@@ -18,19 +18,36 @@
 //!
 //! Parses every `CREATE TABLE` / `ALTER TABLE … ADD COLUMN` in
 //! `worker/migrations/*.sql` *and* in the Durable Object's `schema.rs` into a
-//! table → `NOT NULL` column map, then scans every `UPDATE … SET` in
-//! `worker/src` for an assignment of `NULL` to one of those columns.
+//! table → column map recording, per column, whether it is `NOT NULL`, whether
+//! it has a `DEFAULT`, and whether it is the `INTEGER PRIMARY KEY` rowid alias.
+//! It then scans every statement under `worker/src` for the three ways a write
+//! can fall foul of that schema:
+//!
+//! 1. `UPDATE … SET <col> = NULL` on a `NOT NULL` column — the four real bugs.
+//! 2. `INSERT … VALUES` putting a literal `NULL` in a `NOT NULL` column.
+//! 3. A column-list `INSERT` that never names a `NOT NULL` column which has no
+//!    `DEFAULT` to fall back on.
+//!
+//! `ON CONFLICT … DO UPDATE SET` is read as part of its `INSERT`, so the upsert
+//! clause is covered by (1) as well — it is invisible to the `UPDATE` scan,
+//! which needs an `UPDATE <table> SET` to find a table name.
 //!
 //! ## Layer 2 — self-test
 //!
-//! Runs the same detector over a synthetic schema and statement, so a parser
-//! that silently stops matching fails here rather than going quietly green.
+//! Runs the same detectors over a synthetic schema and statements, so a parser
+//! that silently stops matching fails here rather than going quietly green. The
+//! Layer 1 tests carry sanity floors for the same reason: a minimum table
+//! count, a minimum number of `NOT NULL`-without-`DEFAULT` columns, and a
+//! minimum number of parsed column-list `INSERT`s.
 //!
 //! ## Known limits
 //!
-//! Only `UPDATE … SET` is checked — that is where all four real bugs lived. A
-//! column-list `INSERT` that omits a `NOT NULL` column without a default is the
-//! same class and is not covered.
+//! - Only the first statement in a Rust string literal is read; the scan stops
+//!   at the closing quote or the first `;`.
+//! - `INSERT … SELECT` contributes no `VALUES` findings. Its column list is
+//!   still checked for omissions.
+//! - A `NOT NULL` column reachable only through a `format!` placeholder in the
+//!   column list is invisible — the guard reads the literal, not the value.
 //!
 //! ## Run
 //!
@@ -191,13 +208,57 @@ fn split_top_level(body: &str) -> Vec<String> {
 /// Keywords that begin a table-level constraint rather than a column.
 const CONSTRAINT_KEYWORDS: &[&str] = &["primary", "unique", "foreign", "check", "constraint"];
 
-/// table (lowercased) -> set of columns (lowercased) declared `NOT NULL`.
-type NotNullMap = HashMap<String, HashSet<String>>;
+/// What one column declaration says about whether a write may leave it unset.
+#[derive(Debug, Default, Clone, Copy)]
+struct ColumnFacts {
+    /// Declared `NOT NULL`, so an explicit `NULL` write aborts the statement.
+    not_null: bool,
+    /// Has a `DEFAULT`, so omitting it from an `INSERT` column list is fine.
+    has_default: bool,
+    /// `INTEGER PRIMARY KEY` — the rowid alias, which SQLite fills in itself
+    /// even though it is implicitly `NOT NULL`.
+    integer_pk: bool,
+}
+
+impl ColumnFacts {
+    /// Merge two declarations of the same column. The two schema sources (the
+    /// D1 migrations and the Durable Object's inline `CREATE TABLE`s) can
+    /// disagree; take `NOT NULL` from either, since a write has to satisfy
+    /// whichever backend it lands on, but take an escape hatch from either too,
+    /// so a disagreement can only ever weaken a claim, never invent one.
+    fn merge(self, other: Self) -> Self {
+        Self {
+            not_null: self.not_null || other.not_null,
+            has_default: self.has_default || other.has_default,
+            integer_pk: self.integer_pk || other.integer_pk,
+        }
+    }
+
+    /// An `INSERT` with a column list must name this column explicitly.
+    fn required_on_insert(self) -> bool {
+        self.not_null && !self.has_default && !self.integer_pk
+    }
+}
+
+/// table (lowercased) -> column (lowercased) -> what its declaration says.
+type SchemaMap = HashMap<String, HashMap<String, ColumnFacts>>;
+
+/// The `NOT NULL` columns of `table`, or an empty set if it is unknown.
+fn not_null_columns(map: &SchemaMap, table: &str) -> HashSet<String> {
+    map.get(table)
+        .map(|cols| {
+            cols.iter()
+                .filter(|(_, facts)| facts.not_null)
+                .map(|(name, _)| name.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 /// Parse every `CREATE TABLE` and `ALTER TABLE … ADD COLUMN` in `text` into
 /// `map`. Works on both `.sql` and normalized Rust because it keys off the SQL
 /// keywords rather than the surrounding syntax.
-fn collect_not_null(text: &str, map: &mut NotNullMap) {
+fn collect_schema(text: &str, map: &mut SchemaMap) {
     let norm = normalize(text);
 
     let mut at = 0;
@@ -218,16 +279,23 @@ fn collect_not_null(text: &str, map: &mut NotNullMap) {
         };
         let entry = map.entry(table.to_lowercase()).or_default();
         for part in split_top_level(&body) {
-            let lc = part.to_lowercase();
-            let Some((col, _)) = read_ident(&part, 0) else {
+            let Some((col, past_col)) = read_ident(&part, 0) else {
                 continue;
             };
-            if CONSTRAINT_KEYWORDS.contains(&col.to_lowercase().as_str()) {
+            let col = col.to_lowercase();
+            if CONSTRAINT_KEYWORDS.contains(&col.as_str()) {
                 continue;
             }
-            if lc.contains("not null") {
-                entry.insert(col.to_lowercase());
-            }
+            // Everything after the column name is its type and constraints.
+            // Pad so ` default ` cannot match a bare suffix of a longer word.
+            let rest = format!(" {} ", part[past_col..].to_lowercase());
+            let facts = ColumnFacts {
+                not_null: rest.contains(" not null"),
+                has_default: rest.contains(" default "),
+                integer_pk: rest.contains(" integer ") && rest.contains(" primary key"),
+            };
+            let merged = entry.get(&col).copied().unwrap_or_default().merge(facts);
+            entry.insert(col, merged);
         }
         at = past_body;
     }
@@ -252,11 +320,18 @@ fn collect_not_null(text: &str, map: &mut NotNullMap) {
             .find(';')
             .map(|p| p + past_col)
             .unwrap_or(norm.len());
-        if norm[past_col..end].to_lowercase().contains("not null") {
-            map.entry(table.to_lowercase())
-                .or_default()
-                .insert(col.to_lowercase());
-        }
+        let rest = format!(" {} ", norm[past_col..end].to_lowercase());
+        let facts = ColumnFacts {
+            not_null: rest.contains(" not null"),
+            // SQLite refuses `ADD COLUMN … NOT NULL` without one, so this is
+            // all but implied; read it anyway rather than assume.
+            has_default: rest.contains(" default "),
+            integer_pk: rest.contains(" integer ") && rest.contains(" primary key"),
+        };
+        let entry = map.entry(table.to_lowercase()).or_default();
+        let col = col.to_lowercase();
+        let merged = entry.get(&col).copied().unwrap_or_default().merge(facts);
+        entry.insert(col, merged);
         at = end;
     }
 }
@@ -265,15 +340,81 @@ fn collect_not_null(text: &str, map: &mut NotNullMap) {
 // Statement scan
 // ---------------------------------------------------------------------------
 
-/// One `<column> = NULL` assignment found in an `UPDATE … SET`.
-#[derive(Debug)]
-struct NullAssignment {
-    table: String,
-    column: String,
+/// One way a statement can fall foul of a `NOT NULL` column.
+#[derive(Debug, PartialEq, Eq)]
+enum Offence {
+    /// `<col> = NULL` where `<col>` is `NOT NULL`. SQLite aborts the statement.
+    Nulled {
+        table: String,
+        column: String,
+        /// Which clause it sits in, for the failure message.
+        clause: &'static str,
+    },
+    /// A column-list `INSERT` that never names a `NOT NULL` column which has no
+    /// `DEFAULT` to fall back on. SQLite aborts the statement just the same.
+    Omitted { table: String, column: String },
+}
+
+impl Offence {
+    fn table(&self) -> &str {
+        match self {
+            Self::Nulled { table, .. } | Self::Omitted { table, .. } => table,
+        }
+    }
+
+    fn column(&self) -> &str {
+        match self {
+            Self::Nulled { column, .. } | Self::Omitted { column, .. } => column,
+        }
+    }
+
+    fn describe(&self) -> String {
+        match self {
+            Self::Nulled {
+                table,
+                column,
+                clause,
+            } => format!("{clause} on `{table}` sets `{column}` = NULL"),
+            Self::Omitted { table, column } => {
+                format!("INSERT INTO `{table}` omits `{column}`, which has no DEFAULT")
+            }
+        }
+    }
+}
+
+/// Columns a `SET` clause assigns a literal `NULL`.
+///
+/// Shared by `UPDATE … SET` and `ON CONFLICT … DO UPDATE SET`, which are the
+/// same grammar and the same hazard.
+fn null_targets_in_set_clause(clause: &str) -> Vec<String> {
+    let mut cols = Vec::new();
+    for assign in clause.split(',') {
+        let Some((lhs, rhs)) = assign.split_once('=') else {
+            continue;
+        };
+        if !rhs.trim().eq_ignore_ascii_case("null") {
+            continue;
+        }
+        if let Some((col, _)) = read_ident(lhs.trim(), 0) {
+            cols.push(col.to_lowercase());
+        }
+    }
+    cols
+}
+
+/// Where a statement embedded in a Rust string literal stops: the closing
+/// quote, or a `;`, whichever comes first.
+fn statement_end(norm: &str, from: usize) -> usize {
+    [norm[from..].find('"'), norm[from..].find(';')]
+        .into_iter()
+        .flatten()
+        .min()
+        .map(|p| p + from)
+        .unwrap_or(norm.len())
 }
 
 /// Find every `UPDATE <table> SET … <col> = NULL` in `text`.
-fn find_null_assignments(text: &str) -> Vec<NullAssignment> {
+fn find_null_assignments(text: &str) -> Vec<Offence> {
     let norm = normalize(text);
     let mut found = Vec::new();
     let mut at = 0;
@@ -293,35 +434,178 @@ fn find_null_assignments(text: &str) -> Vec<NullAssignment> {
         let start = set + " set ".len();
         // The SET clause ends at WHERE, at the end of the string literal, or at
         // a statement separator — whichever comes first.
-        let end = [
-            find_ci(&norm, " where ", start),
-            norm[start..].find('"').map(|p| p + start),
-            norm[start..].find(';').map(|p| p + start),
-        ]
-        .into_iter()
-        .flatten()
-        .min()
-        .unwrap_or(norm.len());
+        let end = find_ci(&norm, " where ", start)
+            .into_iter()
+            .chain([statement_end(&norm, start)])
+            .min()
+            .unwrap_or(norm.len());
 
-        let clause = &norm[start..end];
-        for assign in clause.split(',') {
-            let lc = assign.to_lowercase();
-            let Some((_, eq)) = lc.split_once('=') else {
-                continue;
-            };
-            if eq.trim() != "null" {
-                continue;
-            }
-            if let Some((col, _)) = read_ident(assign.trim(), 0) {
-                found.push(NullAssignment {
-                    table: table.to_lowercase(),
-                    column: col.to_lowercase(),
-                });
-            }
+        for column in null_targets_in_set_clause(&norm[start..end]) {
+            found.push(Offence::Nulled {
+                table: table.to_lowercase(),
+                column,
+                clause: "UPDATE … SET",
+            });
         }
         at = end;
     }
     found
+}
+
+/// Skip whitespace and one optional leading comma, then read the parenthesised
+/// tuple that must follow. Returns `None` if anything else is in the way, so a
+/// `VALUES` scan stops at the end of the tuple list instead of running on into
+/// the rest of the statement.
+fn next_tuple(text: &str, from: usize) -> Option<(String, usize)> {
+    let bytes = text.as_bytes();
+    let mut i = from;
+    while i < bytes.len() && bytes[i] == b' ' {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b',' {
+        i += 1;
+        while i < bytes.len() && bytes[i] == b' ' {
+            i += 1;
+        }
+    }
+    match bytes.get(i) {
+        Some(b'(') => balanced_body(text, i),
+        _ => None,
+    }
+}
+
+/// One parsed `INSERT`, reduced to what bears on `NOT NULL`.
+#[derive(Debug)]
+struct InsertStatement {
+    table: String,
+    /// The explicit column list. `None` when the statement has none, in which
+    /// case it names every column by position and nothing can be omitted.
+    columns: Option<Vec<String>>,
+    /// Columns a `VALUES` tuple assigns a literal `NULL`.
+    null_values: Vec<String>,
+    /// Columns an `ON CONFLICT … DO UPDATE SET` clause assigns `NULL`.
+    null_upserts: Vec<String>,
+}
+
+/// Find every `INSERT [OR …] INTO <table> …` in `text`.
+///
+/// `INSERT … SELECT` parses fine — it simply contributes no `VALUES` findings,
+/// while its column list is still checked for omissions.
+fn find_inserts(text: &str) -> Vec<InsertStatement> {
+    let norm = normalize(text);
+    let mut found = Vec::new();
+    let mut at = 0;
+    while let Some(pos) = find_ci(&norm, "insert", at) {
+        at = pos + "insert".len();
+        // `INSERT OR IGNORE INTO`, `INSERT OR REPLACE INTO`, plain `INSERT INTO`.
+        let mut cursor = at;
+        if let Some((word, past_or)) = read_ident(&norm, cursor)
+            && word.eq_ignore_ascii_case("or")
+            && let Some((_verb, past_verb)) = read_ident(&norm, past_or)
+        {
+            cursor = past_verb;
+        }
+        let Some(into) = find_ci(&norm, "into", cursor) else {
+            continue;
+        };
+        // `INTO` must follow directly, or the word `insert` was prose.
+        if !norm[cursor..into].trim().is_empty() {
+            continue;
+        }
+        let Some((table, past_name)) = read_ident(&norm, into + "into".len()) else {
+            continue;
+        };
+        let end = statement_end(&norm, past_name);
+        at = end;
+
+        let mut cursor = past_name;
+        let mut columns = None;
+        if norm[cursor..end].trim_start().starts_with('(')
+            && let Some((body, past_cols)) = balanced_body(&norm[..end], cursor)
+        {
+            columns = Some(
+                split_top_level(&body)
+                    .iter()
+                    .filter_map(|part| read_ident(part, 0).map(|(c, _)| c.to_lowercase()))
+                    .collect::<Vec<_>>(),
+            );
+            cursor = past_cols;
+        }
+
+        // A literal `NULL` in a `VALUES` tuple is only attributable to a column
+        // when the statement lists its columns.
+        let mut null_values = Vec::new();
+        if let Some(values) = find_ci(&norm[..end], "values", cursor)
+            && norm[cursor..values].trim().is_empty()
+        {
+            let mut tuple_at = values + "values".len();
+            while let Some((body, past_tuple)) = next_tuple(&norm[..end], tuple_at) {
+                for (i, expr) in split_top_level(&body).iter().enumerate() {
+                    if expr.trim().eq_ignore_ascii_case("null")
+                        && let Some(column) = columns.as_ref().and_then(|c| c.get(i))
+                    {
+                        null_values.push(column.clone());
+                    }
+                }
+                tuple_at = past_tuple;
+            }
+            cursor = tuple_at;
+        }
+
+        let mut null_upserts = Vec::new();
+        if let Some(update) = find_ci(&norm[..end], "do update set ", cursor) {
+            let start = update + "do update set ".len();
+            let clause_end = find_ci(&norm[..end], " where ", start).unwrap_or(end);
+            null_upserts = null_targets_in_set_clause(&norm[start..clause_end]);
+        }
+
+        found.push(InsertStatement {
+            table: table.to_lowercase(),
+            columns,
+            null_values,
+            null_upserts,
+        });
+    }
+    found
+}
+
+/// Judge one parsed `INSERT` against the schema.
+fn insert_offences(stmt: &InsertStatement, map: &SchemaMap) -> Vec<Offence> {
+    let Some(declared) = map.get(&stmt.table) else {
+        return Vec::new();
+    };
+    let mut offences = Vec::new();
+
+    for column in stmt.null_values.iter().chain(&stmt.null_upserts) {
+        let clause = match stmt.null_values.contains(column) {
+            true => "INSERT … VALUES",
+            false => "ON CONFLICT … DO UPDATE SET",
+        };
+        if declared.get(column).is_some_and(|f| f.not_null) {
+            offences.push(Offence::Nulled {
+                table: stmt.table.clone(),
+                column: column.clone(),
+                clause,
+            });
+        }
+    }
+
+    if let Some(listed) = &stmt.columns {
+        let mut missing: Vec<&String> = declared
+            .iter()
+            .filter(|(name, facts)| facts.required_on_insert() && !listed.contains(name))
+            .map(|(name, _)| name)
+            .collect();
+        missing.sort();
+        for column in missing {
+            offences.push(Offence::Omitted {
+                table: stmt.table.clone(),
+                column: column.clone(),
+            });
+        }
+    }
+
+    offences
 }
 
 // ---------------------------------------------------------------------------
@@ -342,8 +626,8 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-fn load_schema() -> NotNullMap {
-    let mut map = NotNullMap::new();
+fn load_schema() -> SchemaMap {
+    let mut map = SchemaMap::new();
 
     let dir = Path::new(MIGRATIONS_DIR);
     assert!(
@@ -358,11 +642,11 @@ fn load_schema() -> NotNullMap {
         .collect();
     sql.sort();
     for path in &sql {
-        collect_not_null(&fs::read_to_string(path).expect("read migration"), &mut map);
+        collect_schema(&fs::read_to_string(path).expect("read migration"), &mut map);
     }
 
     let do_schema = fs::read_to_string(DO_SCHEMA_RS).expect("read DO schema");
-    collect_not_null(&do_schema, &mut map);
+    collect_schema(&do_schema, &mut map);
 
     map
 }
@@ -375,8 +659,8 @@ fn load_schema() -> NotNullMap {
 fn schema_parse_finds_the_known_not_null_columns() {
     let map = load_schema();
 
-    // A sanity floor: if the parser breaks, these disappear and the scan below
-    // goes vacuously green.
+    // A sanity floor: if the parser breaks, these disappear and the scans below
+    // go vacuously green.
     let expected: &[(&str, &str)] = &[
         ("claim_locks", "expires_at"),
         ("claim_locks", "event_id"),
@@ -385,11 +669,8 @@ fn schema_parse_finds_the_known_not_null_columns() {
         ("contacts", "contact_handle"),
     ];
     for (table, column) in expected {
-        let cols = map
-            .get(*table)
-            .unwrap_or_else(|| panic!("no schema parsed for table `{table}`"));
         assert!(
-            cols.contains(*column),
+            not_null_columns(&map, table).contains(*column),
             "`{table}.{column}` is NOT NULL in the schema but the parser missed it"
         );
     }
@@ -399,12 +680,24 @@ fn schema_parse_finds_the_known_not_null_columns() {
         "only {} tables parsed — the schema parser has stopped matching",
         map.len()
     );
+
+    // The omission check only bites on columns that are `NOT NULL` *and* have
+    // no `DEFAULT`. If `has_default` detection ever over-matches, that set
+    // empties out and `no_insert_leaves_a_not_null_column_unset` goes quiet.
+    let required: usize = map
+        .values()
+        .flat_map(|cols| cols.values())
+        .filter(|facts| facts.required_on_insert())
+        .count();
+    assert!(
+        required > 50,
+        "only {required} columns are NOT NULL without a DEFAULT — the DEFAULT \
+         or INTEGER PRIMARY KEY detection has started over-matching"
+    );
 }
 
-#[test]
-fn no_update_sets_a_not_null_column_to_null() {
-    let map = load_schema();
-
+/// Scan every Rust source under `src` with `detect`, and report what it finds.
+fn scan_sources(detect: impl Fn(&str) -> Vec<Offence>) -> Vec<String> {
     let mut files = Vec::new();
     rust_files(Path::new(SRC_DIR), &mut files);
     files.sort();
@@ -413,27 +706,63 @@ fn no_update_sets_a_not_null_column_to_null() {
     let mut violations = Vec::new();
     for path in &files {
         let text = fs::read_to_string(path).expect("read source");
-        for found in find_null_assignments(&text) {
-            let Some(cols) = map.get(&found.table) else {
-                continue;
-            };
-            if cols.contains(&found.column) {
-                violations.push(format!(
-                    "{}: UPDATE {} SET {} = NULL — `{}.{}` is NOT NULL, so SQLite \
-                     aborts the whole statement and the write silently does nothing",
-                    path.display(),
-                    found.table,
-                    found.column,
-                    found.table,
-                    found.column
-                ));
-            }
+        for offence in detect(&text) {
+            violations.push(format!("{}: {}", path.display(), offence.describe()));
         }
     }
+    violations
+}
+
+#[test]
+fn no_update_sets_a_not_null_column_to_null() {
+    let map = load_schema();
+    let violations = scan_sources(|text| {
+        find_null_assignments(text)
+            .into_iter()
+            .filter(|o| not_null_columns(&map, o.table()).contains(o.column()))
+            .collect()
+    });
 
     assert!(
         violations.is_empty(),
-        "SQL writes null a NOT NULL column:\n  {}",
+        "SQL writes null a NOT NULL column — SQLite aborts the whole statement, \
+         so the write silently does nothing:\n  {}",
+        violations.join("\n  ")
+    );
+}
+
+#[test]
+fn no_insert_leaves_a_not_null_column_unset() {
+    let map = load_schema();
+
+    // Without this floor a broken `INSERT` parser passes by finding nothing.
+    let mut with_columns = 0usize;
+    let mut files = Vec::new();
+    rust_files(Path::new(SRC_DIR), &mut files);
+    for path in &files {
+        let text = fs::read_to_string(path).expect("read source");
+        with_columns += find_inserts(&text)
+            .iter()
+            .filter(|s| s.columns.is_some() && map.contains_key(&s.table))
+            .count();
+    }
+    assert!(
+        with_columns > 20,
+        "only {with_columns} column-list INSERTs against known tables parsed — \
+         the INSERT parser has stopped matching"
+    );
+
+    let violations = scan_sources(|text| {
+        find_inserts(text)
+            .iter()
+            .flat_map(|stmt| insert_offences(stmt, &map))
+            .collect()
+    });
+
+    assert!(
+        violations.is_empty(),
+        "INSERTs leave a NOT NULL column unset — SQLite aborts the whole \
+         statement, so the row is never written:\n  {}",
         violations.join("\n  ")
     );
 }
@@ -442,21 +771,25 @@ fn no_update_sets_a_not_null_column_to_null() {
 // Layer 2 — self-test
 // ---------------------------------------------------------------------------
 
+/// The synthetic schema both self-tests run against.
+const SYNTHETIC_SCHEMA: &str = r#"
+    CREATE TABLE IF NOT EXISTS widgets (
+        rowid      INTEGER PRIMARY KEY AUTOINCREMENT,
+        id         TEXT NOT NULL,
+        label      TEXT,
+        state      TEXT NOT NULL DEFAULT 'new',
+        expires_at TEXT NOT NULL,
+        PRIMARY KEY (id)
+    );
+    ALTER TABLE widgets ADD COLUMN owner TEXT NOT NULL DEFAULT '';
+"#;
+
 #[test]
 fn detector_fires_on_a_synthetic_violation() {
-    let schema = r#"
-        CREATE TABLE IF NOT EXISTS widgets (
-            id         TEXT NOT NULL,
-            label      TEXT,
-            expires_at TEXT NOT NULL,
-            PRIMARY KEY (id)
-        );
-        ALTER TABLE widgets ADD COLUMN owner TEXT NOT NULL DEFAULT '';
-    "#;
-    let mut map = NotNullMap::new();
-    collect_not_null(schema, &mut map);
+    let mut map = SchemaMap::new();
+    collect_schema(SYNTHETIC_SCHEMA, &mut map);
 
-    let cols = map.get("widgets").expect("widgets parsed");
+    let cols = not_null_columns(&map, "widgets");
     assert!(cols.contains("expires_at"), "column NOT NULL missed");
     assert!(cols.contains("owner"), "ADD COLUMN NOT NULL missed");
     assert!(!cols.contains("label"), "nullable column wrongly flagged");
@@ -470,10 +803,10 @@ fn detector_fires_on_a_synthetic_violation() {
                   SET label = ?1, expires_at = NULL \\\n     WHERE id = ?2\",\n);";
     let found = find_null_assignments(source);
     assert_eq!(found.len(), 1, "expected one hit, got {found:?}");
-    assert_eq!(found[0].table, "widgets");
-    assert_eq!(found[0].column, "expires_at");
+    assert_eq!(found[0].table(), "widgets");
+    assert_eq!(found[0].column(), "expires_at");
     assert!(
-        cols.contains(&found[0].column),
+        cols.contains(found[0].column()),
         "detector and schema must agree the assignment is a violation"
     );
 
@@ -482,7 +815,94 @@ fn detector_fires_on_a_synthetic_violation() {
     let found = find_null_assignments(benign);
     assert_eq!(found.len(), 1);
     assert!(
-        !cols.contains(&found[0].column),
+        !cols.contains(found[0].column()),
         "nulling a nullable column must not be flagged"
+    );
+}
+
+#[test]
+fn insert_detector_fires_on_a_synthetic_violation() {
+    let mut map = SchemaMap::new();
+    collect_schema(SYNTHETIC_SCHEMA, &mut map);
+
+    let facts = &map["widgets"];
+    assert!(
+        facts["expires_at"].required_on_insert(),
+        "NOT NULL without a DEFAULT must be required"
+    );
+    assert!(
+        !facts["state"].required_on_insert(),
+        "NOT NULL with a DEFAULT must not be required"
+    );
+    assert!(
+        !facts["rowid"].required_on_insert(),
+        "INTEGER PRIMARY KEY is filled in by SQLite"
+    );
+    assert!(
+        !facts["label"].required_on_insert(),
+        "nullable is not required"
+    );
+
+    // Omits `expires_at` entirely, and nulls it in the upsert clause too.
+    let offending = "\"INSERT OR IGNORE INTO widgets (id, label) VALUES (?1, NULL) \\\n         \
+                     ON CONFLICT (id) DO UPDATE SET label = excluded.label\"";
+    let stmts = find_inserts(offending);
+    assert_eq!(stmts.len(), 1, "expected one INSERT, got {stmts:?}");
+    assert_eq!(stmts[0].table, "widgets");
+    assert_eq!(
+        stmts[0].columns.as_deref(),
+        Some(["id".to_string(), "label".to_string()].as_slice())
+    );
+    // `label` is nullable, so the literal NULL is recorded but not an offence.
+    assert_eq!(stmts[0].null_values, ["label"]);
+    let offences = insert_offences(&stmts[0], &map);
+    assert_eq!(
+        offences,
+        [Offence::Omitted {
+            table: "widgets".to_string(),
+            column: "expires_at".to_string(),
+        }],
+        "expected only the omitted NOT NULL column"
+    );
+
+    // Naming every required column, with a real value, is clean.
+    let clean = "\"INSERT INTO widgets (id, expires_at, label) VALUES (?1, ?2, NULL)\"";
+    let stmts = find_inserts(clean);
+    assert_eq!(stmts.len(), 1);
+    assert!(
+        insert_offences(&stmts[0], &map).is_empty(),
+        "a complete INSERT must not be flagged"
+    );
+
+    // Nulling a NOT NULL column positionally is caught even though it is named.
+    let nulled = "\"INSERT INTO widgets (id, expires_at) VALUES (?1, NULL)\"";
+    let stmts = find_inserts(nulled);
+    assert_eq!(
+        insert_offences(&stmts[0], &map),
+        [Offence::Nulled {
+            table: "widgets".to_string(),
+            column: "expires_at".to_string(),
+            clause: "INSERT … VALUES",
+        }]
+    );
+
+    // So is nulling one in the upsert clause.
+    let upsert = "\"INSERT INTO widgets (id, expires_at) VALUES (?1, ?2) \
+                  ON CONFLICT (id) DO UPDATE SET expires_at = NULL\"";
+    let stmts = find_inserts(upsert);
+    assert_eq!(stmts[0].null_upserts, ["expires_at"]);
+    assert_eq!(
+        insert_offences(&stmts[0], &map),
+        [Offence::Nulled {
+            table: "widgets".to_string(),
+            column: "expires_at".to_string(),
+            clause: "ON CONFLICT … DO UPDATE SET",
+        }]
+    );
+
+    // Prose containing the word must not parse as a statement.
+    assert!(
+        find_inserts("// we insert the widget into the queue here").is_empty(),
+        "prose parsed as an INSERT"
     );
 }
