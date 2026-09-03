@@ -2,9 +2,15 @@
 
 ## Summary
 
-21 source files exceed the 1024-line guideline. Split them into focused submodules while preserving the existing public API via re-exports.
+Split source files over the 1024-line guideline into focused submodules while preserving the
+existing public API via re-exports.
 
-## Scope
+**Current inventory (re-measured 2026-09-04, repo-wide `fd -e rs -E target -E backups`): 8 files remain,
+all in `frontend-leptos`, all blocked on the same structural limit — see "Phase 5 remainder" below.
+No backend file exceeds 1024 lines.** The original 21-file scope below is kept as the historical record;
+every file it names has since been split or renamed.
+
+## Scope (original, 2026-07 — historical; all entries resolved)
 
 ### Backend (worker)
 
@@ -91,9 +97,10 @@
   the only differences are removed section banners, the `mod tests { … }` wrapper, and the listed
   visibility widenings. Clippy clean under `-D warnings`, 481 workspace tests pass.
 
-  **No backend file over 1024 lines remains** (verified 2026-09-04: the largest are
-  `handlers/deposit/usdc/handlers.rs` at 1021, `bethere-escrow/src/tests/close.rs` at 976 and
-  `db/event_summaries.rs` at 968).
+  **No backend file over 1024 lines remains** (re-verified 2026-09-04: the largest are
+  `handlers/deposit/usdc/handlers.rs` at 1021, `bethere-escrow/src/tests/close.rs` at 976,
+  `handlers/campaigns.rs` at 970 and `db/event_summaries.rs` at 968).
+  **Watch `handlers/deposit/usdc/handlers.rs` — 3 lines from breaching the guideline.**
 - [x] Phase 3: Frontend splits — **`pages/landing.rs` ✅** (1255 → `landing/`: auth/waitlist/upcoming/
   registrations/page) and **`pages/quiz_editor.rs` ✅** (1240 → `quiz_editor/`: helpers/editor/preview).
 - [~] Phase 5: Hard frontend — done so far, all **verbatim** (concatenated submodules diffed against the
@@ -119,34 +126,36 @@ by the mechanical technique used above:
 
 | File | Lines | Component starts | `view!` starts | Residual after pulling out all non-component code |
 |---|---|---|---|---|
-| `pages/event_form.rs` | 2291 | 334 | 794 | ~1960 |
-| `pages/admin.rs` | 2280 | 195 | 892 | ~2086 |
-| `pages/campaigns_page.rs` | 1866 | 216 | 892 | ~1651 |
-| `pages/adventure/page.rs` | 1408 | 26 | 582 | ~1383 |
-| `pages/admin_deposit.rs` | 1168 | 40 | 430 | ~1129 |
+| `pages/event_form.rs` | 2499 | 358 | 1002 | ~2142 |
+| `pages/admin.rs` | 2317 | 195 | 929 | ~2123 |
+| `pages/campaigns_page.rs` | 1845 | 214 | 868 | ~1632 |
+| `pages/adventure/page.rs` | 1433 | 26 | 607 | ~1408 |
+| `pages/scanner/page.rs` | 1303 | 18 | 831 | ~1286 |
+| `pages/admin_deposit.rs` | 1170 | 40 | 432 | ~1131 |
+| `pages/claim/page.rs` | 1072 | 27 | 307 | ~1046 |
 
-Three already-split files also keep a component over the line for the same reason:
-`scanner/page.rs` (1269), `claim/page.rs` (1061), `quiz_editor/editor.rs` (1013 — just under).
-`adventure/tests/playtest.rs` (1048) is a test file and was left alone.
+Line counts re-measured 2026-09-04; every one has grown since the 2026-07 measurement (`event_form.rs`
++208, `admin.rs` +37), so the residuals are floors, not targets. `adventure/tests/playtest.rs` (1052) is a
+test file and is left alone. `quiz_editor/editor.rs` was listed here at 1013 and is now under the line.
 
 Closing these requires **extracting real sub-components with props** — a behaviour-affecting refactor that
 changes reactivity boundaries, not a move. The frontend has ~0 native tests (`#[wasm_bindgen_test]` only),
 so `-D warnings` clippy is the only automated check; correctness would have to be confirmed in a browser.
+(That test claim is **false** — see the Follow-up below; the browser-verification point still stands.)
 **Recommend treating that as its own owner-gated task rather than folding it into this issue.**
 
-> **Note (2026-07-28):** the file inventory above is stale — the tree now has ~21 files >1024 lines
-> (several new since this issue, e.g. `handlers/deposit/usdc/mod.rs`, `db/attendees.rs`,
-> `frontend/api/event.rs`, `campaigns_page.rs`, `adventure/*`). **Recommended order: backend before
-> frontend** — the worker has 254 tests so splits are safe to verify, whereas the frontend has ~0 native
-> tests (`#[wasm_bindgen_test]` only), making its refactors higher-risk. Next backend targets: `register.rs`,
-> `handlers/deposit/usdc/mod.rs`, `db/attendees.rs`.
+> **Note (2026-07-28, superseded 2026-09-04):** this warned that the Scope inventory was stale and
+> recommended "backend before frontend" because the worker had 254 tests while the frontend had "~0".
+> Both halves are now obsolete: the backend queue is empty (no backend file over 1024 lines), and the
+> "~0 frontend tests" claim was wrong — see the Follow-up below.
 
 ---
 
 ## Follow-up (2026-09-04) — a split regression the gates never caught
 
 The claim above that "the frontend has ~0 native tests (`#[wasm_bindgen_test]` only)" is **wrong**.
-`frontend-leptos` carries **167 native `#[test]` cases**, including the SSOT mirror audit in
+`frontend-leptos` carries **181 native `#[test]` cases** (167 when this was written; re-counted
+2026-09-04, plus 6 ignored), including the SSOT mirror audit in
 `frontend-leptos/tests/ssot_mirror_audit.rs`. They were never run because:
 
 - `frontend-leptos` is excluded from the root cargo workspace, so `cargo test --workspace` skips it;
@@ -172,5 +181,5 @@ Fixed on this branch:
 cd frontend-leptos
 cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
 cargo clippy --locked --all-targets -- -D warnings   # native, catches test-only lints
-cargo test --locked                                   # 167 tests
+cargo test --locked                                   # 181 tests, 6 ignored
 ```
