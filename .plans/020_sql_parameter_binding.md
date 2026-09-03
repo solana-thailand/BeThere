@@ -205,13 +205,25 @@ Not exercised locally: registration and the Sheets sync, which need a real
 Google Sheet. Check-in was driven by seeding the attendee row directly into
 local D1.
 
-### 4.5 Still open: no email validation
+### 4.5 Email validation — done
 
-No email validator exists anywhere in `worker/src` or `domain/src` (searched
-`validate_email`, `is_valid_email`, `contains('@')` — no hits). Binding makes
-this harmless for SQL, but "emails are well-formed" remains an unenforced
-assumption that other code may lean on. Worth an explicit validator at the
-auth boundary, tracked separately.
+The original claim here ("no email validator exists anywhere") was wrong: a
+real one, `is_plausible_email`, was private to `handlers::register::signup`.
+The actual problem was inconsistency — registration used that check, walk-in
+used `email.contains('@')`, and waitlist used `contains('@') && contains('.')`,
+so the same address could be accepted at one endpoint and rejected at another.
+
+Moved verbatim to `event_checkin_domain::validation::is_plausible_email` and
+used by all three ingress points. Rules: length 3..=254, no whitespace, exactly
+one `@` with a non-empty local part, and a domain containing a dot that is
+neither leading nor trailing. Deliberately not RFC 5322 — it also rejects the
+synthetic `wallet:<address>` identity, which must never be stored as a contact
+email. Tests moved out of the `signup.rs` inline `mod tests` into
+`domain/tests/email_validation.rs` (4 tests).
+
+Verified live against `POST /api/waitlist`: `user@nodot`, `user@.com` and
+`has space@example.com` → 400; `ok@example.com` → 200 (previously the first two
+were accepted).
 
 ## 5. Out of scope, noticed while here
 

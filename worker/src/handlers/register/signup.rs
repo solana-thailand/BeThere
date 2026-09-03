@@ -46,7 +46,7 @@ pub async fn register_attendee(
     let is_wallet_session = jwt_email.starts_with("wallet:");
     let email = if is_wallet_session {
         let typed = body.email.trim().to_lowercase();
-        if !is_plausible_email(&typed) {
+        if !event_checkin_domain::validation::is_plausible_email(&typed) {
             return Err(AppError::Validation(
                 "please enter a valid email to reserve your spot".to_string(),
             )
@@ -835,20 +835,6 @@ pub async fn register_attendee(
     }))
 }
 
-/// Minimal sanity check for a typed email (wallet-session reservations).
-/// Not RFC-complete — just rejects obviously-invalid input: one `@`, a dot in
-/// the domain, no spaces, reasonable length.
-fn is_plausible_email(email: &str) -> bool {
-    let e = email.trim();
-    if e.len() < 3 || e.len() > 254 || e.contains(char::is_whitespace) {
-        return false;
-    }
-    let Some((local, domain)) = e.split_once('@') else {
-        return false;
-    };
-    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
-}
-
 /// Resolve participation type based on event format and user selection.
 ///
 /// Returns the **canonical** storage form (`in_person`/`online`) — see
@@ -878,28 +864,5 @@ fn split_name(name: &str) -> (String, String) {
         [] => (String::new(), String::new()),
         [only] => (only.to_string(), String::new()),
         [first, rest @ ..] => (first.to_string(), rest.join(" ")),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_plausible_email;
-
-    #[test]
-    fn accepts_normal_emails() {
-        assert!(is_plausible_email("a@b.co"));
-        assert!(is_plausible_email("dev.user+tag@example.com"));
-    }
-
-    #[test]
-    fn rejects_malformed_emails() {
-        assert!(!is_plausible_email(""));
-        assert!(!is_plausible_email("no-at-sign"));
-        assert!(!is_plausible_email("@example.com"));
-        assert!(!is_plausible_email("user@nodot"));
-        assert!(!is_plausible_email("user@.com"));
-        assert!(!is_plausible_email("user@example."));
-        assert!(!is_plausible_email("has space@example.com"));
-        assert!(!is_plausible_email("wallet:So1111111111111111111111111111111111111111"));
     }
 }

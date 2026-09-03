@@ -218,7 +218,7 @@ pub async fn register_walkin(
     }
 
     let email = body.email.trim();
-    if email.is_empty() || !email.contains('@') {
+    if !event_checkin_domain::validation::is_plausible_email(email) {
         return Err(AppError::Validation(
             "email is required and must be a valid address".to_string(),
         )

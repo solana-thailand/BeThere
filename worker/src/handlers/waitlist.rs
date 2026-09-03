@@ -34,14 +34,9 @@ pub async fn join_waitlist(
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     let email = body.email.trim().to_lowercase();
 
-    // Basic email validation
-    if email.is_empty() || !email.contains('@') || !email.contains('.') {
+    // Shared plausibility check — also bounds the length at 254.
+    if !event_checkin_domain::validation::is_plausible_email(&email) {
         return Err(AppError::Validation("Invalid email address".into()).into());
-    }
-
-    // Check email length
-    if email.len() > 254 {
-        return Err(AppError::Validation("Email too long".into()).into());
     }
 
     // Duplicate check — fetch existing emails from the sheet
