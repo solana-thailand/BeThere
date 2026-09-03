@@ -1,6 +1,6 @@
 # 022 — Sweep every writer of a state transition before trusting a guard
 
-**Status:** in progress. Two transitions swept, one fix landed each; the rest listed below are unswept.
+**Status:** in progress. Four transitions swept, one fix landed each; the rest listed below are unswept.
 
 ## Why this plan exists
 
@@ -12,8 +12,11 @@ Three separate defects on this branch shared one shape:
    only the read path carried the F1 and `binding_conflict` guards (plan 003 §7).
 3. **Virtual check-in approval** — three paths set `checked_in_at`; the adventure
    quest-complete endpoint never gated on `approval_status` (this plan, §2).
+4. **THB settlement** — a CAS owns `refunded` / `held_as_credit`, but a blanket
+   read-modify-write reachable from seven handlers could retract its result
+   (this plan, §3).
 
-In every case a guard was added at the entry point where the bug was *found*, and
+In the first three, a guard was added at the entry point where the bug was *found*, and
 the siblings performing the same transition were never revisited. In two of the
 three, a plan or a code comment asserted the sibling path was "already safe" —
 both assertions were false. **Treat such a note as a lead, not a fact.**
@@ -92,12 +95,79 @@ re-derived deliberately rather than left asserting a stale assumption.
   but **not D1**, unlike the other two writers, which write D1 first because
   my-registration reads D1-first. Suspected dual-write gap; not yet traced.
 
+## §3 — THB `refunded` / `held_as_credit` (swept, fixed in `186d057`)
+
+`refund_status` on an attendee is *derived* (`db/attendees/reads.rs`) — the real
+transition is the `thb_deposits` settlement pair: `refunded` (cash paid out) and
+`held_as_credit` (converted to rolling credit), mutually exclusive.
+
+Writers of the transition:
+
+| writer | shape |
+|---|---|
+| `try_settle_refund` | CAS — `SET refunded = 1 ... WHERE verified = 1 AND refunded = 0 AND held_as_credit = 0` |
+| `try_settle_hold_credit` | CAS — mirror image; whichever lands first wins |
+| `insert_thb_deposit` | fresh row, nothing to retract |
+| ~~`update_thb_deposit`~~ | **blanket read-modify-write of all 14 columns, including all five settlement columns** |
+
+`update_thb_deposit` is reached from `event_store::save_thb_deposit` by seven
+handlers. Including the settlement columns in that UPDATE reopened exactly the
+hole the CAS closes — not by racing the CAS, but by *retracting* its result:
+
+- `slip_verify` loads the deposit, guards on `refunded` / `held_as_credit` /
+  `is_non_cash`, then blanket-writes. A refund settling between the load and the
+  write is reset to `refunded = 0`, with `refund_proof_url` blanked.
+- `slip_upload` / `slip_admin_upload` construct a fresh record with
+  `refunded: false`. Their "already deposited" guard consults the *other* store
+  (`deposit_status`), so a `thb_deposits` row surviving without its
+  `deposit_status` sibling is overwritten rather than rejected.
+- `hold_admin`'s rolling-credit auto-apply builds a `covered` record with
+  `refunded: false, held_as_credit: false` and saves it through the same
+  existence branch.
+
+In each case the cash has already gone out, the row now says otherwise, and
+`try_settle_refund` will settle it a **second time** — its three preconditions
+are all satisfied again.
+
+**The fix.** The five settlement columns (`refunded`, `refunded_at`,
+`refund_proof_url`, `held_as_credit`, `held_as_credit_at`) are gone from
+`update_thb_deposit`'s `SET` list. Every caller that sets one in memory
+(`refund.rs` ×2, `hold_credit.rs`, `hold_admin.rs`) does so *after* its own CAS
+has already written D1 — their comments say as much — so this is behaviour-
+preserving on the intended paths and removes only the clobber. The KV fallback
+in `save_thb_deposit` still serialises the whole struct, which is correct: there
+is no CAS there.
+
+One legitimate non-CAS writer remained: the `data:`-URL → R2 migration in
+`thb/handlers/mod.rs` rewrites `refund_proof_url` in place to replace a
+multi-MB inline base64 blob with a compact serving path for the *same* proof. It
+now uses `set_refund_proof_url`, which touches exactly that one column and so
+cannot retract a settlement.
+
+Guarded by `worker/tests/thb_settlement_ownership_guard.rs` (5 tests), including
+one that counts every `SET <settlement column> =` in the file and fails if any
+appears outside the three licensed functions — so a *fourth* writer is caught,
+not just a regression of this one. Mutation-tested three ways (column restored
+to the blanket update, refund CAS stripped of `held_as_credit = 0`, proof setter
+given a second column); each turned it red.
+
+### Still open on this transition
+
+- **`save_thb_deposit` never writes KV when D1 is configured** — it returns after
+  the D1 branch. Four call sites carry a comment saying they "mirror the settled
+  state into KV", which in production does not happen. The comments are corrected
+  in `186d057`; whether KV should be a real mirror (it is the documented fallback
+  when D1 is unavailable) is a separate design question. If a D1 read ever falls
+  back to KV, a stale KV blob would report a settled deposit as unrefunded.
+- The USDC deposit refund path was not part of this sweep; `refunded` there lives
+  on-chain (`AttendeeDeposit.refunded`, `solana_escrow/wire.rs:344`) and is read,
+  not written, by the worker.
+
 ## Transitions not yet swept
 
 - `claimed_at` / `claim_asset_id` — `db::attendees::claim_attendee`, the walk-in
   claim path (`claim/mint/walkin.rs`, which skips the quiz/adventure gates), the
   DO copy, and the Sheets `mark_claimed` writer.
-- `refund_status` → `refunded`, and `refund_marked_by`.
 - `approval_status` itself — who may set it to `Approved`.
 - credit-balance mutations (hold → balance → auto-apply; see
   `credit_ledger_guards.rs` for what is already pinned).
@@ -107,7 +177,8 @@ re-derived deliberately rather than left asserting a stale assumption.
 ## DoD
 
 - [x] `checked_in_at` swept; divergence fixed and guarded.
+- [x] THB `refunded` / `held_as_credit` swept; blanket writer defanged and guarded.
 - [x] `verified` (USDC deposit) swept — plan 003 §7.
 - [x] claim-lock cleanup swept — plan 020 §10.
-- [ ] The five transitions above swept.
+- [ ] The four transitions still listed above swept.
 - [ ] Nothing here is deployed; this branch is unpushed.
