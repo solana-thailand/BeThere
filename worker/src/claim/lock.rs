@@ -406,10 +406,18 @@ pub(crate) async fn release_claim_lock(
         return Ok(());
     }
 
-    // D1 path: DELETE
+    // D1 path: DELETE. Hold any error until after the KV delete below — the KV
+    // key is what actually blocks a retry, so a failed D1 delete must not also
+    // strand the attendee behind a lock for the rest of its 5-minute TTL.
+    let mut d1_err = None;
     if let Some(db) = d1 {
-        db::release_claim_lock(db, event_id, token).await?;
-        tracing::info!(claim_token = %token, "claim lock released (D1+KV)");
+        match db::release_claim_lock(db, event_id, token).await {
+            Ok(()) => tracing::info!(claim_token = %token, "claim lock released (D1+KV)"),
+            Err(e) => {
+                tracing::warn!(claim_token = %token, error = %e, "D1 release claim lock failed");
+                d1_err = Some(e);
+            }
+        }
     }
 
     // Always delete from KV
@@ -418,7 +426,11 @@ pub(crate) async fn release_claim_lock(
         .await
         .map_err(|e| format!("claim lock release failed: {e:?}"))?;
     tracing::info!(claim_token = %token, "claim lock released");
-    Ok(())
+
+    match d1_err {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }
 
 // ---------------------------------------------------------------------------
