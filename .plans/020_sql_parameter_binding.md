@@ -215,9 +215,21 @@ auth boundary, tracked separately.
 
 ## 5. Out of scope, noticed while here
 
-`GET /api/events/{id}` returns **500** for a missing event, not 404
-(`"internal error: failed to read event: event '…' not found"`). Pre-existing,
-unrelated to this work, not fixed.
+`GET /api/events/{id}` returned **500** for a missing event, not 404
+(`"internal error: failed to read event: event '…' not found"`). **Fixed.**
+
+`event_store::resolve_event{,_or_fallback}` returned `Result<_, String>`, and
+every handler mapped that string to `AppError::Internal`, so asking for an event
+that does not exist looked like an outage. They now return a typed
+`ResolveError::{NotFound, Backend}` with `From<ResolveError> for AppError`, so a
+miss is a 404 and only a genuine KV/D1 read or parse failure is a 500. Four call
+sites updated (`handlers::ext` ×2, `handlers::events::read`,
+`handlers::deposit::usdc`); this also fixes the quiz/adventure/claim paths, which
+share `ext::resolve_event`.
+
+Verified on local D1: `GET /api/events/does-not-exist` → `404 {"error":"not
+found: event 'does-not-exist' not found"}`, a real event still `200`, and
+`GET /api/quiz/questions?event_id=nope-nope` → `404` (was 500).
 
 ## 6. Three pre-existing production bugs the Phase 2 run surfaced
 

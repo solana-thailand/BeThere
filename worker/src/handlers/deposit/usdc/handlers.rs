@@ -38,7 +38,7 @@ pub async fn get_deposit_status_handler(
     let event =
         event_store::resolve_event_or_fallback(kv, query.event_id.as_deref(), &state.config, d1)
             .await
-            .map_err(event_checkin_domain::models::error::AppError::Internal)?;
+            .map_err(event_checkin_domain::models::error::AppError::from)?;
 
     let status = event_store::get_deposit_status_with_fallback(kv, d1, &event.id, &attendee_id)
         .await
