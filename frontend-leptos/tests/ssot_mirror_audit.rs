@@ -39,12 +39,21 @@
 //!   Documented as a known gap in `.plans/014_ssot_audit.md`.
 //! - **Mirror types outside `MIRROR_FILES`.** The guard scans only the files
 //!   listed in `MIRROR_FILES` (currently `api/types.rs`, the `api/event/`
-//!   module directory, and `api/admin.rs`). If a new mirror-types file appears elsewhere in
+//!   module directory, `api/admin.rs`, and `pages/public_event/types.rs`).
+//!   If a new mirror-types file appears elsewhere in
 //!   `frontend-leptos/src/`, it must be added to `MIRROR_FILES` or coverage
 //!   silently drops. The Phase 2.1 audit found this was a real risk — the
 //!   Phase 2.3 version of this guard listed only `api/types.rs`, missing 3
 //!   load-bearing predicates in `api/event.rs`. See `.plans/014_ssot_audit.md`
 //!   §"Why the Phase 2.3 guard missed them".
+//! - **Field-type drift.** The guard compares *predicates*, never field types,
+//!   so a mirror can type an integer wire field as something else and stay
+//!   green. This is not hypothetical: `pages/public_event/types.rs` mirrored
+//!   `deposit_amount_usdc`/`deposit_amount_thb` (both `u64` in
+//!   `domain::models::event::EventConfig`) as `f64`, which forced a
+//!   magnitude-guessing money formatter on the public registration page
+//!   (fixed 2026-09-04). Catching this class needs the domain struct parsed
+//!   and compared field-by-field — a bigger guard than this one.
 //! - **UI helper methods** (`as_str()`, `label()`, `css_class()`). These are
 //!   explicitly part of the mirror types' value-add and are NOT business
 //!   predicates. The guard only looks at `is_*`/`can_*`/`has_*`/etc.
@@ -93,7 +102,12 @@ fn workspace_root() -> PathBuf {
 /// **Adding a file here is a conscious decision.** If a new mirror-types file
 /// appears in the frontend, it must be added to this list or the guard's
 /// coverage silently drops.
-const MIRROR_FILES: &[&str] = &["src/api/types.rs", "src/api/event", "src/api/admin.rs"];
+const MIRROR_FILES: &[&str] = &[
+    "src/api/types.rs",
+    "src/api/event",
+    "src/api/admin.rs",
+    "src/pages/public_event/types.rs",
+];
 
 /// Business-predicate naming prefixes. A method whose name starts with one of
 /// these prefixes is considered a business predicate (a function that encodes

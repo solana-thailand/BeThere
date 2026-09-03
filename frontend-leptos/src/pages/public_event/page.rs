@@ -466,7 +466,7 @@ fn render_loaded_event(
     let has_description = !data.description.is_empty();
     let has_link = !data.link.is_empty();
     let has_deposit =
-        data.deposit_enabled && (data.deposit_amount_usdc > 0.0 || data.deposit_amount_thb > 0.0);
+        data.deposit_enabled && (data.deposit_amount_usdc > 0 || data.deposit_amount_thb > 0);
     let is_hybrid = data.event_format == crate::api::EventFormat::Hybrid;
     let is_online_only = data.event_format == crate::api::EventFormat::Online;
 
@@ -483,22 +483,20 @@ fn render_loaded_event(
     let community_links = data.community_links.clone();
 
     // Deposit label for registration form checkbox
+    let thb = data.deposit_amount_thb;
     let deposit_label = if escrow_closed {
-        if data.deposit_amount_thb > 0.0 {
-            format!("{} Baht", format_thb(data.deposit_amount_thb))
+        if thb > 0 {
+            format!("{thb} Baht")
         } else {
             format_usdc(data.deposit_amount_usdc)
         }
-    } else if data.deposit_amount_usdc > 0.0 && data.deposit_amount_thb > 0.0 {
-        format!(
-            "{} (~{} Baht)",
-            format_usdc(data.deposit_amount_usdc),
-            format_thb(data.deposit_amount_thb)
-        )
-    } else if data.deposit_amount_usdc > 0.0 {
+    } else if data.deposit_amount_usdc > 0 && thb > 0 {
+        let usdc = format_usdc(data.deposit_amount_usdc);
+        format!("{usdc} (~{thb} Baht)")
+    } else if data.deposit_amount_usdc > 0 {
         format_usdc(data.deposit_amount_usdc)
     } else {
-        format_thb(data.deposit_amount_thb)
+        thb.to_string()
     };
 
     let show_reg_form = !event_completed.get();
