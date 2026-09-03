@@ -1,5 +1,6 @@
 //! Check-in, claim, and QR URL mutation operations.
 
+use crate::sheets::a1;
 use chrono::Utc;
 use event_checkin_domain::models::attendee::ColumnMapping;
 use worker::KvStore;
@@ -26,6 +27,7 @@ pub async fn mark_checked_in(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<String, String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
     let timestamp = Utc::now().to_rfc3339();
 
@@ -37,15 +39,15 @@ pub async fn mark_checked_in(
 
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_at}{row_index}"),
             values: vec![vec![timestamp.clone()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_by}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_by}{row_index}"),
             values: vec![vec![staff_email.to_string()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_claim_token}{row_index}"),
+            range: format!("{sheet_ref}!{col_claim_token}{row_index}"),
             values: vec![vec![claim_token.to_string()]],
         },
     ];
@@ -82,6 +84,7 @@ pub async fn mark_virtual_checked_in(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<String, String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
     let timestamp = Utc::now().to_rfc3339();
 
@@ -92,11 +95,11 @@ pub async fn mark_virtual_checked_in(
 
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_at}{row_index}"),
             values: vec![vec![timestamp.clone()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_by}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_by}{row_index}"),
             values: vec![vec!["virtual".to_string()]],
         },
     ];
@@ -136,6 +139,7 @@ pub async fn clear_checked_in(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
@@ -147,19 +151,19 @@ pub async fn clear_checked_in(
 
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_at}{row_index}"),
             values: vec![vec![String::new()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_by}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_by}{row_index}"),
             values: vec![vec![String::new()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_claim_token}{row_index}"),
+            range: format!("{sheet_ref}!{col_claim_token}{row_index}"),
             values: vec![vec![String::new()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_claimed_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_claimed_at}{row_index}"),
             values: vec![vec![String::new()]],
         },
     ];
@@ -198,6 +202,7 @@ pub async fn mark_claimed(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<String, String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
@@ -208,15 +213,15 @@ pub async fn mark_claimed(
 
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!{col_solana}{row_index}"),
+            range: format!("{sheet_ref}!{col_solana}{row_index}"),
             values: vec![vec![wallet_address.to_string()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_claimed_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_claimed_at}{row_index}"),
             values: vec![vec![claimed_at.to_string()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_nft_proof_url}{row_index}"),
+            range: format!("{sheet_ref}!{col_nft_proof_url}{row_index}"),
             values: vec![vec![nft_proof_url.to_string()]],
         },
     ];
@@ -246,6 +251,7 @@ pub async fn update_qr_urls(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<usize, String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     if updates.is_empty() {
         return Ok(0);
     }
@@ -259,7 +265,7 @@ pub async fn update_qr_urls(
     let data: Vec<ValueRange> = updates
         .iter()
         .map(|(row_index, url)| ValueRange {
-            range: format!("{sheet_name}!{col_qr}{row_index}"),
+            range: format!("{sheet_ref}!{col_qr}{row_index}"),
             values: vec![vec![url.clone()]],
         })
         .collect();

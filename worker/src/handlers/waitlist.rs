@@ -75,12 +75,20 @@ pub async fn join_waitlist(
 }
 
 /// Fetch all existing emails from the "waitlist" sheet tab (column A).
+/// Tab on the platform spreadsheet that holds the waitlist.
+///
+/// A plain identifier, so it needs no A1 quoting and can be interpolated into a
+/// range directly — unlike the organiser-supplied `sheet_name` on an event,
+/// which goes through [`crate::sheets::a1::sheet_ref`]. Pinned by
+/// [`tests::the_waitlist_tab_needs_no_a1_quoting`] so renaming it to something
+/// like `"waiting list"` fails the build rather than the API.
+const WAITLIST_SHEET: &str = "waitlist";
+
 /// Returns a Vec of lowercased email strings for dedup comparison.
 async fn get_existing_waitlist_emails(state: &AppState) -> Result<Vec<String>, String> {
     let access_token = get_access_token(state).await?;
     let sheet_id = crate::handlers::user_log::resolve_platform_sheet_id(state);
-    let sheet_name = "waitlist";
-    let range = format!("{sheet_name}!A2:A");
+    let range = format!("{WAITLIST_SHEET}!A2:A");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -113,15 +121,14 @@ async fn append_to_waitlist(email: &str, state: &AppState) -> Result<(), String>
     let access_token = get_access_token(state).await?;
     let timestamp = chrono::Utc::now().to_rfc3339();
     let sheet_id = crate::handlers::user_log::resolve_platform_sheet_id(state);
-    let sheet_name = "waitlist"; // Dedicated tab name
 
     // Use Google Sheets append API
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{sheet_name}!A:B:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{WAITLIST_SHEET}!A:B:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A:B"),
+        range: format!("{WAITLIST_SHEET}!A:B"),
         values: vec![vec![email.to_string(), timestamp]],
     };
 
@@ -168,4 +175,23 @@ async fn create_waitlist_tab(state: &AppState) -> Result<(), String> {
 
     tracing::info!(%sheet_id, "waitlist: created tab with header row");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sheets::a1::sheet_ref;
+
+    /// [`WAITLIST_SHEET`] is interpolated into A1 ranges bare, including one
+    /// that is not URL-encoded. Both are only correct while the name needs no
+    /// quoting.
+    #[test]
+    fn the_waitlist_tab_needs_no_a1_quoting() {
+        assert_eq!(
+            sheet_ref(WAITLIST_SHEET),
+            WAITLIST_SHEET,
+            "`{WAITLIST_SHEET}` now needs A1 quoting; route the three ranges in \
+             this module through `sheet_ref` instead of interpolating it bare"
+        );
+    }
 }

@@ -7,6 +7,7 @@
 //! All functions are best-effort: errors are logged but never propagate to the
 //! HTTP response. D1 is the source of truth; Sheets is a legacy mirror.
 
+use super::a1;
 use event_checkin_domain::models::attendee::ColumnMapping;
 use worker::KvStore;
 
@@ -33,6 +34,7 @@ pub async fn mark_checked_in(
     kv: Option<KvStore>,
     timestamp: String,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -49,15 +51,15 @@ pub async fn mark_checked_in(
 
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_at}{row_index}"),
             values: vec![vec![timestamp.clone()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_by}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_by}{row_index}"),
             values: vec![vec![staff_email.clone()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_claim_token}{row_index}"),
+            range: format!("{sheet_ref}!{col_claim_token}{row_index}"),
             values: vec![vec![claim_token.clone()]],
         },
     ];
@@ -103,6 +105,7 @@ pub async fn mark_virtual_checked_in(
     kv: Option<KvStore>,
     timestamp: String,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -118,11 +121,11 @@ pub async fn mark_virtual_checked_in(
 
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_at}{row_index}"),
             values: vec![vec![timestamp.clone()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_by}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_by}{row_index}"),
             values: vec![vec!["virtual".to_string()]],
         },
     ];
@@ -166,6 +169,7 @@ pub async fn clear_checked_in(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -183,19 +187,19 @@ pub async fn clear_checked_in(
 
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_at}{row_index}"),
             values: vec![vec![String::new()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_checked_in_by}{row_index}"),
+            range: format!("{sheet_ref}!{col_checked_in_by}{row_index}"),
             values: vec![vec![String::new()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_claim_token}{row_index}"),
+            range: format!("{sheet_ref}!{col_claim_token}{row_index}"),
             values: vec![vec![String::new()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_claimed_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_claimed_at}{row_index}"),
             values: vec![vec![String::new()]],
         },
     ];
@@ -243,6 +247,7 @@ pub async fn mark_claimed(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -259,15 +264,15 @@ pub async fn mark_claimed(
 
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!{col_solana}{row_index}"),
+            range: format!("{sheet_ref}!{col_solana}{row_index}"),
             values: vec![vec![wallet_address.clone()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_claimed_at}{row_index}"),
+            range: format!("{sheet_ref}!{col_claimed_at}{row_index}"),
             values: vec![vec![claimed_at.clone()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_nft_proof_url}{row_index}"),
+            range: format!("{sheet_ref}!{col_nft_proof_url}{row_index}"),
             values: vec![vec![nft_proof_url.clone()]],
         },
     ];
@@ -324,6 +329,7 @@ pub async fn append_attendee_row(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -391,11 +397,11 @@ pub async fn append_attendee_row(
 
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:{last_col_letter}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
-        urlencoding::encode(&sheet_name)
+        urlencoding::encode(&sheet_ref)
     );
 
     let body = crate::http::ValueRange {
-        range: format!("{sheet_name}!A:{last_col_letter}"),
+        range: format!("{sheet_ref}!A:{last_col_letter}"),
         values: vec![row],
     };
 
@@ -435,6 +441,7 @@ pub async fn update_deposit_method(
     method: String,
     mapping: ColumnMapping,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -447,7 +454,7 @@ pub async fn update_deposit_method(
     let col_deposit_method = mapping.column_letter(CK::DepositMethod);
 
     let data = vec![ValueRange {
-        range: format!("{sheet_name}!{col_deposit_method}{row_index}"),
+        range: format!("{sheet_ref}!{col_deposit_method}{row_index}"),
         values: vec![vec![method.clone()]],
     }];
 
@@ -477,6 +484,7 @@ pub async fn update_participation_type(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -489,7 +497,7 @@ pub async fn update_participation_type(
     let col = mapping.column_letter(CK::ParticipationType);
 
     let data = vec![ValueRange {
-        range: format!("{sheet_name}!{col}{row_index}"),
+        range: format!("{sheet_ref}!{col}{row_index}"),
         values: vec![vec![participation_type.clone()]],
     }];
 
@@ -521,6 +529,7 @@ pub async fn write_bank_info(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -536,13 +545,13 @@ pub async fn write_bank_info(
     let mut data = vec![];
     if let Some(ref acct) = bank_account {
         data.push(ValueRange {
-            range: format!("{sheet_name}!{col_bank_account}{row_index}"),
+            range: format!("{sheet_ref}!{col_bank_account}{row_index}"),
             values: vec![vec![acct.clone()]],
         });
     }
     if let Some(ref name) = bank_name {
         data.push(ValueRange {
-            range: format!("{sheet_name}!{col_bank_name}{row_index}"),
+            range: format!("{sheet_ref}!{col_bank_name}{row_index}"),
             values: vec![vec![name.clone()]],
         });
     }
@@ -580,6 +589,7 @@ pub async fn write_deposit_verification(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -595,15 +605,15 @@ pub async fn write_deposit_verification(
 
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!{col_method}{row_index}"),
+            range: format!("{sheet_ref}!{col_method}{row_index}"),
             values: vec![vec![deposit_method]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_amount}{row_index}"),
+            range: format!("{sheet_ref}!{col_amount}{row_index}"),
             values: vec![vec![deposit_amount]],
         },
         ValueRange {
-            range: format!("{sheet_name}!{col_verified}{row_index}"),
+            range: format!("{sheet_ref}!{col_verified}{row_index}"),
             values: vec![vec![if verified {
                 "Yes".to_string()
             } else {
@@ -637,6 +647,7 @@ pub async fn update_qr_urls(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     if updates.is_empty() {
         return;
     }
@@ -655,7 +666,7 @@ pub async fn update_qr_urls(
     let data: Vec<ValueRange> = updates
         .into_iter()
         .map(|(row_index, url)| ValueRange {
-            range: format!("{sheet_name}!{col_qr}{row_index}"),
+            range: format!("{sheet_ref}!{col_qr}{row_index}"),
             values: vec![vec![url]],
         })
         .collect();
@@ -686,6 +697,7 @@ pub async fn write_refund_status(
     refund_status: String,
     mapping: ColumnMapping,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -698,7 +710,7 @@ pub async fn write_refund_status(
     let col_refund_status = mapping.column_letter(CK::RefundStatus);
 
     let data = vec![ValueRange {
-        range: format!("{sheet_name}!{col_refund_status}{row_index}"),
+        range: format!("{sheet_ref}!{col_refund_status}{row_index}"),
         values: vec![vec![refund_status]],
     }];
 
@@ -728,6 +740,7 @@ pub async fn write_refund_link(
     refund_link: String,
     mapping: ColumnMapping,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
         Ok(t) => t,
         Err(e) => {
@@ -740,7 +753,7 @@ pub async fn write_refund_link(
     let col_refund_link = mapping.column_letter(CK::RefundLink);
 
     let data = vec![ValueRange {
-        range: format!("{sheet_name}!{col_refund_link}{row_index}"),
+        range: format!("{sheet_ref}!{col_refund_link}{row_index}"),
         values: vec![vec![refund_link]],
     }];
 
@@ -770,6 +783,7 @@ pub async fn write_refund_status_batch(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
+    let sheet_ref = a1::sheet_ref(&sheet_name);
     if updates.is_empty() {
         return;
     }
@@ -788,7 +802,7 @@ pub async fn write_refund_status_batch(
     let data: Vec<ValueRange> = updates
         .into_iter()
         .map(|(row_index, status)| ValueRange {
-            range: format!("{sheet_name}!{col}{row_index}"),
+            range: format!("{sheet_ref}!{col}{row_index}"),
             values: vec![vec![status]],
         })
         .collect();

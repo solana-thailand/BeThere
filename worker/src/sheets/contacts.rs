@@ -20,6 +20,7 @@
 //!   M: deposit_credit_since| 2026-05-22          | Date when credit was first held
 //!   N: credit_refund_req   | 1                    | Attendee requested return of held credit (Issue #061 Phase 3)
 
+use super::a1;
 use worker::KvStore;
 
 use crate::http::{ValueRange, post_json};
@@ -166,7 +167,8 @@ async fn find_contact_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<Option<(usize, Vec<String>)>, String> {
-    let range = format!("{sheet_name}!A:N");
+    let sheet_ref = a1::sheet_ref(sheet_name);
+    let range = format!("{sheet_ref}!A:N");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -196,14 +198,15 @@ async fn update_contact_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<(), String> {
-    let range = format!("{sheet_name}!A{row_index}:N{row_index}");
+    let sheet_ref = a1::sheet_ref(sheet_name);
+    let range = format!("{sheet_ref}!A{row_index}:N{row_index}");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}?valueInputOption=USER_ENTERED",
         urlencoding::encode(&range)
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A{row_index}:N{row_index}"),
+        range: format!("{sheet_ref}!A{row_index}:N{row_index}"),
         values: vec![row_data.to_vec()],
     };
 
@@ -220,13 +223,14 @@ async fn append_contact_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:N:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
-        urlencoding::encode(sheet_name)
+        urlencoding::encode(&sheet_ref)
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A:N"),
+        range: format!("{sheet_ref}!A:N"),
         values: vec![row.to_vec()],
     };
 
@@ -303,9 +307,10 @@ pub async fn list_contacts(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Vec<Contact>, String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
-    let range = format!("{sheet_name}!A:N");
+    let range = format!("{sheet_ref}!A:N");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
