@@ -1,6 +1,5 @@
 use super::helpers::{crossmint_image_url, orb_nft_url};
 
-
 // ── crossmint_image_url: SVG→PNG rewrite for the mint payload ──
 #[test]
 fn image_url_rewrites_hd_svg_to_png() {
@@ -17,15 +16,24 @@ fn image_url_rewrites_plain_svg_to_png() {
 
 #[test]
 fn image_url_passes_through_png() {
-    assert_eq!(crossmint_image_url("https://x.dev/a.png"), "https://x.dev/a.png");
+    assert_eq!(
+        crossmint_image_url("https://x.dev/a.png"),
+        "https://x.dev/a.png"
+    );
 }
 
 #[test]
 fn image_url_passes_through_empty_and_non_svg() {
     assert_eq!(crossmint_image_url(""), "");
-    assert_eq!(crossmint_image_url("https://x.dev/img"), "https://x.dev/img");
+    assert_eq!(
+        crossmint_image_url("https://x.dev/img"),
+        "https://x.dev/img"
+    );
     // Only a trailing .svg is rewritten — a mid-string ".svg" is untouched.
-    assert_eq!(crossmint_image_url("https://x.dev/a.svg.jpg"), "https://x.dev/a.svg.jpg");
+    assert_eq!(
+        crossmint_image_url("https://x.dev/a.svg.jpg"),
+        "https://x.dev/a.svg.jpg"
+    );
 }
 
 // ── orb_nft_url: explorer link cluster mapping ──

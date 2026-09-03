@@ -568,7 +568,6 @@ pub async fn list_contact_events(
         .collect()
 }
 
-
 /// Whether an email already has any account footprint (contact, developer
 /// profile, or attendee record). Used to decide whether it's safe to
 /// auto-bind a wallet to a typed email at registration (Plan 017): we only
@@ -619,11 +618,16 @@ pub async fn find_bound_email_by_wallet(
 /// Deterministic on the developer_profiles side (most recent binding wins) so
 /// wallet-login and credit-ownership resolution are stable even if a wallet is
 /// (legacy) bound to more than one email.
-pub async fn find_email_by_wallet(db: &D1Database, wallet_address: &str) -> Result<Option<String>, String> {
+pub async fn find_email_by_wallet(
+    db: &D1Database,
+    wallet_address: &str,
+) -> Result<Option<String>, String> {
     let sql = "SELECT email FROM developer_profiles WHERE LOWER(wallet_address) = LOWER(?1) \
                ORDER BY updated_at DESC LIMIT 1";
     let stmt = db.prepare(sql);
-    let bound = stmt.bind_refs(&[D1Type::Text(wallet_address)]).map_err(|e| format!("D1 find_email_by_wallet bind: {e:?}"))?;
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(wallet_address)])
+        .map_err(|e| format!("D1 find_email_by_wallet bind: {e:?}"))?;
     if let Ok(rows) = safe_all_rows(&bound).await
         && let Some(row) = rows.first()
         && let Some(email) = row.get("email").and_then(|v| v.as_str())
@@ -634,7 +638,9 @@ pub async fn find_email_by_wallet(db: &D1Database, wallet_address: &str) -> Resu
     // Fallback: check attendees table
     let sql2 = "SELECT email FROM attendees WHERE LOWER(wallet_address) = LOWER(?1) LIMIT 1";
     let stmt2 = db.prepare(sql2);
-    let bound2 = stmt2.bind_refs(&[D1Type::Text(wallet_address)]).map_err(|e| format!("D1 find_email_by_wallet fallback bind: {e:?}"))?;
+    let bound2 = stmt2
+        .bind_refs(&[D1Type::Text(wallet_address)])
+        .map_err(|e| format!("D1 find_email_by_wallet fallback bind: {e:?}"))?;
     if let Ok(rows2) = safe_all_rows(&bound2).await
         && let Some(row2) = rows2.first()
         && let Some(email2) = row2.get("email").and_then(|v| v.as_str())
@@ -646,7 +652,11 @@ pub async fn find_email_by_wallet(db: &D1Database, wallet_address: &str) -> Resu
 }
 
 /// Link wallet address to an existing email in developer_profiles.
-pub async fn link_wallet_to_email(db: &D1Database, email: &str, wallet_address: &str) -> Result<(), String> {
+pub async fn link_wallet_to_email(
+    db: &D1Database,
+    email: &str,
+    wallet_address: &str,
+) -> Result<(), String> {
     let sql = "INSERT INTO developer_profiles (email, wallet_address, updated_at) \
                VALUES (LOWER(?1), ?2, datetime('now')) \
                ON CONFLICT (email) DO UPDATE SET \
@@ -660,7 +670,6 @@ pub async fn link_wallet_to_email(db: &D1Database, email: &str, wallet_address: 
         .map_err(|e| format!("D1 link_wallet_to_email run: {e:?}"))?;
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

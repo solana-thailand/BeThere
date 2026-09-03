@@ -240,11 +240,8 @@ pub(crate) async fn sha256_digest(data: &[u8]) -> Result<Vec<u8>, String> {
     let data_arr = Uint8Array::new_with_length(data.len() as u32);
     data_arr.copy_from(data);
 
-    let digest_buf = subtle_call(
-        "digest",
-        &[JsValue::from_str("SHA-256"), data_arr.into()],
-    )
-    .await?;
+    let digest_buf =
+        subtle_call("digest", &[JsValue::from_str("SHA-256"), data_arr.into()]).await?;
 
     js_buffer_to_vec(&digest_buf)
 }

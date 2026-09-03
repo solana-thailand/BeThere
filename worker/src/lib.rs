@@ -56,7 +56,9 @@ const INDEX_HTML: &str = include_str!("../../frontend-leptos/dist/index.html");
 /// fallback is Worker-generated for non-asset routes (`/claim/*`, `/staff`,
 /// `/admin`), so the header must be set here, not in `_headers`.
 static SPA_NO_STORE: std::sync::LazyLock<axum::http::HeaderValue> =
-    std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"));
+    std::sync::LazyLock::new(|| {
+        axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0")
+    });
 
 static SPA_PRAGMA: std::sync::LazyLock<axum::http::HeaderValue> =
     std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-cache"));
@@ -86,7 +88,8 @@ fn service_unavailable(e: &str) -> axum::http::Response<axum::body::Body> {
     let body = serde_json::json!({
         "success": false,
         "error": format!("service unavailable: {e}")
-    }).to_string();
+    })
+    .to_string();
 
     axum::http::Response::builder()
         .status(axum::http::StatusCode::SERVICE_UNAVAILABLE)

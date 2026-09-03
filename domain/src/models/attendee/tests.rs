@@ -1,6 +1,5 @@
-use super::*;
 use super::columns::index_to_column_letter;
-
+use super::*;
 
 fn make_attendee(participation_type: &str) -> Attendee {
     Attendee {

@@ -5,7 +5,6 @@ use worker::{D1Database, D1Type};
 
 use super::types::CampaignRow;
 
-
 /// One entry in a campaign's ordered event list — only the public-facing fields
 /// needed to render prev/next + playlist links. Joined from `campaign_events`
 /// and `events`.

@@ -81,12 +81,18 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/wallet/nonce", post(auth::wallet_nonce))
         .route("/auth/wallet/verify", post(auth::wallet_verify))
         // Social account linking (public callback for GitHub, auth-guarded for others)
-        .route("/auth/github/callback", get(social_link::github_link_callback))
+        .route(
+            "/auth/github/callback",
+            get(social_link::github_link_callback),
+        )
         // Public Telegram widget config (is it enabled + which bot username)
         .route("/auth/telegram/config", get(social_link::telegram_config))
         // Public Telegram redirect-flow callback — identity via signed state,
         // not a cookie (survives the cross-site redirect back from Telegram).
-        .route("/auth/telegram/callback", get(social_link::telegram_callback))
+        .route(
+            "/auth/telegram/callback",
+            get(social_link::telegram_callback),
+        )
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Public routes — no auth middleware required.
@@ -523,10 +529,7 @@ pub fn routes(state: AppState) -> Router<()> {
         // Slug availability probe — must precede nothing in particular (axum
         // matches the literal `exists` segment ahead of a bare `{id}` route),
         // but is kept adjacent to the campaign CRUD block for legibility.
-        .route(
-            "/campaigns/{id}/exists",
-            get(campaigns::campaign_id_exists),
-        )
+        .route("/campaigns/{id}/exists", get(campaigns::campaign_id_exists))
         .route(
             "/campaigns/{id}",
             get(campaigns::get_campaign)

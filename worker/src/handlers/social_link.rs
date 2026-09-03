@@ -41,7 +41,9 @@ pub async fn github_link_start(
     if client_id.is_empty() {
         return (
             axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            axum::Json(json!({"error": "GitHub OAuth not configured — set GITHUB_CLIENT_ID secret"})),
+            axum::Json(
+                json!({"error": "GitHub OAuth not configured — set GITHUB_CLIENT_ID secret"}),
+            ),
         )
             .into_response();
     }
@@ -56,17 +58,18 @@ pub async fn github_link_start(
     // update on callback — the HMAC stops third parties from linking their
     // GitHub account to an arbitrary victim email.
     let expires = (js_sys::Date::now() / 1000.0) as i64 + GITHUB_STATE_TTL_SECS;
-    let signed_state = match sign_github_state(&claims.email, expires, &state.config.jwt_secret).await {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("GitHub state signing failed: {e}");
-            return (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                axum::Json(json!({"error": "failed to sign OAuth state"})),
-            )
-                .into_response();
-        }
-    };
+    let signed_state =
+        match sign_github_state(&claims.email, expires, &state.config.jwt_secret).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("GitHub state signing failed: {e}");
+                return (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    axum::Json(json!({"error": "failed to sign OAuth state"})),
+                )
+                    .into_response();
+            }
+        };
     let encoded_state = urlencoding::encode(&signed_state).to_string();
     let redirect_uri = urlencoding::encode(&raw_redirect_uri).to_string();
 
@@ -97,11 +100,8 @@ async fn sign_link_state(
     secret: &str,
 ) -> Result<String, String> {
     let payload = format!("{email}|{expires}");
-    let sig = crate::crypto::hmac_sha256(
-        secret.as_bytes(),
-        format!("{tag}|{payload}").as_bytes(),
-    )
-    .await?;
+    let sig = crate::crypto::hmac_sha256(secret.as_bytes(), format!("{tag}|{payload}").as_bytes())
+        .await?;
     let sig_hex: String = sig.iter().map(|b| format!("{b:02x}")).collect();
     Ok(format!("{payload}|{sig_hex}"))
 }
@@ -318,9 +318,10 @@ pub async fn github_link_callback(
           github_verified = 1, \
           github_verified_at = datetime('now'), \
           updated_at = datetime('now')";
-    let stmt = match worker::D1Database::prepare(d1, sql)
-        .bind_refs(&[worker::D1Type::Text(&email), worker::D1Type::Text(&user_info.login)])
-    {
+    let stmt = match worker::D1Database::prepare(d1, sql).bind_refs(&[
+        worker::D1Type::Text(&email),
+        worker::D1Type::Text(&user_info.login),
+    ]) {
         Ok(s) => s,
         Err(e) => {
             tracing::error!("GitHub handle save bind failed: {e:?}");
@@ -365,7 +366,10 @@ async fn github_get_user(access_token: &str) -> Result<GithubUserInfo, String> {
         .map_err(|e| format!("fetch error: {e:?}"))?;
 
     if response.status_code() != 200 {
-        return Err(format!("GitHub API returned status {}", response.status_code()));
+        return Err(format!(
+            "GitHub API returned status {}",
+            response.status_code()
+        ));
     }
 
     response
@@ -419,7 +423,14 @@ pub async fn telegram_state(
     Extension(claims): Extension<Claims>,
 ) -> Response {
     let expires = (js_sys::Date::now() / 1000.0) as i64 + GITHUB_STATE_TTL_SECS;
-    match sign_link_state("telegram-link", &claims.email, expires, &state.config.jwt_secret).await {
+    match sign_link_state(
+        "telegram-link",
+        &claims.email,
+        expires,
+        &state.config.jwt_secret,
+    )
+    .await
+    {
         Ok(signed) => (
             axum::http::StatusCode::OK,
             axum::Json(json!({ "state": signed })),
@@ -475,7 +486,10 @@ pub async fn telegram_verify(
         .as_ref()
         .ok_or_else(|| WorkerError(AppError::Internal("D1 not available".to_string())))?;
 
-    let telegram_handle = body.username.clone().unwrap_or_else(|| body.first_name.clone());
+    let telegram_handle = body
+        .username
+        .clone()
+        .unwrap_or_else(|| body.first_name.clone());
     let telegram_id = body.id.to_string();
 
     // Parameterized (?1 email, ?2 handle, ?3 id) — Telegram profile text is
@@ -565,7 +579,8 @@ pub async fn telegram_callback(
 
     // Recover the linking user's email from our signed state.
     let raw_state = q.state.clone().unwrap_or_default();
-    let email = match verify_link_state("telegram-link", &raw_state, &state.config.jwt_secret).await {
+    let email = match verify_link_state("telegram-link", &raw_state, &state.config.jwt_secret).await
+    {
         Ok(email) => email,
         Err("expired") => return Redirect::to("/profile?error=telegram_expired").into_response(),
         Err(_) => return Redirect::to("/profile?error=telegram_invalid").into_response(),
@@ -602,7 +617,10 @@ pub async fn telegram_callback(
         None => return Redirect::to("/profile?error=db_unavailable").into_response(),
     };
 
-    let handle = data.username.clone().unwrap_or_else(|| data.first_name.clone());
+    let handle = data
+        .username
+        .clone()
+        .unwrap_or_else(|| data.first_name.clone());
     if let Err(e) = save_telegram_link(d1, &email, &handle, &data.id.to_string()).await {
         tracing::error!("Telegram callback save failed: {e}");
         return Redirect::to("/profile?error=telegram_save_failed").into_response();
@@ -637,22 +655,28 @@ pub async fn social_unlink(
     // Platform selects a fixed statement (whitelisted); email is bound as ?1.
     // See docs/SECURITY-FINDINGS-2026-08-13.md #6.
     let sql: &str = match body.platform.as_str() {
-        "github" => "UPDATE developer_profiles SET \
+        "github" => {
+            "UPDATE developer_profiles SET \
              github_handle = NULL, github_verified = 0, github_verified_at = NULL, \
              updated_at = datetime('now') \
-             WHERE email = ?1",
-        "telegram" => "UPDATE developer_profiles SET \
+             WHERE email = ?1"
+        }
+        "telegram" => {
+            "UPDATE developer_profiles SET \
              telegram_handle = NULL, telegram_id = NULL, telegram_verified = 0, \
              telegram_verified_at = NULL, updated_at = datetime('now') \
-             WHERE email = ?1",
-        "discord" => "UPDATE developer_profiles SET \
+             WHERE email = ?1"
+        }
+        "discord" => {
+            "UPDATE developer_profiles SET \
              discord_handle = NULL, discord_verified = 0, discord_verified_at = NULL, \
              updated_at = datetime('now') \
-             WHERE email = ?1",
+             WHERE email = ?1"
+        }
         other => {
             return Err(WorkerError(AppError::Validation(format!(
                 "Unknown platform: {other}"
-            ))))
+            ))));
         }
     };
 

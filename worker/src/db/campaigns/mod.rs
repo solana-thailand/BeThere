@@ -21,9 +21,7 @@ pub(crate) use crud::{
     campaign_collection_mints, campaign_exists, create_campaign, delete_campaign, get_campaign,
     list_campaigns, update_campaign, update_campaign_status,
 };
-pub(crate) use events::{
-    list_campaign_events, set_campaign_events,
-};
+pub(crate) use events::{list_campaign_events, set_campaign_events};
 pub(crate) use progress::{
     get_developer_progress, list_campaign_attendance, list_campaign_progress,
     list_developer_campaigns, mark_reward_claimed_with_mint,

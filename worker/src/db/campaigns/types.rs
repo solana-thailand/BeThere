@@ -1,6 +1,5 @@
 //! Row and dashboard-stat types decoded from D1 result sets.
 
-
 #[allow(dead_code)]
 #[derive(Debug, Clone, serde::Deserialize)]
 pub(crate) struct CampaignRow {

@@ -15,7 +15,11 @@ use crate::state::AppState;
 
 /// On a 5xx response, post a best-effort Slack alert with the method, path, and
 /// correlation id. Disabled (pass-through) when no webhook is configured.
-pub async fn slack_alert_layer(State(state): State<AppState>, req: Request, next: Next) -> Response {
+pub async fn slack_alert_layer(
+    State(state): State<AppState>,
+    req: Request,
+    next: Next,
+) -> Response {
     let method = req.method().as_str().to_string();
     let path = req.uri().path().to_string();
 

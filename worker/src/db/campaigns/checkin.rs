@@ -4,7 +4,6 @@ use worker::{D1Database, D1Type};
 
 use super::progress::upsert_developer_progress;
 
-
 /// Projection row for `SELECT DISTINCT campaign_id` — one field, because
 /// `D1Result::results::<T>()` (worker 0.8.1) `unwrap()`s each row's
 /// deserialization. A struct with fields the projection does not select is not
@@ -80,10 +79,10 @@ pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_
              WHERE ce.campaign_id = ? \
              AND a.email = ? \
              AND a.checked_in_at IS NOT NULL";
-        let completed_stmt = match db.prepare(completed_sql).bind_refs(&[
-            D1Type::Text(campaign_id),
-            D1Type::Text(developer_email),
-        ]) {
+        let completed_stmt = match db
+            .prepare(completed_sql)
+            .bind_refs(&[D1Type::Text(campaign_id), D1Type::Text(developer_email)])
+        {
             Ok(stmt) => stmt,
             Err(e) => {
                 tracing::warn!(campaign_id = %campaign_id, error = %e, "campaign auto-progress: failed to bind completed count");

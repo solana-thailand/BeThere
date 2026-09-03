@@ -1,9 +1,6 @@
 //! Internal helpers: event-id coalescing and NFT URL rewriting.
 
-
-
 use crate::state::AppState;
-
 
 /// Resolve the correct `event_id` for a claim token when the caller did not
 /// provide one.

@@ -142,8 +142,7 @@ fn test_parse_confirmed_signer_matches_expected_wallet() {
 fn test_parse_finalized_signer_matches() {
     // "finalized" should also count as confirmed.
     let parsed = confirmed_tx("WalletX", "finalized");
-    let outcome =
-        parse_get_transaction_response(&parsed, "sig", Some("WalletX"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletX"));
     assert!(outcome.is_confirmed_and_matched());
 }
 
@@ -161,11 +160,7 @@ fn test_parse_confirmed_no_expected_wallet_backfills_signer() {
 #[test]
 fn test_parse_confirmed_signer_does_not_match_expected_wallet() {
     let parsed = confirmed_tx("AttackerWallet", "confirmed");
-    let outcome = parse_get_transaction_response(
-        &parsed,
-        "sig",
-        Some("ExpectedAttendeeWallet"),
-    );
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("ExpectedAttendeeWallet"));
     // Confirmed, but NOT matched — caller must refuse verification.
     assert!(outcome.is_confirmed());
     assert!(!outcome.is_confirmed_and_matched());
@@ -199,8 +194,7 @@ fn test_parse_result_missing_is_pending() {
 #[test]
 fn test_parse_tx_failed_on_chain_is_pending() {
     let parsed = failed_tx("InstructionError");
-    let outcome =
-        parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
     assert!(matches!(outcome, VerifyWithSignerOutcome::Pending));
 }
 
@@ -208,8 +202,7 @@ fn test_parse_tx_failed_on_chain_is_pending() {
 fn test_parse_tx_processed_but_not_confirmed_is_pending() {
     // Some RPCs return "processed" before it reaches "confirmed".
     let parsed = confirmed_tx("WalletA", "processed");
-    let outcome =
-        parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
     assert!(matches!(outcome, VerifyWithSignerOutcome::Pending));
 }
 
@@ -261,8 +254,7 @@ fn test_parse_realistic_devnet_self_deposit_signer_matches() {
     // cross-check is designed to recover from.
     let organizer_wallet = "AqdrF1bMEayzZC72R7SxsC2KFqybT5rHPYswkFWe5Mkn";
     let parsed = confirmed_tx(organizer_wallet, "finalized");
-    let outcome =
-        parse_get_transaction_response(&parsed, "real-sig", Some(organizer_wallet));
+    let outcome = parse_get_transaction_response(&parsed, "real-sig", Some(organizer_wallet));
     assert!(outcome.is_confirmed_and_matched());
     assert_eq!(outcome.signer(), Some(organizer_wallet));
 }

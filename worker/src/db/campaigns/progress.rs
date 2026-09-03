@@ -4,7 +4,6 @@ use worker::{D1Database, D1Type};
 
 use super::types::{DeveloperCampaignProgressRow, DeveloperEventAttendanceRow};
 
-
 #[allow(dead_code)]
 pub(crate) async fn get_developer_progress(
     db: &D1Database,
@@ -20,8 +19,8 @@ pub(crate) async fn get_developer_progress(
     .bind_refs(&args)
     .map_err(|e| format!("D1 get_developer_progress bind: {e:?}"))?
     .first::<DeveloperCampaignProgressRow>(None)
-        .await
-        .map_err(|e| format!("D1 get_developer_progress query: {e:?}"))
+    .await
+    .map_err(|e| format!("D1 get_developer_progress query: {e:?}"))
 }
 
 #[allow(clippy::too_many_arguments)]

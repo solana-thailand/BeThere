@@ -4,7 +4,6 @@ use worker::{D1Database, D1Type};
 
 use super::types::{CampaignCompletionStats, EventDropOff};
 
-
 /// Per-event drop-off row from the join between campaign_events and attendees.
 #[derive(Debug, Clone, serde::Deserialize)]
 struct EventDropOffRow {

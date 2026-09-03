@@ -294,8 +294,12 @@ pub async fn clear_credit_refund_request_handler(
             )
             .await
             {
-                Ok(_) => tracing::info!(email = %body.email, amount = bal, "reversed held credit in ledger on payout"),
-                Err(e) => tracing::error!(email = %body.email, error = %e, "ledger refund reversal failed — credit NOT reversed; reconcile manually"),
+                Ok(_) => {
+                    tracing::info!(email = %body.email, amount = bal, "reversed held credit in ledger on payout")
+                }
+                Err(e) => {
+                    tracing::error!(email = %body.email, error = %e, "ledger refund reversal failed — credit NOT reversed; reconcile manually")
+                }
             }
         }
     }

@@ -265,10 +265,10 @@ pub async fn update_my_profile(
         discord_handle: Some(body.discord_handle).filter(|s| !s.is_empty()),
         twitter_handle: Some(body.twitter_handle).filter(|s| !s.is_empty()),
         telegram_handle: Some(body.telegram_handle).filter(|s| !s.is_empty()),
-        telegram_id: None, // set via Telegram Login Widget only
-        github_verified: false, // set via OAuth only
+        telegram_id: None,        // set via Telegram Login Widget only
+        github_verified: false,   // set via OAuth only
         telegram_verified: false, // set via Telegram widget only
-        discord_verified: false, // set via OAuth only
+        discord_verified: false,  // set via OAuth only
         github_verified_at: None,
         telegram_verified_at: None,
         discord_verified_at: None,

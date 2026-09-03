@@ -1,6 +1,5 @@
 //! Result types returned by the claim lookup and execute flows.
 
-
 use event_checkin_domain::models::api::{EventConfig as ApiEventConfig, QuizStatus};
 
 /// Result of a successful claim lookup (GET).

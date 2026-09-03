@@ -273,9 +273,13 @@ pub async fn check_in(
         )
         .await
         {
-            Ok(true) => tracing::info!(%email, event_id = %event.id, amount = dep.amount_thb, "rolling credit returned on check-in (Model B)"),
+            Ok(true) => {
+                tracing::info!(%email, event_id = %event.id, amount = dep.amount_thb, "rolling credit returned on check-in (Model B)")
+            }
             Ok(false) => {} // already returned — idempotent
-            Err(e) => tracing::error!(%email, error = %e, "credit return on check-in failed — reconcile"),
+            Err(e) => {
+                tracing::error!(%email, error = %e, "credit return on check-in failed — reconcile")
+            }
         }
     }
 

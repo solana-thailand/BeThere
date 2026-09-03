@@ -145,7 +145,11 @@ fn tally_contacts_per_event(rows: &[AudienceRow]) -> Vec<EventContactCount> {
             count,
         })
         .collect();
-    events.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.event_id.cmp(&b.event_id)));
+    events.sort_by(|a, b| {
+        b.count
+            .cmp(&a.count)
+            .then_with(|| a.event_id.cmp(&b.event_id))
+    });
     events
 }
 
@@ -632,7 +636,6 @@ pub async fn contact_history_handler(
     }))
 }
 
-
 #[cfg(test)]
 mod r9_tests {
     use super::*;
@@ -678,7 +681,13 @@ mod r9_tests {
         let second = tally_contacts_per_event(&rows);
         let ids: Vec<&str> = first.iter().map(|e| e.event_id.as_str()).collect();
         assert_eq!(ids, vec!["alpha", "mid", "zeta"]);
-        assert_eq!(ids, second.iter().map(|e| e.event_id.as_str()).collect::<Vec<_>>());
+        assert_eq!(
+            ids,
+            second
+                .iter()
+                .map(|e| e.event_id.as_str())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -690,7 +699,11 @@ mod r9_tests {
     /// not the drifting stored CSV.
     #[test]
     fn repeat_attendees_use_the_joined_count() {
-        let rows = [row("a@x", 2, "e1,e2"), row("b@x", 1, "e1"), row("c@x", 5, "e1")];
+        let rows = [
+            row("a@x", 2, "e1,e2"),
+            row("b@x", 1, "e1"),
+            row("c@x", 5, "e1"),
+        ];
         assert_eq!(rows.iter().filter(|r| r.events_joined > 1).count(), 2);
     }
 }

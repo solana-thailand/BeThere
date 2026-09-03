@@ -1,11 +1,9 @@
 //! Online-attendee quest gate (quiz or adventure).
 
-
 use event_checkin_domain::models::adventure::AdventureStatus;
 use event_checkin_domain::models::api::QuizStatus;
 
 use crate::state::AppState;
-
 
 // ---------------------------------------------------------------------------
 

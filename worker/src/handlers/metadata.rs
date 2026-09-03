@@ -144,10 +144,5 @@ pub async fn get_badge_hd_svg() -> Response {
 /// `.svg` URL to this `.png` twin. Pre-rendered from `badge_production.svg`.
 pub async fn get_badge_hd_png() -> Response {
     let png = include_bytes!("../badge_hd.png").to_vec();
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "image/png")],
-        png,
-    )
-        .into_response()
+    (StatusCode::OK, [(header::CONTENT_TYPE, "image/png")], png).into_response()
 }

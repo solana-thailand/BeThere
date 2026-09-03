@@ -63,10 +63,7 @@ pub(crate) async fn recover_and_verify_deposit(
         };
 
         if !cooldown_active {
-            let wallet = status
-                .wallet_address
-                .as_deref()
-                .filter(|w| !w.is_empty());
+            let wallet = status.wallet_address.as_deref().filter(|w| !w.is_empty());
 
             let escrow_addr = if !event.escrow_address.is_empty() {
                 Some(event.escrow_address.clone())
@@ -135,7 +132,10 @@ pub(crate) async fn recover_and_verify_deposit(
     }
 
     // Backfill wallet_address if missing (older record / web2 hiccup).
-    if status.wallet_address.as_deref().is_none_or(|w| w.is_empty())
+    if status
+        .wallet_address
+        .as_deref()
+        .is_none_or(|w| w.is_empty())
         && let Some(signer) = outcome.signer()
     {
         status.wallet_address = Some(signer.to_string());
@@ -319,12 +319,7 @@ pub(crate) async fn recover_and_verify_deposit(
     // worker_ctx is unavailable (tests).
     let deposit_amount_str = status.amount.to_string();
     let (mapping_result, attendee_result) = futures_util::join!(
-        crate::sheets::get_column_mapping(
-            state,
-            &event.sheet_id,
-            &event.sheet_name,
-            kv,
-        ),
+        crate::sheets::get_column_mapping(state, &event.sheet_id, &event.sheet_name, kv,),
         crate::sheets::get_attendee_by_id(
             &attendee_id,
             state,

@@ -9,13 +9,11 @@ use crate::handlers::ext::resolve_kv;
 use crate::solana::MintRequest;
 use crate::state::AppState;
 
-use crate::claim::lock::{
-    FinalizeClaimLockParams, acquire_claim_lock, finalize_claim_lock,
-    release_claim_lock,
-};
-use super::types::ClaimResult;
 use super::helpers::crossmint_image_url;
-
+use super::types::ClaimResult;
+use crate::claim::lock::{
+    FinalizeClaimLockParams, acquire_claim_lock, finalize_claim_lock, release_claim_lock,
+};
 
 /// Execute the claim flow for a walk-in attendee.
 /// Walk-ins skip quiz/adventure gates. Claims are recorded in D1 (primary)

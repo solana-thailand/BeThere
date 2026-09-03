@@ -1,5 +1,5 @@
-use super::stats::totals_sql;
 use super::series::{EventSeriesEntry, compute_series_neighbors};
+use super::stats::totals_sql;
 
 /// Guards the fix for the stats 500. Asserting on the SQL string is the
 /// only native check available — the NULL behaviour lives in SQLite, not in

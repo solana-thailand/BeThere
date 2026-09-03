@@ -142,8 +142,7 @@ pub async fn duplicate_event(
     // Carry the NFT name template only when it adapts to the new event; reset a
     // fixed literal so the duplicate can't inherit the source event's number
     // (see carried_name_template).
-    let (new_name_template, warn_template_reset) =
-        carried_name_template(&source.nft_name_template);
+    let (new_name_template, warn_template_reset) = carried_name_template(&source.nft_name_template);
     if warn_template_reset {
         warnings.push(
             "NFT name template was reset — the source used a fixed title; set a new one so the badge shows this event's name.".to_string(),

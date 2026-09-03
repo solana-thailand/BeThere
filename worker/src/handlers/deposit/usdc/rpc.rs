@@ -308,9 +308,7 @@ pub(crate) fn parse_get_transaction_response(
 /// The Solana RPC spec orders the `result` array newest-first, so the first
 /// error-free entry is the most recent successful transaction touching the
 /// queried account (the AttendeeDeposit PDA in the deposit-discovery flow).
-pub(crate) fn parse_signatures_for_address_response(
-    parsed: &serde_json::Value,
-) -> Option<String> {
+pub(crate) fn parse_signatures_for_address_response(parsed: &serde_json::Value) -> Option<String> {
     // Check for RPC-level error.
     if let Some(error) = parsed.get("error") {
         let msg = error

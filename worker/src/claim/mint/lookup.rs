@@ -1,6 +1,5 @@
 //! Lookup logic (GET /api/claim/{token}).
 
-
 use event_checkin_domain::models::api::{EventConfig as ApiEventConfig, QuizStatus};
 use event_checkin_domain::models::attendee::WalkinAttendee;
 use event_checkin_domain::models::error::AppError;
@@ -8,11 +7,9 @@ use event_checkin_domain::models::error::AppError;
 use crate::handlers::ext::{resolve_event, resolve_kv};
 use crate::state::AppState;
 
-use crate::claim::lock::{
-    claim_lock_key, mask_wallet,
-};
-use super::types::ClaimLookup;
 use super::helpers::coalesce_event_id;
+use super::types::ClaimLookup;
+use crate::claim::lock::{claim_lock_key, mask_wallet};
 
 /// Look up claim status by token. Returns attendee info, event config, quiz/adventure status.
 pub async fn lookup_claim(

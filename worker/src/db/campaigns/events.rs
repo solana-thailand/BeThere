@@ -4,7 +4,6 @@ use worker::{D1Database, D1Type};
 
 use super::types::CampaignEventRow;
 
-
 #[allow(dead_code)]
 pub(crate) async fn add_campaign_event(
     db: &D1Database,

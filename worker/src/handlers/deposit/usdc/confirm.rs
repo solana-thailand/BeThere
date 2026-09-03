@@ -23,13 +23,8 @@ pub(crate) async fn verify_and_confirm_deposit(
     // A single `verify_tx_with_signer` call (getTransaction) replaces the previous
     // two-step pattern (getSignatureStatuses pre-check + getTransaction) — same
     // security, half the RPC calls on the success path.
-    match event_store::get_deposit_status_with_fallback(
-        kv,
-        d1,
-        &body.event_id,
-        &body.attendee_id,
-    )
-    .await
+    match event_store::get_deposit_status_with_fallback(kv, d1, &body.event_id, &body.attendee_id)
+        .await
     {
         Ok(Some(mut deposit_status)) => {
             // Single RPC call via getTransaction: confirms the TX on-chain
@@ -62,7 +57,10 @@ pub(crate) async fn verify_and_confirm_deposit(
             // Backfill the wallet_address if missing (older record or web2
             // hiccup at deposit creation time). Future refunds/check-ins
             // depend on having the depositor's wallet on hand.
-            if deposit_status.wallet_address.as_deref().is_none_or(|w| w.is_empty())
+            if deposit_status
+                .wallet_address
+                .as_deref()
+                .is_none_or(|w| w.is_empty())
                 && let Some(signer) = signer_outcome.signer()
             {
                 deposit_status.wallet_address = Some(signer.to_string());
@@ -175,7 +173,8 @@ pub(crate) async fn verify_and_confirm_deposit(
                         // D1 write — inline so the ticket page sees the QR immediately.
                         if let Some(ref d1) = state.d1
                             && let Err(e) =
-                                crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url).await
+                                crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url)
+                                    .await
                         {
                             tracing::warn!(
                                 attendee_id = %attendee.api_id,

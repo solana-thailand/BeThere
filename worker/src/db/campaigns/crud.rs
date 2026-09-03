@@ -4,7 +4,6 @@ use worker::{D1Database, D1Type};
 
 use super::types::CampaignRow;
 
-
 #[allow(clippy::too_many_arguments)]
 /// Insert a campaign.
 ///
