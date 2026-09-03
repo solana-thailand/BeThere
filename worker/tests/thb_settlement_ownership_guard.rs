@@ -23,6 +23,7 @@
 //! changes nothing on the intended paths. These tests fail if they come back.
 
 const THB_DB: &str = include_str!("../src/db/thb_deposits.rs");
+const SAVE_DEPOSIT: &str = include_str!("../src/event_store/write/deposit.rs");
 
 /// Source with `//`, `///` and `//!` lines stripped, so a rule that talks about
 /// code is never satisfied (or broken) by prose describing it.
@@ -162,4 +163,36 @@ fn only_the_cas_pair_and_the_proof_setter_write_settlement_columns() {
              write must go through the CAS pair"
         );
     }
+}
+
+/// The other half of the same rule: with D1 configured, the KV blob must not be
+/// written. `save_thb_deposit` serialises the caller's *whole in-memory struct*,
+/// so mirroring it into KV would re-create the retraction the CAS prevents —
+/// only in a store where there is no CAS to lose to. The D1 branch drops the KV
+/// copy instead, so `get_thb_deposit_with_fallback` (the ticket page's read, KV
+/// on a D1 miss) can never serve a settled deposit as still outstanding.
+#[test]
+fn save_thb_deposit_never_mirrors_into_kv_when_d1_is_configured() {
+    let code = code_only(SAVE_DEPOSIT);
+    let start = code
+        .find("pub async fn save_thb_deposit")
+        .expect("save_thb_deposit must exist");
+    let d1_branch_end = code[start..]
+        .find("return Ok(());")
+        .expect("the D1 branch must return early — KV is the D1-less path only")
+        + start;
+    let d1_branch = &code[start..d1_branch_end];
+
+    assert!(
+        !d1_branch.contains("kv.put("),
+        "save_thb_deposit writes the deposit blob to KV on the D1 path. The blob \
+         carries the settlement columns, so a stale in-memory struct would retract \
+         a settled refund in a store with no CAS to stop it (plan 022 §3)."
+    );
+    assert!(
+        d1_branch.contains("kv.delete("),
+        "save_thb_deposit no longer drops the stale KV copy on the D1 path. A blob \
+         left from a D1-less deployment diverges for good, and the ticket page's \
+         fallback read serves KV on a D1 miss (plan 022 §3)."
+    );
 }

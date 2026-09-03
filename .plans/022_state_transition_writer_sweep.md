@@ -184,12 +184,20 @@ given a second column); each turned it red.
 
 ### Still open on this transition
 
-- **`save_thb_deposit` never writes KV when D1 is configured** — it returns after
-  the D1 branch. Four call sites carry a comment saying they "mirror the settled
-  state into KV", which in production does not happen. The comments are corrected
-  in `186d057`; whether KV should be a real mirror (it is the documented fallback
-  when D1 is unavailable) is a separate design question. If a D1 read ever falls
-  back to KV, a stale KV blob would report a settled deposit as unrefunded.
+- ~~**`save_thb_deposit` never writes KV when D1 is configured**~~ — settled.
+  Making KV a real mirror would be *wrong*: the function serialises the caller's
+  whole in-memory struct, so the mirror would re-create the retraction the CAS
+  prevents, in a store with no CAS to lose to. The D1 branch now **deletes** any
+  KV copy instead, so a blob left over from a D1-less deployment cannot diverge
+  for good. It cannot orphan data: the branch has just written the row to D1,
+  where the fallback looks first.
+
+  The exposure was narrower than first recorded — `get_thb_deposit_with_fallback`
+  is read only by the ticket page, and a D1 *error* propagates rather than falling
+  back, so only a D1 *miss* reaches KV. The payout path (`try_settle_refund`) is
+  D1-only, so this was a stale-display risk, not a second double-payout route.
+  Pinned by a sixth test in `thb_settlement_ownership_guard.rs` (no `kv.put` on
+  the D1 branch, and the delete is still there); mutation-tested both ways.
 - The USDC deposit refund path was not part of this sweep; `refunded` there lives
   on-chain (`AttendeeDeposit.refunded`, `solana_escrow/wire.rs:344`) and is read,
   not written, by the worker.
