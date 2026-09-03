@@ -198,6 +198,14 @@ struct ExistsRow {
     present: i64,
 }
 
+/// Projection row for the `SELECT reward_config` in
+/// [`campaign_collection_mints`]. Must list exactly the selected columns — see
+/// [`CampaignIdRow`] for why a wider struct is a panic, not an error.
+#[derive(Debug, serde::Deserialize)]
+struct RewardConfigRow {
+    reward_config: String,
+}
+
 #[allow(dead_code)]
 /// Fetch all distinct `collection_mint` values from active campaigns with
 /// `reward_type = 'nft_certificate'`. Used to classify NFTs as campaign vs event.
@@ -209,7 +217,7 @@ pub(crate) async fn campaign_collection_mints(db: &D1Database) -> Result<Vec<Str
         .await
         .map_err(|e| format!("D1 campaign_collection_mints: {e:?}"))?;
     let rows = result
-        .results::<CampaignRow>()
+        .results::<RewardConfigRow>()
         .map_err(|e| format!("D1 campaign_collection_mints results: {e:?}"))?;
 
     let mut mints = Vec::new();
@@ -668,6 +676,17 @@ struct TotalsRow {
 // Auto-Progress on Check-In (Issue 051 Phase 1)
 // ---------------------------------------------------------------------------
 
+/// Projection row for `SELECT DISTINCT campaign_id` — one field, because
+/// `D1Result::results::<T>()` (worker 0.8.1) `unwrap()`s each row's
+/// deserialization. A struct with fields the projection does not select is not
+/// a recoverable `Err`, it is an unconditional wasm panic that aborts the whole
+/// `wait_until` context. Reusing the 4-field `CampaignEventRow` here is what
+/// made campaign auto-progress panic on every check-in.
+#[derive(Debug, Clone, serde::Deserialize)]
+struct CampaignIdRow {
+    campaign_id: String,
+}
+
 /// After a successful check-in, update campaign progress for any campaigns that include this event.
 /// Non-blocking: errors are logged but don't affect check-in.
 pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_email: &str) {
@@ -690,7 +709,7 @@ pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_
         }
     };
 
-    let campaign_rows = match result.results::<CampaignEventRow>() {
+    let campaign_rows = match result.results::<CampaignIdRow>() {
         Ok(rows) => rows,
         Err(e) => {
             tracing::warn!(event_id = %event_id, error = %e, "campaign auto-progress: failed to parse campaign rows");
