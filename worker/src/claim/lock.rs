@@ -84,6 +84,29 @@ struct DoResponseParsed {
     error: Option<String>,
 }
 
+/// Run a DO RPC and flatten both failure modes — a transport error and a
+/// `success: false` response — into one `Option<String>`.
+///
+/// Used by the finalize/release paths, which must carry the DO error *past* a
+/// mandatory KV write rather than `?`-ing out of it: the KV record is what the
+/// attendee actually reads (finalize) and what actually blocks their retry
+/// (release), so it has to be written even when the durable side failed.
+/// `acquire` deliberately does not use this — there, a DO failure must abort.
+async fn do_rpc_err(
+    namespace: &ObjectNamespace,
+    event_id: &str,
+    request: DoRequest,
+    fallback: &str,
+) -> Option<String> {
+    match do_rpc(namespace, event_id, request).await {
+        Err(e) => Some(e),
+        Ok(resp) => match resp.success {
+            true => None,
+            false => Some(resp.error.unwrap_or_else(|| fallback.to_string())),
+        },
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Lock helpers (pub(crate) for reuse by handlers if needed)
 // ---------------------------------------------------------------------------
@@ -281,7 +304,12 @@ pub(crate) async fn finalize_claim_lock(
     // DO path
     if let Some(namespace) = event_do {
         let claimed_at = chrono::Utc::now().to_rfc3339();
-        let resp = do_rpc(
+        // The KV record is what the claim and attendee read paths use to show
+        // the attendee their asset_id / signature, so it is written even when
+        // the DO write failed: a failed durable write must not also cost the
+        // attendee their proof link. That covers a transport failure too, hence
+        // `do_rpc_err` rather than `?`. The DO error is reported after.
+        let do_err = do_rpc_err(
             namespace,
             event_id,
             DoRequest::FinalizeClaimLock {
@@ -291,20 +319,12 @@ pub(crate) async fn finalize_claim_lock(
                 signature: signature.to_string(),
                 claimed_at: claimed_at.clone(),
             },
+            "claim lock finalization failed (DO)",
         )
-        .await?;
-
-        // The KV record is what the claim and attendee read paths use to show
-        // the attendee their asset_id / signature, so it is written even when
-        // the DO write failed: a failed durable write must not also cost the
-        // attendee their proof link. The DO error is reported after.
-        let do_err = match resp.success {
-            true => None,
-            false => Some(
-                resp.error
-                    .unwrap_or_else(|| "claim lock finalization failed (DO)".to_string()),
-            ),
-        };
+        .await;
+        if let Some(e) = do_err.as_deref() {
+            tracing::warn!(claim_token = %token, error = %e, "DO finalize claim lock failed");
+        }
 
         // Also finalize in KV for read compatibility
         let key = claim_lock_key(event_id, token);
@@ -379,22 +399,21 @@ pub(crate) async fn release_claim_lock(
 ) -> Result<(), String> {
     // DO path
     if let Some(namespace) = event_do {
-        let resp = do_rpc(
+        // The KV key is what actually blocks the attendee's retry, so it is
+        // deleted even when the DO side failed — including a transport failure,
+        // hence `do_rpc_err` rather than `?`.
+        let do_err = do_rpc_err(
             namespace,
             event_id,
             DoRequest::ReleaseClaimLock {
                 event_id: event_id.to_string(),
                 token: token.to_string(),
             },
+            "claim lock release failed (DO)",
         )
-        .await?;
-
-        if !resp.success {
-            tracing::warn!(
-                claim_token = %token,
-                error = ?resp.error,
-                "DO release claim lock failed"
-            );
+        .await;
+        if let Some(e) = do_err.as_deref() {
+            tracing::warn!(claim_token = %token, error = %e, "DO release claim lock failed");
         }
 
         // Always delete from KV
@@ -402,8 +421,13 @@ pub(crate) async fn release_claim_lock(
         kv.delete(&key)
             .await
             .map_err(|e| format!("claim lock release failed: {e:?}"))?;
-        tracing::info!(claim_token = %token, "claim lock released (DO+KV)");
-        return Ok(());
+        return match do_err {
+            Some(e) => Err(e),
+            None => {
+                tracing::info!(claim_token = %token, "claim lock released (DO+KV)");
+                Ok(())
+            }
+        };
     }
 
     // D1 path: DELETE. Hold any error until after the KV delete below — the KV
