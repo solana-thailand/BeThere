@@ -105,14 +105,15 @@ pub(crate) async fn update_deposit_credit(
 /// Clear PII for a contact (PDPA right to erasure).
 /// Keeps the row but blanks name and contact fields.
 pub(crate) async fn clear_contact_pii(db: &D1Database, email: &str) -> Result<(), String> {
-    let sql = format!(
-        "UPDATE contacts SET \
+    let sql = "UPDATE contacts SET \
          name = '[DELETED]', \
          contact_channel = NULL, contact_handle = NULL, \
          last_registered = datetime('now') \
-         WHERE LOWER(email) = '{email}'"
-    );
-    db.exec(&sql)
+         WHERE LOWER(email) = ?";
+    db.prepare(sql)
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 clear_contact_pii bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 clear_contact_pii: {e:?}"))?;
     Ok(())

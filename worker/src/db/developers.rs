@@ -449,15 +449,16 @@ pub(crate) async fn developer_count(db: &D1Database) -> Result<i64, String> {
 /// Clear PII for a developer profile (PDPA right to erasure).
 /// Keeps the row but blanks all identifying fields.
 pub(crate) async fn clear_developer_pii(db: &D1Database, email: &str) -> Result<(), String> {
-    let sql = format!(
-        "UPDATE developer_profiles SET \
+    let sql = "UPDATE developer_profiles SET \
          display_name = '[DELETED]', wallet_address = NULL, \
          github_handle = NULL, discord_handle = NULL, twitter_handle = NULL, \
          company_org = NULL, location_city = NULL, \
          updated_at = datetime('now') \
-         WHERE LOWER(email) = '{email}'"
-    );
-    db.exec(&sql)
+         WHERE LOWER(email) = ?";
+    db.prepare(sql)
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 clear_developer_pii bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 clear_developer_pii: {e:?}"))?;
     Ok(())
@@ -468,12 +469,20 @@ pub(crate) async fn delete_developer_responses(
     db: &D1Database,
     email: &str,
 ) -> Result<usize, String> {
-    let sql =
-        format!("DELETE FROM registration_responses WHERE LOWER(developer_email) = '{email}'");
-    db.exec(&sql)
+    let result = db
+        .prepare("DELETE FROM registration_responses WHERE LOWER(developer_email) = ?")
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 delete_developer_responses bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 delete_developer_responses: {e:?}"))?;
-    Ok(0) // D1 exec doesn't return rows affected
+    // Unlike `exec`, a prepared `run` reports the affected row count.
+    Ok(result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0))
 }
 
 // ---------------------------------------------------------------------------
