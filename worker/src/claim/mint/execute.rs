@@ -150,39 +150,23 @@ pub async fn execute_claim(
             let quest_passed =
                 verify_online_quest_completion(state, &event.id, token, event.quiz_enabled).await;
             if quest_passed {
-                // Auto virtual check-in — generate timestamp locally, detach Sheets write
-                let virtual_ts = chrono::Utc::now().to_rfc3339();
+                // Single writer of the virtual check-in (plan 022 §2). It runs the
+                // approval gate, which the inline copy this replaced did not — the
+                // claim path used to read a set `checked_in_at` as proof that an
+                // approval-gated path produced it. It also writes D1, which the
+                // inline copy did not: `my-registration` reads D1-first, so a
+                // Sheets-only write left the frontend showing "not checked in".
+                let virtual_ts = crate::virtual_checkin::commit_virtual_check_in(
+                    state, &attendee, &event, &mapping, kv, token,
+                )
+                .await?;
                 tracing::info!(
                     claim_token = %token,
                     attendee_id = %attendee.api_id,
                     checked_in_at = %virtual_ts,
                     "virtual check-in auto-completed for online attendee"
                 );
-                attendee.checked_in_at = Some(virtual_ts.clone());
-
-                // Detach Sheets write
-                if let Some(ctx) = &state.worker_ctx {
-                    ctx.wait_until(crate::sheets::bg_sync::mark_virtual_checked_in(
-                        state.clone(),
-                        attendee.row_index,
-                        mapping.clone(),
-                        event.sheet_id.clone(),
-                        event.sheet_name.clone(),
-                        kv.cloned(),
-                        virtual_ts,
-                    ));
-                } else if let Err(e) = crate::sheets::write::mark_virtual_checked_in(
-                    attendee.row_index,
-                    &mapping,
-                    state,
-                    &event.sheet_id,
-                    &event.sheet_name,
-                    kv,
-                )
-                .await
-                {
-                    tracing::error!(claim_token = %token, error = %e, "virtual check-in sheet write failed (non-fatal)");
-                }
+                attendee.checked_in_at = Some(virtual_ts);
             } else {
                 tracing::warn!(
                     claim_token = %token,

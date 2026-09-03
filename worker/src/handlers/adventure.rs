@@ -54,7 +54,9 @@ pub async fn resolve_claim_token_from_d1(
     }
 }
 
-use event_checkin_domain::models::adventure::{AdventureConfig, AdventureSaveRequest};
+use event_checkin_domain::models::adventure::{
+    AdventureConfig, AdventureSaveRequest, AdventureStatus,
+};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
@@ -322,20 +324,6 @@ pub async fn quest_complete_checkin(
         })));
     }
 
-    // Approval gate — the same domain check the staff online check-in runs.
-    // Without it this endpoint is a way for a pending/waitlisted/rejected
-    // registrant to set their own `checked_in_at`, and the claim mint path does
-    // not re-check approval: it treats "checked in" as proof of it.
-    if let Err(e) = attendee.can_check_in_virtually() {
-        tracing::warn!(
-            attendee_id = %attendee.api_id,
-            approval_status = %attendee.approval_status,
-            error = %e,
-            "quest-complete virtual check-in denied",
-        );
-        return Err(AppError::Validation(e.to_string()).into());
-    }
-
     // Check if adventure is configured and enabled
     let db = state
         .d1
@@ -356,42 +344,36 @@ pub async fn quest_complete_checkin(
         return Err(AppError::Validation("adventure is not enabled for this event".into()).into());
     }
 
-    // Perform virtual check-in
-    //
-    // SECURITY NOTE: The virtual check-in is idempotent and only grants access to claim
-    // an NFT badge. The actual claim flow still verifies quest completion independently.
-    // This is acceptable because the claim flow has its own verification.
-    let virtual_ts = chrono::Utc::now().to_rfc3339();
-
     // Resolve the claim token: prefer the one already stored in D1 (generated at
     // registration), fall back to the Sheets attendee value. This prevents
     // overwriting a valid D1 claim_token with an empty string when Sheets hasn't
-    // synced yet.
+    // synced yet. Adventure progress is keyed by claim token, so this is also the
+    // key the completion gate below reads.
     let resolved_claim_token = resolve_claim_token_from_d1(&state, attendee).await;
 
-    // Write to D1 FIRST (synchronous) — my-registration reads D1-first, so the
-    // Sheet write alone causes a loop because D1 still has checked_in_at = NULL.
-    if let Some(ref d1) = state.d1 {
-        let ct = resolved_claim_token.clone().unwrap_or_default();
-        if let Err(e) = crate::db::attendees::check_in_attendee(
-            d1,
-            &attendee.api_id,
-            &virtual_ts,
-            "virtual",
-            &ct,
-        )
+    // Quest-completion gate. The claim flow re-verifies completion before minting,
+    // so skipping this cannot hand out a badge — but `checked_in_at` is also the
+    // attendance signal every dashboard, `db::event_summaries` and the plan 008
+    // recap count, so an unstarted adventure must not set it. Progress rows are
+    // keyed by claim token; no token means no progress can exist.
+    let claim_token = resolved_claim_token.clone().unwrap_or_default();
+    let quest_status = adventure::get_adventure_status(db, &event.id, &claim_token)
         .await
-        {
-            tracing::warn!(error = %e, "D1 virtual check-in failed (non-fatal)");
-        } else {
-            tracing::info!(
-                attendee_id = %attendee.api_id,
-                "D1 virtual check-in written"
-            );
-        }
+        .map_err(AppError::Internal)?;
+    if !matches!(quest_status, AdventureStatus::Passed) {
+        tracing::warn!(
+            attendee_id = %attendee.api_id,
+            status = ?quest_status,
+            "quest-complete virtual check-in denied: adventure not completed",
+        );
+        return Err(AppError::Validation(
+            "complete the required adventure levels before checking in".into(),
+        )
+        .into());
     }
 
-    // Also write to Google Sheets (async via wait_when available)
+    // Single writer of the virtual check-in — gates on approval and the event's
+    // online track, writes D1 first, then mirrors to Sheets (plan 022 §2).
     let mapping =
         match crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
             .await
@@ -403,31 +385,15 @@ pub async fn quest_complete_checkin(
             }
         };
 
-    if let Some(ctx) = &state.worker_ctx {
-        ctx.wait_until(crate::sheets::bg_sync::mark_virtual_checked_in(
-            state.clone(),
-            attendee.row_index,
-            mapping.clone(),
-            event.sheet_id.clone(),
-            event.sheet_name.clone(),
-            kv.cloned(),
-            virtual_ts,
-        ));
-    } else {
-        // No wait_until available — do it synchronously (best effort)
-        if let Err(e) = crate::sheets::write::mark_virtual_checked_in(
-            attendee.row_index,
-            &mapping,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            kv,
-        )
-        .await
-        {
-            tracing::error!(error = %e, "virtual check-in sheet write failed (non-fatal)");
-        }
-    }
+    crate::virtual_checkin::commit_virtual_check_in(
+        &state,
+        attendee,
+        &event,
+        &mapping,
+        kv,
+        &claim_token,
+    )
+    .await?;
 
     tracing::info!(
         email = %claims.email,

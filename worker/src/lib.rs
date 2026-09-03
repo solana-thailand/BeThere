@@ -25,6 +25,7 @@ mod solana;
 mod solana_escrow;
 mod state;
 mod storage;
+mod virtual_checkin;
 
 // Export DO class for workers-rs macro registration
 pub use durable_objects::EventDurableObject;
