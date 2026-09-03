@@ -271,22 +271,35 @@ pub async fn clear_credit_refund_request_handler(
     // cash (double payout). Read requested_at while the flag is still set and use
     // it as the idempotency key: a double-clear finds the flag already gone
     // (None) and skips, so the reversal happens exactly once per request.
-    // Single-org scope today (organization_id ""); multi-org would reverse per org.
+    // Reverse EVERY bucket the attendee still holds, not just `("", "thb")`. The
+    // flag is on the contact, so the request is against the whole rolling balance
+    // across orgs and currencies; reading one hard-coded org would silently skip
+    // the reversal for an event whose Org ID column is filled in, leaving the
+    // attendee with the cash *and* spendable credit (plan 022 §6).
     if let Some(db) = state.d1.as_deref()
         && let Some(requested_at) =
             crate::db::contacts::get_credit_refund_requested_at(db, &body.email).await
     {
-        let bal = crate::db::credit_ledger::balance(db, &body.email, "", "thb")
+        let buckets = crate::db::credit_ledger::positive_balances(db, &body.email)
             .await
-            .unwrap_or(0);
-        if bal > 0 {
-            let key = format!("refund:{}:{}", body.email.to_lowercase(), requested_at);
+            .unwrap_or_default();
+        for bucket in buckets {
+            // The idempotency key carries the bucket, so one clear writes one
+            // reversal per bucket and a double-clear finds each balance already
+            // at zero (and, if the flag is gone, never gets here at all).
+            let key = format!(
+                "refund:{}:{}:{}:{}",
+                body.email.to_lowercase(),
+                requested_at,
+                bucket.organization_id,
+                bucket.currency
+            );
             match crate::db::credit_ledger::record(
                 db,
                 &body.email,
-                "",
-                "thb",
-                -bal,
+                &bucket.organization_id,
+                &bucket.currency,
+                -bucket.balance,
                 crate::db::credit_ledger::REASON_REFUND,
                 None,
                 Some(&key),
@@ -294,12 +307,20 @@ pub async fn clear_credit_refund_request_handler(
             )
             .await
             {
-                Ok(_) => {
-                    tracing::info!(email = %body.email, amount = bal, "reversed held credit in ledger on payout")
-                }
-                Err(e) => {
-                    tracing::error!(email = %body.email, error = %e, "ledger refund reversal failed — credit NOT reversed; reconcile manually")
-                }
+                Ok(_) => tracing::info!(
+                    email = %body.email,
+                    organization_id = %bucket.organization_id,
+                    currency = %bucket.currency,
+                    amount = bucket.balance,
+                    "reversed held credit in ledger on payout"
+                ),
+                Err(e) => tracing::error!(
+                    email = %body.email,
+                    organization_id = %bucket.organization_id,
+                    currency = %bucket.currency,
+                    error = %e,
+                    "ledger refund reversal failed — credit NOT reversed; reconcile manually"
+                ),
             }
         }
     }

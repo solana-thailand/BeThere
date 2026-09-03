@@ -270,20 +270,26 @@ pub async fn credit_balance_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<CreditBalanceResponse>, WorkerError> {
-    // Source of truth is the org-scoped credit ledger. No event context here, so
-    // report the default org ("") balance — single-org today; a per-org breakdown
-    // is a future multi-org enhancement (Issue #029).
+    // Source of truth is the org-scoped credit ledger. There is no event context
+    // here, so sum every org the caller holds credit in rather than guessing one:
+    // hard-coding `""` under-reports to zero for any event whose Org ID column is
+    // set. The number is what the attendee holds in total; what is *spendable* at
+    // a given event is still resolved per-org at registration (plan 022 §6).
     let (credit_thb, credit_usdc) = match state.d1.as_deref() {
-        Some(db) => (
-            crate::db::credit_ledger::balance(db, &claims.email, "", "thb")
+        Some(db) => {
+            let buckets = crate::db::credit_ledger::positive_balances(db, &claims.email)
                 .await
-                .unwrap_or(0)
-                .max(0) as u64,
-            crate::db::credit_ledger::balance(db, &claims.email, "", "usdc")
-                .await
-                .unwrap_or(0)
-                .max(0) as u64,
-        ),
+                .unwrap_or_default();
+            let sum = |currency: &str| -> u64 {
+                buckets
+                    .iter()
+                    .filter(|b| b.currency == currency)
+                    .map(|b| b.balance)
+                    .sum::<i64>()
+                    .max(0) as u64
+            };
+            (sum("thb"), sum("usdc"))
+        }
         None => (0, 0),
     };
 

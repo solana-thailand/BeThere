@@ -69,3 +69,86 @@ fn try_spend_keeps_balance_guard() {
          `>= ?4` guard credit could be over-spent into a negative balance"
     );
 }
+
+// ---------------------------------------------------------------------------
+// 4. No caller guesses the organization (plan 022 §6)
+// ---------------------------------------------------------------------------
+
+/// The ledger is org-scoped, so a caller with no event context has to *enumerate*
+/// the orgs an email holds credit in — never hard-code one. Two paths hang off
+/// the contact rather than an event (the balance chip and the "return my held
+/// credit" payout reversal) and both used to pass `""`. That reads as zero for
+/// any event whose Org ID column is filled in: the chip under-reports, and the
+/// reversal silently does nothing while the organizer pays the cash out, leaving
+/// the attendee holding spendable credit as well.
+///
+/// `positive_balances` is the enumerating read. This guard fails if any call site
+/// passes an empty-string org to the scoped helpers again.
+#[test]
+fn no_caller_hardcodes_the_default_org() {
+    const SCOPED: [&str; 3] = [
+        "credit_ledger::balance(",
+        "credit_ledger::record(",
+        "credit_ledger::try_spend(",
+    ];
+
+    let src_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut offenders = Vec::new();
+
+    visit_rs(&src_root, &mut |path, contents| {
+        // The ledger module itself takes the org as a parameter; the guard is
+        // about its *callers* choosing a value.
+        if path.ends_with("credit_ledger.rs") {
+            return;
+        }
+        let code = strip_comments(contents);
+        for needle in SCOPED {
+            let mut idx = 0;
+            while let Some(pos) = code[idx..].find(needle) {
+                let start = idx + pos;
+                let args = &code[start..(start + 260).min(code.len())];
+                // The org is the argument right after the email; an empty literal
+                // anywhere in the argument list is the shape we are banning.
+                if args.contains("\"\"") {
+                    offenders.push(format!("{}: {needle}", path.display()));
+                }
+                idx = start + needle.len();
+            }
+        }
+    });
+
+    assert!(
+        offenders.is_empty(),
+        "these call sites pass a hard-coded organization to the org-scoped credit \
+         ledger. With no event context, enumerate with `positive_balances` instead \
+         — guessing `\"\"` under-reports to zero for any event whose Org ID is set, \
+         and on the payout-reversal path that means a double payout: {offenders:?}"
+    );
+}
+
+/// Strip `//`-prefixed lines so prose about the banned shape cannot trip (or
+/// satisfy) a rule about code.
+fn strip_comments(source: &str) -> String {
+    source
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn visit_rs(dir: &Path, f: &mut impl FnMut(&Path, &str)) {
+    for entry in fs::read_dir(dir)
+        .expect("worker/src must be readable")
+        .flatten()
+    {
+        let path = entry.path();
+        match path.is_dir() {
+            true => visit_rs(&path, f),
+            false if path.extension().is_some_and(|e| e == "rs") => {
+                let contents = fs::read_to_string(&path).expect("source file must be readable");
+                f(&path, &contents);
+            }
+            false => {}
+        }
+    }
+}

@@ -161,6 +161,47 @@ pub async fn balance(
     Ok(bal)
 }
 
+/// One `(organization_id, currency)` bucket of a single email's credit.
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+pub struct CreditBucket {
+    #[serde(default)]
+    pub organization_id: String,
+    #[serde(default)]
+    pub currency: String,
+    #[serde(default)]
+    pub balance: i64,
+}
+
+/// Every bucket in which one email still holds credit, across **all** orgs and
+/// currencies. Only positive buckets are returned — the money still owed to them.
+///
+/// The ledger is org-scoped so Org A's credit can never be spent at Org B, but
+/// two paths are inherently org-blind: the attendee's own balance display and
+/// the "return my held credit" exit, both of which hang off the *contact* and
+/// carry no event (hence no org) context. Both used to hard-code
+/// `organization_id = ""`, which is only correct while every event's org is
+/// empty — the moment an organizer fills the Events tab's Org ID column, the
+/// held credit becomes invisible to the balance chip and, far worse, invisible
+/// to the payout reversal, so the organizer pays the cash out and the attendee
+/// keeps spendable credit. Enumerate instead of guessing (plan 022 §6).
+pub async fn positive_balances(db: &D1Database, email: &str) -> Result<Vec<CreditBucket>, String> {
+    let email_lc = email.to_lowercase();
+    let sql = "SELECT organization_id, currency, COALESCE(SUM(delta), 0) AS balance \
+               FROM credit_ledger WHERE email = ?1 \
+               GROUP BY organization_id, currency \
+               HAVING SUM(delta) > 0 \
+               ORDER BY organization_id, currency";
+    let stmt = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(&email_lc)])
+        .map_err(|e| format!("D1 credit_ledger positive_balances bind: {e:?}"))?;
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|v| serde_json::from_value::<CreditBucket>(v).ok())
+        .collect())
+}
+
 /// One row of the org-partitioned liability report.
 #[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
 pub struct OrgLiability {
