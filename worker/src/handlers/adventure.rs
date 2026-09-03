@@ -311,7 +311,8 @@ pub async fn quest_complete_checkin(
             ))
         })?;
 
-    // Already checked in
+    // Already checked in — idempotent success, not an error: the frontend polls
+    // this endpoint and a repeat completion must still hand back the claim token.
     if attendee.is_checked_in() {
         let final_ct = resolve_claim_token_from_d1(&state, attendee).await;
         return Ok(ApiOk::new(json!({
@@ -319,6 +320,20 @@ pub async fn quest_complete_checkin(
             "claim_token": final_ct,
             "event_slug": event.slug,
         })));
+    }
+
+    // Approval gate — the same domain check the staff online check-in runs.
+    // Without it this endpoint is a way for a pending/waitlisted/rejected
+    // registrant to set their own `checked_in_at`, and the claim mint path does
+    // not re-check approval: it treats "checked in" as proof of it.
+    if let Err(e) = attendee.can_check_in_virtually() {
+        tracing::warn!(
+            attendee_id = %attendee.api_id,
+            approval_status = %attendee.approval_status,
+            error = %e,
+            "quest-complete virtual check-in denied",
+        );
+        return Err(AppError::Validation(e.to_string()).into());
     }
 
     // Check if adventure is configured and enabled

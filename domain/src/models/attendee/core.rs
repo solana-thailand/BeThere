@@ -120,6 +120,35 @@ impl Attendee {
         Ok(())
     }
 
+    /// Validate whether this attendee can be checked in *virtually* (online
+    /// track: the hybrid `online=true` scan, or a self-serve quest completion).
+    ///
+    /// Same gates as [`Attendee::can_check_in`] minus the in-person requirement,
+    /// which is inverted for this path. Kept here rather than inline in each
+    /// handler because the approval gate is what makes a check-in the only way
+    /// an unapproved registrant is kept out of the claim flow — the claim path
+    /// does not re-check approval, it relies on `checked_in_at` being reachable
+    /// only through a gate like this one. A handler that flips `checked_in_at`
+    /// without calling this silently opens that door.
+    ///
+    /// Checks (in order):
+    /// 1. Not already checked in
+    /// 2. Approval status is Approved or CheckedIn
+    ///
+    /// The caller is still responsible for the event-level gate (the event must
+    /// have an online track); that is not attendee state.
+    pub fn can_check_in_virtually(&self) -> Result<(), CheckInError> {
+        if self.is_checked_in() {
+            return Err(CheckInError::AlreadyCheckedIn(
+                self.checked_in_at.clone().unwrap_or_default(),
+            ));
+        }
+        if !self.is_approved() {
+            return Err(CheckInError::NotApproved(self.approval_status.to_string()));
+        }
+        Ok(())
+    }
+
     /// Is deposit verified (USDC confirmed on-chain or THB slip approved)?
     /// The `deposit_verified` field is a string from Google Sheets ("true"/"false"
     /// or a timestamp). Non-empty means verified.
