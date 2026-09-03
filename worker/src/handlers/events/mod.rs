@@ -20,6 +20,7 @@
 //!   POST   /api/events/reseed-kv     — reseed KV index from D1 (super admin only)
 
 pub mod audit;
+pub mod common;
 pub mod create;
 pub mod duplicate;
 pub mod lifecycle;

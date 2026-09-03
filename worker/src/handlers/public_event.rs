@@ -357,6 +357,11 @@ pub async fn get_public_recap(
     //    primitives — we don't want the full EventSummary (financials/no-show
     //    are sensitive), so we read the persisted row directly and project out
     //    only the three headline numbers.
+    //
+    //    A read failure is fatal rather than a zero-fill: the zeros are
+    //    indistinguishable from a real "nobody came" and would be published as
+    //    the event's attendance. `get_recap` above already propagates its read
+    //    error; this read hits the same row and must agree.
     let funnel = match crate::db::event_summaries::get_summary(db, &config.id).await {
         Ok(Some(s)) => json!({
             "registered_count": s.funnel.registered_count,
@@ -364,12 +369,19 @@ pub async fn get_public_recap(
             "checked_in_count": s.funnel.checked_in_count,
             "claimed_count": s.funnel.claimed_count,
         }),
-        _ => json!({
+        // Unreachable in practice — `get_recap` found this row a few lines up.
+        Ok(None) => json!({
             "registered_count": 0,
             "deposited_count": 0,
             "checked_in_count": 0,
             "claimed_count": 0,
         }),
+        Err(e) => {
+            tracing::error!(slug = %slug, event_id = %config.id, error = %e, "recap funnel read failed");
+            return Err(
+                AppError::Internal("could not load the recap — please try again".into()).into(),
+            );
+        }
     };
 
     tracing::info!(slug = %slug, event_id = %config.id, "public recap served");
