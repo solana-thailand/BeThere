@@ -451,12 +451,55 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
 
 ### Integration
 
-- [ ] `worker/tests/event_summary_flow.rs` — full freeze flow:
-  1. Seed event with `event_end_ms` in the past.
-  2. Seed N attendees, M deposits, K check-ins.
-  3. `GET /summary` → assert `frozen: true`, correct counts.
-  4. Refund a deposit after freeze.
-  5. `GET /summary` → assert numbers **unchanged** (freeze is durable).
+- [x] `worker/tests/event_summary_flow.rs` — **superseded: exercised against
+      local D1 instead (2026-09-04).** Same reasoning as the post-event box
+      below — the handler is `#[worker::send]` axum over a D1 binding, so a
+      host-target `tests/*.rs` could only re-implement it. Ran all five steps
+      under `wrangler dev --local` against a seeded `completed` event
+      (3 approved in-person attendees, 2 checked in, 1 claimed, 2 verified USDC
+      deposits). Verified there are no `sheets::` calls anywhere in
+      `handlers/events/summary.rs`, `db/event_summaries.rs` or `db/dashboard.rs`
+      first, so nothing left the machine.
+
+      **What held.** Step 3 froze correctly: registered 3, checked-in 2,
+      claimed 1, deposited 2, no-show 1, 2 USDC deposited. `registered_count`
+      counts `approval_status = 'approved'` only, so a seeded
+      `post_event_registered` row was correctly excluded while
+      `post_event_reg_count` picked it up. Step 4 un-verified a deposit and
+      added a late check-in + late claim; step 5 returned **byte-identical**
+      numbers. Freeze is durable. Also confirmed: an event still running returns
+      a preview with `frozen: false` and persists **no** row; `POST
+      /summary/freeze` on it is rejected 400; a manual re-freeze after the event
+      ended does update the numbers (intended — it is an explicit organizer
+      action) and leaves `recap_markdown` / `recap_published_at` intact, because
+      `upsert_summary`'s `DO UPDATE` set omits the recap columns.
+
+      **Defect — a read failure destroyed the snapshot (fixed, `893bd01`).**
+      Step 4 of the handler matched the existing-freeze lookup on `Ok(Some(_))`
+      and let `Err` fall through to step 5, which recomputes and
+      `upsert_summary`s over the durable row. A transient D1 read failure would
+      therefore replace the official record with post-drift numbers — silently,
+      and unrecoverably, since the whole point of the freeze is that the source
+      rows have since moved. Now returns 500 and leaves the row alone. **Not
+      reproduced locally**: `get_summary` only errs when D1 itself fails, and a
+      `SELECT` cannot be made to fail from SQLite (triggers do not fire on
+      reads) while the write path still succeeds. Reasoned from the code, fixed
+      because refusing is cheap and a destroyed snapshot is not recoverable.
+
+      The mirror of it in the **public** recap (`handlers/public_event.rs`) was
+      fixed in the same commit: a failed funnel read fell into a `_ =>` arm that
+      published `registered_count: 0, checked_in_count: 0, claimed_count: 0` —
+      indistinguishable from a real "nobody came", on a public page. It now
+      propagates, agreeing with the `get_recap` call two lines above it.
+
+      **Also fixed in `893bd01`:** `summary` / `recap` / `pr_pack` /
+      `post_event_registration` each carried a byte-identical private
+      `load_event` + `enforce_organizer`, with a comment in `pr_pack.rs`
+      deferring extraction "only if a fourth consumer appears". It had. They now
+      share `handlers/events/common.rs`, which also fixes the defect all four
+      copies shared: `if let Ok(Some(_))` on both the KV and D1 reads, so a
+      backend outage was reported to the organizer as *"event not found"* —
+      the same masking `resolve_event_by_slug` carried before `734aa4b`.
 - [x] `worker/tests/post_event_registration.rs` — **superseded: exercised against
       local D1 instead (2026-09-04), and it found two live defects.** The
       endpoint is `#[worker::send]` axum over a D1 binding, so a host-target
@@ -508,7 +551,27 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
       A host-target regression test still cannot cover either defect; both are
       properties of the SQL against a live SQLite. Re-run the local harness when
       touching this path.
-- [ ] `worker/tests/pr_pack.rs` — endpoint smoke test against a fixture event.
+- [x] `worker/tests/pr_pack.rs` — **superseded: smoke-tested against local D1
+      (2026-09-04).** `GET /api/events/{id}/pr-pack` returned all seven fields
+      for a seeded fixture event; generation is a pure function over
+      `EventConfig` already covered by 17 unit tests in `domain/src/pr_pack.rs`,
+      so the only thing a host-target test could add is the handler's
+      load-event + role check, which `events::common` now shares with three
+      other endpoints.
+
+      **Defect — the "Register here" link was wrong in both branches (fixed,
+      `1c156d0`).** `registration_url` returned `claim_base_url` verbatim when
+      set. That is a *claim* endpoint — `handlers/walkin.rs:346` builds
+      `{claim_base_url}/{claim_token}` — so every generated tweet, blurb and
+      email invited readers to a token-gated claim page rather than the
+      registration page. When it was unset the function returned a root-relative
+      `/e/{slug}`, which the doc comment described as "clickable"; it is not,
+      the moment the copy is pasted into an email or a tweet, which is the only
+      thing this feature produces. Now resolves in order: the organizer's
+      external `link`, else `origin(claim_base_url) + /e/{slug}`, else the
+      relative path. Verified live: the blurb went from
+      `Register: https://bethere.app/claim` to
+      `Register: https://bethere.app/e/freeze-test`.
 
 ### Manual
 
