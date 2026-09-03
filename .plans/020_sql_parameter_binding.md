@@ -220,10 +220,24 @@ permanently deleted". That was luck, not design. Prefer
 `wrangler d1 execute --local` for fixture teardown; if you do use the API,
 diff the dev log for `sheets::` afterwards.
 
-**`hard_delete_event` does not cascade.** It removes the KV entry and the
-`events` row only, so fixture teardown through the API leaves `event_summaries`,
-`attendees` and audit rows behind. Verify the tables you seeded are actually
-empty afterwards rather than assuming the delete was total.
+**`hard_delete_event` cascades only to `event_summaries` (fixed 2026-09-04,
+`db5b2a1`).** It used to remove the KV entry and the `events` row only, which
+orphaned the frozen funnel snapshot forever — `event_summaries` is keyed by
+`event_id` with no FK to `events`, so nothing else would ever collect it.
+`sync_delete_event_from_d1` now also calls `db::event_summaries::delete_summary`,
+logging (not propagating) a failure so the summary delete cannot mask a
+successful event delete.
+
+`attendees`, `audit_log` and `credit_ledger` are still left behind **on
+purpose** — they carry standalone record-keeping value that outlives the event.
+For fixture teardown that means the delete is still not total: verify the tables
+you seeded are actually empty afterwards rather than assuming.
+
+Verified against local D1: created `cascade-probe` via `POST /api/events`,
+seeded an `event_summaries` row directly, then
+`DELETE /api/events/cascade-probe/delete?force=true` → both tables 0. The dev
+log showed only the read-only staff-sheet fetch from role resolution between
+"event hard-deleted" and "event permanently deleted" — no `events_tab` write.
 
 ### 4.5 Email validation — done
 
