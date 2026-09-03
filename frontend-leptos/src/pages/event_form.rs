@@ -24,6 +24,8 @@ pub struct EventForm {
     pub name: String,
     pub slug: String,
     pub tagline: String,
+    /// Long-form public description (agenda, schedule, details).
+    pub description: String,
     pub link: String,
     pub event_start: String,
     pub event_end: String,
@@ -162,6 +164,7 @@ pub fn default_form() -> EventForm {
         name: String::new(),
         slug: String::new(),
         tagline: String::new(),
+        description: String::new(),
         link: String::new(),
         event_start: String::new(),
         event_end: String::new(),
@@ -215,6 +218,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         name: detail.name.clone(),
         slug: detail.slug.clone(),
         tagline: detail.tagline.clone(),
+        description: detail.description.clone(),
         link: detail.link.clone(),
         event_start: if detail.event_start_ms > 0 {
             format_datetime_local(detail.event_start_ms)
@@ -537,6 +541,7 @@ pub fn EventFormComponent(
                 name: current_form.name.trim().to_string(),
                 slug: current_form.slug.trim().to_string(),
                 tagline: current_form.tagline.trim().to_string(),
+                description: current_form.description.trim().to_string(),
                 link: current_form.link.trim().to_string(),
                 event_start_ms: start_ms,
                 event_end_ms: end_ms,
@@ -710,6 +715,7 @@ pub fn EventFormComponent(
                 name: Some(current_form.name.trim().to_string()),
                 slug: Some(current_form.slug.trim().to_string()),
                 tagline: Some(current_form.tagline.trim().to_string()),
+                description: Some(current_form.description.trim().to_string()),
                 link: Some(current_form.link.trim().to_string()),
                 status: Some(current_form.status.clone()),
                 event_start_ms: Some(start_ms),
@@ -838,6 +844,80 @@ pub fn EventFormComponent(
                                 prop:value=move || form.get().tagline
                                 on:input=move |ev| set_form.update(|f| f.tagline = event_target_value(&ev))
                             />
+                        </div>
+                        <div class="quiz-setting-item">
+                            <label class="quiz-field-label">
+                                "Description"<span class="field-optional-badge">"Optional"</span>
+                            </label>
+                            <textarea
+                                class="quiz-textarea"
+                                rows="8"
+                                placeholder="Agenda, schedule, what to bring, links…&#10;&#10;13:00  Registration&#10;13:30  Keynote&#10;15:00  Workshop"
+                                prop:value=move || form.get().description
+                                on:input=move |ev| set_form.update(|f| f.description = event_target_value(&ev))
+                            ></textarea>
+                            <span class="quiz-setting-hint">
+                                "Shown publicly under \"About this Event\". Line breaks are preserved, so an agenda can be pasted straight in."
+                            </span>
+                            <label class="quiz-field-label" style="margin-top: 0.5rem;">
+                                "Import an Ontime rundown"
+                            </label>
+                            <input
+                                type="file"
+                                accept=".csv,text/csv"
+                                on:change=move |ev| {
+                                    // Parsed entirely in the browser — the file is
+                                    // never uploaded. The organizer reviews (and can
+                                    // edit) the generated text before saving.
+                                    let Some(target) = ev.target() else { return };
+                                    let input: web_sys::HtmlInputElement = target.unchecked_into();
+                                    let Some(file) = input.files().and_then(|fl| fl.item(0)) else {
+                                        return;
+                                    };
+                                    // Allow re-selecting the same file after a failed
+                                    // parse; without this `change` never fires again.
+                                    input.set_value("");
+                                    leptos::task::spawn_local(async move {
+                                        let text = match wasm_bindgen_futures::JsFuture::from(file.text()).await {
+                                            Ok(v) => v.as_string().unwrap_or_default(),
+                                            Err(_) => {
+                                                components::show_toast(
+                                                    &set_toast,
+                                                    "Could not read that file",
+                                                    components::ToastType::Error,
+                                                );
+                                                return;
+                                            }
+                                        };
+                                        use event_checkin_domain::models::rundown;
+                                        match rundown::parse_ontime_csv(&text) {
+                                            Ok(sessions) => {
+                                                let count = sessions.len();
+                                                let agenda = rundown::to_agenda_text(&sessions);
+                                                set_form.update(|f| f.description = agenda);
+                                                components::show_toast(
+                                                    &set_toast,
+                                                    &format!(
+                                                        "Imported {count} sessions — review below, then Save"
+                                                    ),
+                                                    components::ToastType::Success,
+                                                );
+                                            }
+                                            Err(e) => {
+                                                // Leave the textarea untouched on failure.
+                                                components::show_toast(
+                                                    &set_toast,
+                                                    &format!("Could not import rundown: {e}"),
+                                                    components::ToastType::Error,
+                                                );
+                                            }
+                                        }
+                                    });
+                                }
+                            />
+                            <span class="quiz-setting-hint">
+                                "Export the rundown from Ontime as CSV. Skipped rows are left out; run-of-show notes and colours are not published."
+                            </span>
                         </div>
                         <div class="quiz-setting-item">
                             <label class="quiz-field-label">"Link"<span class="field-optional-badge">"Optional"</span></label>

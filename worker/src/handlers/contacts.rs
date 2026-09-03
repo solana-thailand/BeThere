@@ -119,51 +119,70 @@ pub struct EventContactCount {
     pub count: usize,
 }
 
+/// Tally how many distinct contacts registered for each event.
+///
+/// Input is [`AudienceRow::event_ids`], which is
+/// `GROUP_CONCAT(DISTINCT a.event_id)` — computed fresh by the audience JOIN,
+/// **not** the deprecated `contacts.events_joined` stored column. Extracted so
+/// that distinction stays under test.
+///
+/// Ties are broken by event id so the output is deterministic; a `HashMap`
+/// iteration order otherwise makes the response shuffle between identical calls.
+fn tally_contacts_per_event(rows: &[AudienceRow]) -> Vec<EventContactCount> {
+    let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for row in rows {
+        for event_id in row.event_ids.split(',') {
+            let id = event_id.trim();
+            if !id.is_empty() {
+                *counts.entry(id).or_insert(0) += 1;
+            }
+        }
+    }
+    let mut events: Vec<EventContactCount> = counts
+        .into_iter()
+        .map(|(event_id, count)| EventContactCount {
+            event_id: event_id.to_string(),
+            count,
+        })
+        .collect();
+    events.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.event_id.cmp(&b.event_id)));
+    events
+}
+
+/// Source of truth: the `attendees` table, via [`audience_aggregate`].
+///
+/// Previously this read the master contacts **Google Sheet** and then split the
+/// denormalized `contacts.events_joined` CSV column — both of the stale read
+/// paths that plan 008 §3.5 deprecated. The sheet lags live registrations and
+/// the CSV column is overwritten on every upsert, so the numbers this endpoint
+/// reported drifted from reality in two independent ways at once.
+///
+/// The per-event tally below still splits a comma-separated string, but that
+/// string is `GROUP_CONCAT(DISTINCT a.event_id)` computed fresh by the JOIN —
+/// not the stored column. Deriving it in SQL and splitting the result is the
+/// sanctioned path; reading `contacts.events_joined` is not.
 #[worker::send]
 pub async fn contacts_stats_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<ContactsStatsResponse>, WorkerError> {
     crate::auth::require_super_admin(&claims.email, &state, "view contact stats").await?;
-    let config = &state.config.sheets;
-    if config.contacts_sheet_id.is_empty() {
-        return Ok(ApiOk::new(ContactsStatsResponse {
-            total_contacts: 0,
-            repeat_attendees: 0,
-            events: vec![],
-        }));
-    }
 
-    let kv = state.events_kv.as_ref();
-    let all_contacts = contacts::list_contacts(
-        &state,
-        &config.contacts_sheet_id,
-        &config.contacts_sheet_name,
-        kv,
-    )
-    .await
-    .map_err(AppError::Internal)?;
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
 
-    let total_contacts = all_contacts.len();
-    let repeat_attendees = all_contacts.iter().filter(|c| c.event_count > 1).count();
+    // `None` ⇒ aggregate across every event.
+    let rows = audience_aggregate(db, None)
+        .await
+        .map_err(AppError::Internal)?;
 
-    // Count contacts per event
-    let mut event_counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
-    for contact in &all_contacts {
-        for event_id in contact.events_joined.split(',') {
-            let id = event_id.trim();
-            if !id.is_empty() {
-                *event_counts.entry(id.to_string()).or_insert(0) += 1;
-            }
-        }
-    }
+    // One row per distinct lowercased email, so the row count IS the contact count.
+    let total_contacts = rows.len();
+    let repeat_attendees = rows.iter().filter(|r| r.events_joined > 1).count();
 
-    let mut events: Vec<EventContactCount> = event_counts
-        .into_iter()
-        .map(|(event_id, count)| EventContactCount { event_id, count })
-        .collect();
-    events.sort_by_key(|e| std::cmp::Reverse(e.count));
+    let events = tally_contacts_per_event(&rows);
 
     Ok(ApiOk::new(ContactsStatsResponse {
         total_contacts,
@@ -611,4 +630,67 @@ pub async fn contact_history_handler(
         events,
         total,
     }))
+}
+
+
+#[cfg(test)]
+mod r9_tests {
+    use super::*;
+
+    fn row(email: &str, events_joined: i64, event_ids: &str) -> AudienceRow {
+        AudienceRow {
+            email: email.to_string(),
+            events_joined,
+            event_ids: event_ids.to_string(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn tallies_contacts_per_event() {
+        let rows = vec![
+            row("a@x", 2, "evt1,evt2"),
+            row("b@x", 1, "evt1"),
+            row("c@x", 1, "evt3"),
+        ];
+        let out = tally_contacts_per_event(&rows);
+        assert_eq!(out[0].event_id, "evt1");
+        assert_eq!(out[0].count, 2);
+        assert_eq!(out.len(), 3);
+    }
+
+    /// `GROUP_CONCAT` can emit stray spaces, and an email with no registrations
+    /// yields an empty string — neither may become a phantom event bucket.
+    #[test]
+    fn ignores_blank_and_whitespace_ids() {
+        let rows = vec![row("a@x", 0, ""), row("b@x", 1, " evt1 , , evt2")];
+        let out = tally_contacts_per_event(&rows);
+        assert_eq!(out.len(), 2);
+        assert!(out.iter().all(|e| !e.event_id.is_empty()));
+        assert!(out.iter().any(|e| e.event_id == "evt1"));
+    }
+
+    /// Equal counts must not shuffle between calls — HashMap order is random.
+    #[test]
+    fn ties_are_broken_deterministically() {
+        let rows = vec![row("a@x", 3, "zeta,alpha,mid")];
+        let first = tally_contacts_per_event(&rows);
+        let second = tally_contacts_per_event(&rows);
+        let ids: Vec<&str> = first.iter().map(|e| e.event_id.as_str()).collect();
+        assert_eq!(ids, vec!["alpha", "mid", "zeta"]);
+        assert_eq!(ids, second.iter().map(|e| e.event_id.as_str()).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn empty_input_yields_no_events() {
+        assert!(tally_contacts_per_event(&[]).is_empty());
+    }
+
+    /// The repeat-attendee predicate reads the JOIN's `COUNT(DISTINCT event_id)`,
+    /// not the drifting stored CSV.
+    #[test]
+    fn repeat_attendees_use_the_joined_count() {
+        let rows = vec![row("a@x", 2, "e1,e2"), row("b@x", 1, "e1"), row("c@x", 5, "e1")];
+        assert_eq!(rows.iter().filter(|r| r.events_joined > 1).count(), 2);
+    }
 }

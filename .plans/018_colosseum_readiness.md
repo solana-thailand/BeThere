@@ -253,9 +253,49 @@ interesting and slightly different:
 So the accurate sentence is *"deposits denominated in Thai baht, settled on
 Solana, refunded on-chain on check-in"* — which is a stronger claim than the deck
 makes, since it demonstrates a working local-currency on-ramp rather than
-assuming crypto-native users. Recommend aligning `scripts/make_pitch_deck.py`
-before submission; `.plans/002` already established the discipline of not
-shipping a number the repo cannot back.
+assuming crypto-native users.
+
+### 5.6 Deck drift — the deck currently *under-claims*, measurably
+
+`python3 scripts/measure_metrics.py` (the drift checker built in `.plans/002`
+Phase 3) was re-run 2026-08-21. Every drift is in BeThere's favour:
+
+| Metric | Deck claims | Measured today | Delta |
+|---|---|---|---|
+| On-chain SVM tests | 54 | **65** | +11 |
+| Domain tests | 73 | **125** | +52 |
+| Worker tests | 123 | **299** | +176 |
+| **Total executed & passing** | **250+** | **489** | **≈2×** |
+| Kani proof harnesses | 16 | **17** | +1 |
+| Program size | 89,856 B | 89,856 B | ✅ matches |
+| Fee per TX | $0.00087 | $0.000869 | ✅ matches |
+
+The deck says "250+ tests" while the stack actually runs **489 executed and
+passing** (656 counting static frontend specs). For a judging panel underwriting
+a company, a 2× understatement of your own verification depth is a free upgrade
+— and unlike a marketing claim it is reproducible on demand by a script that
+already exists.
+
+One non-drift to leave alone: `fee_per_cnft_usd` reports $0.002064 against the
+deck's $0.001. That is a documented model choice (marginal cost vs. Bubblegum
+leaf-creation), already caveated in `docs/sources.md` §3 — not an error.
+
+**Two things to fix in `scripts/make_pitch_deck.py` before submission:**
+
+- [ ] **5.6a Regenerate the measured numbers** so the deck stops understating
+      (`250+` → `489`, and the per-suite counts above).
+- [ ] **5.6b Decide the deposit framing** — the deck says "$5 USDC deposit"
+      (lines ~538, 643, 867, 877, 974); production is THB 500 settled on Solana.
+      Also `("Deposits Verified", "0")` at line ~1425 is simply stale: the real
+      figures are 47 verified, 64 on-chain deposit signatures, 18 on-chain
+      refunds. The *numbers* are settled fact; how to frame baht-vs-USDC to an
+      investor is a positioning call and therefore yours.
+
+**Why I did not just do it:** `.plans/002` sets a non-negotiable — *"every change
+to the deck must be rebuilt and visually confirmed."* I can regenerate the
+`.pptx` but cannot visually confirm it, so applying these unverified would break
+the very discipline that makes the deck trustworthy. Both items are one command
+plus one look.
 
 ---
 
@@ -306,6 +346,10 @@ checkbox is blocked on a decision, not on engineering.
 - [x] §4.1 distribution sentence written from the 15 events' real provenance.
 - [x] §4.3 ICP named, with the data that rules out the alternative.
 - [x] §5.5 payment-rail framing corrected against the prod dataset.
+- [x] §5.6 deck drift measured via `scripts/measure_metrics.py`; deck understates
+      total tests by ~2× (250+ claimed vs 489 measured).
+- [ ] §5.6a/§5.6b deck regenerated and visually confirmed. *Blocked on a human
+      look, per `.plans/002`'s non-negotiable.*
 - [ ] §4.2 building-in-public decided (A or B). *Prepared with costs; the call
       is the founder's. Not marked complete on a recommendation alone.*
 - [ ] §5 eligibility answered by the organizers. **Still blocking** — none of the
