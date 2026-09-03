@@ -38,8 +38,8 @@
 //!   requires semantic analysis of boolean expressions, not text scanning.
 //!   Documented as a known gap in `.plans/014_ssot_audit.md`.
 //! - **Mirror types outside `MIRROR_FILES`.** The guard scans only the files
-//!   listed in `MIRROR_FILES` (currently `api/types.rs`, `api/event.rs`,
-//!   `api/admin.rs`). If a new mirror-types file appears elsewhere in
+//!   listed in `MIRROR_FILES` (currently `api/types.rs`, the `api/event/`
+//!   module directory, and `api/admin.rs`). If a new mirror-types file appears elsewhere in
 //!   `frontend-leptos/src/`, it must be added to `MIRROR_FILES` or coverage
 //!   silently drops. The Phase 2.1 audit found this was a real risk — the
 //!   Phase 2.3 version of this guard listed only `api/types.rs`, missing 3
@@ -85,18 +85,15 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
-/// Frontend source files that contain mirror-type definitions. Each file in
-/// this list is scanned for business-predicate methods (`is_*`, `can_*`,
+/// Frontend source entries that contain mirror-type definitions. Each entry is
+/// either a `.rs` file or a module directory (scanned recursively), and is
+/// scanned for business-predicate methods (`is_*`, `can_*`,
 /// `has_*`, etc.) that mirror domain logic.
 ///
 /// **Adding a file here is a conscious decision.** If a new mirror-types file
 /// appears in the frontend, it must be added to this list or the guard's
 /// coverage silently drops.
-const MIRROR_FILES: &[&str] = &[
-    "src/api/types.rs",
-    "src/api/event.rs",
-    "src/api/admin.rs",
-];
+const MIRROR_FILES: &[&str] = &["src/api/types.rs", "src/api/event", "src/api/admin.rs"];
 
 /// Business-predicate naming prefixes. A method whose name starts with one of
 /// these prefixes is considered a business predicate (a function that encodes
@@ -335,12 +332,13 @@ fn domain_predicate_baseline_is_nonempty() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Paths under `domain/src/` that hold business predicates. Used to establish
+/// Paths under `domain/src/` that hold business predicates, each either a
+/// `.rs` file or a module directory (scanned recursively). Used to establish
 /// the SSOT baseline (Layer 4). If domain reorganises its model modules, this
 /// list needs updating.
 const DOMAIN_PREDICATE_PATHS: &[&str] = &[
-    "domain/src/models/attendee.rs",
-    "domain/src/models/event.rs",
+    "domain/src/models/attendee",
+    "domain/src/models/event",
     "domain/src/models/deposit.rs",
     "domain/src/models/error.rs",
 ];
@@ -388,6 +386,56 @@ fn extract_predicate_method_name(line: &str) -> Option<String> {
     Some(name.to_string())
 }
 
+/// Read every Rust source reachable from `path`, which may be either a single
+/// `.rs` file or a module directory. The 1024-line refactor turned several of
+/// the configured entries into directories, so resolving both keeps the audit
+/// scope stable across file->directory splits.
+fn read_module_sources(path: &Path, constant: &str, entry: &str, hint: &str) -> Vec<String> {
+    match (path.is_dir(), path.is_file()) {
+        (true, _) => {
+            let mut out = Vec::new();
+            push_rs_sources(path, &mut out);
+            out
+        }
+        (_, true) => vec![
+            fs::read_to_string(path)
+                .unwrap_or_else(|e| panic!("could not read {}: {e}", path.display())),
+        ],
+        _ => panic!(
+            "configured {constant} entry `{entry}` does not exist at {}. {hint}",
+            path.display()
+        ),
+    }
+}
+
+/// Depth-first append of every `.rs` file body under `dir`, in sorted order so
+/// the resulting predicate list is deterministic.
+fn push_rs_sources(dir: &Path, out: &mut Vec<String>) {
+    let mut entries: Vec<PathBuf> = fs::read_dir(dir)
+        .unwrap_or_else(|e| panic!("could not read directory {}: {e}", dir.display()))
+        .map(|entry| {
+            entry
+                .unwrap_or_else(|e| panic!("could not read entry in {}: {e}", dir.display()))
+                .path()
+        })
+        .collect();
+    entries.sort();
+
+    for path in entries {
+        match (
+            path.is_dir(),
+            path.extension().is_some_and(|ext| ext == "rs"),
+        ) {
+            (true, _) => push_rs_sources(&path, out),
+            (_, true) => out.push(
+                fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("could not read {}: {e}", path.display())),
+            ),
+            _ => {}
+        }
+    }
+}
+
 /// Recursively collect every business-predicate method declared in the
 /// configured mirror files. Returns a sorted, deduplicated list.
 fn collect_mirror_predicates() -> Vec<String> {
@@ -395,18 +443,13 @@ fn collect_mirror_predicates() -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
 
     for &file_rel in MIRROR_FILES {
-        let path = root.join(file_rel);
-        if !path.is_file() {
-            panic!(
-                "configured MIRROR_FILES entry `{}` does not exist at {}. \
-                 Update the constant to match the current frontend layout.",
-                file_rel,
-                path.display()
-            );
-        }
-        let source = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("could not read {}: {e}", path.display()));
-        for line in source.lines() {
+        let sources = read_module_sources(
+            &root.join(file_rel),
+            "MIRROR_FILES",
+            file_rel,
+            "Update the constant to match the current frontend layout.",
+        );
+        for line in sources.iter().flat_map(|source| source.lines()) {
             if let Some(name) = extract_predicate_method_name(line)
                 && !out.contains(&name)
             {
@@ -428,18 +471,13 @@ fn collect_domain_predicates() -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
 
     for &file_rel in DOMAIN_PREDICATE_PATHS {
-        let path = root.join(file_rel);
-        if !path.is_file() {
-            panic!(
-                "configured DOMAIN_PREDICATE_PATHS entry `{}` does not exist at {}. \
-                 Update the constant or re-scope the audit.",
-                file_rel,
-                path.display()
-            );
-        }
-        let source = fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("could not read {}: {e}", path.display()));
-        for line in source.lines() {
+        let sources = read_module_sources(
+            &root.join(file_rel),
+            "DOMAIN_PREDICATE_PATHS",
+            file_rel,
+            "Update the constant or re-scope the audit.",
+        );
+        for line in sources.iter().flat_map(|source| source.lines()) {
             if let Some(name) = extract_predicate_method_name(line) {
                 let full = format!("{file_rel}::{name}");
                 if !out.contains(&full) {
