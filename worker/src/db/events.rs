@@ -460,6 +460,8 @@ pub async fn upsert_event(
     let event_format_str = config.event_format.as_str();
     let visibility_str = config.visibility.as_str();
     let online_open_mode_str = config.online_open_mode.as_str();
+    let community_links_json =
+        serde_json::to_string(&config.community_links).unwrap_or_else(|_| "[]".to_string());
 
     let sql = format!(
         "INSERT INTO events (\
@@ -481,25 +483,25 @@ pub async fn upsert_event(
          online_open_mode, online_registration_open, \
          deposit_deadline_hours, updated_by, dev_profile_enabled, community_links, \
          calendar_subscribe_url, poster_url, recap_published) \
-         VALUES ('{id}', '{name}', '{slug}', '{status}', '{event_format}', \
+         VALUES (?, ?, ?, ?, ?, \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
-         '{escrow_status}', '{escrow_pda}', '{location}', '{tagline}', \
-         '{organizer_emails}', '{organization_id}', '{video_url}', \
-         '{sheet_id}', '{sheet_name}', '{staff_sheet_name}', \
-         {capacity}, {total_attendees}, '{created_at}', '{updated_at}', \
-         '{link}', {time_tba}, {quiz_enabled}, \
-         '{nft_collection_mint}', '{nft_metadata_uri}', '{nft_image_url}', \
-         '{nft_name_template}', '{nft_symbol}', '{nft_description_template}', \
-         '{merkle_tree}', '{staff_emails}', '{claim_base_url}', \
-         '{promptpay_id}', '{escrow_address}', '{organizer_wallet}', \
+         ?, ?, ?, ?, \
+         ?, ?, ?, \
+         ?, ?, ?, \
+         {capacity}, {total_attendees}, ?, ?, \
+         ?, {time_tba}, {quiz_enabled}, \
+         ?, ?, ?, \
+         ?, ?, ?, \
+         ?, ?, ?, \
+         ?, ?, ?, \
          {on_chain_event_id}, {refund_deadline_hours}, {max_refundable_deposits}, \
-         '{description}', '{visibility}', \
+         ?, ?, \
          {require_contact_info}, {require_photo_consent}, \
          {in_person_capacity}, {online_capacity}, \
-         '{online_open_mode}', {online_registration_open}, \
-         {deposit_deadline_hours}, '{updated_by}', {dev_profile_enabled}, '{community_links}', \
-         '{calendar_subscribe_url}', '{poster_url}', {recap_published}) \
+         ?, {online_registration_open}, \
+         {deposit_deadline_hours}, ?, {dev_profile_enabled}, ?, \
+         ?, ?, {recap_published}) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -547,70 +549,76 @@ pub async fn upsert_event(
          calendar_subscribe_url = excluded.calendar_subscribe_url, \
          poster_url = excluded.poster_url, \
          recap_published = excluded.recap_published",
-        id = config.id,
-        name = config.name.replace('\'', "''"),
-        slug = config.slug,
-        status = status_str,
-        event_format = event_format_str,
         event_start_ms = config.event_start_ms,
         event_end_ms = config.event_end_ms,
         deposit_enabled = config.deposit_enabled as i32,
         deposit_amount_usdc = config.deposit_amount_usdc,
         deposit_amount_thb = config.deposit_amount_thb,
-        escrow_status = escrow_status_str,
-        escrow_pda = config.escrow_address,
-        location = config.location.replace('\'', "''"),
-        tagline = config.tagline.replace('\'', "''"),
-        organizer_emails = organizer_emails.replace('\'', "''"),
-        organization_id = config.organization_id,
-        video_url = config.video_url,
-        sheet_id = config.sheet_id,
-        sheet_name = config.sheet_name,
-        staff_sheet_name = config.staff_sheet_name,
         capacity = config.in_person_capacity.unwrap_or(0),
         total_attendees = 0,
-        created_at = config.created_at,
-        updated_at = config.updated_at,
-        link = config.link.replace('\'', "''"),
         time_tba = config.time_tba as i32,
         quiz_enabled = config.quiz_enabled as i32,
-        nft_collection_mint = config.nft_collection_mint,
-        nft_metadata_uri = config.nft_metadata_uri,
-        nft_image_url = config.nft_image_url,
-        nft_name_template = config.nft_name_template.replace('\'', "''"),
-        nft_symbol = config.nft_symbol,
-        nft_description_template = config.nft_description_template.replace('\'', "''"),
-        merkle_tree = config.merkle_tree,
-        staff_emails = staff_emails.replace('\'', "''"),
-        claim_base_url = config.claim_base_url,
-        promptpay_id = config.promptpay_id,
-        escrow_address = config.escrow_address,
-        organizer_wallet = config.organizer_wallet,
         on_chain_event_id = config.on_chain_event_id,
         refund_deadline_hours = config.refund_deadline_hours,
         max_refundable_deposits = config.max_refundable_deposits,
-        description = config.description.replace('\'', "''"),
-        visibility = visibility_str,
         require_contact_info = config.require_contact_info as i32,
         require_photo_consent = config.require_photo_consent as i32,
         in_person_capacity = config.in_person_capacity.map(|v| v as i64).unwrap_or(-1),
         online_capacity = config.online_capacity.map(|v| v as i64).unwrap_or(-1),
-        online_open_mode = online_open_mode_str,
         online_registration_open = config.online_registration_open as i32,
         deposit_deadline_hours = config
             .deposit_deadline_hours
             .map(|v| v as i64)
             .unwrap_or(-1),
-        updated_by = config.updated_by,
         dev_profile_enabled = config.dev_profile_enabled as i32,
-        community_links =
-            serde_json::to_string(&config.community_links).unwrap_or_else(|_| "[]".to_string()),
-        calendar_subscribe_url = config.calendar_subscribe_url,
-        poster_url = config.poster_url,
         recap_published = config.recap_published as i32,
     );
 
-    db.exec(&sql)
+    // Order MUST match the `?` placeholders in the VALUES clause above.
+    let args = [
+        D1Type::Text(&config.id),
+        D1Type::Text(&config.name),
+        D1Type::Text(&config.slug),
+        D1Type::Text(status_str),
+        D1Type::Text(event_format_str),
+        D1Type::Text(escrow_status_str),
+        D1Type::Text(&config.escrow_address), // escrow_pda
+        D1Type::Text(&config.location),
+        D1Type::Text(&config.tagline),
+        D1Type::Text(&organizer_emails),
+        D1Type::Text(&config.organization_id),
+        D1Type::Text(&config.video_url),
+        D1Type::Text(&config.sheet_id),
+        D1Type::Text(&config.sheet_name),
+        D1Type::Text(&config.staff_sheet_name),
+        D1Type::Text(&config.created_at),
+        D1Type::Text(&config.updated_at),
+        D1Type::Text(&config.link),
+        D1Type::Text(&config.nft_collection_mint),
+        D1Type::Text(&config.nft_metadata_uri),
+        D1Type::Text(&config.nft_image_url),
+        D1Type::Text(&config.nft_name_template),
+        D1Type::Text(&config.nft_symbol),
+        D1Type::Text(&config.nft_description_template),
+        D1Type::Text(&config.merkle_tree),
+        D1Type::Text(&staff_emails),
+        D1Type::Text(&config.claim_base_url),
+        D1Type::Text(&config.promptpay_id),
+        D1Type::Text(&config.escrow_address),
+        D1Type::Text(&config.organizer_wallet),
+        D1Type::Text(&config.description),
+        D1Type::Text(visibility_str),
+        D1Type::Text(online_open_mode_str),
+        D1Type::Text(&config.updated_by),
+        D1Type::Text(&community_links_json),
+        D1Type::Text(&config.calendar_subscribe_url),
+        D1Type::Text(&config.poster_url),
+    ];
+
+    db.prepare(&sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 upsert_event bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 upsert_event: {e:?}"))?;
 
