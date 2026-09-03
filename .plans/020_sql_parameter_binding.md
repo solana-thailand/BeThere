@@ -526,3 +526,89 @@ coverage of the 58 known sites.
 Gates: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
 -- -D warnings`, 15 workspace test binaries green. The wasm build was not re-run
 — the change is confined to `worker/tests/`, which is not in that target.
+
+## 8. A fourth NOT NULL abort — `finalize_claim_lock` (2026-09-04)
+
+Same class as §6.2, found by auditing that class mechanically rather than by
+eye. `claim_locks.expires_at` is `TEXT NOT NULL` in **both** schemas —
+`migrations/0001_initial.sql:15` and the DO's `event_do/schema.rs:17` — and
+**both** finalize copies set it to `NULL`:
+
+- `db/claim_locks.rs:63` (D1 path)
+- `durable_objects/event_do/claim_lock.rs:83` (DO path)
+
+The intent was "finalization removes the 5-minute TTL". SQLite instead aborts
+the whole `UPDATE`, so `asset_id`, `signature` and `claimed_at` were never
+written either. **`claim_locks` has never recorded a single completed mint.**
+
+### Why it was user-visible, not just an audit gap
+
+`claim::lock::finalize_claim_lock` called the D1 write with `?` *before* the KV
+dual-write. The abort therefore short-circuited the function and the KV record
+was never upgraded, so:
+
+- the KV value stayed the **acquire** payload — `{lock_id, wallet, started_at}`,
+  with no `asset_id` and no `signature`;
+- it kept the **300-second acquire TTL** instead of `CLAIM_LOCK_FINALIZE_TTL_SECS`
+  (90 days), so five minutes after a claim the key was gone entirely.
+
+`claim/mint/lookup.rs:182` and `handlers/attendee/read.rs:55,278` read exactly
+that record to show a claimed attendee their `signature` / `asset_id` / explorer
+link. So **every attendee who claimed an NFT lost their proof link**, blank
+immediately and with `wallet` also gone after five minutes.
+
+Both call sites (`claim/mint/execute.rs:458`, `claim/mint/walkin.rs:126`) log the
+failure at `warn!` and continue, which is why nothing ever surfaced.
+
+Not a double-mint vector: the primary guard is `attendee.claimed_at.is_some()`
+(`execute.rs:272`), and on the D1 path `INSERT … ON CONFLICT DO NOTHING` still
+refuses a re-acquire. The DO path degrades to the wrong *message* only —
+`handle_acquire_claim_lock` reads `claimed_at` to distinguish "already
+completed" from "already being processed".
+
+### Fix
+
+- **`claim::finalized_expires_at()`** (new, in `claim/lock.rs` beside
+  `CLAIM_LOCK_FINALIZE_TTL_SECS`) returns `now + 90 days` as RFC3339 — one
+  definition shared by the D1 and DO copies, so the two cannot drift again.
+  Finalization moves `expires_at` out to the retention horizon rather than
+  nulling it: it satisfies the NOT NULL contract honestly, needs no migration
+  (a SQLite `NOT NULL` drop is a table rebuild, and `CREATE TABLE IF NOT EXISTS`
+  would never re-apply it to already-created DOs), keeps
+  `idx_claim_locks_expires` meaningful for any future sweeper, and matches the
+  KV record's own 90-day TTL. `claimed_at IS NOT NULL` stays the marker for
+  "finalized", which is what the DO already reads.
+- **Write ordering.** Both paths now hold the DO/D1 error and return it *after*
+  the KV record is written. A failed durable write must not also cost the
+  attendee their proof link.
+
+### Guard — `worker/tests/not_null_column_guard.rs` (3 tests)
+
+Pins the class, not the line. Parses every `CREATE TABLE` / `ALTER TABLE … ADD
+COLUMN` in `migrations/*.sql` **and** in the DO's `schema.rs` into a
+table → NOT NULL column map, then scans every `UPDATE … SET` under `worker/src`
+for an assignment of `NULL` to one of those columns. Reading the code cannot
+catch this bug — the statement and the schema are in different files and
+different languages — so the test reads both.
+
+Mutation-tested: restoring `expires_at = NULL` in both copies fails the guard,
+naming each file, table and column. Only `UPDATE … SET` is covered; a
+column-list `INSERT` omitting a NOT NULL column without a default is the same
+class and is not.
+
+The self-test (Layer 2) earned its place immediately — it caught that the first
+parser was broken and that the real scan had been passing **vacuously**. Two
+defects it surfaced: `find_ci` returned byte offsets while the readers used char
+offsets (the migrations contain em dashes, so the two diverge), and SQL/Rust
+line comments were parsed as code.
+
+### Not done
+
+- **No backfill.** Every `claim_locks` row from a completed mint still has
+  `asset_id`/`signature`/`claimed_at` NULL. The data is recoverable — the
+  attendee rows carry `claimed_at`, and the mint signature is on chain — but a
+  migration would have to join against Solana, so it is an owner call.
+- **`release_claim_lock` has the same ordering shape**: its D1 `DELETE` uses `?`
+  before the KV delete, so a D1 failure leaves the KV lock in place. Latent, not
+  live — that `DELETE` has no NOT NULL exposure — and left alone deliberately.
+  The DO branch of the same function already warns-and-continues instead.
