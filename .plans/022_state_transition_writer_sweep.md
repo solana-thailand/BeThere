@@ -1,0 +1,113 @@
+# 022 — Sweep every writer of a state transition before trusting a guard
+
+**Status:** in progress. Two transitions swept, one fix landed each; the rest listed below are unswept.
+
+## Why this plan exists
+
+Three separate defects on this branch shared one shape:
+
+1. **claim-lock cleanup ordering** — the `?`-before-KV-write bug was fixed on one
+   cleanup path; two sibling paths performing the same cleanup kept it (plan 020 §10).
+2. **USDC deposit verification** — three entry points could set `verified = true`;
+   only the read path carried the F1 and `binding_conflict` guards (plan 003 §7).
+3. **Virtual check-in approval** — three paths set `checked_in_at`; the adventure
+   quest-complete endpoint never gated on `approval_status` (this plan, §2).
+
+In every case a guard was added at the entry point where the bug was *found*, and
+the siblings performing the same transition were never revisited. In two of the
+three, a plan or a code comment asserted the sibling path was "already safe" —
+both assertions were false. **Treat such a note as a lead, not a fact.**
+
+## The sweep
+
+For a state transition `T` (a field flipping to a meaningful value):
+
+1. `rg` for every write of the field — SQL `SET`, struct-field assignment, insert
+   column lists. Include the Durable Object copies and the Sheets writers.
+2. For each writer, walk up to the HTTP handler(s) that reach it and tabulate the
+   gates each one runs. Divergence between columns is the defect.
+3. **Prefer collapsing over copying.** If one path is a superset, make the others
+   delegate to it and delete the duplicate. A guard that is copied is a guard that
+   will diverge again.
+4. Express the shared rule in `domain/` where the check is on entity state, so it
+   has one home and a behavioural test.
+5. Narrow the re-exports afterwards. If the collapsed-away helpers become private,
+   restoring the pre-fix path no longer compiles — stronger than any test.
+6. Add a source-text guard in `tests/` (strip comment lines, so prose cannot
+   satisfy a rule about code) and mutation-test it: revert the fix, confirm red.
+
+## §2 — `checked_in_at` (swept, fixed in `e628759`)
+
+Writers of the transition:
+
+| path | entry | gates |
+|---|---|---|
+| staff scan, on-site | `handlers/checkin.rs` → `db::attendees::check_in_attendee` | `Attendee::can_check_in` (not-checked-in, approved, in-person) |
+| staff scan, `online=true` | same handler, online branch | ~~open-coded not-checked-in + approved~~ → `can_check_in_virtually` |
+| self-serve quest completion | `handlers/adventure.rs::quest_complete_checkin` | event has online track, adventure enabled, idempotent — **no approval check** |
+| claim mint auto check-in | `claim/mint/execute.rs:145` | online attendee, event has online track, quest passed, event has ended |
+| walk-in creation | `db/attendees/walkin.rs` | inserts already-checked-in; approval does not apply by design |
+| `EventDurableObject::handle_check_in` | DO RPC | not reachable — DO bindings are disabled (see CLAUDE.md `10021`) |
+
+**The defect.** `claim/mint/execute.rs` never checks `approval_status`. It does not
+have to, *provided* every path that sets `checked_in_at` is approval-gated — it
+reads a set `checked_in_at` as proof that an approval-gated path produced it. That
+is the same transitive trust the deposit paths had. `quest_complete_checkin` broke
+it: a `PendingApproval` or `Invited` registrant on an adventure-enabled hybrid
+event could `POST /api/adventure/quest-complete` to set their own `checked_in_at`,
+and thereby become claim-eligible without an organiser ever approving them. They
+still had to complete the adventure — the gate at `execute.rs:252` runs
+unconditionally, outside the `checked_in_at.is_none()` branch, so the endpoint's
+*other* missing check (it verifies no quest progress despite its doc comment
+saying it does) is genuinely defended downstream, as its `SECURITY NOTE` claims.
+The approval gate was not.
+
+Secondary effect: an unapproved registrant counts as checked in everywhere
+attendance is read — dashboards, `db/event_summaries.rs`, the plan 008 recap.
+
+**The fix.** `Attendee::can_check_in_virtually` in `domain/` — `can_check_in`
+minus the in-person rule, which the virtual path inverts. Both the online branch
+of the staff scan and `quest_complete_checkin` now call it; the open-coded copy in
+`checkin.rs` is gone. Behaviour pinned by `domain/tests/virtual_checkin_gate.rs`
+(5 tests, including one that asserts the *relationship* — anything `can_check_in`
+accepts, `can_check_in_virtually` must accept, so a rule added to one forces a
+decision about the other). Shape pinned by `worker/tests/virtual_checkin_guard.rs`
+(4 tests), mutation-tested four ways: gate deleted, gate moved after the write,
+`checkin.rs` restored to the hand-rolled copy, and the domain gate stripped of its
+approval check. Each turned it red.
+
+The fourth guard test asserts `claim/mint/execute.rs` still *lacks* an approval
+check — the premise the other three protect. If that changes, the guards should be
+re-derived deliberately rather than left asserting a stale assumption.
+
+### Still open on this transition
+
+- `quest_complete_checkin`'s doc comment claims it "verifies … the required levels
+  are completed in D1". It does not — it fetches the config and checks only
+  `enabled`. Harmless today (the claim gate catches it) but the comment is wrong
+  and the endpoint hands out a `checked_in_at` for an unstarted adventure, which
+  inflates attendance. Fixing it means calling `get_adventure_status` here too;
+  left out of `e628759` to keep that commit to the security defect.
+- `claim/mint/execute.rs`'s auto check-in writes the in-memory struct and Sheets
+  but **not D1**, unlike the other two writers, which write D1 first because
+  my-registration reads D1-first. Suspected dual-write gap; not yet traced.
+
+## Transitions not yet swept
+
+- `claimed_at` / `claim_asset_id` — `db::attendees::claim_attendee`, the walk-in
+  claim path (`claim/mint/walkin.rs`, which skips the quiz/adventure gates), the
+  DO copy, and the Sheets `mark_claimed` writer.
+- `refund_status` → `refunded`, and `refund_marked_by`.
+- `approval_status` itself — who may set it to `Approved`.
+- credit-balance mutations (hold → balance → auto-apply; see
+  `credit_ledger_guards.rs` for what is already pinned).
+- `escrow` state transitions (`escrow_transition_contract.rs` covers the wire
+  shape, not the set of writers).
+
+## DoD
+
+- [x] `checked_in_at` swept; divergence fixed and guarded.
+- [x] `verified` (USDC deposit) swept — plan 003 §7.
+- [x] claim-lock cleanup swept — plan 020 §10.
+- [ ] The five transitions above swept.
+- [ ] Nothing here is deployed; this branch is unpushed.
