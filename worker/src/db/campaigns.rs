@@ -4,7 +4,7 @@
 //! Three tables: campaigns, campaign_events, developer_campaign_progress.
 
 use wasm_bindgen_futures::JsFuture;
-use worker::D1Database;
+use worker::{D1Database, D1Type};
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -89,10 +89,10 @@ pub(crate) struct EventDropOff {
 #[allow(clippy::too_many_arguments)]
 /// Insert a campaign.
 ///
-/// `id` and `status` MUST already be validated by the caller
-/// (`handlers::campaigns::validate_campaign_id` / `validate_create_status`) —
-/// like the rest of this module the query is interpolated rather than bound.
-/// `status` is checked against a closed set, so it can never carry a quote.
+/// Every value is bound as a parameter, so free-text fields (`title`,
+/// `description`, the JSON blobs) cannot break out of the statement. Callers
+/// still validate `id` and `status` for shape/domain reasons
+/// (`handlers::campaigns::validate_campaign_id` / `validate_create_status`).
 pub(crate) async fn create_campaign(
     db: &D1Database,
     id: &str,
@@ -104,14 +104,23 @@ pub(crate) async fn create_campaign(
     reward_type: &str,
     reward_config: &str,
 ) -> Result<(), String> {
-    let sql = format!(
-        "INSERT INTO campaigns (id, title, description, organization_id, status, \
+    let sql = "INSERT INTO campaigns (id, title, description, organization_id, status, \
          completion_criteria, reward_type, reward_config, created_at, updated_at) \
-         VALUES ('{id}', '{title}', '{description}', '{organization_id}', '{status}', \
-         '{completion_criteria}', '{reward_type}', '{reward_config}', \
-         datetime('now'), datetime('now'))"
-    );
-    db.exec(&sql)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))";
+    let args = [
+        D1Type::Text(id),
+        D1Type::Text(title),
+        D1Type::Text(description),
+        D1Type::Text(organization_id),
+        D1Type::Text(status),
+        D1Type::Text(completion_criteria),
+        D1Type::Text(reward_type),
+        D1Type::Text(reward_config),
+    ];
+    db.prepare(sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 create_campaign bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 create_campaign: {e:?}"))?;
     Ok(())
@@ -126,17 +135,26 @@ pub(crate) async fn update_campaign(
     reward_type: &str,
     reward_config: &str,
 ) -> Result<(), String> {
-    let sql = format!(
-        "UPDATE campaigns SET \
-         title = '{title}', \
-         description = '{description}', \
-         completion_criteria = '{completion_criteria}', \
-         reward_type = '{reward_type}', \
-         reward_config = '{reward_config}', \
+    let sql = "UPDATE campaigns SET \
+         title = ?, \
+         description = ?, \
+         completion_criteria = ?, \
+         reward_type = ?, \
+         reward_config = ?, \
          updated_at = datetime('now') \
-         WHERE id = '{id}'"
-    );
-    db.exec(&sql)
+         WHERE id = ?";
+    let args = [
+        D1Type::Text(title),
+        D1Type::Text(description),
+        D1Type::Text(completion_criteria),
+        D1Type::Text(reward_type),
+        D1Type::Text(reward_config),
+        D1Type::Text(id),
+    ];
+    db.prepare(sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 update_campaign bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 update_campaign: {e:?}"))?;
     Ok(())
