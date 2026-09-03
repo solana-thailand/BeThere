@@ -56,8 +56,14 @@ pub async fn deposit_webhook_handler(
     };
 
     if !is_webhook_authed && !is_jwt_authed {
+        // Never log `auth_header` itself. A rejected header is still credential
+        // material — a near-miss `WEBHOOK_SECRET` or a JWT that is valid
+        // somewhere else — and Cloudflare request logs are a far weaker
+        // trust boundary than the secret store. Log only its shape.
         tracing::warn!(
-            auth = %auth_header,
+            auth_present = !auth_header.is_empty(),
+            auth_is_bearer = auth_header.starts_with("Bearer "),
+            auth_len = auth_header.len(),
             "deposit webhook rejected: no valid webhook secret or JWT"
         );
         return Err(event_checkin_domain::models::error::AppError::Unauthorized(
@@ -80,6 +86,31 @@ pub async fn deposit_webhook_handler(
                     body.attendee_id, body.event_id
                 ))
             })?;
+
+    // Refuse to rewrite the signature of an already-verified deposit. The JWT
+    // branch above authenticates the *caller* but does not bind them to
+    // `body.attendee_id`, so any holder of a valid token could otherwise
+    // overwrite a settled money record's proof-of-payment with an arbitrary
+    // string — the `verified` flag would survive while the signature backing
+    // it, and every refund/audit path that reads it, would not. Re-sending the
+    // same signature stays a no-op success so Helius retries are safe.
+    if deposit_status.verified {
+        let recorded = deposit_status.tx_signature.as_deref().unwrap_or("");
+        if !recorded.is_empty() && recorded != body.tx_signature {
+            tracing::warn!(
+                attendee_id = %body.attendee_id,
+                event_id = %body.event_id,
+                recorded_tx_signature = %recorded,
+                incoming_tx_signature = %body.tx_signature,
+                "deposit webhook refused: deposit already verified with a different TX signature"
+            );
+        }
+        return Ok(ApiOk::new(serde_json::json!({
+            "success": true,
+            "confirmed": true,
+            "tx_signature": recorded,
+        })));
+    }
 
     // Update with TX signature
     deposit_status.tx_signature = Some(body.tx_signature.clone());
