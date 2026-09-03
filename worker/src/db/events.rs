@@ -662,12 +662,13 @@ pub async fn get_event(db: &D1Database, event_id: &str) -> Result<Option<D1Event
 /// with `.unwrap()` — panics on certain nullable column types.
 async fn get_event_raw(
     db: &D1Database,
-    column: &str,
+    column: &'static str,
     value: &str,
 ) -> Result<Option<D1EventRow>, String> {
-    // `column` is always a caller-supplied literal ("id" / "slug") — SQLite
-    // cannot parameterise an identifier. `value` comes from a URL path segment
-    // and is bound.
+    // `column` is `&'static str`, so only a compile-time literal ("id" / "slug")
+    // can reach the SQL — SQLite cannot parameterise an identifier, and the type
+    // is what makes the interpolation safe. `value` comes from a URL path
+    // segment and is bound.
     let sql = format!("SELECT * FROM events WHERE {column} = ? LIMIT 1");
     let args = [D1Type::Text(value)];
     let stmt = db
