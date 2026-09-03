@@ -4,7 +4,7 @@
 //! equivalent: **the escrow lifecycle allowlist must be pinned and drift-proof**.
 //!
 //! The Phase 2.4 type-state audit (handover 116) found that the runtime
-//! transition allowlist for `EscrowStatus` lives in TWO independent copies
+//! transition allowlist for `EscrowStatus` lived in TWO independent copies
 //! inside `worker/src/event_store/write.rs`:
 //!
 //!   1. `update_event` (async, DB-backed) — called by escrow-init confirmation,
@@ -12,7 +12,12 @@
 //!   2. `apply_update` (pure, no IO) — called by the main `PUT /events/{id}`
 //!      handler, which is the primary UI-driven path for escrow status changes.
 //!
-//! Both copies enumerate the same 5 legal transitions:
+//! The two have since been collapsed: `update_event` loads the config, calls
+//! `apply_update`, and persists. That removes the drift risk this file was
+//! written for, so Layer 2 now pins the opposite property — the allowlist
+//! appears exactly ONCE, and a reintroduced second copy fails the guard.
+//!
+//! The allowlist enumerates 5 legal transitions:
 //!
 //!   None → Initialized
 //!   Initialized → Deactivated
@@ -36,8 +41,8 @@
 //! ## Layer 2 — Source-scan drift guard
 //!
 //! Reads `worker/src/event_store/write.rs` as raw text and asserts that:
-//!   - Each of the 5 canonical arm-strings appears exactly 2× (once per
-//!     function copy). If someone edits one copy but not the other, the
+//!   - Each of the 5 canonical arm-strings appears exactly 1×. If a second
+//!     copy of the allowlist is reintroduced, or an arm is edited, the
 //!     count drops to 1 and the guard fires.
 //!   - The total `(EscrowStatus::` arm-pattern count is exactly 10
 //!     (5 arms × 2 functions). If someone adds a 6th transition to either
@@ -268,7 +273,7 @@ fn illegal_transition_leaves_config_unchanged() {
 /// Root of the worker crate, resolved from `CARGO_MANIFEST_DIR`.
 const WORKER_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"));
 
-/// Relative path to the file containing both allowlist copies.
+/// Relative path to the file containing the allowlist.
 const WRITE_RS_REL: &str = "src/event_store/write/update.rs";
 
 /// Read `worker/src/event_store/write.rs` as a string.
@@ -278,30 +283,29 @@ fn read_write_rs() -> String {
 }
 
 #[test]
-fn each_canonical_arm_appears_exactly_twice_in_source() {
-    // Each of the 5 legal arm-strings must appear exactly 2× in write.rs —
-    // once in `update_event` and once in `apply_update`. If someone edits
-    // one copy but not the other, the count drops to 1 and this fires.
+fn each_canonical_arm_appears_exactly_once_in_source() {
+    // The allowlist has one home: `apply_update`. A count of 2 means a second
+    // copy was reintroduced (the shape this file was written for); a count of
+    // 0 means an arm was edited or removed.
     let source = read_write_rs();
 
     for (from, to) in LEGAL_TRANSITIONS {
         let arm = format!("({}, {})", arm_str(from), arm_str(to));
         let count = source.matches(&arm).count();
         assert_eq!(
-            count, 2,
-            "arm `{arm}` must appear exactly 2× in write.rs \
-             (once in update_event, once in apply_update); found {count}. \
-             If you added/removed a transition, update LEGAL_TRANSITIONS in \
-             this test AND both copies in write.rs."
+            count, 1,
+            "arm `{arm}` must appear exactly 1× in write.rs (in apply_update); \
+             found {count}. More than one means the allowlist was duplicated \
+             again; none means you added/removed a transition, in which case \
+             update LEGAL_TRANSITIONS in this test to match."
         );
     }
 }
 
 #[test]
-fn total_arm_count_is_exactly_ten() {
-    // 5 legal arms × 2 function copies = 10 total `(EscrowStatus::`
-    // occurrences. If someone adds a 6th transition to either copy (or
-    // removes one), this count changes and the guard fires.
+fn total_arm_count_matches_the_allowlist() {
+    // One `(EscrowStatus::` occurrence per legal transition. Adding a 6th
+    // transition, or duplicating the `matches!`, changes this count.
     //
     // The pattern `(EscrowStatus::` is specific enough that it only matches
     // the `matches!` arm tuples — it does not match the standalone
@@ -311,26 +315,26 @@ fn total_arm_count_is_exactly_ten() {
     let total = source.matches("(EscrowStatus::").count();
 
     assert_eq!(
-        total, 10,
-        "expected exactly 10 `(EscrowStatus::` arm-pattern occurrences in \
-         write.rs (5 legal arms × 2 function copies); found {total}. \
-         A change here means a transition was added or removed from one or \
-         both copies. Update LEGAL_TRANSITIONS in this test to match."
+        total,
+        LEGAL_TRANSITIONS.len(),
+        "expected one `(EscrowStatus::` arm-pattern occurrence per legal \
+         transition in write.rs; found {total}. A change here means a \
+         transition was added or removed, or the allowlist was duplicated. \
+         Update LEGAL_TRANSITIONS in this test to match."
     );
 }
 
 #[test]
-fn error_format_string_appears_exactly_twice_in_source() {
-    // The error format string must appear exactly 2× — once per function.
-    // If someone changes the wording in one copy, the count drops to 1.
+fn error_format_string_appears_exactly_once_in_source() {
+    // One home for the error wording, matching the one home for the allowlist.
     let source = read_write_rs();
     let error_prefix = "invalid escrow status transition:";
     let count = source.matches(error_prefix).count();
 
     assert_eq!(
-        count, 2,
-        "error format string `{error_prefix}` must appear exactly 2× in \
-         write.rs (once in update_event, once in apply_update); found {count}."
+        count, 1,
+        "error format string `{error_prefix}` must appear exactly 1× in \
+         write.rs (in apply_update); found {count}."
     );
 }
 
@@ -429,19 +433,19 @@ mod self_tests {
 
     #[test]
     fn simulated_arm_removal_would_fail_drift_guard() {
-        // Verify the set logic: if one occurrence of an arm is removed from
-        // the source, the count would drop to 1 and the guard would fire.
+        // Verify the set logic: if the arm is removed from the source, the
+        // count drops to 0 and the guard fires.
         let source = read_write_rs();
         let first = &LEGAL_TRANSITIONS[0];
         let arm = format!("({}, {})", arm_str(&first.0), arm_str(&first.1));
 
-        // Simulate removing one occurrence (replace first match with spaces).
+        // Simulate removing the occurrence (replace the match with spaces).
         let simulated = source.replacen(&arm, &" ".repeat(arm.len()), 1);
         let count = simulated.matches(&arm).count();
         assert_eq!(
-            count, 1,
-            "after simulated removal of one occurrence, count must be 1 \
-             (would trigger the drift guard)"
+            count, 0,
+            "after simulated removal, count must be 0 (would trigger the \
+             drift guard)"
         );
     }
 }

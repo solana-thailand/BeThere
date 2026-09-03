@@ -176,10 +176,8 @@ warnings`, `cargo test --workspace`, the wasm release build, plus
   `"Contacts"` / `"Events"` as env-var fallbacks. Deliberately left: those are
   platform deployment config, not organiser input, and two of the four names
   have no constant to share.
-- **`update.rs` holds two near-identical copies of the whole update path**
-  (`update_event` and `apply_update`) — `escrow_transition_contract.rs` pins the
-  same duplication for escrow transitions. The tab names now route through one
-  helper, but every other field is still duplicated. Its own task.
+- ~~`update.rs` holds two near-identical copies of the whole update path.~~
+  Done, same session — see §8.
 - **Existing events are not migrated.** An event stored with an illegal tab name
   before this keeps it; validation only fires on write. No such event is known
   to exist, and a migration would have to guess a replacement name.
@@ -188,3 +186,29 @@ warnings`, `cargo test --workspace`, the wasm release build, plus
   been made against a real spreadsheet. That needs an owner with a sheet.
 - Like `.plans/020` §6 and §7, this fix is unpushed and therefore still live in
   production.
+
+## 8. The two copies of the update path, collapsed (2026-09-04)
+
+Wiring the tab-name validation surfaced why `update.rs` was 570 lines:
+`update_event` (async, DB-backed) and `apply_update` (pure) each carried a full,
+independent copy of the field-application body — 236 lines, applied in the same
+order, including the SEC-002 escrow field lock and the SEC-003 deposit cap.
+`escrow_transition_contract.rs` was written *because* of that duplication and
+pinned the escrow allowlist at exactly 2 occurrences.
+
+Normalising for comments and `&mut`, the two bodies differed in exactly one
+place: `apply_update` applied `req.dev_profile_enabled` and `update_event` did
+not. Latent rather than live — the three `update_event` callers (escrow status
+confirmation, poster upload, poster delete) all leave that field `None` — but it
+is precisely the drift the duplication invites, and it had already happened
+unnoticed.
+
+`update_event` now loads the config, checks `expected_updated_at`, calls
+`apply_update`, stamps `updated_at`/`updated_by`, and persists. 570 lines → 343.
+
+`escrow_transition_contract.rs` Layer 2 had to be inverted: its three source
+scans asserted "exactly 2×, once per copy", which the collapse turns red. They
+now assert exactly 1×, so a *reintroduced* second copy fails the guard — the
+property worth pinning now. Layer 1 (the exhaustive 25-case transition matrix on
+`apply_update`) is unchanged and still passes. The self-test that simulated
+removing one occurrence now expects a count of 0 rather than 1.

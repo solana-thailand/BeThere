@@ -19,12 +19,10 @@
 //!
 //! ## Layer 2 — source-scan drift guard
 //!
-//! `update.rs` carries two near-identical copies of the update logic
-//! (`update_event`, async and DB-backed; `apply_update`, pure) — see
-//! `escrow_transition_contract.rs`, which pins the same duplication for escrow
-//! transitions. Only the pure one is reachable from a test, so Layer 2 asserts
-//! textually that both copies route through the shared `apply_sheet_names`
-//! helper and that neither assigns a tab name from the request directly.
+//! Asserts textually that the update path routes through the shared
+//! `apply_sheet_names` helper and never assigns a tab name from the request
+//! directly — the shape that was there before, and the one that gets
+//! reintroduced by copying a neighbouring field's line.
 //!
 //! ## Run
 //!
@@ -40,10 +38,10 @@ use event_checkin_domain::models::event::{
 };
 use event_checkin_worker::event_store::apply_update;
 
-/// Path to the file holding both copies of the update logic.
+/// Path to the file holding the update logic.
 const UPDATE_RS: &str = "src/event_store/write/update.rs";
 
-/// The shared helper both copies must call.
+/// The shared helper the update path must call.
 const HELPER: &str = "apply_sheet_names(";
 
 /// Names Google will not accept as a tab title. Each must be refused at the
@@ -158,16 +156,16 @@ fn a_legacy_event_with_no_tab_name_falls_back_to_the_default() {
 }
 
 #[test]
-fn both_copies_of_the_update_logic_route_through_the_helper() {
-    // `update_event` is async and DB-backed, so Layer 1 cannot reach it. If a
-    // future edit inlines the assignment back into one copy, that copy stops
-    // validating and nothing else in the suite notices.
+fn the_update_path_routes_through_the_helper() {
+    // `update_event` used to carry its own copy of the whole field-application
+    // body and now delegates to `apply_update`; if that duplication comes back,
+    // the new copy would need this call too and the count would change.
     let src = update_rs();
     let calls = src.matches(HELPER).count();
     assert_eq!(
-        calls, 3,
-        "expected `{HELPER}` once per definition and once per call site \
-         (update_event, apply_update) in {UPDATE_RS}, found {calls}"
+        calls, 2,
+        "expected `{HELPER}` once as a definition and once as a call in \
+         {UPDATE_RS}, found {calls}"
     );
 }
 
