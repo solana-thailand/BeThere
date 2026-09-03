@@ -78,7 +78,22 @@
   the test module imports its subjects from the owning submodules rather than a `super::*` glob.
   Clippy clean under `-D warnings`, 481 workspace tests pass.
 
-  **No backend file over 1024 lines remains.**
+  Also **`domain/models/event.rs` ✅** (1609 → `event/`, 6 submodules: enums/config/requests/responses/form
+  + `defaults` + tests) and **`domain/models/attendee.rs` ✅** (1405 → `attendee/`, 5 submodules:
+  status/core/columns/row/walkin + tests; `index_to_column_letter` widened to `pub(super)` because a test
+  exercises it directly).
+  Also **`worker/claim/mint.rs` ✅** (1118 → `mint/`, 7 submodules: types/helpers/lookup/quest/execute/walkin
+  + tests; `resolve_event_id_from_token`, `crossmint_image_url`, `orb_nft_url`,
+  `verify_online_quest_completion` and `execute_walkin_claim` widened to `pub(super)`) and
+  **`worker/db/campaigns.rs` ✅** (1105 → `campaigns/`, 8 submodules: types/crud/events/progress/stats/
+  checkin/series + tests; `totals_sql` widened to `pub(super)`).
+  All four splits **verbatim** — proven by diffing the concatenated submodules against the pre-split file;
+  the only differences are removed section banners, the `mod tests { … }` wrapper, and the listed
+  visibility widenings. Clippy clean under `-D warnings`, 481 workspace tests pass.
+
+  **No backend file over 1024 lines remains** (verified 2026-09-04: the largest are
+  `handlers/deposit/usdc/handlers.rs` at 1021, `bethere-escrow/src/tests/close.rs` at 976 and
+  `db/event_summaries.rs` at 968).
 - [ ] Phase 3: Frontend splits (landing, quiz_editor)
 - [ ] Phase 5: Hard frontend (scanner, claim, event_form, admin)
 
