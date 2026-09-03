@@ -612,3 +612,70 @@ line comments were parsed as code.
   before the KV delete, so a D1 failure leaves the KV lock in place. Latent, not
   live — that `DELETE` has no NOT NULL exposure — and left alone deliberately.
   The DO branch of the same function already warns-and-continues instead.
+  **Closed 2026-09-04 (`25e694d`)** — see §9.
+
+## 9. Closing the two gaps left open in §8 (2026-09-04)
+
+### `release_claim_lock` write ordering — `25e694d`
+
+`release_claim_lock` is the failure path: the mint blew up, so delete the lock
+and let the attendee retry. The KV key is what actually blocks that retry — the
+D1 row is the audit copy. Yet the D1 `DELETE` ran first, with `?`, so a D1
+failure returned early and skipped the KV delete two lines below the comment
+that reads *"Always delete from KV"*. A failed mint would then have been
+followed by a lock the attendee could not clear for the rest of its 300-second
+TTL.
+
+Same shape as the finalize fix: hold the error, do the KV delete, return the
+error afterwards. The DO branch already warned-and-continued; the D1 branch now
+warns *and* still returns the error, because both callers use `let _ =` and
+silently dropping it would be a second swallow.
+
+Not observed in production — a D1 `DELETE` by primary key has no NOT NULL
+exposure and little else to fail on. Fixed because the ordering, not the
+statement, is the defect.
+
+### The guard now covers `INSERT` — `07d9b79`
+
+§8's guard read `UPDATE … SET` only. Two more shapes abort a statement exactly
+the same way, and neither was covered:
+
+1. `INSERT … VALUES` putting a literal `NULL` into a `NOT NULL` column.
+2. A column-list `INSERT` that never names a `NOT NULL` column which has no
+   `DEFAULT` to fall back on.
+
+Covering (2) meant the schema parser had to record more than a `NOT NULL` flag:
+a `DEFAULT` makes omission legal, and so does `INTEGER PRIMARY KEY`, the rowid
+alias SQLite fills in itself. `ColumnFacts` now carries all three, merged across
+the two schema sources such that a disagreement between the migrations and the
+DO can only ever weaken a claim, never invent one.
+
+A third gap fell out of the same work. `ON CONFLICT … DO UPDATE SET` is
+invisible to the `UPDATE` scan — that scan needs an `UPDATE <table> SET` to find
+a table name, and an upsert clause has neither. **16 files** use one. It is now
+parsed as part of its enclosing `INSERT`, which supplies the table.
+
+**Mutation-tested against real source, not just the self-test** — each of the
+three new paths was broken in a real file, the guard named it, and the file was
+restored:
+
+| Mutation | Guard output |
+|---|---|
+| drop `expires_at` from `INSERT INTO claim_locks (…)` | ``src/db/claim_locks.rs: INSERT INTO `claim_locks` omits `expires_at`, which has no DEFAULT`` |
+| `VALUES (?1, ?2, ?3, NULL, ?5)` in the same statement | ``src/db/claim_locks.rs: INSERT … VALUES on `claim_locks` sets `wallet` = NULL`` |
+| `name = NULL` in `attendees`' upsert clause | ``src/db/attendees/writes.rs: ON CONFLICT … DO UPDATE SET on `attendees` sets `name` = NULL`` |
+
+**The clean scan is real, not vacuous.** The unmutated run parses 26 tables, 224
+`NOT NULL` columns of which **72** are `NOT NULL` without a `DEFAULT`, and 40
+column-list `INSERT`s against known tables — and finds nothing. All three counts
+are now permanent floors in the tests, so an over-matching `DEFAULT` detector or
+a silently-stopped `INSERT` parser fails loudly instead of going green. **No
+fifth instance of this bug class exists in the codebase.**
+
+### Still not done
+
+- **The `claim_locks` backfill** is unchanged and still an owner call.
+- **`format!`-built column lists are invisible.** The guard reads string
+  literals; a column list assembled at runtime is not checked. None exist today.
+- **Only the first statement per literal is read** — the scan stops at the
+  closing quote or the first `;`.
