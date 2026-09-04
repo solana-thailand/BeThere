@@ -309,6 +309,40 @@ fn each_canonical_arm_appears_exactly_once_in_source() {
 }
 
 #[test]
+fn escrow_init_confirm_rejects_a_repoint_with_a_clear_error() {
+    // `Initialized → Initialized` is illegal by design (repointing a live escrow
+    // strands the deposits held at the old address). The confirm handler must
+    // therefore catch that case itself and explain it — falling through to
+    // `update_event` turns a legitimate operator state conflict into an opaque
+    // 500 "failed to persist escrow state".
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/handlers/deposit/escrow/status.rs");
+    let src = fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+
+    let guard_at = src
+        .find("event.escrow_status == EscrowStatus::Initialized && !already_persisted")
+        .expect(
+            "confirm_escrow_init must reject a repoint explicitly; without it the illegal              self-transition surfaces as a 500 with no recovery instructions",
+        );
+    let persist_at = src
+        .find("event_store::update_event(")
+        .expect("confirm_escrow_init must persist through update_event");
+    assert!(
+        guard_at < persist_at,
+        "the repoint guard must run BEFORE update_event, or the allowlist rejects it first"
+    );
+    assert!(
+        src[guard_at..persist_at].contains("AppError::Validation"),
+        "a repoint is an operator state conflict, not a server fault — it must be a \
+         Validation error, not an Internal one"
+    );
+    assert!(
+        src[guard_at..persist_at].contains("Deactivated"),
+        "the error must name the wind-down path (Initialized → Deactivated → Closed → \
+         None); a refusal with no recovery just moves the confusion"
+    );
+}
+
+#[test]
 fn total_arm_count_matches_the_allowlist() {
     // One `(EscrowStatus::` occurrence per legal transition. Adding a 6th
     // transition, or duplicating the `matches!`, changes this count.

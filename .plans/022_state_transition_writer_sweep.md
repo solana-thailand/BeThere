@@ -381,16 +381,25 @@ contract test: it walks `worker/src` and fails on any `.escrow_status =`
 assignment outside `event_store/write/update.rs`. Mutation-tested by adding one in
 `handlers/events/recap.rs`; red.
 
-### Noted, not changed
+### Follow-ups (both since closed)
 
-- Re-initialising an escrow to a *different* address while the event is still
-  `Initialized` is rejected by the allowlist (self-transitions are illegal), so
-  `confirm_escrow_init` returns a 500 "failed to persist escrow state" rather than
-  a clear error. Fail-closed, and the documented recovery is `Closed → None` first.
-- The contract test's module header still describes "two copies in write.rs" in
-  places, and the file it reads moved to `event_store/write/update.rs` in the #052
-  split. The assertions are current (they require exactly one copy); only the prose
-  lags.
+- ~~Re-initialising an escrow to a *different* address while the event is still
+  `Initialized` returns a 500 "failed to persist escrow state".~~ **Fixed.**
+  The refusal itself is correct — repointing a live escrow would strand every
+  deposit held at the old address, which is exactly why the allowlist makes
+  `Initialized → Initialized` illegal. What was wrong is that the refusal
+  arrived as an opaque server error. `confirm_escrow_init` now catches the case
+  before it reaches `update_event` and returns a `Validation` error naming the
+  current address, the derived one, and the wind-down path
+  (`Initialized → Deactivated → Closed → None`). The empty-`escrow_address`
+  variant of the same state takes the same branch. A fourteenth test in the
+  contract file pins the guard's existence, its position before `update_event`,
+  its error class and the recovery text; mutation-tested three ways.
+- ~~The contract test's module header still describes "two copies in write.rs"
+  and the pre-#052 file path.~~ **Fixed** — the header now documents the actual
+  three layers (behavioural matrix, single-copy source scan, writer-set walk),
+  the post-split path, and the corrected Layer 2 counts (5 arms, 1 error string,
+  not 10 and 2).
 
 ## Transitions not yet swept
 
