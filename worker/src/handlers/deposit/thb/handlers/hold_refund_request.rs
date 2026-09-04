@@ -81,51 +81,80 @@ pub async fn request_credit_refund_handler(
         "credit refund requested (attendee) — setting flag"
     );
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    // 1. D1 write — the *only* path the organizer's payout queue reads.
+    //    `credit_refund_requests` selects on `contacts.credit_refund_requested`;
+    //    it never looks at the sheet. So this write, not the Sheets mirror, is
+    //    what decides whether the attendee's money comes back, and it fails
+    //    closed on both of its failure modes:
+    //
+    //      * no D1 binding ⇒ the flag cannot be stored at all;
+    //      * a D1 error, or an `UPDATE` matching no contact row (registered via
+    //        Sheets without `upsert_contact` firing) — the latter is not an
+    //        `Err`, which is why the helper reports rows-affected.
+    //
+    //    Reporting `requested: true` on either would tell the attendee their
+    //    refund is queued while no organizer will ever see it. A 500 is
+    //    recoverable — the write is idempotent, so a retry just re-stamps.
+    let db = state.d1.as_deref().ok_or_else(|| {
+        AppError::Internal("D1 not configured — credit refund request cannot be queued".to_string())
+    })?;
 
-    // 1. Resolve contacts sheet from global config. The flag is cross-event
-    //    (on the contact, not any specific deposit), so no event context is
-    //    needed — mirrors `credit_balance_handler`.
+    let flagged = crate::db::contacts::set_credit_refund_requested(db, &claims.email)
+        .await
+        .map_err(AppError::Internal)?;
+
+    if !flagged {
+        tracing::error!(
+            email = %claims.email,
+            "credit refund request matched no contact row — not queued"
+        );
+        return Err(AppError::Internal(
+            "no contact record for this account — credit refund request was not queued".to_string(),
+        )
+        .into());
+    }
+
+    // 2. Sheets write (human-readable master) — a display-only mirror, so every
+    //    part of it is best-effort now that step 1 is authoritative and has
+    //    already succeeded. The contacts sheet is org-blind and no read path
+    //    treats it as authoritative (`docs/deposit-refund-flows.md`), so neither
+    //    a missing binding nor a failed write may block or fail the request:
+    //    500-ing here would tell the attendee their refund request failed when
+    //    it is in fact already in the organizer's queue, and their retry would
+    //    re-stamp a timestamp that is serving as the reversal's idempotency key.
+    //
+    //    The flag is cross-event (on the contact, not any specific deposit), so
+    //    the sheet resolves from global config with no event context — mirrors
+    //    `credit_balance_handler`.
     let resolved = event_checkin_domain::models::org::ResolvedContactsSheet {
         sheet_id: state.config.sheets.contacts_sheet_id.clone(),
         contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
         events_sheet_name: state.config.sheets.events_sheet_name.clone(),
     };
 
-    if resolved.sheet_id.is_empty() {
-        return Err(AppError::Internal("contacts sheet not configured".to_string()).into());
-    }
-
-    // 2. D1 write (source of truth for reads in this module). Best-effort:
-    //    if the contact row doesn't exist in D1 yet (edge case — registered
-    //    via Sheets but the `upsert_contact` path didn't fire), the UPDATE
-    //    affects 0 rows silently. Log and continue to the Sheets write so the
-    //    attendee's request is still recorded somewhere.
-    if let Some(db) = state.d1.as_deref()
-        && let Err(e) = crate::db::contacts::set_credit_refund_requested(db, &claims.email).await
-    {
-        tracing::warn!(
+    match (state.events_kv.as_ref(), resolved.sheet_id.is_empty()) {
+        (Some(kv), false) => {
+            if let Err(e) = crate::sheets::contacts::set_credit_refund_requested(
+                &state,
+                &resolved.sheet_id,
+                &resolved.contacts_sheet_name,
+                Some(kv),
+                &claims.email,
+            )
+            .await
+            {
+                tracing::warn!(
+                    email = %claims.email,
+                    error = %e,
+                    "Sheets credit-refund-request mirror failed (non-fatal; D1 queue already has it)"
+                );
+            }
+        }
+        _ => tracing::warn!(
             email = %claims.email,
-            error = %e,
-            "D1 set_credit_refund_requested failed — falling back to Sheets-only write"
-        );
+            "contacts sheet or EVENTS KV not configured — skipping credit-refund-request mirror"
+        ),
     }
-
-    // 3. Sheets write (human-readable master). This is the canonical visibility
-    //    path matching the existing `increment_credit` pattern — if this fails,
-    //    the attendee's request is not recorded and they should see an error.
-    crate::sheets::contacts::set_credit_refund_requested(
-        &state,
-        &resolved.sheet_id,
-        &resolved.contacts_sheet_name,
-        Some(kv),
-        &claims.email,
-    )
-    .await
-    .map_err(AppError::Internal)?;
 
     tracing::info!(
         email = %claims.email,

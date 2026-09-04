@@ -384,6 +384,46 @@ Mutation-tested four ways (swallow the bucket read; swallow the handler's error;
 drop `double_settled` from `is_clean`; stub `phantom_holds = 0`) — each red, and
 the last one is why the `count_query` count assertion exists.
 
+## §6d — the refund *request* never reached the queue it feeds
+
+Swept the entry side of the same transition §6b covers the exit side of. The
+attendee-facing `request_credit_refund_handler` had the polarity backwards:
+
+| write | was | reads it |
+| --- | --- | --- |
+| D1 `contacts.credit_refund_requested` | best-effort, `warn` and continue | `credit_refund_requests` — the organizer's payout queue |
+| Sheets contacts mirror | fatal, `map_err(...)?` | nothing |
+
+So the only write anyone reads was the one allowed to fail. A transient D1
+error, or a missing binding, returned `200 {requested: true}` to the attendee
+while the request never entered the queue — money owed, silently dropped. The
+fatal write was the display-only mirror, which no read path treats as
+authoritative (`docs/deposit-refund-flows.md`), so a stale sheet 500'd a
+request that had in fact succeeded.
+
+A third failure mode had no error at all. The original comment justified the
+best-effort arm with "if the contact row doesn't exist in D1 yet the UPDATE
+affects 0 rows silently" — but a 0-row `UPDATE` is not an `Err`, so that arm
+never caught the case it named. `set_credit_refund_requested` now returns
+rows-affected (`meta().changes > 0`) and the handler rejects `false`.
+
+Fixed by inverting the polarity: D1 first and fatal (missing binding, D1 error,
+and 0-row update all fail closed — the write is idempotent, so a retry just
+re-stamps), Sheets second and entirely best-effort, with neither a missing
+`EVENTS KV` binding nor an unconfigured sheet id allowed to gate the
+authoritative write any more.
+
+Three guards in `worker/tests/credit_ledger_guards.rs` (7 → 10): the D1 write
+propagates and its binding is required; the setter reports `meta().changes` and
+the handler branches on it; the mirror runs second, is not `?`-propagated, and
+neither binding check precedes the D1 write. Four mutations run, all red.
+
+**This is the eighth instance of the plan's recurring shape** and a new variant
+of it: not "one path skips the gate" but *the guarded write and the read are on
+different sides of the fatality line*. Sweep rule added — for any pair of
+dual-writes, find which store the **reader** uses, and make that one the fatal
+write.
+
 ## §7 — `escrow_status` (swept, clean, guard added in the same commit)
 
 The event-level escrow lifecycle already had a behavioural contract test

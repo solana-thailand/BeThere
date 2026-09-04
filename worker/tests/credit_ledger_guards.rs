@@ -21,6 +21,10 @@
 //! 6. `reconcile` checks both directions of the money, not just the loss one.
 //! 7. The admin payout queue reads the amount from the LEDGER, not from the
 //!    superseded `contacts.deposit_credit_*` cells.
+//! 8. The attendee's refund REQUEST fails closed on the D1 write. That write is
+//!    the only thing `credit_refund_requests` reads, so a swallowed failure —
+//!    or a 0-row UPDATE, which is not an `Err` at all — reports "queued" to the
+//!    attendee while no organizer ever sees the request.
 
 use std::fs;
 use std::path::Path;
@@ -258,6 +262,125 @@ fn payout_queue_reads_the_ledger_not_the_superseded_columns() {
         !code.contains("SET deposit_credit_thb"),
         "`contacts.deposit_credit_*` is superseded by the append-only ledger; a \
          mutable-cell writer reintroduces the exact 2026-08-14 loss shape"
+    );
+}
+
+fn refund_request_src() -> String {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/handlers/deposit/thb/handlers/hold_refund_request.rs");
+    fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()))
+}
+
+/// Extract the body of `request_credit_refund_handler`, comments stripped.
+fn request_handler_body() -> String {
+    let code = strip_comments(&refund_request_src());
+    let start = code
+        .find("pub async fn request_credit_refund_handler")
+        .expect("request_credit_refund_handler must exist");
+    let end = code[start..]
+        .find("\n}\n")
+        .map_or(code.len(), |i| start + i);
+    code[start..end].to_string()
+}
+
+#[test]
+fn refund_request_d1_write_fails_closed() {
+    let body = request_handler_body();
+
+    // The failure the old code shipped: `if let Err(e) = ...set_credit_refund_requested`
+    // followed by a warn and a 200. The organizer's queue reads D1 only, so that
+    // is a silently dropped payout obligation.
+    assert!(
+        !body.contains("if let Err(e) = crate::db::contacts::set_credit_refund_requested"),
+        "the D1 flag write must not be logged-and-continued — `credit_refund_requests` \
+         reads that column alone, so swallowing the error tells the attendee their \
+         refund is queued when no organizer will ever see it"
+    );
+    assert!(
+        body.contains("crate::db::contacts::set_credit_refund_requested(db, &claims.email)")
+            && body.contains(".map_err(AppError::Internal)?"),
+        "the D1 flag write must propagate its error to the caller"
+    );
+
+    // A missing binding is the same outcome as a failed write, and must not
+    // silently fall through to the display-only Sheets mirror.
+    assert!(
+        body.contains("state.d1.as_deref().ok_or_else("),
+        "a missing D1 binding must fail closed, not fall back to a Sheets-only write"
+    );
+}
+
+#[test]
+fn refund_request_rejects_zero_row_update() {
+    // An UPDATE matching no contact row succeeds with `changes == 0`. Without a
+    // rows-affected check the handler cannot see it, and the request is dropped
+    // exactly as silently as a swallowed error would drop it.
+    let db = strip_comments(&{
+        let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/db/contacts.rs");
+        fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()))
+    });
+    let start = db
+        .find("pub(crate) async fn set_credit_refund_requested")
+        .expect("set_credit_refund_requested must exist");
+    let end = db[start..].find("\n}\n").map_or(db.len(), |i| start + i);
+    let setter = &db[start..end];
+
+    assert!(
+        setter.contains("-> Result<bool, String>"),
+        "set_credit_refund_requested must report whether a row was flagged"
+    );
+    assert!(
+        setter.contains(".and_then(|m| m.changes)") && setter.contains("Ok(changes > 0)"),
+        "the rows-affected signal must come from D1 meta().changes, not be assumed"
+    );
+
+    let body = request_handler_body();
+    assert!(
+        body.contains("if !flagged") && body.contains("return Err(AppError::Internal("),
+        "the handler must reject a 0-row UPDATE instead of reporting `requested: true`"
+    );
+}
+
+#[test]
+fn refund_request_sheets_mirror_is_non_fatal() {
+    let body = request_handler_body();
+
+    // Polarity: authoritative write first and fatal, display-only mirror second
+    // and best-effort. The inverse (what shipped) 500s on a stale mirror while
+    // letting the real record vanish.
+    let d1_at = body
+        .find("set_credit_refund_requested(db, &claims.email)")
+        .expect("D1 write must exist");
+    let sheets_at = body
+        .find("crate::sheets::contacts::set_credit_refund_requested")
+        .expect("Sheets mirror must exist");
+    assert!(
+        d1_at < sheets_at,
+        "the authoritative D1 write must run before the display-only Sheets mirror"
+    );
+
+    let mirror = &body[sheets_at..];
+    assert!(
+        !mirror.contains(".map_err(AppError::Internal)?"),
+        "the Sheets mirror is display-only and must not fail the request — a 500 here \
+         reports failure for a request that is already in the organizer's queue"
+    );
+    assert!(
+        body.contains("if let Err(e) = crate::sheets::contacts::set_credit_refund_requested"),
+        "the Sheets mirror failure must be caught and logged"
+    );
+
+    // Neither missing binding may gate the authoritative write either.
+    let kv_gate = body
+        .find("state.events_kv.as_ref()")
+        .expect("KV lookup must exist");
+    assert!(
+        kv_gate > d1_at,
+        "a missing EVENTS KV binding must not block the D1 write that queues the payout"
+    );
+    assert!(
+        !body[..d1_at].contains("sheet_id.is_empty()"),
+        "an unconfigured contacts sheet must not block the D1 write that queues the payout"
     );
 }
 

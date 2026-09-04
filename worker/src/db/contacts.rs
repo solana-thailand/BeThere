@@ -284,10 +284,18 @@ pub struct CreditLiability {
 /// organizer clears the flag manually after processing the payout — there is
 /// no automated state machine for v1 (Issue #061 §D3). Lowercases the email
 /// because `contacts.email` is the lowercased primary key.
+///
+/// Returns `true` when a row was actually flagged. An `UPDATE` that matches no
+/// contact is **not** a D1 error — it succeeds having changed nothing — so the
+/// caller cannot distinguish "queued" from "silently dropped" without this
+/// flag. [`credit_refund_requests`] sources the organizer's payout queue from
+/// this column alone, so a 0-row update means the attendee's request will never
+/// be seen by anyone; the caller must fail closed on `false` rather than report
+/// success (plan 022 §6d).
 pub(crate) async fn set_credit_refund_requested(
     db: &D1Database,
     email: &str,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let email_lower = email.to_lowercase();
     let stmt = db.prepare(
         "UPDATE contacts \
@@ -295,13 +303,20 @@ pub(crate) async fn set_credit_refund_requested(
          credit_refund_requested_at = datetime('now') \
          WHERE email = ?1",
     );
-    stmt.bind_refs(&[D1Type::Text(&email_lower)])
+    let result = stmt
+        .bind_refs(&[D1Type::Text(&email_lower)])
         .map_err(|e| format!("D1 set_credit_refund_requested bind: {e:?}"))?
         .run()
         .await
         .map_err(|e| format!("D1 set_credit_refund_requested run: {e:?}"))?;
 
-    Ok(())
+    let changes = result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0);
+    Ok(changes > 0)
 }
 
 /// Clear the `credit_refund_requested` flag on a contact (organizer-side
