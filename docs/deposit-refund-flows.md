@@ -132,14 +132,22 @@ Flow in `worker/src/handlers/register/signup.rs`:
 
 ### Credit fields
 
-- **D1 `contacts`** (`worker/src/db/contacts.rs`): `deposit_credit_thb`,
-  `deposit_credit_usdc`, `deposit_credit_since` (cols K–M), written by
-  `update_deposit_credit` (`:80`) / the increment path. Plus the Phase-3 exit
-  flag `credit_refund_requested` / `credit_refund_requested_at`
-  (`set_/clear_/get_credit_refund_requested`, `:335`–`:438`) and the aggregate
-  `credit_liability` (`:301`).
-- The **Master Contacts Sheet** is the human-readable master; D1 is the read
-  source of truth for the liability chip and the request-flag reads.
+- **The `credit_ledger` table** (`worker/src/db/credit_ledger.rs`, migration
+  `0028`) is the source of truth: append-only, keyed
+  `(email, organization_id, currency)`, balance = `SUM(delta)`. Every balance
+  read, the liability chip, the admin payout queue and the payout reversal go
+  through it.
+- **D1 `contacts`** (`worker/src/db/contacts.rs`) keeps the Phase-3 exit flag
+  `credit_refund_requested` / `credit_refund_requested_at`
+  (`set_/clear_/get_credit_refund_requested`). Its `deposit_credit_thb`,
+  `deposit_credit_usdc`, `deposit_credit_since` columns (K–M) are **superseded
+  and unwritten** — the mutable cells the ledger replaced after the 2026-08-14
+  loss. `update_deposit_credit` was deleted; nothing may read them for a money
+  decision, and `credit_ledger_guards.rs` enforces that.
+- The **Master Contacts Sheet** is the human-readable master and a display-only
+  mirror (`sheets::contacts::increment_credit`). It is org-blind — one contacts
+  sheet for all orgs — so a multi-org deployment shows a merged number there.
+  Harmless only because no read path treats it as authoritative.
 
 ---
 
