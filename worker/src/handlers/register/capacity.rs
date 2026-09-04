@@ -45,17 +45,9 @@ pub(super) async fn enforce_capacity(
         }
     }
 
-    // Count walk-in attendees from D1
-    if let Some(db) = state.d1.as_deref() {
-        match crate::db::attendees::count_walkin_attendees(db, &config.id).await {
-            Ok(count) => {
-                in_person_count += count;
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "D1 walkin count for capacity failed, skipping");
-            }
-        }
-    }
+    // Count walk-in attendees from D1. Fails closed when a cap is set — see
+    // `handlers::capacity`.
+    in_person_count += crate::handlers::capacity::count_walkins_against_cap(state, config).await?;
 
     tracing::info!(
         event_id = %config.id,

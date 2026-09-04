@@ -2,6 +2,7 @@ pub mod adventure;
 pub mod attendee;
 pub mod auth;
 pub mod campaigns;
+pub mod capacity;
 pub mod checkin;
 pub mod claim;
 pub mod community;
