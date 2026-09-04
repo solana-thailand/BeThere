@@ -642,6 +642,23 @@ the count *fails*. A tally assembled from several sources fails open unless
 every source is fail-closed — and the source most likely to be dropped is the
 one the other sources cannot see, which is exactly the one the limit needs.
 
+### §9b — the rest of the `unwrap_or_default()` lead list, audited and cleared
+
+The read-back sweep left six `serde_json::from_str(...).unwrap_or_default()`
+sites unexamined. All six were read this session; none is a policy fallback and
+none needs a change. Recorded so the next sweep does not redo the work.
+
+| site | fallback | verdict |
+|---|---|---|
+| `handlers/profile.rs:81` (`parse_json_array`) | empty `Vec` | display-only profile skills/interests; empty is the safe fail |
+| `db/dashboard.rs:173`, `db/event_summaries.rs:534`, `db/deposit_statuses.rs:220` | `Value::Null` → count `0` | re-parses `JSON::stringify`'s own output, so failure is not reachable; and the consumers are display counters, not gates — the one non-display consumer, `event_store::read::increment_deposit_counter_with_fallback`, propagates the D1 error with `?` and only uses the count as a sequence number |
+| `db/campaigns/series.rs:94` | empty row list | already skips orphan rows deliberately |
+| `db/onchain_events.rs:73` | `EscrowInstruction::Unknown` | already an explicit fail-closed fallback, not a `Default` |
+
+Also cleared by inspection: `state.rs`'s 17 hits are all `get_secret`/`get_var`
+deployment-config fallbacks, and `db/attendees/reads.rs`'s 17 are
+`Option<String>` → `String` on nullable text columns — no enum parse in either.
+
 ## Transitions not yet swept
 
 None. Every transition identified at the start of this plan has been swept.
