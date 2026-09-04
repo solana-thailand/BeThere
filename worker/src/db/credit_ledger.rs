@@ -314,11 +314,23 @@ pub struct ReconcileReport {
     /// over-spend the atomic `try_spend` guard should make impossible; nonzero
     /// means an invariant broke.
     pub negative_balances: i64,
+    /// Deposits settled BOTH ways (`held_as_credit=1 AND refunded=1`) — the
+    /// attendee got the cash back *and* keeps spendable credit. The two settle
+    /// paths are mutually exclusive by CAS, so nonzero means the CAS was
+    /// bypassed (or a row was hand-edited) and money left twice.
+    pub double_settled: i64,
+    /// Ledger `hold` entries whose deposit is no longer held as credit — credit
+    /// standing against nothing. `orphan_holds` catches the loss direction
+    /// (deposit held, credit missing); this catches the creation direction.
+    pub phantom_holds: i64,
 }
 
 impl ReconcileReport {
     pub fn is_clean(&self) -> bool {
-        self.orphan_holds == 0 && self.negative_balances == 0
+        self.orphan_holds == 0
+            && self.negative_balances == 0
+            && self.double_settled == 0
+            && self.phantom_holds == 0
     }
 }
 
@@ -332,9 +344,14 @@ async fn count_query(db: &D1Database, sql: &str) -> Result<i64, String> {
         .unwrap_or(0))
 }
 
-/// Reconcile the ledger against deposit truth. Two cheap COUNT queries — safe to
-/// run daily from the cron. Callers alert (Slack) on a non-clean report so a
+/// Reconcile the ledger against deposit truth. Four cheap COUNT queries — safe
+/// to run daily from the cron. Callers alert (Slack) on a non-clean report so a
 /// silent credit loss surfaces within a day instead of at the next event.
+///
+/// The checks cover both directions of the money: credit that should exist and
+/// does not (`orphan_holds`), and credit that exists and should not
+/// (`phantom_holds`, `double_settled`, `negative_balances`). Only the first was
+/// checked originally, which left every over-payment path silent.
 pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
     let orphan_holds = count_query(
         db,
@@ -352,8 +369,27 @@ pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
              GROUP BY email, organization_id, currency HAVING SUM(delta) < 0)",
     )
     .await?;
+    let double_settled = count_query(
+        db,
+        "SELECT COUNT(*) AS n FROM thb_deposits \
+         WHERE held_as_credit = 1 AND refunded = 1",
+    )
+    .await?;
+    // A `hold` entry is keyed `deposit_id = event_id || ':' || attendee_id` by
+    // both hold writers, so the join back to deposit truth is exact.
+    let phantom_holds = count_query(
+        db,
+        "SELECT COUNT(*) AS n FROM credit_ledger l \
+         WHERE l.reason = 'hold' AND l.deposit_id IS NOT NULL \
+           AND NOT EXISTS (SELECT 1 FROM thb_deposits d \
+                           WHERE d.held_as_credit = 1 \
+                             AND d.event_id || ':' || d.attendee_id = l.deposit_id)",
+    )
+    .await?;
     Ok(ReconcileReport {
         orphan_holds,
         negative_balances,
+        double_settled,
+        phantom_holds,
     })
 }

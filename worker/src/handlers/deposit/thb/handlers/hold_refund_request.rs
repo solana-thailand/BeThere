@@ -236,6 +236,52 @@ pub struct ClearCreditRefundResponse {
     pub message: String,
 }
 
+/// Reverse every positive credit bucket the contact still holds, as the ledger
+/// side of an out-of-band payout.
+///
+/// Returns `Err` — and therefore aborts the clear — if the buckets cannot be
+/// read or any single reversal cannot be written. That is deliberate: a cleared
+/// flag with an unreversed ledger is a double payout (the attendee has the cash
+/// *and* spendable credit) and nothing downstream detects it, whereas a failed
+/// clear leaves the request in the organizer's queue to retry. The per-bucket
+/// idempotency key means the retry re-writes nothing that already landed.
+async fn reverse_held_credit(
+    db: &worker::D1Database,
+    email: &str,
+    requested_at: &str,
+) -> Result<(), String> {
+    let buckets = crate::db::credit_ledger::positive_balances(db, email).await?;
+    for bucket in buckets {
+        let key = format!(
+            "refund:{}:{}:{}:{}",
+            email.to_lowercase(),
+            requested_at,
+            bucket.organization_id,
+            bucket.currency
+        );
+        crate::db::credit_ledger::record(
+            db,
+            email,
+            &bucket.organization_id,
+            &bucket.currency,
+            -bucket.balance,
+            crate::db::credit_ledger::REASON_REFUND,
+            None,
+            Some(&key),
+            Some("held-credit payout processed by organizer"),
+        )
+        .await?;
+        tracing::info!(
+            %email,
+            organization_id = %bucket.organization_id,
+            currency = %bucket.currency,
+            amount = bucket.balance,
+            "reversed held credit in ledger on payout"
+        );
+    }
+    Ok(())
+}
+
 /// Admin clears the `credit_refund_requested` flag on a contact after
 /// processing the payout through the existing refund tooling (Issue #061 §D3).
 /// Sets the flag to 0 and nulls the timestamp so a subsequent attendee request
@@ -246,13 +292,18 @@ pub struct ClearCreditRefundResponse {
 /// event_id to resolve against. The route is registered in the `protected`
 /// router block which already requires staff auth via `require_staff`.
 ///
+/// **The ledger reversal gates the clear.** [`reverse_held_credit`] runs first
+/// and any failure aborts with a 500, leaving the request in the queue for the
+/// organizer to retry. Clearing without reversing would be a double payout, and
+/// no reconcile check detects credit outstanding against a cleared request.
+///
 /// **Dual-write (D1 + Sheets)** — mirrors `request_credit_refund_handler`'s
 /// write path: D1 is source of truth, Sheets is the human-readable master.
-/// Both writes are best-effort (logged, not fatal): the clear is idempotent,
-/// so a transient failure on either store is recovered by the next refresh's
-/// retry. The read paths (admin badge, attendee status) read from D1, which
-/// is why a Sheets lag is reconciliation-cosmetic rather than a correctness
-/// issue.
+/// The two *flag clears* stay best-effort (logged, not fatal): they are
+/// idempotent, so a transient failure on either store is recovered by the next
+/// refresh's retry. The read paths (admin badge, attendee status) read from D1,
+/// which is why a Sheets lag is reconciliation-cosmetic rather than a
+/// correctness issue.
 #[worker::send]
 pub async fn clear_credit_refund_request_handler(
     State(state): State<AppState>,
@@ -265,64 +316,34 @@ pub async fn clear_credit_refund_request_handler(
         "admin clearing credit refund request flag"
     );
 
-    // Reverse the held credit in the ledger BEFORE clearing the flag. Clearing
-    // the request == the organizer paid the credit back out-of-band, so it must
-    // leave the ledger — otherwise the attendee keeps usable credit AND got the
-    // cash (double payout). Read requested_at while the flag is still set and use
-    // it as the idempotency key: a double-clear finds the flag already gone
-    // (None) and skips, so the reversal happens exactly once per request.
-    // Reverse EVERY bucket the attendee still holds, not just `("", "thb")`. The
-    // flag is on the contact, so the request is against the whole rolling balance
-    // across orgs and currencies; reading one hard-coded org would silently skip
-    // the reversal for an event whose Org ID column is filled in, leaving the
-    // attendee with the cash *and* spendable credit (plan 022 §6).
-    if let Some(db) = state.d1.as_deref()
-        && let Some(requested_at) =
-            crate::db::contacts::get_credit_refund_requested_at(db, &body.email).await
+    // Reverse the held credit in the ledger BEFORE clearing the flag, and only
+    // clear the flag if the reversal fully succeeded. Clearing the request ==
+    // the organizer paid the credit back out-of-band, so the credit must leave
+    // the ledger — otherwise the attendee keeps usable credit AND got the cash
+    // (double payout). `requested_at` is read while the flag is still set and
+    // used as the idempotency key, so the reversal happens exactly once per
+    // request and a retry after a partial failure re-runs only the buckets that
+    // did not land.
+    //
+    // Every bucket the attendee still holds is reversed, not just `("", "thb")`.
+    // The flag is on the contact, so the request is against the whole rolling
+    // balance across orgs and currencies; reading one hard-coded org would
+    // silently skip the reversal for an event whose Org ID column is filled in
+    // (plan 022 §6).
+    let db = state
+        .d1
+        .as_deref()
+        // No D1 ⇒ the ledger is unreachable ⇒ the reversal cannot be written.
+        // Fail closed rather than clear the flag: an unreversed clear is a
+        // double payout, and the request staying in the queue is recoverable.
+        .ok_or_else(|| AppError::Internal("D1 not configured".to_string()))?;
+
+    if let Some(requested_at) =
+        crate::db::contacts::get_credit_refund_requested_at(db, &body.email).await
     {
-        let buckets = crate::db::credit_ledger::positive_balances(db, &body.email)
+        reverse_held_credit(db, &body.email, &requested_at)
             .await
-            .unwrap_or_default();
-        for bucket in buckets {
-            // The idempotency key carries the bucket, so one clear writes one
-            // reversal per bucket and a double-clear finds each balance already
-            // at zero (and, if the flag is gone, never gets here at all).
-            let key = format!(
-                "refund:{}:{}:{}:{}",
-                body.email.to_lowercase(),
-                requested_at,
-                bucket.organization_id,
-                bucket.currency
-            );
-            match crate::db::credit_ledger::record(
-                db,
-                &body.email,
-                &bucket.organization_id,
-                &bucket.currency,
-                -bucket.balance,
-                crate::db::credit_ledger::REASON_REFUND,
-                None,
-                Some(&key),
-                Some("held-credit payout processed by organizer"),
-            )
-            .await
-            {
-                Ok(_) => tracing::info!(
-                    email = %body.email,
-                    organization_id = %bucket.organization_id,
-                    currency = %bucket.currency,
-                    amount = bucket.balance,
-                    "reversed held credit in ledger on payout"
-                ),
-                Err(e) => tracing::error!(
-                    email = %body.email,
-                    organization_id = %bucket.organization_id,
-                    currency = %bucket.currency,
-                    error = %e,
-                    "ledger refund reversal failed — credit NOT reversed; reconcile manually"
-                ),
-            }
-        }
+            .map_err(AppError::Internal)?;
     }
 
     // D1 clear — source of truth. Best-effort log on failure: an unreachable
@@ -330,9 +351,7 @@ pub async fn clear_credit_refund_request_handler(
     // disappear from the admin list on next refresh either way), but we still
     // surface success because the action is idempotent — a retry on next
     // refresh will pick up the clear.
-    if let Some(db) = state.d1.as_deref()
-        && let Err(e) = crate::db::contacts::clear_credit_refund_requested(db, &body.email).await
-    {
+    if let Err(e) = crate::db::contacts::clear_credit_refund_requested(db, &body.email).await {
         tracing::warn!(
             email = %body.email,
             error = %e,

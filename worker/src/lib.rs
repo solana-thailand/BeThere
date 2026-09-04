@@ -197,14 +197,19 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
                 tracing::error!(
                     orphan_holds = report.orphan_holds,
                     negative_balances = report.negative_balances,
+                    double_settled = report.double_settled,
+                    phantom_holds = report.phantom_holds,
                     "credit ledger reconcile FAILED"
                 );
                 if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
                     && !webhook.is_empty()
                 {
                     let msg = format!(
-                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s). Check credit_ledger vs thb_deposits.",
-                        report.orphan_holds, report.negative_balances
+                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s), {} double-settled deposit(s) (cash refunded AND held as credit), {} phantom hold(s) (ledger credit with no held deposit). Check credit_ledger vs thb_deposits.",
+                        report.orphan_holds,
+                        report.negative_balances,
+                        report.double_settled,
+                        report.phantom_holds
                     );
                     let _ = middleware::alert::post_slack(&webhook, &msg).await;
                 }

@@ -306,8 +306,53 @@ call site; red.
   contacts sheet for all orgs. It is display-only (the D1 ledger is authoritative
   and the module doc says so), but a multi-org deployment will show a merged
   number there.
-- `reconcile` (`lib.rs:195`, the scheduled job) was not re-read as part of this
-  sweep.
+- ~~`reconcile` (`lib.rs:195`, the scheduled job) was not re-read as part of this
+  sweep.~~ **Swept — §6b below.**
+
+## §6b — the payout reversal's failure path, and reconcile's blind side
+
+Re-reading the reversal for the first time end-to-end surfaced that §6 fixed
+*which* buckets get reversed but not *whether the reversal happened at all*.
+
+`clear_credit_refund_request_handler` read the buckets with `unwrap_or_default()`
+and logged each failed `record` with "reconcile manually" — then **cleared the
+flag regardless**. So any transient D1 failure during the reversal produced
+exactly the outcome the reversal exists to prevent: the organizer has paid the
+cash out, the flag is gone from the queue, and the attendee keeps the full
+spendable balance. The "reconcile manually" instruction had nowhere to land —
+`reconcile` only checked the *loss* direction (held deposit with no ledger
+credit), so credit standing against a cleared request was invisible forever.
+
+Two changes, one for each half:
+
+1. **The reversal fails closed.** The bucket enumeration and the per-bucket write
+   moved into `reverse_held_credit(db, email, requested_at)`, which propagates
+   with `?`; the handler `map_err(AppError::Internal)?`s it *before* either flag
+   clear. A failure now 500s and the request stays in the organizer's queue to
+   retry — recoverable, where an unreversed clear is not. The per-bucket
+   idempotency key means the retry re-writes only the buckets that did not land.
+   A missing D1 binding is treated the same way (fail closed) rather than
+   clearing a flag whose ledger side can't be written.
+2. **`reconcile` now checks both directions of the money.** Two more COUNT
+   queries alongside the existing two:
+   - `double_settled` — deposits with `held_as_credit = 1 AND refunded = 1`. The
+     two settle paths are mutually exclusive by CAS, so a nonzero count means the
+     CAS was bypassed and money left twice (cash back *and* credit kept).
+   - `phantom_holds` — ledger `hold` entries whose deposit is no longer held as
+     credit. The mirror of `orphan_holds`: credit that exists and should not.
+
+   Both feed `is_clean()` and the Slack alert text, so either surfaces within a
+   day instead of never.
+
+Guarded by two more tests in `worker/tests/credit_ledger_guards.rs`
+(6 total): one pins the reversal's fail-closed shape (no `unwrap_or_default` in
+the helper, `?` on both the read and the writes, reversal ordered before the
+clear, `map_err(...)?` between them); one pins all four reconcile fields in both
+`ReconcileReport` and `is_clean()`, the `double_settled`/`phantom_holds` SQL
+shapes, and a `count_query` per check so a field stubbed to a literal is caught.
+Mutation-tested four ways (swallow the bucket read; swallow the handler's error;
+drop `double_settled` from `is_clean`; stub `phantom_holds = 0`) — each red, and
+the last one is why the `count_query` count assertion exists.
 
 ## §7 — `escrow_status` (swept, clean, guard added in the same commit)
 
