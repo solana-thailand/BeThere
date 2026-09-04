@@ -471,6 +471,85 @@ assignment outside `event_store/write/update.rs`. Mutation-tested by adding one 
   the post-split path, and the corrected Layer 2 counts (5 arms, 1 error string,
   not 10 and 2).
 
+## §8 — the *read* side: enum columns degrading open and unlogged (`c358d15`)
+
+Every §-above concerns a **writer**. This one is the mirror image: the single
+place where every stored event state is *read back*.
+
+`D1EventRow::to_event_config` (`worker/src/db/events.rs`) parsed all five enum
+columns the same way:
+
+```rust
+serde_json::from_value(Value::String(self.visibility.clone().unwrap_or_default()))
+    .unwrap_or_default()
+```
+
+That collapses three distinct situations into one silent answer:
+
+| stored | means | old result |
+|---|---|---|
+| `NULL` | row predates the migration that added the column | `Default` |
+| a legal value | itself | itself |
+| anything else | out-of-band D1 edit, or a migration default | `Default`, **no log** |
+
+`Default` pointed the wrong way twice:
+
+- `EventVisibility::default()` is `Public` — a corrupt `visibility` column
+  **published a private event** (`public_event.rs:140` is the only gate).
+- `EscrowStatus::default()` is `None`, whose `is_active()` is false — a corrupt
+  `escrow_status` unlocked archive, delete (`event_store/write/lifecycle.rs`
+  23 / 114) and escrow repoint (`handlers/events/update.rs:175`) on an event
+  whose escrow may still hold funds.
+
+`OnlineOpenMode::default()` is `Always`, which opens online registration on a
+hybrid event the organizer never opened. `status` and `event_format` already
+defaulted fail-closed.
+
+**Reachability, stated honestly:** every writer goes through `as_str()`
+(`db/events.rs` 449 / 469–472 / 856), and the Sheets `Events` tab is a
+write-only mirror — `read_event_rows` feeds a listing in `handlers/contacts.rs`
+and never re-enters D1. So no request path can plant a bad value today. This is
+hardening plus observability, not a live exploit: the concrete win is that a
+corrupt column is no longer *indistinguishable* from a fresh `NULL`.
+
+**Fix.** One helper, `parse_enum_column(event_id, column, stored, legacy,
+corrupt)`, replaces all five parses. It splits the three cases apart:
+absent/empty → `legacy` (what the pre-migration row meant); parses (after
+`trim()`, so a hand-typed `" private "` survives as `Private` rather than
+tipping public) → itself; unrecognised → `corrupt`, chosen per column to fail
+closed, plus a `tracing::warn!` carrying the event id, column and raw value.
+
+| column | legacy (`NULL`) | corrupt | why |
+|---|---|---|---|
+| `status` | `Draft` | `Draft` | stays out of every listing |
+| `visibility` | `Public` | **`Private`** | must not publish a private event |
+| `escrow_status` | `None` | **`Initialized`** | `is_active()` blocks archive/delete/repoint |
+| `online_open_mode` | `AutoOnFull` | **`Manual`** | waits for the organizer |
+| `event_format` | `InPerson` | `InPerson` | no security dimension |
+
+The `legacy` column is why this is not just "swap the `Default`": flipping
+`EventVisibility::default()` to `Private` would have hidden every event whose
+row predates migration 0016.
+
+**Guard.** `worker/tests/event_enum_column_fallbacks.rs` — 12 behavioural
+tests driving `to_event_config` through a `#[serde(default)]`-built row, so
+they stay honest if the parse is rewritten. `worker/src/lib.rs` widens
+`mod db` to `pub mod db` with the same justification comment `event_store`
+already carries. Four mutations run, all red: visibility `corrupt` → `Public`;
+escrow `corrupt` → `None`; `OnlineOpenMode::Manual` → `Always`; drop the
+`trim()`. The trim mutation initially **survived** — the padding assertion was
+on `visibility`, where the parsed value and the fallback are both `Private`, so
+it could not see the difference. Re-anchored on `status` (`" active "` parses
+to `Active`, fallback is `Draft`) it goes red. Sweep rule: *a fallback
+assertion is blind whenever the correct answer and the fallback coincide —
+anchor it on a column where they differ.*
+
+**Sweep rule added.** The procedure above walks writers. Add the read-back:
+for any state persisted as a string, find where it is parsed and ask what
+happens to a value the parser does not recognise. `unwrap_or_default()` there
+is a policy decision disguised as a convenience — and `Default` is chosen for
+ergonomics, not for safety.
+
 ## Transitions not yet swept
 
 None. Every transition identified at the start of this plan has been swept.
@@ -492,4 +571,6 @@ deliverable, not the list.
 - [x] credit balance swept; the two contact-scoped paths no longer guess the org.
 - [x] `escrow` state transitions swept — clean; a writer-set guard now backs the
       existing allowlist contract.
+- [x] The read-back path swept — enum columns no longer degrade open or
+      silently; per-column fail-closed fallbacks guarded and mutation-tested.
 - [ ] Nothing here is deployed; this branch is unpushed.
