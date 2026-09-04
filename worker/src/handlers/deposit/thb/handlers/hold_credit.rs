@@ -277,9 +277,21 @@ pub async fn credit_balance_handler(
     // a given event is still resolved per-org at registration (plan 022 §6).
     let (credit_thb, credit_usdc) = match state.d1.as_deref() {
         Some(db) => {
+            // Degrading to zero is safe *here* because nothing spends against
+            // this number — registration resolves the balance server-side via
+            // `try_spend`, so a false zero costs the attendee reassurance, not
+            // money. It must not be silent though: without this log a D1 flake
+            // is indistinguishable from "this attendee holds no credit".
             let buckets = crate::db::credit_ledger::positive_balances(db, &claims.email)
                 .await
-                .unwrap_or_default();
+                .unwrap_or_else(|e| {
+                    tracing::warn!(
+                        email = %claims.email,
+                        error = %e,
+                        "credit balance read failed — reporting 0 (display only)"
+                    );
+                    Vec::new()
+                });
             let sum = |currency: &str| -> u64 {
                 buckets
                     .iter()
