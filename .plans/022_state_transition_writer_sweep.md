@@ -567,6 +567,81 @@ happens to a value the parser does not recognise. `unwrap_or_default()` there
 is a policy decision disguised as a convenience — and `Default` is chosen for
 ergonomics, not for safety.
 
+## §9 — the *gate* side: a failed count opening the in-person cap (`1dc43bc`)
+
+§8 swept how stored state is *parsed*. This is the third face of the same
+defect: how a stored state is *counted*. A gate that compares a number against
+a limit has the same fail-open exposure as a parse that picks a default — and
+the same tendency to be written twice.
+
+Two handlers enforce `in_person_capacity`:
+
+| gate | file |
+|---|---|
+| public registration | `handlers/register/capacity.rs::enforce_capacity` |
+| staff walk-in registration | `handlers/walkin.rs::enforce_walkin_capacity` |
+
+Both counted the same two halves — sheet-based in-person attendees, plus
+walk-ins from D1 (walk-ins live only in D1; the Sheets copy is a best-effort
+mirror). The sheet half was already fail-closed (`?` → `AppError::Internal`).
+The D1 half, in **both** copies, was the same twelve lines:
+
+```rust
+match crate::db::attendees::count_walkin_attendees(db, &config.id).await {
+    Ok(count) => in_person_count += count,
+    Err(e) => tracing::warn!(error = %e, "D1 walkin count for capacity failed, skipping"),
+}
+```
+
+"Skipping" a count is not neutral. It means *zero walk-ins*, and zero reads as
+plenty of room: an event sitting exactly at its cap because of walk-ins looks
+empty, and the gate admits the registration. The whole point of the walk-in
+half is that walk-ins are the attendees the sheet does not know about, so
+dropping it drops precisely the population the cap exists to bound.
+
+The direction matters and it is not symmetric. The same under-count also feeds
+`in_person_available`, which drives `OnlineOpenMode::AutoOnFull` — there it
+keeps online registration *closed*, which is merely annoying. The capacity
+comparison is the side that fails open.
+
+### The fix
+
+One `pub(crate)` helper, `handlers::capacity::count_walkins_against_cap`, is
+now the single home for the count. Both gates call it and propagate with `?`.
+It answers three cases deliberately rather than collapsing them:
+
+| case | answer | why |
+|---|---|---|
+| no `in_person_capacity` set | `Ok(0)`, query skipped | the count cannot change any decision — and one fewer D1 round-trip on the registration hot path for every uncapped event |
+| no D1 binding | `Ok(0)` | not a fallback: walk-ins are stored in D1, so without it none can exist |
+| cap set, query failed | `Err(AppError::Internal)` | fail closed |
+
+The fail-closed choice costs little: registration writes go to the same D1, so
+a caller that cannot reach it was going to fail a few lines later anyway. And
+because the `None`-cap case returns early, an event with no cap can never be
+blocked by this error at all — the error only bites the events where honouring
+the limit was the point.
+
+### Guard
+
+`worker/tests/capacity_count_single_home.rs` — 3 tests. The helper takes an
+`AppState` (worker bindings), so it cannot be driven off-wasm; these are
+comment-stripped source scans instead, aimed at the failure mode that actually
+recurs here — a second gate growing its own copy. They assert the D1 count is
+called from exactly one file, that neither gate calls it directly, that both
+propagate with `.await?`, and that the helper contains none of the recovery
+idioms (`unwrap_or(0)`, `unwrap_or_default()`, `or_else(`, `unwrap_or_else(`)
+that would turn the error back into a number.
+
+Mutations, both red: restore one gate's `.unwrap_or(0)`; add
+`.or_else(|_| Ok(0))` inside the helper.
+
+**Sweep rule added.** Extend the read-back rule to counts: for any limit
+enforced by comparing a count against a cap, ask what the comparison sees when
+the count *fails*. A tally assembled from several sources fails open unless
+every source is fail-closed — and the source most likely to be dropped is the
+one the other sources cannot see, which is exactly the one the limit needs.
+
 ## Transitions not yet swept
 
 None. Every transition identified at the start of this plan has been swept.
@@ -591,4 +666,7 @@ deliverable, not the list.
 - [x] The read-back path swept — enum columns no longer degrade open or
       silently; per-column fail-closed fallbacks guarded and mutation-tested,
       and all three copies of the parse collapsed into one helper (§8b).
+- [x] The capacity gates swept — the walk-in half of the in-person tally no
+      longer degrades to zero on a D1 error, and both gates share one
+      fail-closed count (§9).
 - [ ] Nothing here is deployed; this branch is unpushed.
