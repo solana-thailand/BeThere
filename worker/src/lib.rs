@@ -4,7 +4,12 @@ mod auth;
 mod claim;
 mod cleanup;
 mod crypto;
-mod db;
+// Public for the same reason as `event_store` below — the worker compiles to a
+// cdylib with no downstream Rust consumer, and
+// `worker/tests/event_enum_column_fallbacks.rs` drives
+// `db::events::D1EventRow::to_event_config` directly. Its items were already
+// `pub`; only the module declaration was private.
+pub mod db;
 mod durable_objects;
 mod error;
 mod escrow_indexer;

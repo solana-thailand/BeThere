@@ -97,37 +97,96 @@ pub struct D1EventRow {
     pub post_event_registration_until_ms: Option<i64>,
 }
 
+/// Parse an enum column stored as its `as_str()` snake_case spelling.
+///
+/// Three cases, deliberately kept distinct — the previous
+/// `from_value(...).unwrap_or_default()` collapsed them into one and logged
+/// nothing, so a corrupt column was indistinguishable from a fresh one:
+///
+/// - **absent or empty** — `NULL` on a row written before the column existed.
+///   Returns `legacy`, the value that row semantically had.
+/// - **parses** — use it. Surrounding whitespace is tolerated.
+/// - **present but unrecognised** — every writer goes through `as_str()`, so
+///   this is only reachable through an out-of-band D1 edit or a migration
+///   default. Returns `corrupt`, chosen per column to fail closed, and warns:
+///   the fallback is a guess, and the row needs a human.
+fn parse_enum_column<T: serde::de::DeserializeOwned>(
+    event_id: &str,
+    column: &str,
+    stored: Option<&str>,
+    legacy: T,
+    corrupt: T,
+) -> T {
+    let raw = stored.unwrap_or("").trim();
+    match raw.is_empty() {
+        true => legacy,
+        false => match serde_json::from_value(serde_json::Value::String(raw.to_string())) {
+            Ok(parsed) => parsed,
+            Err(_) => {
+                tracing::warn!(
+                    event_id = %event_id,
+                    column = %column,
+                    value = %raw,
+                    "unrecognised enum value in D1 — falling back to the fail-closed variant"
+                );
+                corrupt
+            }
+        },
+    }
+}
+
 impl D1EventRow {
     /// Convert D1 row to domain EventConfig.
-    /// Uses `unwrap_or_default` for columns added by migration 0003
-    /// so it's safe even if the migration hasn't run yet.
+    /// Missing columns fall back to their pre-migration value via
+    /// [`parse_enum_column`] / `unwrap_or_default`, so a row written before a
+    /// migration ran still converts.
     pub fn to_event_config(&self) -> event_checkin_domain::models::event::EventConfig {
         use event_checkin_domain::models::event::*;
 
-        let status: EventStatus = serde_json::from_value(serde_json::Value::String(
-            self.status.clone().unwrap_or_default(),
-        ))
-        .unwrap_or_default();
-        let escrow_status: EscrowStatus = serde_json::from_value(serde_json::Value::String(
-            self.escrow_status.clone().unwrap_or_default(),
-        ))
-        .unwrap_or_default();
-        let event_format: EventFormat = serde_json::from_value(serde_json::Value::String(
-            self.event_format.clone().unwrap_or_default(),
-        ))
-        .unwrap_or_default();
-        let visibility: EventVisibility = serde_json::from_value(serde_json::Value::String(
-            self.visibility
-                .clone()
-                .unwrap_or_else(|| "public".to_string()),
-        ))
-        .unwrap_or_default();
-        let online_open_mode: OnlineOpenMode = serde_json::from_value(serde_json::Value::String(
-            self.online_open_mode
-                .clone()
-                .unwrap_or_else(|| "auto_on_full".to_string()),
-        ))
-        .unwrap_or_default();
+        let event_id = self.id.as_deref().unwrap_or("<unknown>");
+        let status = parse_enum_column(
+            event_id,
+            "status",
+            self.status.as_deref(),
+            EventStatus::Draft,
+            // A corrupt status keeps the event out of every listing.
+            EventStatus::Draft,
+        );
+        let escrow_status = parse_enum_column(
+            event_id,
+            "escrow_status",
+            self.escrow_status.as_deref(),
+            EscrowStatus::None,
+            // Treat a corrupt escrow status as live: `is_active()` then blocks
+            // archiving, deleting and repointing an escrow that may still hold
+            // funds. Degrading to `None` would unlock all three.
+            EscrowStatus::Initialized,
+        );
+        let event_format = parse_enum_column(
+            event_id,
+            "event_format",
+            self.event_format.as_deref(),
+            EventFormat::InPerson,
+            EventFormat::InPerson,
+        );
+        let visibility = parse_enum_column(
+            event_id,
+            "visibility",
+            self.visibility.as_deref(),
+            // NULL predates migration 0016; those events were all public.
+            EventVisibility::Public,
+            // A corrupt visibility must not publish a private event.
+            EventVisibility::Private,
+        );
+        let online_open_mode = parse_enum_column(
+            event_id,
+            "online_open_mode",
+            self.online_open_mode.as_deref(),
+            OnlineOpenMode::AutoOnFull,
+            // A corrupt mode must not fling online registration open; `Manual`
+            // waits for the organizer.
+            OnlineOpenMode::Manual,
+        );
 
         let organizer_emails: Vec<String> = self
             .organizer_emails
