@@ -473,20 +473,30 @@ pub async fn list_past_events_raw(db: &D1Database) -> Result<Vec<serde_json::Val
     Ok(rows
         .into_iter()
         .map(|r| {
-            let status: EventStatus = serde_json::from_value(serde_json::Value::String(
-                r.status.clone().unwrap_or_default(),
-            ))
-            .unwrap_or_default();
-            let event_format: EventFormat = serde_json::from_value(serde_json::Value::String(
-                r.event_format.clone().unwrap_or_default(),
-            ))
-            .unwrap_or_default();
-            let visibility: EventVisibility = serde_json::from_value(serde_json::Value::String(
-                r.visibility
-                    .clone()
-                    .unwrap_or_else(|| "public".to_string()),
-            ))
-            .unwrap_or_default();
+            let status = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "status",
+                r.status.as_deref(),
+                EventStatus::Draft,
+                EventStatus::Draft,
+            );
+            let event_format = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "event_format",
+                r.event_format.as_deref(),
+                EventFormat::InPerson,
+                EventFormat::InPerson,
+            );
+            let visibility = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "visibility",
+                r.visibility.as_deref(),
+                // NULL predates migration 0016; those events were all public.
+                EventVisibility::Public,
+                // This listing is the landing page's source — a corrupt
+                // visibility must not put a private event on it.
+                EventVisibility::Private,
+            );
 
             serde_json::json!({
                 "id": r.id.unwrap_or_default(),
@@ -881,20 +891,30 @@ pub async fn list_public_events_raw(db: &D1Database) -> Result<Vec<serde_json::V
     Ok(rows
         .into_iter()
         .map(|r| {
-            let status: EventStatus = serde_json::from_value(serde_json::Value::String(
-                r.status.clone().unwrap_or_default(),
-            ))
-            .unwrap_or_default();
-            let event_format: EventFormat = serde_json::from_value(serde_json::Value::String(
-                r.event_format.clone().unwrap_or_default(),
-            ))
-            .unwrap_or_default();
-            let visibility: EventVisibility = serde_json::from_value(serde_json::Value::String(
-                r.visibility
-                    .clone()
-                    .unwrap_or_else(|| "public".to_string()),
-            ))
-            .unwrap_or_default();
+            let status = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "status",
+                r.status.as_deref(),
+                EventStatus::Draft,
+                EventStatus::Draft,
+            );
+            let event_format = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "event_format",
+                r.event_format.as_deref(),
+                EventFormat::InPerson,
+                EventFormat::InPerson,
+            );
+            let visibility = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "visibility",
+                r.visibility.as_deref(),
+                // NULL predates migration 0016; those events were all public.
+                EventVisibility::Public,
+                // This listing is the landing page's source — a corrupt
+                // visibility must not put a private event on it.
+                EventVisibility::Private,
+            );
 
             serde_json::json!({
                 "id": r.id.unwrap_or_default(),

@@ -219,3 +219,43 @@ fn event_format_falls_back_to_in_person() {
         EventFormat::Hybrid
     );
 }
+
+// ---------------------------------------------------------------------------
+// Drift guard — the same parse used to exist in three copies
+// ---------------------------------------------------------------------------
+
+/// `to_event_config`, `list_past_events_raw` and `list_public_events_raw` each
+/// carried their own `from_value(...).unwrap_or_default()` block. The listing
+/// readers are the *worst* place for it: `handlers/public_event.rs:74` filters
+/// the landing page on the `visibility` string they emit, so a fallback of
+/// `Public` there puts a private event on the front page. Per-reader copies of
+/// a rule are how this codebase's guards keep diverging (plan 022), so pin the
+/// parse to a single home.
+#[test]
+fn the_enum_parse_has_exactly_one_home() {
+    let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/db/events.rs"))
+        .expect("worker/src/db/events.rs must be readable");
+    // Prose about the pattern must not satisfy a rule about code.
+    let code: String = source
+        .lines()
+        .filter(|l| !l.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert_eq!(
+        code.matches("serde_json::from_value").count(),
+        1,
+        "every enum column must be parsed through `parse_enum_column`; a second \
+         `serde_json::from_value` means a reader grew its own copy of the rule"
+    );
+    assert!(
+        code.matches("parse_enum_column(").count() >= 11,
+        "expected all three readers to route their enum columns through the \
+         helper (5 + 3 + 3 columns)"
+    );
+    assert!(
+        !code.contains(".unwrap_or_else(|| \"public\".to_string())"),
+        "the legacy-NULL fallback belongs in `parse_enum_column`'s `legacy` \
+         argument, not open-coded at a call site"
+    );
+}
