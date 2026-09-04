@@ -19,6 +19,8 @@
 //!    reversal could not be written, or the attendee has the cash *and* keeps
 //!    spendable credit.
 //! 6. `reconcile` checks both directions of the money, not just the loss one.
+//! 7. The admin payout queue reads the amount from the LEDGER, not from the
+//!    superseded `contacts.deposit_credit_*` cells.
 
 use std::fs;
 use std::path::Path;
@@ -216,6 +218,46 @@ fn reconcile_checks_both_money_directions() {
         src.matches("count_query(").count() >= 5,
         "each of the four reconcile checks needs its own count_query (plus the fn \
          definition); a field assigned a literal is a check that never fires"
+    );
+}
+
+#[test]
+fn payout_queue_reads_the_ledger_not_the_superseded_columns() {
+    // The organizer reads this queue to decide how much cash to hand back, so
+    // the number must be the one `reverse_held_credit` will remove. The
+    // `contacts.deposit_credit_thb/usdc` cells are what the append-only ledger
+    // replaced after the 2026-08-14 loss and nothing writes them any more, so
+    // sourcing the queue from them renders 0 THB against a live balance — the
+    // same defect that made the old liability chip always read zero.
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/db/contacts.rs");
+    let src = fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+    let code = strip_comments(&src);
+
+    let start = code
+        .find("pub async fn credit_refund_requests")
+        .expect("credit_refund_requests must exist");
+    // Back up to the SQL literal that the function opens with.
+    let body = &code[start
+        ..code[start..]
+            .find("\n}\n")
+            .map_or(code.len(), |i| start + i)];
+
+    assert!(
+        body.contains("FROM credit_ledger"),
+        "the payout queue's amounts must be summed from credit_ledger"
+    );
+    for banned in ["deposit_credit_thb", "deposit_credit_usdc"] {
+        assert!(
+            !body.contains(banned),
+            "the payout queue must not read `contacts.{banned}` — nothing writes that \
+             cell any more, so the organizer would be shown 0 against a live balance"
+        );
+    }
+    // And no writer may resurrect the mutable cells anywhere in the module.
+    assert!(
+        !code.contains("SET deposit_credit_thb"),
+        "`contacts.deposit_credit_*` is superseded by the append-only ledger; a \
+         mutable-cell writer reintroduces the exact 2026-08-14 loss shape"
     );
 }
 

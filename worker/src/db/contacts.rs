@@ -75,33 +75,6 @@ pub(crate) async fn upsert_contact(
     Ok(())
 }
 
-/// Update deposit credit for a contact (rolling balance across events).
-#[allow(dead_code)]
-pub(crate) async fn update_deposit_credit(
-    db: &D1Database,
-    email: &str,
-    credit_thb: i64,
-    credit_usdc: i64,
-) -> Result<(), String> {
-    let stmt = db.prepare(
-        "UPDATE contacts \
-         SET deposit_credit_thb = ?1, deposit_credit_usdc = ?2, \
-         deposit_credit_since = datetime('now') \
-         WHERE email = ?3",
-    );
-    stmt.bind_refs(&[
-        D1Type::Integer(credit_thb as i32),
-        D1Type::Integer(credit_usdc as i32),
-        D1Type::Text(email),
-    ])
-    .map_err(|e| format!("D1 update_deposit_credit bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 update_deposit_credit run: {e:?}"))?;
-
-    Ok(())
-}
-
 /// Clear PII for a contact (PDPA right to erasure).
 /// Keeps the row but blanks name and contact fields.
 ///
@@ -310,8 +283,7 @@ pub struct CreditLiability {
 /// (surfaces "still waiting" to the organizer without a separate counter). The
 /// organizer clears the flag manually after processing the payout — there is
 /// no automated state machine for v1 (Issue #061 §D3). Lowercases the email
-/// because `contacts.email` is the lowercased primary key (matches
-/// [`update_deposit_credit`]).
+/// because `contacts.email` is the lowercased primary key.
 pub(crate) async fn set_credit_refund_requested(
     db: &D1Database,
     email: &str,
@@ -385,17 +357,29 @@ pub struct CreditRefundRequest {
 /// match the [`CreditRefundRequest`] field names so `serde_json::from_value`
 /// deserializes directly without remap. Returns an empty vec when D1 is
 /// unreachable — the admin view must still render.
+///
+/// **The amounts come from the ledger, not from `contacts.deposit_credit_*`.**
+/// The organizer reads this queue to decide how much cash to hand back, so the
+/// number has to be the one the reversal will remove. Those two columns are the
+/// mutable cells the append-only ledger replaced after the 2026-08-14 loss;
+/// nothing writes them any more (`update_deposit_credit` was deleted), so the
+/// queue was rendering "0 THB" against a live balance — the same defect that
+/// made the old liability chip always read zero. Summing across orgs is correct
+/// here and only here: the flag is on the contact, and `reverse_held_credit`
+/// reverses every bucket, so the displayed total is exactly what gets reversed.
 pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest> {
     let sql = "\
          SELECT \
-           email, \
-           COALESCE(name, '')                       AS name, \
-           COALESCE(deposit_credit_thb, 0)          AS credit_thb, \
-           COALESCE(deposit_credit_usdc, 0)         AS credit_usdc, \
-           COALESCE(credit_refund_requested_at, '') AS requested_at \
-         FROM contacts \
-         WHERE credit_refund_requested = 1 \
-         ORDER BY credit_refund_requested_at DESC";
+           c.email                                    AS email, \
+           COALESCE(c.name, '')                       AS name, \
+           COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                     WHERE l.email = LOWER(c.email) AND l.currency = 'thb'),  0) AS credit_thb, \
+           COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                     WHERE l.email = LOWER(c.email) AND l.currency = 'usdc'), 0) AS credit_usdc, \
+           COALESCE(c.credit_refund_requested_at, '') AS requested_at \
+         FROM contacts c \
+         WHERE c.credit_refund_requested = 1 \
+         ORDER BY c.credit_refund_requested_at DESC";
 
     let stmt = db.prepare(sql);
     match safe_all_rows(&stmt).await {

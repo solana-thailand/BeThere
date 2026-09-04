@@ -305,7 +305,37 @@ call site; red.
 - The Sheets `contacts` mirror (`increment_credit`) is inherently org-blind — one
   contacts sheet for all orgs. It is display-only (the D1 ledger is authoritative
   and the module doc says so), but a multi-org deployment will show a merged
-  number there.
+  number there. Tracing that mirror to its readers turned up §6c below, which was
+  not display-only.
+
+## §6c — the admin payout queue was reading a column nothing writes
+
+`db::contacts::credit_refund_requests` — the queue the organizer works through to
+pay held credit back — sourced `credit_thb` / `credit_usdc` from
+`contacts.deposit_credit_thb` / `deposit_credit_usdc`. Those are the mutable cells
+the append-only ledger replaced after the 2026-08-14 loss. The only writer left,
+`update_deposit_credit`, was `#[allow(dead_code)]` with zero callers (already
+flagged in `docs/SECURITY-FINDINGS-2026-08-13.md`), so the column holds whatever
+the sheet sync last put there — in practice zero.
+
+`frontend-leptos/src/pages/admin_deposit.rs:1042` renders that pair as
+`"{credit_thb} THB + {credit_usdc} USDC"`. So the organizer decides **how much
+cash to hand back** from a number sourced independently of the ledger the payout
+reverses. It is the same defect the liability chip had ("summed a D1 column that
+hold never wrote, so it always read zero") — fixed there, missed here, because
+the fix was applied per-chip rather than per-column.
+
+The queue now sums `credit_ledger` per currency in the same round trip, via two
+correlated subqueries keyed on `LOWER(c.email)`. Summing across orgs is correct
+*here and only here*: the flag is on the contact and `reverse_held_credit`
+reverses every bucket, so the number displayed is exactly the number reversed.
+`update_deposit_credit` is deleted rather than left dead — a future caller would
+reintroduce the mutable cell the ledger exists to replace.
+
+Guarded by a seventh test in `worker/tests/credit_ledger_guards.rs`: the queue's
+body must read `FROM credit_ledger` and must not mention either superseded
+column, and the module must contain no `SET deposit_credit_thb` writer at all.
+Mutation-tested both ways; red.
 - ~~`reconcile` (`lib.rs:195`, the scheduled job) was not re-read as part of this
   sweep.~~ **Swept — §6b below.**
 
