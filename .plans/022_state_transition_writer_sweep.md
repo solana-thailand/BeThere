@@ -544,6 +544,23 @@ to `Active`, fallback is `Draft`) it goes red. Sweep rule: *a fallback
 assertion is blind whenever the correct answer and the fallback coincide —
 anchor it on a column where they differ.*
 
+### §8b — the same parse in three copies (`f78258d`)
+
+The first pass fixed `to_event_config` only. `rg`-ing the file for the parse
+shape found **two more copies**, in `list_past_events_raw` and
+`list_public_events_raw` — and those are the worse ones: `public_event.rs:74`
+filters the landing page on the `visibility` string those listings emit, so
+their `Public` fallback is the path that would actually surface a private
+event. Textbook per-reader drift (memory `duplicated-state-transition-paths`
+variant 4): fixing the reader you happened to open leaves the siblings.
+
+All three now call `parse_enum_column`, and
+`the_enum_parse_has_exactly_one_home` pins it: after stripping comment lines,
+`db/events.rs` must contain `serde_json::from_value` **exactly once** (inside
+the helper), at least 11 `parse_enum_column(` call sites (5 + 3 + 3 columns),
+and no open-coded `unwrap_or_else(|| "public".to_string())` legacy fallback.
+Mutation: restore one listing's inline parse → red.
+
 **Sweep rule added.** The procedure above walks writers. Add the read-back:
 for any state persisted as a string, find where it is parsed and ask what
 happens to a value the parser does not recognise. `unwrap_or_default()` there
@@ -572,5 +589,6 @@ deliverable, not the list.
 - [x] `escrow` state transitions swept — clean; a writer-set guard now backs the
       existing allowlist contract.
 - [x] The read-back path swept — enum columns no longer degrade open or
-      silently; per-column fail-closed fallbacks guarded and mutation-tested.
+      silently; per-column fail-closed fallbacks guarded and mutation-tested,
+      and all three copies of the parse collapsed into one helper (§8b).
 - [ ] Nothing here is deployed; this branch is unpushed.
