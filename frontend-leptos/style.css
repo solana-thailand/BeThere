@@ -110,39 +110,6 @@ body {
     padding: 2rem 1rem;
 }
 
-.page-container {
-    max-width: 800px;
-    width: 100%;
-    margin: 0 auto;
-    padding: 1rem;
-    position: relative;
-    overflow-x: hidden;
-}
-
-/* Subtle ambient glow behind page content (admin/scanner) */
-.page-container::before {
-    content: "";
-    position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 700px;
-    max-width: 100vw;
-    height: 500px;
-    background: radial-gradient(
-        ellipse at center,
-        rgba(255, 92, 57, 0.04) 0%,
-        transparent 70%
-    );
-    pointer-events: none;
-    z-index: 0;
-}
-
-.page-container > * {
-    position: relative;
-    z-index: 1;
-}
-
 .center-page {
     display: flex;
     flex-direction: column;
@@ -552,10 +519,6 @@ h3 {
     width: 2.5em;
     height: 2.5em;
 }
-.icon-3xl {
-    width: 3em;
-    height: 3em;
-}
 .icon-success {
     color: var(--success);
 }
@@ -570,12 +533,6 @@ h3 {
 }
 .icon-muted {
     color: var(--text-muted);
-}
-.icon-accent {
-    color: var(--accent);
-}
-.icon-white {
-    color: var(--text-heading);
 }
 
 /* ===== Logo ===== */
@@ -1145,12 +1102,6 @@ nav a.active {
     border: 1px solid var(--warning-border);
 }
 
-.badge-danger {
-    background: var(--danger-bg);
-    color: var(--danger-bright);
-    border: 1px solid var(--danger-border);
-}
-
 .badge-info {
     background: var(--info-bg);
     color: var(--info-bright);
@@ -1190,50 +1141,6 @@ nav a.active {
     border-radius: 9999px;
 }
 
-/* ===== Scanner ===== */
-.scanner-area {
-    position: relative;
-    width: 100%;
-    max-width: 400px;
-    margin: 0 auto;
-    aspect-ratio: 1;
-    border-radius: var(--radius);
-    overflow: hidden;
-    background: var(--bg-void);
-}
-
-.scanner-area video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-
-.scanner-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: none;
-}
-
-.scanner-frame {
-    width: 65%;
-    aspect-ratio: 1;
-    border: 3px solid rgba(255, 92, 57, 0.8);
-    border-radius: var(--radius);
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
-}
-
-.scanner-line {
-    position: absolute;
-    width: 60%;
-    height: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-    animation: scan 2s ease-in-out infinite;
-}
-
 @keyframes scan {
     0%,
     100% {
@@ -1242,25 +1149,6 @@ nav a.active {
     50% {
         top: 75%;
     }
-}
-
-.scanner-placeholder {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
-    min-height: 300px;
-    background: var(--bg-secondary);
-    border: 2px dashed var(--border);
-    border-radius: var(--radius);
-    color: var(--text-secondary);
-}
-
-.scanner-placeholder .icon {
-    font-size: 3rem;
-    margin-bottom: 0.75rem;
 }
 
 .manual-input-group {
@@ -1289,16 +1177,6 @@ nav a.active {
     color: var(--text-muted);
 }
 
-/* ===== Result Panel ===== */
-.result-panel {
-    display: none;
-    margin-top: 1rem;
-}
-
-.result-panel.visible {
-    display: block;
-}
-
 /* result-success/error/warning gradient styles defined below (near EOF) */
 
 .result-details {
@@ -1325,22 +1203,6 @@ nav a.active {
 }
 
 .error-msg.visible {
-    display: block;
-}
-
-.info-msg {
-    margin-top: 1.25rem;
-    padding: 0.85rem 1rem;
-    background: var(--info-bg);
-    border: 1px solid var(--info-border);
-    border-radius: var(--radius);
-    color: var(--info);
-    font-size: 0.9rem;
-    line-height: 1.5;
-    display: none;
-}
-
-.info-msg.visible {
     display: block;
 }
 
@@ -1455,85 +1317,14 @@ nav a.active {
     transform: rotate(45deg);
     border-radius: 1px;
 }
-
-/* ===== QR Code Display ===== */
-.qr-display {
-    text-align: center;
-    padding: 1rem;
-}
-
-.qr-display img {
-    max-width: 256px;
-    max-height: 256px;
-    border-radius: var(--radius);
-    border: 4px solid var(--text-heading);
-}
-
-/* ===== Footer ===== */
-.footer {
-    margin-top: 3rem;
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    text-align: center;
-}
-
-/* ===== Utility ===== */
-.text-center {
-    text-align: center;
-}
-.text-left {
-    text-align: left;
-}
-.text-right {
-    text-align: right;
-}
-.mt-1 {
-    margin-top: 0.5rem;
-}
-.mt-2 {
-    margin-top: 1rem;
-}
 .mt-3 {
     margin-top: 1.5rem;
-}
-.mb-1 {
-    margin-bottom: 0.5rem;
 }
 .mb-2 {
     margin-bottom: 1rem;
 }
-.mb-3 {
-    margin-bottom: 1.5rem;
-}
-.gap-1 {
-    gap: 0.5rem;
-}
-.gap-2 {
-    gap: 1rem;
-}
-.flex {
-    display: flex;
-}
-.flex-col {
-    flex-direction: column;
-}
-.items-center {
-    align-items: center;
-}
-.justify-between {
-    justify-content: space-between;
-}
 .hidden {
     display: none !important;
-}
-.w-full {
-    width: 100%;
-}
-
-/* ===== Claim Page: Brand Header ===== */
-.claim-header {
-    text-align: center;
-    margin-bottom: 1.5rem;
 }
 
 .claim-title {
@@ -2066,33 +1857,6 @@ nav a.active {
     padding: 0.75rem 2rem;
 }
 
-/* Share to X button */
-.claim-share-x {
-    border-color: var(--color-x-brand);
-    color: var(--color-x-brand);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-}
-
-.claim-share-x:hover {
-    opacity: 0.8;
-    border-color: var(--color-x-brand);
-    background: rgba(29, 161, 242, 0.08);
-}
-.claim-share-x svg {
-    width: 18px;
-    height: 18px;
-}
-
-/* Already claimed detail text */
-.claim-already-detail {
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-}
-
 /* Pixelated SVG rendering for avatar */
 .claim-avatar-svg {
     image-rendering: pixelated;
@@ -2169,28 +1933,6 @@ nav a.active {
     fill: none;
 }
 
-.claim-success .success-details {
-    text-align: left;
-    margin-top: 1rem;
-    font-size: 0.9rem;
-}
-
-.claim-success .success-details p {
-    margin-bottom: 0.4rem;
-    color: var(--text-secondary);
-}
-
-.claim-success .success-details strong {
-    color: var(--text-primary);
-}
-
-.claim-success .success-details code {
-    font-size: 0.75rem;
-    color: var(--accent);
-    word-break: break-all;
-    font-family: "SF Mono", "Fira Code", monospace;
-}
-
 .claim-success .success-actions {
     margin-top: 1.25rem;
     display: flex;
@@ -2213,42 +1955,6 @@ nav a.active {
     color: var(--danger);
     font-size: 1.25rem;
     font-weight: 700;
-}
-
-/* ===== Claim Page: Warning State (Already Claimed) ===== */
-.claim-warning {
-    width: 100%;
-    background: linear-gradient(
-        135deg,
-        rgba(245, 158, 11, 0.06) 0%,
-        rgba(30, 30, 30, 0.95) 100%
-    );
-    border: 1px solid var(--warning-border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    text-align: center;
-}
-
-.claim-warning h2 {
-    color: var(--warning);
-    font-size: 1.25rem;
-    font-weight: 700;
-}
-
-/* ===== Claim Page: Loading State ===== */
-.claim-loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.75rem;
-    padding: 2rem;
-    color: var(--text-secondary);
-}
-
-.claim-loading h3 {
-    color: var(--text-primary);
-    font-weight: 600;
 }
 
 /* ===== Claim Page: Bookmark Footer ===== */
@@ -2503,15 +2209,6 @@ nav a.active {
         display: none;
     }
 
-    .scanner-area {
-        max-width: 280px;
-    }
-
-    .page-container::before {
-        width: 300px;
-        height: 225px;
-    }
-
     .center-page::before {
         width: 300px;
         height: 300px;
@@ -2611,8 +2308,7 @@ nav a.active {
         padding: 1rem;
     }
 
-    .claim-error,
-    .claim-warning {
+    .claim-error {
         padding: 1rem;
     }
 
@@ -2724,11 +2420,6 @@ nav a.active {
 @media (max-width: 480px) {
     .container {
         padding: 1.5rem 1rem;
-    }
-
-    .page-container::before {
-        width: 400px;
-        height: 300px;
     }
 
     .center-page::before {
@@ -2854,14 +2545,6 @@ nav a.active {
         font-size: 1.6rem;
     }
 
-    .page-container {
-        padding: 1.5rem;
-    }
-
-    .scanner-area {
-        max-width: 360px;
-    }
-
     .claim-success {
         padding: 1.75rem 1.5rem;
     }
@@ -2871,11 +2554,6 @@ nav a.active {
 @media (min-width: 768px) {
     .container {
         max-width: 720px;
-    }
-
-    .page-container {
-        max-width: 900px;
-        padding: 2rem;
     }
 
     .stats-grid {
@@ -2907,17 +2585,9 @@ nav a.active {
         padding: 2.5rem 2rem;
     }
 
-    .timeline-item {
-        font-size: 0.85rem;
-    }
-
     .claim-wallet-input {
         font-size: 0.9rem;
         padding: 0.85rem 1rem;
-    }
-
-    .scanner-area {
-        max-width: 400px;
     }
 }
 
@@ -2928,20 +2598,7 @@ nav a.active {
         padding: 1rem;
     }
 
-    .scanner-area {
-        max-height: 250px;
-        aspect-ratio: auto;
-    }
-
-    .claim-loading {
-        padding: 1rem;
-    }
-
     .container {
-        padding: 1rem;
-    }
-
-    .page-container {
         padding: 1rem;
     }
 }
@@ -3877,12 +3534,6 @@ nav a.active {
     margin-top: 0.5rem;
 }
 
-.scanner-attendee-detail {
-    margin-top: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-}
-
 .scanner-actions {
     display: flex;
     gap: 0.5rem;
@@ -4009,70 +3660,6 @@ nav a.active {
 .solana-pill svg {
     width: 14px;
     height: 14px;
-}
-
-.landing-svg-icon {
-    width: 2.5rem;
-    height: 2.5rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    margin-bottom: 0.75rem;
-}
-
-.landing-svg-icon svg {
-    width: 1.25rem;
-    height: 1.25rem;
-    stroke: var(--text-secondary);
-    fill: none;
-    stroke-width: 2;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.landing-svg-icon.icon-clipboard {
-    background: rgba(59, 130, 246, 0.1);
-    border: 1px solid rgba(59, 130, 246, 0.25);
-}
-
-.landing-svg-icon.icon-clipboard svg {
-    stroke: var(--info);
-}
-
-.landing-svg-icon.icon-chart {
-    background: rgba(245, 158, 11, 0.1);
-    border: 1px solid rgba(245, 158, 11, 0.25);
-}
-
-.landing-svg-icon.icon-chart svg {
-    stroke: var(--warning);
-}
-
-.landing-svg-icon.icon-proof {
-    background: rgba(255, 171, 77, 0.1);
-    border: 1px solid rgba(255, 171, 77, 0.25);
-}
-
-.landing-svg-icon.icon-proof svg {
-    stroke: var(--accent-purple);
-}
-
-.landing-footer-brand {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    text-align: center;
-    padding: 2rem 1rem 1rem;
-    border-top: 1px solid var(--border);
-    margin-top: 2rem;
-}
-
-.landing-footer-brand .accent {
-    font-weight: 700;
-    background: linear-gradient(135deg, #ff7b5c, #ff5c39);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
 }
 
 /* ===== Admin Page — Phase B ===== */
@@ -4209,40 +3796,6 @@ nav a.active {
     border-color: rgba(168, 85, 247, 0.5);
 }
 
-/* ===== Social Proof ===== */
-.social-proof {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 2rem 1.5rem 3rem;
-    text-align: center;
-}
-
-.social-proof-label {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-muted);
-    margin-bottom: 1rem;
-}
-
-.social-proof-logos {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    justify-content: center;
-    align-items: center;
-}
-
-.social-proof-pill {
-    padding: 0.4rem 0.85rem;
-    border-radius: 9999px;
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    border: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.02);
-    white-space: nowrap;
-}
-
 /* ===== Landing Footer ===== */
 .landing-footer {
     border-top: 1px solid var(--border);
@@ -4316,10 +3869,6 @@ nav a.active {
     width: 14px;
     height: 14px;
     color: var(--solana);
-}
-
-.swimlane-mockup {
-    animation: swimlane-fade-in 0.25s ease-out;
 }
 
 @keyframes swimlane-fade-in {
@@ -4570,15 +4119,6 @@ nav a.active {
     max-width: 100%;
     overflow-x: hidden;
     background: var(--bg-primary);
-}
-
-.admin-content .page-container {
-    max-width: 100%;
-    padding: 0;
-}
-
-.admin-content .page-container::before {
-    display: none;
 }
 
 /* ===== Admin sidebar: Home quick-nav ===== */
@@ -6189,12 +5729,6 @@ nav a.active {
     opacity: 0.85;
 }
 
-.adventure-moves-final {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    margin: 0.5rem 0 1rem 0;
-}
-
 /* Dialog card */
 .adventure-dialog-card {
     background: var(--bg-card);
@@ -6326,38 +5860,6 @@ nav a.active {
 
 .puzzle-input:focus {
     border-color: var(--accent);
-}
-
-.puzzle-pairs {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-.puzzle-pair {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-family: "SF Mono", "Fira Code", monospace;
-    font-size: 0.8rem;
-}
-
-.pair-left {
-    color: var(--code-text);
-    background: var(--code-bg);
-    padding: 0.25rem 0.5rem;
-    border-radius: 3px;
-}
-
-.pair-arrow {
-    color: var(--text-muted);
-}
-
-.pair-right {
-    color: var(--accent-purple);
-    background: rgba(255, 92, 57, 0.1);
-    padding: 0.25rem 0.5rem;
-    border-radius: 3px;
 }
 
 .puzzle-actions {
@@ -7050,50 +6552,6 @@ nav a.active {
     }
 }
 
-.confetti-container {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 9999;
-    overflow: hidden;
-}
-
-.confetti-particle {
-    position: absolute;
-    top: -10px;
-    animation:
-        confetti-fall var(--duration) ease-in forwards,
-        confetti-sway 3s ease-in-out infinite;
-}
-
-/* ===== Claim Page: Claim Counter ===== */
-
-.claim-counter {
-    margin-top: 1rem;
-    padding: 0.75rem 1rem;
-    background: rgba(255, 92, 57, 0.06);
-    border: 1px solid rgba(255, 92, 57, 0.15);
-    border-radius: var(--radius-sm);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-}
-
-.claim-counter-badge {
-    font-size: 1rem;
-}
-
-.claim-counter-text {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-}
-
-.claim-counter-text strong {
-    color: var(--accent);
-    font-weight: 700;
-}
-
 /* ===== Claim Page: Share Section ===== */
 
 .claim-share-section {
@@ -7103,33 +6561,6 @@ nav a.active {
     border: 1px solid var(--border);
     border-radius: var(--radius);
     text-align: center;
-}
-
-.claim-share-heading {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-}
-
-.claim-share-preview {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: var(--radius-sm);
-    padding: 0.75rem 1rem;
-    margin-bottom: 1rem;
-    text-align: left;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    line-height: 1.5;
-}
-
-.claim-share-preview-name {
-    color: var(--text-primary);
-    font-weight: 600;
-    margin-bottom: 0.25rem;
 }
 
 .claim-share-buttons {
@@ -7201,29 +6632,6 @@ nav a.active {
     opacity: 1;
 }
 
-.claim-cnft-hint {
-    margin-top: 1rem;
-    padding: 0.75rem 1rem;
-    background: rgba(255, 92, 57, 0.08);
-    border: 1px solid rgba(255, 92, 57, 0.2);
-    border-radius: 0.5rem;
-    text-align: left;
-}
-
-.claim-cnft-hint .hint-title {
-    font-size: 0.85rem;
-    font-weight: 600;
-    margin-bottom: 0.35rem;
-    color: var(--text-primary);
-}
-
-.claim-cnft-hint .hint-desc {
-    font-size: 0.8rem;
-    line-height: 1.4;
-    margin-bottom: 0;
-    color: var(--text-secondary);
-}
-
 /* ===== Deposit Page & Admin Deposit Section ===== */
 
 .admin-deposits {
@@ -7242,174 +6650,6 @@ nav a.active {
     font-weight: 600;
     margin: 0;
     color: var(--text-primary, var(--text-heading));
-}
-
-/* Deposit page inputs */
-.deposit-page {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 2rem 1rem;
-}
-
-.deposit-amount-display {
-    font-size: 1.5rem;
-    font-weight: 700;
-    text-align: center;
-    margin: 0.5rem 0;
-}
-
-.deposit-method-cards {
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-    width: 100%;
-    max-width: 480px;
-}
-
-.deposit-method-card {
-    background: var(--card-bg, rgba(255, 255, 255, 0.03));
-    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    cursor: pointer;
-    transition:
-        border-color 0.2s ease,
-        box-shadow 0.2s ease;
-}
-
-.deposit-method-card:hover {
-    border-color: var(--border-hover, rgba(255, 255, 255, 0.15));
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
-}
-
-.deposit-method-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 0.75rem;
-}
-
-.deposit-method-title {
-    font-size: 1.05rem;
-    font-weight: 600;
-    margin: 0;
-}
-
-.deposit-method-desc {
-    font-size: 0.85rem;
-    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
-    margin-bottom: 0.75rem;
-    line-height: 1.4;
-}
-
-.deposit-pay-url-box {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-    border-radius: var(--radius-sm);
-    padding: 0.75rem 1rem;
-    margin: 0.75rem 0;
-    word-break: break-all;
-    font-size: 0.8rem;
-    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
-    font-family: monospace;
-    text-align: left;
-    line-height: 1.5;
-}
-
-.deposit-actions {
-    display: flex;
-    gap: 0.5rem;
-    justify-content: center;
-    margin-top: 0.75rem;
-}
-
-.deposit-status-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.6rem 0;
-    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-}
-
-.deposit-status-row:last-child {
-    border-bottom: none;
-}
-
-.deposit-status-label {
-    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
-    font-size: 0.9rem;
-}
-
-.deposit-status-value {
-    font-weight: 500;
-    font-size: 0.9rem;
-}
-
-/* Admin deposit slip card */
-.admin-slip-card {
-    background: var(--card-bg, rgba(255, 255, 255, 0.03));
-    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-    border-radius: var(--radius);
-    padding: 1rem 1.25rem;
-    margin-bottom: 0.75rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    transition: all 0.15s ease;
-}
-
-.admin-slip-card:hover {
-    border-color: var(--border-hover, rgba(255, 255, 255, 0.15));
-}
-
-.admin-slip-info {
-    flex: 1;
-    min-width: 200px;
-}
-
-.admin-slip-attendee {
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-    font-size: 0.95rem;
-}
-
-.admin-slip-amount {
-    font-size: 0.9rem;
-    margin-bottom: 0.25rem;
-}
-
-.admin-slip-meta {
-    color: var(--text-muted, rgba(255, 255, 255, 0.5));
-    font-size: 0.8rem;
-}
-
-.admin-slip-link {
-    color: var(--accent);
-    font-size: 0.85rem;
-    text-decoration: none;
-}
-
-.admin-slip-link:hover {
-    text-decoration: underline;
-}
-
-.admin-slip-actions {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    flex-shrink: 0;
-}
-
-/* Deposit QR hint text */
-.deposit-qr-hint {
-    font-size: 0.8rem;
-    color: var(--text-secondary, rgba(255, 255, 255, 0.5));
-    text-align: center;
-    margin-top: 0.75rem;
 }
 
 /* Form input for deposit page */
@@ -7546,46 +6786,6 @@ nav a.active {
     background: rgba(107, 114, 128, 0.12);
     color: var(--text-muted);
     border: 1px solid rgba(107, 114, 128, 0.15);
-}
-
-/* ===== Advanced Toggle ===== */
-.advanced-toggle-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-    padding: 0.4rem 0;
-    cursor: pointer;
-    user-select: none;
-}
-
-.advanced-toggle-row:hover {
-    opacity: 0.85;
-}
-
-.advanced-toggle-icon {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    transition: transform 0.2s ease;
-}
-
-.advanced-toggle-icon-open {
-    transform: rotate(90deg);
-}
-
-.advanced-toggle-label {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    font-style: italic;
-}
-
-.advanced-fields-hidden {
-    display: none;
-}
-
-/* ===== Deposit Section Conditional ===== */
-.deposit-config-body-hidden {
-    display: none;
 }
 
 /* ===== Events Search Input ===== */
@@ -8074,8 +7274,6 @@ nav a.active {
 .match-item:focus-visible,
 .quiz-option-radio:focus-visible,
 .level-select-item:focus-visible,
-.deposit-method-card:focus-visible,
-.claim-share-x:focus-visible,
 .claim-wallet-input:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
@@ -8093,16 +7291,6 @@ nav a.active {
 
 /* Responsive */
 @media (max-width: 480px) {
-    .deposit-method-cards {
-        max-width: 100%;
-    }
-    .admin-slip-card {
-        flex-direction: column;
-    }
-    .admin-slip-actions {
-        width: 100%;
-        justify-content: flex-end;
-    }
     .events-header-row {
         flex-direction: column;
         align-items: stretch;
@@ -8143,66 +7331,12 @@ nav a.active {
     }
 }
 
-/* ===== Phase 9f: Inline Style Migration Classes ===== */
-
-/*
- * Component and utility classes to replace recurring inline styles across:
- *   deposit.rs, claim.rs, escrow_init.rs, events_page.rs,
- *   admin_escrow.rs, admin_deposit.rs, adventure_config.rs, admin.rs, lib.rs
- *
- * NAMING CONVENTION:
- *   .dep-*   — Deposit flow component classes
- *   .tx-*    — Transaction / on-chain display classes
- *   .wallet-* — Wallet connect / display classes
- *   .hint-*  — Hint / description text classes
- *   .badge-* — Additional badge variants
- *   .u-*     — Generic utility (spacing, layout, text)
- */
-
-/* ---------- Deposit Flow Card ---------- */
-
-/* Main card wrapper for deposit steps (repeats ~8x in deposit.rs)
- * Replaces: style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;" */
-.dep-card {
-    margin-top: 1.5rem;
-    text-align: center;
-    width: 100%;
-    max-width: 480px;
-}
-
-/* Error/unavailable card variant (top margin only)
- * Replaces: style="margin-top:2rem;text-align:center;" */
-.dep-card-error {
-    margin-top: 2rem;
-    text-align: center;
-}
-
-/* QR payment polling indicator */
-.dep-qr-polling {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-    margin-top: 0.75rem;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
-
 /* ---------- Deposit Info Note Box ---------- */
 
 /* Dashed-border info note (repeats ~6x)
  * Replaces: style="margin-top:0.75rem;padding:0.75rem;background:var(--bg-secondary);border-radius:8px;border:1px dashed var(--border-color);" */
 .dep-info-note {
     margin-top: 0.75rem;
-    padding: 0.75rem;
-    background: var(--bg-secondary);
-    border-radius: var(--radius-sm);
-    border: 1px dashed var(--border);
-}
-
-/* Variant with top=1rem spacing */
-.dep-info-note-lg {
-    margin-top: 1rem;
     padding: 0.75rem;
     background: var(--bg-secondary);
     border-radius: var(--radius-sm);
@@ -8256,48 +7390,6 @@ nav a.active {
     margin-left: auto;
 }
 
-/* ---------- Deposit Detail Rows ---------- */
-
-/* Detail row with bottom border (repeats ~4x)
- * Replaces: style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border-color);" */
-.dep-detail-row {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--border);
-}
-
-/* Detail row with center alignment + bottom border
- * Replaces: style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border-color);" */
-.dep-detail-row-center {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--border);
-}
-
-/* Last detail row (no border)
- * Replaces: style="display:flex;justify-content:space-between;padding:0.5rem 0;" */
-.dep-detail-row-last {
-    display: flex;
-    justify-content: space-between;
-    padding: 0.5rem 0;
-}
-
-/* Label text in detail rows
- * Replaces: style="color:var(--text-secondary);" */
-.dep-label {
-    color: var(--text-secondary);
-}
-
-/* Detail rows wrapper (left-aligned)
- * Replaces: style="text-align:left;margin:1rem 0;" */
-.dep-details-block {
-    text-align: left;
-    margin: 1rem 0;
-}
-
 /* ---------- TX Hash Display ---------- */
 
 /* TX hash display box (repeats ~6x)
@@ -8334,20 +7426,6 @@ nav a.active {
 
 .tx-explorer-link:hover {
     color: var(--accent-hover);
-}
-
-/* Pay URL display box (shows the full Solana Pay URL)
- * Replaces: style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1rem;word-break:break-all;font-size:0.8rem;color:var(--text-secondary);text-align:left;" */
-.tx-pay-url-box {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 1rem;
-    margin-bottom: 1rem;
-    word-break: break-all;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    text-align: left;
 }
 
 /* ---------- Wallet Connect Buttons ---------- */
@@ -8426,27 +7504,10 @@ nav a.active {
     border-width: 3px;
 }
 
-/* ---------- Action Buttons ---------- */
-
-/* Large action button (primary CTA in deposit flows)
- * Replaces: style="font-size:1.1rem;padding:0.8rem;" on .btn-primary/.btn-success */
-.btn-action-lg {
-    font-size: 1.1rem;
-    padding: 0.8rem;
-}
-
 /* Secondary action button with top margin
  * Replaces: style="margin-top:0.75rem;" on .btn-outline */
 .btn-action-secondary {
     margin-top: 0.75rem;
-}
-
-/* Small action button
- * Replaces: style="margin-top:0.5rem;font-size:0.9rem;padding:0.6rem;" */
-.btn-action-sm {
-    margin-top: 0.5rem;
-    font-size: 0.9rem;
-    padding: 0.6rem;
 }
 
 /* ---------- Back to Home Link ---------- */
@@ -8490,20 +7551,6 @@ nav a.active {
     text-align: center;
 }
 
-/* Success title text
- * Replaces: style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem;" */
-.success-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-}
-
-/* "Go Home" button wrapper with top margin
- * Replaces: style="margin-top:1rem;" or style="margin-top:1.25rem;" */
-.action-row-top {
-    margin-top: 1rem;
-}
-
 .action-row-top-lg {
     margin-top: 1.25rem;
 }
@@ -8525,24 +7572,6 @@ nav a.active {
     margin: 0 auto 0.75rem;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     width: fit-content;
-}
-
-/* QR loading state — pulsing placeholder */
-.qr-loading {
-    flex-direction: column;
-    gap: 0.5rem;
-    background: var(--bg-secondary);
-    border: 2px dashed var(--border);
-    box-shadow: none;
-}
-
-.qr-loading-spinner {
-    width: 28px;
-    height: 28px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
 }
 
 /* QR image — large (256px, Solana Pay)
@@ -8586,28 +7615,6 @@ nav a.active {
     box-shadow: 0 0 0 2px rgba(255, 92, 57, 0.2);
 }
 
-/* ---------- Payment Method Layout ---------- */
-
-/* Payment methods container
- * Replaces: style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:1.5rem;" */
-.dep-methods {
-    width: 100%;
-    max-width: 480px;
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-/* Badge row / flex wrap row for status badges
- * Replaces: style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;margin-bottom:1rem;" */
-.badge-row {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    flex-wrap: wrap;
-    margin-bottom: 1rem;
-}
-
 /* ---------- Hint / Description Text ---------- */
 
 /* Description text (repeats ~20x)
@@ -8647,16 +7654,6 @@ nav a.active {
 .hint-2xs {
     font-size: 0.8rem;
     color: var(--text-secondary);
-}
-
-/* PromptPay amount text
- * Replaces: style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;" */
-.text-amount {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 1rem;
-    text-align: center;
 }
 
 /* ---------- 404 Page ---------- */
@@ -8819,50 +7816,6 @@ nav a.active {
     font-size: 0.7rem;
 }
 
-/* ---------- Deposit Section Dividers ---------- */
-
-/* Border-top divider section
- * Replaces: style="border-top:1px solid var(--border-color);padding-top:1rem;margin-top:0.5rem;" */
-.dep-divider-section {
-    border-top: 1px solid var(--border);
-    padding-top: 1rem;
-    margin-top: 0.5rem;
-}
-
-/* ---------- File Upload / Slip Upload ---------- */
-
-/* File input wrapper
- * Replaces: style="margin-bottom:0.75rem;" */
-.upload-field {
-    margin-bottom: 0.75rem;
-}
-
-/* Upload label
- * Replaces: style="display:block;font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.3rem;" */
-.upload-label {
-    display: block;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.3rem;
-}
-
-/* File input styling
- * Replaces: style="width:100%;font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.5rem;" */
-.upload-input {
-    width: 100%;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.5rem;
-}
-
-/* ---------- Details/Summary Toggle ---------- */
-
-/* Details wrapper
- * Replaces: style="margin-bottom:0.75rem;" on <details> */
-.details-toggle {
-    margin-bottom: 0.75rem;
-}
-
 /* Summary text
  * Replaces: style="font-size:0.8rem;color:var(--text-secondary);cursor:pointer;margin-bottom:0.3rem;" */
 .details-summary-text {
@@ -8870,17 +7823,6 @@ nav a.active {
     color: var(--text-secondary);
     cursor: pointer;
     margin-bottom: 0.3rem;
-}
-
-/* ---------- Deposit QR Hint ---------- */
-
-/* QR pay instruction text
- * Replaces: style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.3rem;" */
-.qr-hint-text {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    margin-top: 0;
-    text-align: center;
 }
 
 /* ---------- Events Deposit Config Inline Styles ---------- */
@@ -8900,23 +7842,6 @@ nav a.active {
     font-size: 0.95rem;
     font-weight: 600;
     color: var(--text-secondary);
-}
-
-/* Escrow initialized badge (inline success panel)
- * Replaces: style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success);border-radius:6px;background:rgba(0,128,0,0.05)" */
-.escrow-initialized-badge {
-    margin-top: 0.75rem;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--success);
-    border-radius: var(--radius-sm);
-    background: var(--success-bg);
-}
-
-/* Escrow initialized label
- * Replaces: style="font-size:0.8rem;color:var(--success)" */
-.escrow-badge-text {
-    font-size: 0.8rem;
-    color: var(--success);
 }
 
 /* Wallet locked hint
@@ -9026,33 +7951,6 @@ nav a.active {
     50% {
         opacity: 0.7;
     }
-}
-
-/* ---------- Admin Stats ---------- */
-
-/* Admin header weight
- * Replaces: style="font-weight:600;margin-bottom:0.25rem" in admin_deposit */
-.admin-item-title {
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-}
-
-/* ---------- Remaining edge-case utilities ---------- */
-
-/* Subtitle with larger bottom margin
- * Replaces: style="margin-bottom:1.5rem" on subtitle */
-.subtitle-lg {
-    margin-bottom: 1.5rem;
-}
-
-/* Bottom margin 1rem override for layout containers */
-.u-mb-1rem {
-    margin-bottom: 1rem;
-}
-
-/* Bottom margin 0.5rem override */
-.u-mb-half {
-    margin-bottom: 0.5rem;
 }
 
 /* Top margin 1rem override */
@@ -9360,26 +8258,13 @@ nav a.active {
 /* ---------- Responsive overrides for Phase 9f ---------- */
 
 @media (max-width: 480px) {
-    .dep-card {
-        max-width: 100%;
-    }
     .wallet-connected-bar {
         flex-direction: column;
         gap: 0.5rem;
     }
-    .dep-detail-row,
-    .dep-detail-row-center,
-    .dep-detail-row-last {
-        flex-direction: column;
-        gap: 0.25rem;
-    }
     .qr-img-lg {
         width: 220px;
         height: 220px;
-    }
-    .badge-row {
-        flex-direction: column;
-        align-items: center;
     }
     .dep-config-row {
         flex-wrap: wrap;
@@ -9681,14 +8566,6 @@ nav a.active {
         var(--bg-card) 100%
     );
 }
-.ticket-action-card--danger {
-    border-left-color: var(--danger);
-    background: linear-gradient(
-        135deg,
-        var(--danger-bg) 0%,
-        var(--bg-card) 100%
-    );
-}
 .ticket-action-card--info {
     border-left-color: var(--info);
     background: linear-gradient(135deg, var(--info-bg) 0%, var(--bg-card) 100%);
@@ -9741,12 +8618,6 @@ nav a.active {
 .ticket-action-card--refund .ticket-action-btn:hover {
     opacity: 0.85;
 }
-.ticket-action-card--danger .ticket-action-btn {
-    background: var(--danger);
-}
-.ticket-action-card--danger .ticket-action-btn:hover {
-    opacity: 0.85;
-}
 .ticket-action-card--info .ticket-action-btn {
     background: var(--info);
 }
@@ -9796,10 +8667,6 @@ nav a.active {
     background: var(--success);
     border: 2px solid var(--success);
 }
-.ticket-timeline-dot--current {
-    background: var(--bg-primary);
-    border: 2px solid var(--accent);
-}
 .ticket-timeline-dot--pending {
     background: var(--bg-primary);
     border: 2px solid var(--text-muted);
@@ -9830,35 +8697,6 @@ nav a.active {
     border: 1px solid var(--border);
     overflow: hidden;
 }
-.ticket-video-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem 1rem;
-    border-bottom: 1px solid var(--border);
-}
-.ticket-video-header svg {
-    color: var(--danger);
-    flex-shrink: 0;
-}
-.ticket-video-header span {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-.ticket-video-embed {
-    position: relative;
-    width: 100%;
-    padding-bottom: 56.25%;
-    background: #000;
-}
-.ticket-video-embed iframe {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    border: none;
-}
 .ticket-video-link {
     display: inline-flex;
     align-items: center;
@@ -9886,12 +8724,6 @@ nav a.active {
     text-align: center;
     padding: 0.75rem 1rem;
 }
-.ticket-event-badge {
-    width: 64px;
-    height: 64px;
-    border-radius: var(--radius);
-    object-fit: cover;
-}
 .ticket-event-tagline {
     font-size: 0.85rem;
     color: var(--text-secondary);
@@ -9908,46 +8740,6 @@ nav a.active {
     transition: color 0.15s ease;
 }
 .ticket-event-link:hover {
-    color: var(--accent-hover);
-}
-
-/* --- 10. NFT Claimed --- */
-.ticket-nft-card {
-    max-width: 420px;
-    width: 100%;
-    background: var(--bg-card);
-    border-radius: var(--radius);
-    border: 1px solid var(--success-border);
-    padding: 1rem 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-.ticket-nft-card .ticket-action-title {
-    color: var(--success);
-}
-.ticket-nft-asset-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-family: monospace;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-sm);
-    padding: 0.5rem 0.75rem;
-}
-.ticket-nft-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--accent);
-    text-decoration: none;
-    transition: color 0.15s ease;
-}
-.ticket-nft-link:hover {
     color: var(--accent-hover);
 }
 
@@ -10733,51 +9525,11 @@ a.ticket-series-card:hover {
     font-size: 0.85rem;
 }
 
-/* ===== THB Payment Flow ===== */
-
-/* How-to-pay instruction box */
-.thb-how-to-pay {
-    background: rgba(255, 255, 255, 0.04);
-    border-radius: var(--radius);
-    padding: 0.75rem;
-    margin-bottom: 1rem;
-}
-
-.thb-how-to-pay-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 0.5rem;
-}
-
-.thb-how-to-pay ol {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    margin: 0;
-    padding-left: 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-}
-
 /* Slip upload hint below file input */
 .thb-slip-hint {
     color: var(--text-secondary);
     font-size: 0.75rem;
     margin: 0.25rem 0 0.5rem;
-}
-
-/* Bank info section divider */
-.thb-bank-section {
-    margin-top: 1rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
-    padding-top: 0.75rem;
-}
-
-.thb-bank-label {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    margin-bottom: 0.5rem;
 }
 
 /* Small centered disclaimer under upload button */
@@ -10787,16 +9539,6 @@ a.ticket-series-card:hover {
     text-align: center;
     margin-top: 0.25rem;
     margin-bottom: 0;
-}
-
-/* THB uploaded success card */
-.thb-success-card {
-    margin-top: 2rem;
-    text-align: center;
-}
-
-.thb-success-card .badge {
-    margin-top: 0.5rem;
 }
 
 .thb-success-redirect {
@@ -10974,13 +9716,6 @@ a.ticket-series-card:hover {
     font-size: 0.9rem;
 }
 
-/* Capacity */
-.pe-capacity-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
 /* Capacity dashboard grid */
 .pe-capacity-grid {
     display: grid;
@@ -11009,54 +9744,6 @@ a.ticket-series-card:hover {
     font-size: 0.75rem;
     color: var(--text-secondary);
     margin-top: 0.25rem;
-}
-
-/* Deposit method rows */
-.pe-method-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-}
-
-.pe-method-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.pe-method-row--closed {
-    opacity: 0.5;
-}
-
-.pe-method-label {
-    background: var(--bg-hover);
-    border-radius: var(--radius-sm);
-    padding: 0.15rem 0.5rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-}
-
-.pe-method-label--closed {
-    text-decoration: line-through;
-}
-
-.pe-method-amount {
-    color: var(--text-primary);
-    font-size: 1.1rem;
-    font-weight: 600;
-}
-
-.pe-method-amount--closed {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    text-decoration: line-through;
-}
-
-.pe-method-via {
-    color: var(--text-secondary);
-    font-size: 0.8rem;
 }
 
 /* Refund items */
@@ -11105,17 +9792,6 @@ a.ticket-series-card:hover {
     padding: 0.6rem 1rem;
     margin-bottom: 0.75rem;
     box-shadow: var(--shadow);
-}
-
-/* Signed-in indicator */
-.pe-signed-in-row {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-    padding: 0.5rem 0.75rem;
-    background: rgba(52, 211, 153, 0.1);
-    border-radius: var(--radius);
 }
 
 /* Form elements */
@@ -11204,16 +9880,6 @@ a.ticket-series-card:hover {
 .pe-checkbox {
     margin-top: 0.2rem;
     accent-color: var(--accent);
-}
-
-/* Optional checkbox — muted styling */
-.pe-checkbox-optional {
-    opacity: 0.7;
-    font-size: 0.8rem;
-}
-
-.pe-checkbox-optional:hover {
-    opacity: 1;
 }
 
 /* Developer profile section (Issue #049) */
@@ -11409,11 +10075,6 @@ a.ticket-series-card:hover {
     margin-top: 0.25rem;
 }
 
-/* Top margin */
-.pe-mt-05 {
-    margin-top: 0.5rem;
-}
-
 /* Flex row with small gap */
 .pe-flex-row-gap {
     display: flex;
@@ -11425,13 +10086,6 @@ a.ticket-series-card:hover {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-}
-
-/* Flex column with small gap */
-.pe-flex-col-gap-sm {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
 }
 
 /* Centered button row */
@@ -11495,11 +10149,6 @@ a.ticket-series-card:hover {
 /* Emoji icon sizing */
 .pe-emoji-icon {
     font-size: 0.9rem;
-}
-
-/* Success checkmark */
-.pe-checkmark {
-    color: var(--success);
 }
 
 /* Left margin indent for field errors */
@@ -11597,12 +10246,6 @@ a.ticket-series-card:hover {
     padding: 1rem 1.5rem 3rem;
 }
 
-.landing-section-how {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 4rem 1.5rem;
-}
-
 .landing-section-narrow {
     max-width: 720px;
     margin: 0 auto;
@@ -11619,17 +10262,6 @@ a.ticket-series-card:hover {
 .landing-section-header-sm {
     text-align: center;
     margin-bottom: 1.5rem;
-}
-
-.landing-section-header-md {
-    text-align: center;
-    margin-bottom: 2rem;
-}
-
-.landing-section-header-center {
-    text-align: center;
-    max-width: 480px;
-    margin: 0 auto;
 }
 
 /* ── Landing Typography ──────────────────────────────────────────── */
@@ -11872,563 +10504,6 @@ a.ticket-series-card:hover {
     color: var(--solana);
 }
 
-/* ── Landing How-It-Works Swimlane ───────────────────────────────── */
-
-.landing-role-tabs {
-    display: flex;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-bottom: 2rem;
-}
-
-.landing-role-tab {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.5rem 1rem;
-    border-radius: 9999px;
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.landing-step-flow {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-    margin-bottom: 1.5rem;
-}
-
-.landing-step-flow-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.35rem;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-}
-
-.landing-step-flow-dot {
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.85rem;
-    transition: all 0.15s;
-}
-
-.landing-step-flow-dot-inner {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.landing-step-flow-label {
-    font-size: 0.65rem;
-    max-width: 4.5rem;
-    text-align: center;
-    line-height: 1.2;
-}
-
-.landing-step-flow-line {
-    width: 2rem;
-    height: 2px;
-    flex-shrink: 0;
-}
-
-/* ── Landing Swimlane Mini ───────────────────────────────────────── */
-
-.landing-swimlane-mini-list {
-    margin-top: 2.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.landing-swimlane-mini-btn {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.65rem 0.85rem;
-    border-radius: var(--radius);
-    cursor: pointer;
-    width: 100%;
-    text-align: left;
-    transition: all 0.15s;
-}
-
-.landing-swimlane-mini-label {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    min-width: 5.5rem;
-}
-
-.landing-swimlane-mini-dots {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-.landing-swimlane-mini-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-}
-
-.landing-swimlane-mini-arrow {
-    width: 0.75rem;
-    height: 1px;
-    background: var(--border);
-}
-
-.landing-swimlane-mini-viewing {
-    font-size: 0.6rem;
-    margin-left: auto;
-    font-weight: 600;
-}
-
-/* ── Landing Mockup ──────────────────────────────────────────────── */
-
-.landing-mockup-wrapper {
-    max-width: 340px;
-    margin: 0 auto;
-}
-
-.landing-mockup {
-    transition:
-        opacity 0.2s ease,
-        transform 0.2s ease;
-}
-
-.landing-mockup-desc {
-    text-align: center;
-    margin-top: 0.75rem;
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-}
-
-/* ── Swimlane Mockup Cards ─────────────────────────────────────── */
-
-/* Card container */
-.landing-mock-card {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    font-size: 0.8rem;
-}
-.landing-mock-card--center {
-    text-align: center;
-}
-.landing-mock-card--success {
-    border-color: var(--success-border);
-}
-
-/* Card heading */
-.landing-mock-h {
-    font-weight: 600;
-    color: var(--text-heading);
-    margin-bottom: 0.75rem;
-}
-.landing-mock-h--icon {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-.landing-mock-h--sm {
-    margin-bottom: 0.5rem;
-}
-
-/* Value text (bold numbers/amounts) */
-.landing-mock-val {
-    font-weight: 700;
-}
-.landing-mock-val--accent {
-    color: var(--accent-hover);
-    font-size: 1.1rem;
-    font-weight: 700;
-}
-.landing-mock-val--success {
-    color: var(--success);
-    font-size: 1.1rem;
-    font-weight: 700;
-}
-.landing-mock-val--heading {
-    color: var(--text-heading);
-    font-size: 1.1rem;
-    font-weight: 700;
-}
-.landing-mock-val--danger {
-    color: var(--danger);
-    font-size: 1.1rem;
-    font-weight: 700;
-}
-.landing-mock-val--warning {
-    color: var(--warning);
-    font-size: 1.1rem;
-    font-weight: 700;
-}
-
-/* Secondary / muted text */
-.landing-mock-sub {
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-}
-.landing-mock-sub-xs {
-    color: var(--text-secondary);
-    font-size: 0.65rem;
-}
-.landing-mock-sub-right {
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-    margin-top: 0.35rem;
-    text-align: right;
-}
-.landing-mock-sub-after {
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-    margin-top: 0.35rem;
-}
-
-/* Form input surfaces */
-.landing-mock-input {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 0.5rem 0.65rem;
-    color: var(--text-secondary);
-}
-.landing-mock-input--accent {
-    background: var(--accent-bg);
-    border-color: var(--accent-border);
-    color: var(--accent-hover);
-    font-weight: 500;
-}
-.landing-mock-input--success {
-    background: var(--success-bg);
-    border-color: var(--success-border);
-    color: var(--success);
-}
-.landing-mock-input--flex {
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-
-/* CTA buttons inside mockup cards */
-.landing-mock-cta {
-    border-radius: var(--radius-sm);
-    padding: 0.5rem;
-    text-align: center;
-    font-weight: 600;
-}
-.landing-mock-cta--accent {
-    background: var(--accent);
-    color: var(--text-heading);
-    margin-top: 0.75rem;
-}
-.landing-mock-cta--success {
-    background: var(--success);
-    color: var(--text-heading);
-    margin-top: 0.65rem;
-    font-size: 0.75rem;
-}
-
-/* Stat grid cells (dashboard) */
-.landing-mock-stat {
-    text-align: center;
-    border-radius: var(--radius-sm);
-    padding: 0.5rem;
-}
-.landing-mock-stat--accent {
-    background: var(--accent-bg);
-}
-.landing-mock-stat--success {
-    background: var(--success-bg);
-}
-.landing-mock-stat--danger {
-    background: var(--danger-bg);
-}
-
-/* Progress bar */
-.landing-mock-bar {
-    border-radius: 9999px;
-    height: 6px;
-    overflow: hidden;
-}
-.landing-mock-bar--accent {
-    background: rgba(255, 92, 57, 0.1);
-}
-.landing-mock-bar--success {
-    background: rgba(34, 197, 94, 0.1);
-}
-.landing-mock-bar-fill--accent {
-    width: 75%;
-    height: 100%;
-    background: linear-gradient(90deg, var(--accent), var(--accent-hover));
-    border-radius: 9999px;
-}
-.landing-mock-bar-fill--success {
-    width: 95%;
-    height: 100%;
-    background: linear-gradient(90deg, var(--success), var(--success-bright));
-    border-radius: 9999px;
-}
-
-/* Scanner frame + corners */
-.landing-mock-scan-frame {
-    background: var(--bg-primary);
-    border: 2px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.5rem 1rem;
-    margin-bottom: 0.75rem;
-    position: relative;
-}
-.landing-mock-scan-corner {
-    position: absolute;
-    width: 24px;
-    height: 24px;
-}
-.landing-mock-scan-corner--tl {
-    top: 8px;
-    left: 8px;
-    border-top: 3px solid var(--warning);
-    border-left: 3px solid var(--warning);
-    border-radius: 4px 0 0 0;
-}
-.landing-mock-scan-corner--tr {
-    top: 8px;
-    right: 8px;
-    border-top: 3px solid var(--warning);
-    border-right: 3px solid var(--warning);
-    border-radius: 0 4px 0 0;
-}
-.landing-mock-scan-corner--bl {
-    bottom: 8px;
-    left: 8px;
-    border-bottom: 3px solid var(--warning);
-    border-left: 3px solid var(--warning);
-    border-radius: 0 0 0 4px;
-}
-.landing-mock-scan-corner--br {
-    bottom: 8px;
-    right: 8px;
-    border-bottom: 3px solid var(--warning);
-    border-right: 3px solid var(--warning);
-    border-radius: 0 0 4px 0;
-}
-.landing-mock-scan-label {
-    color: var(--text-secondary);
-    font-size: 0.75rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.25rem;
-}
-.landing-mock-scan-status {
-    color: var(--warning);
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
-/* Success circle (check icon container) */
-.landing-mock-circle {
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: 50%;
-    background: rgba(34, 197, 94, 0.15);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.25rem;
-    margin-bottom: 0.5rem;
-}
-
-/* NFT badge (Attendee claim) */
-.landing-mock-badge {
-    display: inline-block;
-    background: linear-gradient(135deg, var(--success), var(--success-bright));
-    border-radius: var(--radius);
-    padding: 0.65rem 1rem;
-    margin-bottom: 0.65rem;
-}
-.landing-mock-badge-title {
-    font-weight: 700;
-    color: var(--text-heading);
-    font-size: 0.9rem;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-.landing-mock-badge-sub {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 0.6rem;
-}
-
-/* Quiz option rows */
-.landing-mock-quiz-opt {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    padding: 0.4rem 0.6rem;
-    color: var(--text-secondary);
-    font-size: 0.7rem;
-}
-.landing-mock-quiz-opt--selected {
-    background: var(--success-bg);
-    border-color: var(--success-border);
-    color: var(--success);
-    font-weight: 600;
-}
-
-/* Wallet pill row */
-.landing-mock-wallet {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid var(--border);
-    border-radius: 9999px;
-    padding: 0.3rem 0.65rem;
-    margin-bottom: 0.65rem;
-}
-.landing-mock-wallet-dot {
-    color: var(--accent-light);
-}
-
-/* Payout sub-cards (Organizer step 3) */
-.landing-mock-payout {
-    border-radius: var(--radius-sm);
-    padding: 0.65rem;
-}
-.landing-mock-payout--success {
-    background: var(--success-bg);
-    border: 1px solid rgba(34, 197, 94, 0.2);
-}
-.landing-mock-payout--warning {
-    background: var(--warning-bg);
-    border: 1px solid rgba(245, 158, 11, 0.2);
-}
-.landing-mock-payout-label {
-    font-weight: 600;
-    font-size: 0.7rem;
-    margin-bottom: 0.35rem;
-    display: flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-.landing-mock-payout-label--success {
-    color: var(--success);
-}
-.landing-mock-payout-label--warning {
-    color: var(--warning);
-}
-
-/* QR code frame + grid */
-.landing-mock-qr-frame {
-    display: inline-block;
-    background: var(--text-heading);
-    border-radius: var(--radius);
-    padding: 0.75rem;
-    margin-bottom: 0.75rem;
-}
-.landing-mock-qr-grid {
-    width: 80px;
-    height: 80px;
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 1px;
-}
-.landing-mock-qr-pixel {
-    width: 8px;
-    height: 8px;
-    border-radius: 1px;
-}
-
-/* Claim title (Attendee step 4) */
-.landing-mock-claim-title {
-    color: var(--text-heading);
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.3rem;
-}
-
-/* Layout helpers */
-.landing-mock-flex-col {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-.landing-mock-flex-row {
-    display: flex;
-    gap: 0.5rem;
-}
-.landing-mock-flex-row-lg {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 0.75rem;
-}
-.landing-mock-flex-center {
-    display: flex;
-    justify-content: center;
-    gap: 1rem;
-    margin-bottom: 0.5rem;
-}
-.landing-mock-grid-3 {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 0.5rem;
-    margin-bottom: 0.75rem;
-}
-.landing-mock-grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-}
-.landing-mock-grow {
-    flex: 1;
-}
-.landing-mock-right {
-    text-align: right;
-}
-
-/* Margin utilities for mockup cards */
-.landing-mock-mb-xs {
-    margin-bottom: 0.25rem;
-}
-.landing-mock-mb-sm {
-    margin-bottom: 0.65rem;
-}
-.landing-mock-mb-md {
-    margin-bottom: 0.75rem;
-}
-.landing-mock-mt-xs {
-    margin-top: 0.25rem;
-}
-.landing-mock-mt-xxs {
-    margin-top: 0.15rem;
-}
-.landing-mock-circle--empty {
-    background: transparent;
-}
-.landing-mock-sub--success-bold {
-    color: var(--success);
-    font-weight: 600;
-}
-
 /* ── Landing FAQ ─────────────────────────────────────────────────── */
 
 .landing-faq-grid {
@@ -12555,26 +10630,6 @@ a.ticket-series-card:hover {
 .landing-events-loading-text {
     color: var(--text-secondary);
     font-size: 0.9rem;
-    margin-top: 0.75rem;
-}
-
-.landing-events-empty {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-}
-.landing-events-empty-sub {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    margin-top: 0.25rem;
-}
-.landing-events-empty-sub a {
-    color: var(--solana);
-    text-decoration: none;
-}
-.landing-events-empty-sub a:hover {
-    text-decoration: underline;
-}
-.landing-events-empty-cta {
     margin-top: 0.75rem;
 }
 
@@ -12767,12 +10822,6 @@ a.ticket-series-card:hover {
     color: #fff;
 }
 
-.landing-reg-user {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
 .landing-reg-grid {
     display: grid;
     gap: 0.75rem;
@@ -12791,38 +10840,13 @@ a.ticket-series-card:hover {
     margin-top: 0.15rem;
 }
 
-.landing-reg-empty-user {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    margin-bottom: 0.5rem;
-}
-
 .landing-reg-empty-text {
     color: var(--text-secondary);
     font-size: 0.85rem;
 }
-
-.landing-reg-signout-btn {
-    margin-top: 0.75rem;
-}
 .landing-reg-action {
     text-decoration: none;
     font-size: 0.85rem;
-}
-
-/* ── Landing Social Proof ────────────────────────────────────────── */
-
-.landing-social-pill-solana {
-    text-decoration: none;
-    color: var(--text-secondary);
-    border-color: rgba(255, 92, 57, 0.3);
-}
-
-.landing-social-pill-cta {
-    text-decoration: none;
-    color: var(--accent);
-    border-color: rgba(255, 92, 57, 0.4);
-    cursor: pointer;
 }
 
 /* ── Landing Footer ──────────────────────────────────────────────── */
@@ -12943,10 +10967,6 @@ a.ticket-series-card:hover {
 
 .scanner-mt-075 {
     margin-top: 0.75rem;
-}
-
-.scanner-mt-025 {
-    margin-top: 0.25rem;
 }
 
 .scanner-btn-escrow {
@@ -13712,28 +11732,6 @@ a.ticket-series-card:hover {
     font-size: 0.75rem;
 }
 
-/* ===== dep-choose inline style extractions (choose_payment.rs) ===== */
-
-/* dep-info-note with bottom spacing — extends dep-info-note */
-.dep-choose-note-mb {
-    margin-bottom: 1rem;
-}
-
-/* Badge with bottom spacing in choose payment */
-.dep-choose-badge-mb {
-    margin-bottom: 0.5rem;
-}
-
-/* Hint note with top spacing */
-.dep-choose-hint-mt {
-    margin-top: 0.5rem;
-}
-
-/* Change method button spacing */
-.dep-choose-back-btn {
-    margin-bottom: 0.75rem;
-}
-
 /* ===== events inline style extractions (events_page.rs) ===== */
 
 /* Flex row with wrap and center alignment (extends flex-row-gap) */
@@ -13883,12 +11881,6 @@ a.ticket-series-card:hover {
     width: 14px;
     height: 14px;
 }
-.dep-badge-mt {
-    margin-top: 0.5rem;
-}
-.dep-refund-badge-mb {
-    margin-bottom: 0.75rem;
-}
 
 /* ========================================================================
    Deposit v2 — Redesigned deposit flow classes (dep2- prefix)
@@ -13972,10 +11964,6 @@ a.ticket-series-card:hover {
     border-radius: 9999px;
     letter-spacing: 0.03em;
     text-transform: uppercase;
-}
-.dep2-method-icon {
-    font-size: 1.5rem;
-    margin-bottom: 0.25rem;
 }
 .dep2-method-name {
     font-size: 0.95rem;
@@ -14098,19 +12086,6 @@ a.ticket-series-card:hover {
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 0.75rem;
-}
-.dep2-step-num {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: white;
-    font-size: 0.7rem;
-    font-weight: 800;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
 }
 
 /* 6. Deadline/urgency banner */
@@ -14336,12 +12311,6 @@ a.ticket-series-card:hover {
         font-size: 0.6rem;
         top: -0.55rem;
     }
-}
-
-/* Rejected slip warning icon */
-.dep2-icon--danger {
-    color: var(--danger, red);
-    font-size: 1.5rem;
 }
 
 /* ========================================================================
@@ -14614,11 +12583,6 @@ a.ticket-series-card:hover {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 0.75rem;
-}
-
-.dev-score-tier-badge {
-    font-size: 1rem;
-    padding: 0.4rem 0.85rem;
 }
 
 .dev-score-value {
@@ -16003,11 +13967,6 @@ a.ticket-series-card:hover {
     color: var(--text-primary);
 }
 
-.dev-profile-telegram-widget {
-    font-size: 0.8rem;
-    color: #94a3b8;
-}
-
 /* ==========================================================================
    Developer Passport Card (Landing Page)
    ========================================================================== */
@@ -16132,8 +14091,6 @@ a.ticket-series-card:hover {
         justify-content: space-between;
     }
 }
-
-
 
 /* ============================================================
    Night Edition — landing stat stubs (paper tickets on night)
