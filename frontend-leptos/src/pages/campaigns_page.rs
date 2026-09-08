@@ -871,7 +871,7 @@ pub fn CampaignsPage(
             <Show when=move || current_view.get() == CampaignView::List fallback=|| view! { <div></div> }>
                 <div class="events-header-row">
                     <h2 class="admin-section-heading">
-                        <Icon icon=IconName::Trophy class="icon-heading" />
+                        <Icon icon=IconName::Trophy class="icon-md" />
                         " Campaigns & Series"
                     </h2>
                     <div class="events-header-actions">
@@ -881,13 +881,13 @@ pub fn CampaignsPage(
                     </div>
                 </div>
                 <Show when=move || loading.get() fallback=|| view! { <div></div> }>
-                    <div class="empty-state">
+                    <div class="admin-empty-state">
                         <span class="status-dot status-dot-loading"></span>
                         " Loading campaigns..."
                     </div>
                 </Show>
                 <Show when=move || !loading.get() && campaigns.get().is_empty() fallback=|| view! { <div></div> }>
-                    <div class="empty-state">
+                    <div class="admin-empty-state">
                         <Icon icon=IconName::Trophy class="icon-lg" />
                         <p>"No campaigns yet. Create your first campaign."</p>
                     </div>
@@ -928,13 +928,13 @@ pub fn CampaignsPage(
                                             </div>
                                             <div class="card-header-actions">
                                                 <button
-                                                    class="btn btn-secondary btn-sm"
+                                                    class="btn btn-outline btn-sm"
                                                     on:click=move |_: web_sys::MouseEvent| handle_view(cid_view.clone())
                                                 >
                                                     "View"
                                                 </button>
                                                 <button
-                                                    class="btn btn-secondary btn-sm"
+                                                    class="btn btn-outline btn-sm"
                                                     on:click={
                                                         let c_edit = c_edit.clone();
                                                         move |_: web_sys::MouseEvent| handle_edit(c_edit.clone())
@@ -1014,7 +1014,7 @@ pub fn CampaignsPage(
                             }
                         }}
                     </h2>
-                    <button class="btn btn-secondary btn-sm" on:click=handle_back>
+                    <button class="btn btn-outline btn-sm" on:click=handle_back>
                         "← Back"
                     </button>
                 </div>
@@ -1255,7 +1255,7 @@ pub fn CampaignsPage(
                             >
                                 {move || if saving.get() { "Saving..." } else { "Save Campaign" }}
                             </button>
-                            <button class="btn btn-secondary" on:click=handle_back>
+                            <button class="btn btn-outline" on:click=handle_back>
                                 "Cancel"
                             </button>
                         </div>
@@ -1268,7 +1268,7 @@ pub fn CampaignsPage(
                     <h2 class="admin-section-heading">
                         {move || campaign_detail.get().map(|d| d.campaign.title.clone()).unwrap_or_default()}
                     </h2>
-                    <button class="btn btn-secondary btn-sm" on:click=handle_back>
+                    <button class="btn btn-outline btn-sm" on:click=handle_back>
                         "← Back"
                     </button>
                 </div>
@@ -1335,7 +1335,7 @@ pub fn CampaignsPage(
                     </div>
                 </div>
                 // Tabs
-                <div class="tab-bar">
+                <div class="tabs">
                     <button
                         class=move || if detail_tab.get() == DetailTab::Events { "tab active" } else { "tab" }
                         on:click=move |_| set_detail_tab.set(DetailTab::Events)
@@ -1390,7 +1390,7 @@ pub fn CampaignsPage(
                                 }
                             }}
                             <button
-                                class="btn btn-sm btn-secondary"
+                                class="btn btn-sm btn-outline"
                                 style="margin-left: 0.75rem; padding: 0.15rem 0.5rem; font-size: 0.75rem;"
                                 on:click=move |_: web_sys::MouseEvent| set_draft_nudge.set(None)
                             >
@@ -1533,7 +1533,7 @@ pub fn CampaignsPage(
                                 }
                                 fallback=|| view! { <div></div> }
                             >
-                                <div class="empty-state">
+                                <div class="admin-empty-state">
                                     <p>"No events in this campaign yet."</p>
                                 </div>
                             </Show>
@@ -1548,7 +1548,7 @@ pub fn CampaignsPage(
                         </div>
                         <div class="card-body">
                             <Show when=move || progress.get().is_empty() fallback=|| view! { <div></div> }>
-                                <div class="empty-state">
+                                <div class="admin-empty-state">
                                     <p>"No developer progress yet."</p>
                                 </div>
                             </Show>
@@ -1674,7 +1674,7 @@ pub fn CampaignsPage(
                                     let rate = s.completion_rate;
                                     let rate_pct = format!("{:.1}%", rate * 100.0);
                                     view! {
-                                        <div class="stats-overview">
+                                        <div class="stats-grid">
                                             <div class="stat-card">
                                                 <div class="stat-value">{s.total_enrolled.to_string()}</div>
                                                 <div class="stat-label">"Enrolled"</div>
@@ -1688,9 +1688,9 @@ pub fn CampaignsPage(
                                                 <div class="stat-label">"Completion Rate"</div>
                                             </div>
                                         </div>
-                                        <div class="progress-bar-wrapper">
+                                        <div class="progress-bar">
                                             <div
-                                                class="progress-bar-fill"
+                                                class="progress-fill"
                                                 style=format!("width: {}%", (rate * 100.0).min(100.0))
                                             ></div>
                                         </div>

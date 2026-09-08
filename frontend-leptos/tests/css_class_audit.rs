@@ -10,8 +10,10 @@
 //!    `landing-*` rules orphaned by a landing-page redesign whose Rust
 //!    components were deleted while their CSS was not.
 //! 2. **Unstyled markup.** A class is applied in Rust that no rule defines, so
-//!    the element silently renders unstyled. The same sweep found 108 of these
-//!    already present; they are baselined in `KNOWN_UNSTYLED` below.
+//!    the element silently renders unstyled. The same sweep found 108 of these;
+//!    30 were then fixed in `campaigns_page.rs` and the files sharing its form
+//!    and table vocabulary, and the remaining 78 are baselined in
+//!    `KNOWN_UNSTYLED` below.
 //!
 //! ## Why two different "used" sets
 //!
@@ -65,14 +67,16 @@ use std::path::{Path, PathBuf};
 /// Classes applied in Rust that no CSS rule defines, as of the 2026-09 audit.
 ///
 /// These predate the guard and are baselined so it can gate *new* regressions.
-/// They are not all benign — `btn-secondary`, `btn-ghost`, `form-group`,
-/// `table` and the `stat-tile-*` family read like markup expecting styling that
-/// simply is not there. Burning this list down is tracked separately; the
-/// discipline of not growing it is what this guard enforces.
+/// They are not all benign — `btn-ghost` and the `stat-tile-*` family read like
+/// markup expecting styling that simply is not there, exactly as the 30 classes
+/// already burned down from this list did (`table` rendered at browser default
+/// inside a dark theme; `btn-secondary` was a stale name for the existing
+/// `.btn-outline`). The discipline of not growing this list is what the guard
+/// enforces; `known_unstyled_baseline_has_no_stale_entries` makes sure it can
+/// only shrink.
 const KNOWN_UNSTYLED: &[&str] = &[
     "access-logistics-card",
     "admin-actions-divider",
-    "admin-campaigns-page",
     "admin-content-inner",
     "admin-dep-credit-used",
     "admin-escrow",
@@ -97,14 +101,6 @@ const KNOWN_UNSTYLED: &[&str] = &[
     "badge-info-xs",
     "badge-muted",
     "btn-ghost",
-    "btn-secondary",
-    "campaign-detail-info",
-    "campaign-detail-row",
-    "campaigns-list",
-    "card-body",
-    "card-header-actions",
-    "card-header-left",
-    "card-meta",
     "dashboard-btn-toggle",
     "dashboard-state-loading",
     "dep2-info-note",
@@ -115,7 +111,6 @@ const KNOWN_UNSTYLED: &[&str] = &[
     "dpad-left",
     "dpad-right",
     "dpad-up",
-    "empty-state",
     "event-card-body",
     "event-card-cta",
     "event-card-date",
@@ -127,21 +122,11 @@ const KNOWN_UNSTYLED: &[&str] = &[
     "event-card-title",
     "events-grid",
     "events-grid-3",
-    "form-actions",
-    "form-advanced",
-    "form-advanced-summary",
-    "form-group",
-    "form-group-sm",
     "form-hint",
-    "form-label",
-    "form-label-inline",
-    "form-row",
     "form-section-icon-community",
-    "form-select",
     "form-select-sm",
     "hide-mobile",
     "hint-text",
-    "icon-heading",
     "landing-nav-right",
     "landing-user-avatar",
     "landing-user-badge",
@@ -149,15 +134,12 @@ const KNOWN_UNSTYLED: &[&str] = &[
     "manual-input",
     "match-row-left",
     "match-row-right",
-    "meta-item",
     "nfc-card",
     "nfc-page-container",
     "nfc-pulse-ring",
     "panel-title",
     "pe-field-hint",
     "powered-badge",
-    "progress-bar-fill",
-    "progress-bar-wrapper",
     "radio-group",
     "radio-label",
     "recap-body",
@@ -168,13 +150,6 @@ const KNOWN_UNSTYLED: &[&str] = &[
     "stat-tile",
     "stat-tile-label",
     "stat-tile-value",
-    "stats-overview",
-    "status-dot",
-    "status-dot-loading",
-    "tab-bar",
-    "table",
-    "table-header",
-    "table-row",
     "ticket-action-card--rollover",
     "u-mb-xs",
     "u-mt-sm",

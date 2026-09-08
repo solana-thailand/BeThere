@@ -596,7 +596,7 @@ pub fn AdminDeposits(
                     <div class="admin-section-header" style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;">
                         <h3 style="margin:0;">{format!("{} pending slip{}", pending_count.get(), if pending_count.get() != 1 { "s" } else { "" })}</h3>
                         <button
-                            class="btn btn-secondary btn-sm"
+                            class="btn btn-outline btn-sm"
                             title="Record a slip on behalf of an attendee who cannot upload themselves (slip sent via LINE/email, JWT expired, browser bug, etc.). Staff-authed + audited."
                             on:click=move |_| set_show_record_slip_modal.set(true)
                         >
@@ -858,7 +858,7 @@ pub fn AdminDeposits(
                                             // button. Credits the attendee's contact row.
                                             <div class="admin-dep-hold-row">
                                                 <button
-                                                    class="btn btn-secondary btn-sm"
+                                                    class="btn btn-outline btn-sm"
                                                     disabled=hold_disabled
                                                     title="Hold this deposit as rolling credit for the attendee's next event (use when the attendee confirmed hold verbally)"
                                                     on:click=move |_| handle_admin_hold(item_for_hold.clone())

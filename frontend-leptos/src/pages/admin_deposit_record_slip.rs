@@ -284,7 +284,7 @@ pub fn AdminRecordSlipModal(
                                         hint="Tap the image or backdrop to close".to_string()
                                     />
                                     <button
-                                        class="slip-preview-remove btn btn-secondary btn-sm"
+                                        class="slip-preview-remove btn btn-outline btn-sm"
                                         on:click=move |_| {
                                             set_slip_preview.set(None);
                                             if let Some(el) = file_input_ref.get() {
@@ -361,7 +361,7 @@ pub fn AdminRecordSlipModal(
                         style="display:flex;justify-content:flex-end;gap:0.5rem;padding-top:0.75rem;margin-top:0.75rem;border-top:1px solid var(--border-muted, #e5e7eb);"
                     >
                         <button
-                            class="btn btn-secondary"
+                            class="btn btn-outline"
                             on:click=move |_| close()
                             disabled=move || submitting.get()
                         >

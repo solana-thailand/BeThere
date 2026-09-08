@@ -1,0 +1,219 @@
+
+/* ===== Shared Form / Table / Card Primitives =====
+   Added 2026-09-08. These class names were already used in the markup —
+   chiefly `pages/campaigns_page.rs` (mounted by the admin page's Campaigns
+   section), plus `event_summary.rs`, `admin_deposit_record_slip.rs` and
+   `event_form.rs` — but had no rules at all, so the elements rendered at
+   browser defaults. `tests/css_class_audit.rs` guards against that recurring.
+
+   Deliberately generic: several of these are shared across pages, so they use
+   the same tokens and metrics as the existing `.form-input`, `.card` and
+   `.badge` rules rather than introducing a parallel vocabulary. */
+
+/* --- Forms --- */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group-sm {
+    margin-bottom: 0.6rem;
+}
+
+.form-label {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.form-label-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.form-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.form-row > .form-group {
+    flex: 1 1 12rem;
+}
+
+/* Mirrors .form-input so inputs and selects align on the same row. */
+.form-select {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+    outline: none;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+.form-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(255, 92, 57, 0.15);
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.form-advanced {
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.75rem;
+}
+
+.form-advanced-summary {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    list-style: none;
+}
+
+.form-advanced-summary:hover {
+    color: var(--text-primary);
+}
+
+/* --- Tables --- */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.table th,
+.table td {
+    padding: 0.55rem 0.6rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.table-header th {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    white-space: nowrap;
+}
+
+.table-row {
+    transition: background 0.15s ease;
+}
+
+.table-row:hover {
+    background: var(--bg-hover);
+}
+
+.table-row:last-child td {
+    border-bottom: none;
+}
+
+/* --- Card internals ---
+   `.card` already supplies padding, so `.card-body` is a content wrapper
+   rather than a second padded box. */
+.card-body {
+    color: var(--text-secondary);
+    font-size: 0.88rem;
+}
+
+.card-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.card-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-shrink: 0;
+}
+
+.card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    margin-top: 0.6rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+/* --- Status dot --- */
+.status-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.status-dot-loading {
+    background: var(--accent);
+    animation: dep2-dot-pulse 1.2s ease-in-out infinite;
+}
+
+/* --- Campaigns (admin → Campaigns section) --- */
+.admin-campaigns-page {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.campaigns-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.campaign-detail-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.campaign-detail-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.campaign-detail-row strong {
+    color: var(--text-primary);
+    font-weight: 600;
+    min-width: 7rem;
+}
