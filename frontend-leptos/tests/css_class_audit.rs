@@ -4,7 +4,7 @@
 //! which no compiler checks. Two failure modes follow from that, and this file
 //! guards both directions:
 //!
-//! 1. **Dead CSS.** A rule survives in `style.css` after the markup that used
+//! 1. **Dead CSS.** A rule survives in the stylesheets after the markup that used
 //!    it is deleted. This is not hypothetical: a sweep in 2026-09 removed 260
 //!    such classes (316 rule blocks, 12.6% of the file). 104 of them were
 //!    `landing-*` rules orphaned by a landing-page redesign whose Rust
@@ -182,6 +182,32 @@ const KNOWN_UNSTYLED: &[&str] = &[
 
 fn crate_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+}
+
+/// All stylesheets, concatenated in the order `index.html` links them.
+///
+/// `style.css` was split into `styles/style-NN-*.css` in 2026-09; the parts
+/// concatenate byte-for-byte to the original, and the numeric prefix is the
+/// load order. Reading them in sorted order therefore reproduces the exact
+/// cascade the browser sees.
+fn css_sources() -> String {
+    let dir = crate_root().join("styles");
+    let mut files: Vec<PathBuf> = fs::read_dir(&dir)
+        .unwrap_or_else(|e| panic!("read_dir {}: {e}", dir.display()))
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.extension().is_some_and(|e| e == "css"))
+        .collect();
+    assert!(
+        !files.is_empty(),
+        "no stylesheets found in {}",
+        dir.display()
+    );
+    files.sort();
+    files
+        .iter()
+        .map(|p| fs::read_to_string(p).unwrap_or_else(|e| panic!("read {}: {e}", p.display())))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn rust_sources() -> String {
@@ -378,7 +404,7 @@ fn used_in_class_position(rs: &str) -> BTreeSet<String> {
 
 #[test]
 fn no_dead_css_classes() {
-    let css = fs::read_to_string(crate_root().join("style.css")).expect("read style.css");
+    let css = css_sources();
     let rs = rust_sources();
     let defined = css_classes(&css);
     let used = used_broad(&rs);
@@ -396,7 +422,7 @@ fn no_dead_css_classes() {
 
 #[test]
 fn no_unstyled_class_names() {
-    let css = fs::read_to_string(crate_root().join("style.css")).expect("read style.css");
+    let css = css_sources();
     let rs = rust_sources();
     let defined = css_classes(&css);
     let used = used_in_class_position(&rs);
@@ -421,7 +447,7 @@ fn no_unstyled_class_names() {
 /// as the debt is paid rather than silently masking future regressions.
 #[test]
 fn known_unstyled_baseline_has_no_stale_entries() {
-    let css = fs::read_to_string(crate_root().join("style.css")).expect("read style.css");
+    let css = css_sources();
     let rs = rust_sources();
     let defined = css_classes(&css);
     let used = used_in_class_position(&rs);

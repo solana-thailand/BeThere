@@ -144,7 +144,28 @@
             href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
             rel="stylesheet"
         />
-        <link data-trunk rel="css" href="style.css" />
+        <!-- Stylesheet split by section (see styles/). ORDER IS LOAD-BEARING:
+             these files concatenate to the former single style.css byte-for-byte,
+             so the cascade only holds if they stay in this order. -->
+        <link data-trunk rel="css" href="styles/style-01-core.css" />
+        <link data-trunk rel="css" href="styles/style-02-claim.css" />
+        <link data-trunk rel="css" href="styles/style-03-responsive.css" />
+        <link data-trunk rel="css" href="styles/style-04-scanner.css" />
+        <link data-trunk rel="css" href="styles/style-05-admin.css" />
+        <link data-trunk rel="css" href="styles/style-06-admin.css" />
+        <link data-trunk rel="css" href="styles/style-07-quiz.css" />
+        <link data-trunk rel="css" href="styles/style-08-core.css" />
+        <link data-trunk rel="css" href="styles/style-09-core.css" />
+        <link data-trunk rel="css" href="styles/style-10-core.css" />
+        <link data-trunk rel="css" href="styles/style-11-ticket.css" />
+        <link data-trunk rel="css" href="styles/style-12-core.css" />
+        <link data-trunk rel="css" href="styles/style-13-public-event.css" />
+        <link data-trunk rel="css" href="styles/style-14-public-event.css" />
+        <link data-trunk rel="css" href="styles/style-15-event-form.css" />
+        <link data-trunk rel="css" href="styles/style-16-deposit.css" />
+        <link data-trunk rel="css" href="styles/style-17-dashboard.css" />
+        <link data-trunk rel="css" href="styles/style-18-dashboard.css" />
+        <link data-trunk rel="css" href="styles/style-19-deposit.css" />
         <!-- jsQR + QRious loaded lazily by js/lazy_assets.js when Scanner/Claim pages need them -->
     </head>
     <body>

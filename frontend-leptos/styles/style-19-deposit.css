@@ -1,0 +1,503 @@
+/* ===== Ultra-Premium Deposit Commitment Card & Methods ===== */
+.pe-deposit-card {
+    background: rgba(19, 20, 28, 0.75) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(153, 69, 255, 0.25) !important;
+    border-radius: 20px !important;
+    padding: 24px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.pe-deposit-methods-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+    gap: 14px !important;
+    margin-top: 16px !important;
+    margin-bottom: 20px !important;
+}
+
+.pe-method-card {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 14px !important;
+    padding: 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    transition: all 0.2s ease !important;
+}
+
+.pe-method-card:hover {
+    border-color: rgba(153, 69, 255, 0.4) !important;
+    background: rgba(153, 69, 255, 0.06) !important;
+}
+
+.pe-method-card--promptpay {
+    background: linear-gradient(135deg, rgba(0, 59, 114, 0.3) 0%, rgba(0, 114, 206, 0.12) 100%) !important;
+    border: 1px solid rgba(56, 189, 248, 0.35) !important;
+}
+
+.pe-method-card--solana {
+    background: linear-gradient(135deg, rgba(153, 69, 255, 0.15) 0%, rgba(20, 241, 149, 0.1) 100%) !important;
+    border: 1px solid rgba(153, 69, 255, 0.35) !important;
+}
+
+.pe-method-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+}
+
+.pe-method-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    padding: 4px 10px !important;
+    border-radius: 20px !important;
+    letter-spacing: 0.02em !important;
+}
+
+.pe-method-badge--promptpay {
+    background: #003b72 !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.4) !important;
+}
+
+.pe-method-badge--solana {
+    background: rgba(153, 69, 255, 0.25) !important;
+    color: #14F195 !important;
+    border: 1px solid rgba(20, 241, 149, 0.4) !important;
+}
+
+.pe-method-amount-val {
+    font-size: 1.15rem !important;
+    font-weight: 800 !important;
+    color: #ffffff !important;
+}
+
+.pe-method-subtext {
+    font-size: 0.78rem !important;
+    color: #94a3b8 !important;
+    line-height: 1.4 !important;
+}
+
+.pe-journey-timeline {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 12px !important;
+    margin-top: 20px !important;
+    padding: 16px !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 16px !important;
+    text-align: center !important;
+}
+
+.pe-journey-step-num {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 auto 8px auto !important;
+    font-size: 0.85rem !important;
+    font-weight: 800 !important;
+}
+
+@media (max-width: 600px) {
+    .pe-journey-timeline {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 16px !important;
+    }
+}
+
+/* ==========================================================================
+   Social Account Linking Styling (Developer Profile)
+   ========================================================================== */
+
+.dev-profile-social-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    gap: 12px;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.dev-profile-social-row:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.dev-profile-social-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 140px;
+}
+
+.dev-profile-social-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--text-heading);
+}
+
+.dev-profile-social-icon svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+.dev-profile-verified-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(20, 241, 149, 0.15);
+    color: #14F195;
+    border: 1px solid rgba(20, 241, 149, 0.4);
+    letter-spacing: 0.02em;
+}
+
+.dev-profile-social-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-grow: 1;
+    justify-content: flex-end;
+}
+
+.dev-profile-social-connect-btn {
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #14F195 0%, #00c2ff 100%);
+    color: #0b0f19;
+    text-decoration: none;
+    transition: transform 0.15s, opacity 0.15s;
+    box-shadow: 0 2px 10px rgba(20, 241, 149, 0.2);
+}
+
+.dev-profile-social-connect-btn:hover {
+    transform: translateY(-1px);
+    opacity: 0.95;
+}
+
+.dev-profile-social-unlink-btn {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.dev-profile-social-unlink-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.dev-profile-social-link-btn {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.dev-profile-social-link-btn:hover {
+    background: rgba(56, 189, 248, 0.2);
+}
+
+.dev-profile-social-input {
+    max-width: 200px;
+    font-size: 0.82rem;
+    padding: 4px 10px;
+    height: 32px;
+}
+
+.dev-profile-social-handle {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Developer Passport Card (Landing Page)
+   ========================================================================== */
+
+.landing-dev-passport {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 22px;
+    background: linear-gradient(135deg, rgba(20, 241, 149, 0.06) 0%, rgba(153, 69, 255, 0.08) 100%);
+    border: 1px solid rgba(20, 241, 149, 0.25);
+    border-radius: 16px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    gap: 16px;
+    margin-bottom: 8px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.landing-dev-passport:hover {
+    border-color: rgba(20, 241, 149, 0.45);
+    box-shadow: 0 6px 30px rgba(20, 241, 149, 0.15);
+}
+
+.landing-passport-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+    flex: 1;
+}
+
+.landing-passport-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(20, 241, 149, 0.15);
+    border: 1px solid rgba(20, 241, 149, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #14F195;
+    flex-shrink: 0;
+}
+
+.landing-passport-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+}
+
+.landing-passport-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.landing-passport-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    letter-spacing: -0.01em;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.landing-passport-verified-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(20, 241, 149, 0.15);
+    color: #14F195;
+    border: 1px solid rgba(20, 241, 149, 0.4);
+    white-space: nowrap;
+}
+
+.landing-passport-sub {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.landing-passport-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.landing-passport-btn {
+    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    padding: 6px 16px !important;
+    border-radius: 10px !important;
+    white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+    .landing-dev-passport {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 14px;
+        padding: 14px 16px;
+    }
+    .landing-passport-left {
+        width: 100%;
+    }
+    .landing-passport-name {
+        max-width: 180px;
+    }
+    .landing-passport-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+/* ============================================================
+   Night Edition — landing stat stubs (paper tickets on night)
+   ============================================================ */
+.landing-stat-stubs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    width: 100%;
+    max-width: 720px;
+    margin: 28px auto 0;
+}
+
+.landing-stat-stub {
+    background: var(--paper);
+    color: var(--paper-ink);
+    border-radius: 6px;
+    padding: 14px 16px 12px;
+    text-align: center;
+    box-shadow: 3px 3px 0 rgba(11, 13, 28, 0.6);
+}
+
+.landing-stat-stub-value {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.25rem;
+    font-weight: 800;
+}
+
+.landing-stat-stub-value.stub-green {
+    color: var(--success-btn);
+}
+
+.landing-stat-stub-value.stub-poppy {
+    color: #d43f20;
+}
+
+.landing-stat-stub-label {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #4c5178;
+    border-top: 1px dashed var(--paper-dim);
+    padding-top: 6px;
+    margin-top: 6px;
+}
+
+/* ── Public-event slug page: hero CTA + sticky mobile CTA (conversion) ── */
+.pe-hero-cta {
+    margin-top: 0.85rem;
+}
+/* Offset the scroll target so the section isn't flush against the top edge. */
+.pe-anchor {
+    scroll-margin-top: 1rem;
+}
+/* Sticky mobile CTA: hidden on desktop, fixed bottom bar on phones. */
+.pe-sticky-cta {
+    display: none;
+}
+.pe-sticky-spacer {
+    display: none;
+}
+@media (max-width: 640px) {
+    .pe-sticky-cta {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 60;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.95rem 1rem;
+        padding-bottom: calc(0.95rem + env(safe-area-inset-bottom, 0px));
+        background: linear-gradient(135deg, #ff5c39 0%, #ff7b5c 100%);
+        color: var(--text-heading);
+        font-weight: 700;
+        font-size: 1.02rem;
+        text-decoration: none;
+        box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.35);
+    }
+    .pe-sticky-cta:active {
+        background: linear-gradient(135deg, #ff7b5c 0%, #ffa184 100%);
+    }
+    .pe-sticky-spacer {
+        display: block;
+        height: 4.5rem;
+    }
+}
+
+/* ── Public-event slug page: loading skeleton (perceived performance) ── */
+.pe-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    width: 100%;
+}
+.pe-skel {
+    border-radius: 12px;
+    background: linear-gradient(
+        100deg,
+        var(--bg-card) 30%,
+        rgba(255, 255, 255, 0.06) 50%,
+        var(--bg-card) 70%
+    );
+    background-size: 200% 100%;
+    animation: pe-skel-shimmer 1.3s ease-in-out infinite;
+}
+.pe-skel-hero {
+    height: 180px;
+    border-radius: 16px;
+}
+.pe-skel-title {
+    height: 28px;
+    width: 70%;
+    margin-top: 0.4rem;
+}
+.pe-skel-sub {
+    height: 16px;
+    width: 45%;
+}
+.pe-skel-cta {
+    height: 46px;
+    border-radius: 10px;
+    margin-top: 0.3rem;
+}
+.pe-skel-card {
+    height: 96px;
+}
+@keyframes pe-skel-shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pe-skel { animation: none; }
+}

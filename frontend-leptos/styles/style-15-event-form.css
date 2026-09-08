@@ -1,0 +1,598 @@
+/* ===== Event Form ===== */
+.event-form-span-full {
+    grid-column: 1 / -1;
+}
+
+.event-form-tba-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.event-form-tba-field-label {
+    margin: 0;
+}
+
+.event-form-tba-hint {
+    margin: 0;
+}
+
+.event-form-sheet-guide {
+    margin-bottom: 0.75rem;
+}
+
+.event-form-nft-intro {
+    margin-bottom: var(--space-2xs, 0.25rem);
+}
+
+.event-form-nft-actions {
+    display: flex;
+    gap: var(--space-xs, 0.5rem);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.event-form-badge-preview {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+}
+
+.event-form-badge-type-label {
+    font-size: var(--text-xs, 0.75rem);
+    color: var(--text-muted, #888);
+}
+
+.event-form-hint-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.event-form-link-sm {
+    font-size: 0.75rem;
+    color: var(--info);
+    text-decoration: none;
+}
+
+.event-form-code-inherit {
+    font-size: inherit;
+}
+
+.event-form-toggle-label {
+    cursor: pointer;
+    padding-top: 0.3rem;
+}
+
+.event-form-hint-success {
+    color: var(--success);
+}
+
+.event-form-escrow-panel {
+    margin-top: 0.75rem;
+}
+
+.event-form-wallet-bar-no-gap {
+    margin-bottom: 0;
+}
+
+.event-form-hint-after-wallet {
+    margin-top: 0.5rem;
+}
+
+/* --- Escrow Init Panel --- */
+.escrow-panel-mt {
+    margin-top: 1rem;
+}
+
+.escrow-panel-mt-sm {
+    margin-top: 0.75rem;
+}
+
+.escrow-sync-panel {
+    margin-top: 0.75rem;
+    border-color: var(--warning-border, var(--warning));
+}
+
+.escrow-sync-label {
+    font-size: 0.8rem;
+}
+
+.escrow-sync-hint {
+    font-size: 0.75rem;
+}
+
+.escrow-sync-btn {
+    font-size: 0.8rem;
+}
+
+.escrow-gap-sm {
+    gap: 0.5rem;
+}
+
+.escrow-text-muted {
+    color: var(--text-muted);
+}
+
+.escrow-title-warning {
+    color: var(--warning);
+}
+
+.escrow-hint-warning {
+    color: var(--warning);
+}
+
+.escrow-text-error {
+    color: var(--danger);
+}
+
+.panel-warning {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-sm);
+    background: var(--warning-bg);
+}
+
+/* On-chain events panel */
+.onchain-panel {
+    margin-top: 1rem;
+}
+.onchain-icon {
+    background: var(--accent);
+}
+.onchain-badge-count {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+.onchain-loading {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-muted);
+}
+.onchain-error {
+    color: var(--danger-hover);
+    padding: 0.5rem;
+}
+.onchain-empty {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-muted);
+}
+.onchain-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+.onchain-timeline {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.onchain-event-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+.onchain-event-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-top: 4px;
+}
+.onchain-event-time {
+    flex-shrink: 0;
+    width: 80px;
+    color: var(--text-muted);
+}
+.onchain-event-badge-wrap {
+    flex-shrink: 0;
+}
+.onchain-event-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+}
+.onchain-event-details {
+    flex: 1;
+    color: var(--text-primary);
+    min-width: 0;
+}
+.onchain-event-amount {
+    font-weight: 600;
+}
+.onchain-event-attendee {
+    color: var(--text-muted);
+    margin-left: 0.25rem;
+}
+.onchain-event-tx-link {
+    flex-shrink: 0;
+    color: var(--info);
+    font-size: 0.75rem;
+    text-decoration: none;
+}
+.onchain-event-tx-link:hover {
+    text-decoration: underline;
+}
+.onchain-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+.onchain-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+/* ── Claim page inline style extractions ── */
+.claim-step-check-icon {
+    width: 14px;
+    height: 14px;
+}
+.claim-shimmer-line-60 {
+    width: 60%;
+}
+.claim-shimmer-line-sm-40 {
+    width: 40%;
+}
+.claim-shimmer-line-75 {
+    width: 75%;
+}
+.claim-shimmer-line-sm-50 {
+    width: 50%;
+}
+.claim-shimmer-line-sm-55 {
+    width: 55%;
+}
+.claim-shimmer-btn-full {
+    width: 100%;
+}
+.claim-disconnect-btn {
+    width: 100%;
+    margin-bottom: 0.75rem;
+}
+.claim-success-actions-spaced {
+    margin-top: 0.75rem;
+}
+.claim-redirect-center {
+    text-align: center;
+}
+.claim-redirect-spinner {
+    margin-bottom: 1rem;
+}
+.claim-redirect-title {
+    color: var(--bg-card);
+}
+.claim-redirect-desc {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+.claim-redirect-btn {
+    margin-top: 1rem;
+}
+
+/* ── Audit panel ── */
+.audit-panel-section {
+    margin-top: 1rem;
+}
+.audit-icon-muted {
+    background: var(--text-muted);
+}
+.audit-badge-muted {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+.audit-empty-text {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-muted);
+}
+.audit-error-text {
+    color: var(--danger);
+    padding: 0.5rem;
+}
+.audit-timeline {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.audit-entry {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+.audit-entry-time {
+    flex-shrink: 0;
+    width: 130px;
+    color: var(--text-muted);
+}
+.audit-entry-action {
+    flex-shrink: 0;
+}
+.audit-action-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+.audit-entry-desc {
+    flex: 1;
+    color: var(--text-secondary);
+}
+.audit-entry-actor {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+/* ===== ticket-action inline style extractions (action_cards.rs) ===== */
+
+/* Secondary description with bottom spacing */
+.ticket-action-alt-desc {
+    margin-bottom: 0.25rem;
+}
+
+/* Muted secondary text inside action card descriptions */
+.ticket-action-alt-text {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+/* Wallet button row with micro spacing */
+.ticket-action-wallet-btn {
+    margin-right: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
+/* Cancel/back button with small top margin */
+.ticket-action-cancel {
+    margin-top: 0.5rem;
+}
+
+/* Cancel/back button with minimal top margin */
+.ticket-action-cancel-xs {
+    margin-top: 0.25rem;
+}
+
+/* Signing spinner row with flex alignment */
+.ticket-action-signing-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Success-colored action title */
+.ticket-action-title-success {
+    color: var(--success);
+}
+
+/* Danger-colored action title */
+.ticket-action-title-danger {
+    color: var(--danger);
+}
+
+/* Hold-as-credit action card (Issue #061) — success-tinted, distinguishing the
+   "keep your money with us" path from the info-tinted refund guidance above it.
+   The modifier was referenced by HoldDepositCard before it had a rule, so the
+   card silently fell back to the neutral accent base. */
+.ticket-action-card--hold {
+    border-left-color: var(--success);
+    background: linear-gradient(
+        135deg,
+        var(--success-bg) 0%,
+        var(--bg-card) 100%
+    );
+}
+.ticket-action-card--hold .ticket-action-btn {
+    background: var(--success);
+}
+.ticket-action-card--hold .ticket-action-btn:hover {
+    opacity: 0.85;
+}
+
+/* Credit-return request card (Issue #061 Phase 3 exit path) — warning-tinted:
+   it moves money back out, the counterpart to the success-tinted hold. */
+.ticket-action-card--credit-refund {
+    border-left-color: var(--warning);
+    background: linear-gradient(
+        135deg,
+        var(--warning-bg) 0%,
+        var(--bg-card) 100%
+    );
+}
+.ticket-action-card--credit-refund .ticket-action-btn {
+    background: var(--warning);
+}
+.ticket-action-card--credit-refund .ticket-action-btn:hover {
+    opacity: 0.85;
+}
+
+/* Rolling deposit-credit chip (Issue #061) — a one-line balance readout above
+   the ticket action cards. Deliberately lighter than a card: it is a status
+   readout, not an action, and it is absent entirely when the balance is zero. */
+.ticket-credit-chip {
+    max-width: 420px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--success);
+    background: var(--success-bg);
+    font-size: 0.8rem;
+}
+.ticket-credit-chip .icon-sm {
+    color: var(--success);
+    flex-shrink: 0;
+}
+.ticket-credit-chip-label {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.ticket-credit-chip-value {
+    font-weight: 700;
+    color: var(--success);
+}
+.ticket-credit-chip-hint {
+    flex-basis: 100%;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+/* ===== events inline style extractions (events_page.rs) ===== */
+
+/* Flex row with wrap and center alignment (extends flex-row-gap) */
+.events-flex-wrap-center {
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Flex row with wrap only (extends flex-row-gap) */
+.events-flex-wrap {
+    flex-wrap: wrap;
+}
+
+/* Flex row with small gap (extends flex-row-gap) */
+.events-flex-gap-sm {
+    gap: 0.5rem;
+}
+
+/* Card title at 1rem size in context bar */
+.events-ctx-title {
+    font-size: 1rem;
+}
+.admin-dep-slip-link-row {
+    margin-top: 0.25rem;
+}
+.admin-dep-bank-section {
+    margin-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 0.5rem;
+}
+.admin-dep-bank-label {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+.admin-dep-badge-row {
+    margin-top: 0.25rem;
+}
+.admin-dep-confirm-row {
+    display: flex;
+    gap: 0.25rem;
+}
+.admin-dep-hold-row {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.admin-dep-liability-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.875rem;
+}
+
+/* Issue #061 Phase 3 — "Credit Refund Requested" sub-list inside the Held tab.
+ * Warning-tinted container so the organizer sees at a glance that action is
+ * requested; per-row cards mirror the Held/Refunded card shape. */
+.admin-dep-credit-refund-requests {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(245, 158, 11, 0.06);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.admin-dep-credit-refund-requests .admin-dep-flow-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.65rem;
+    color: var(--warning-bright, #eab308);
+}
+.admin-dep-credit-refund-row {
+    margin-bottom: 0.5rem;
+}
+.admin-dep-credit-refund-row:last-child {
+    margin-bottom: 0;
+}
+.admin-dep-clear-btn {
+    margin-left: 0.5rem;
+}
+.admin-refund-form-row {
+    margin-top: 4px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.admin-refund-form-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.admin-refund-form-select {
+    width: auto;
+    margin-left: 4px;
+}
+.admin-refund-form-input {
+    width: 200px;
+    margin-left: 4px;
+    padding: 2px 6px;
+    font-size: 0.8rem;
+}
+.admin-escrow-badge-done {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+.admin-escrow-hint-mb {
+    margin-bottom: 0.75rem;
+}
+.admin-escrow-connect-btn {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.8rem;
+}
+.admin-escrow-disconnect-btn {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+}
+.admin-escrow-info-mt {
+    margin-top: 0.75rem;
+}
+
+/* ===== Login ===== */
+.login-center-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.login-back-link {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-top: 1rem;
+    text-decoration: none;
+}
+
+/* ===== Adventure ===== */
+.adventure-quiz-preview {
+    margin-top: 1rem;
+}
+

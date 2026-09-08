@@ -1,0 +1,581 @@
+
+/* Small top margin (0.25rem)
+ * Replaces: style="margin-top:0.25rem" */
+.u-mt-2xs {
+    margin-top: 0.25rem;
+}
+
+/* Nowrap
+ * Replaces: style="white-space:nowrap" */
+.u-nowrap {
+    white-space: nowrap;
+}
+
+/* Flex gap override (1rem)
+ * Replaces: style="gap:1rem" */
+.u-gap-lg {
+    gap: 1rem;
+}
+
+/* Escrow address code display
+ * Replaces: style="font-size:0.7rem" on <code> */
+.code-xs {
+    font-size: 0.7rem;
+}
+
+/* Inline label for escrow result fields
+ * Replaces: style="color:var(--text-secondary)" inline on spans */
+.text-label {
+    color: var(--text-secondary);
+}
+
+/* ---------- Events Page ---------- */
+
+/* Search wrapper (relative, flex center)
+ * Replaces: style="position:relative;display:flex;align-items:center" */
+.search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* Keyboard hint badge (absolute positioned)
+ * Replaces: style="position:absolute;right:8px;pointer-events:none;opacity:0.5" */
+.search-kbd-hint {
+    position: absolute;
+    right: 8px;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* Setting value text
+ * Replaces: style="font-size:0.85rem" */
+.setting-value {
+    font-size: 0.85rem;
+}
+
+/* Monospace setting value
+ * Replaces: style="font-size:0.85rem;font-family:monospace" */
+.setting-value-mono {
+    font-size: 0.85rem;
+    font-family: monospace;
+}
+
+/* ---------- Adventure Config ---------- */
+
+/* Select full width
+ * Replaces: style="width: 100%; padding: 0.5rem 0.75rem;" */
+.select-full {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+}
+
+/* Dirty hint text
+ * Replaces: style="color: var(--warning); font-size: 0.8rem; margin-left: 0.5rem;" */
+.hint-dirty {
+    color: var(--warning);
+    font-size: 0.8rem;
+    margin-left: 0.5rem;
+}
+
+/* Clean hint text
+ * Replaces: style="color: var(--text-muted); font-size: 0.8rem; margin-left: 0.5rem;" */
+.hint-clean {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-left: 0.5rem;
+}
+
+/* ---------- Admin ---------- */
+
+/* Extra-small button variant (overrides)
+ * Replaces: style="margin-left:0.5rem;padding:0.15rem 0.4rem;font-size:0.7rem;" */
+.btn-xs-override {
+    margin-left: 0.5rem;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.7rem;
+}
+
+/* Summary text
+ * Replaces: style="font-size:0.8rem;color:var(--text-secondary);cursor:pointer;margin-bottom:0.3rem;" */
+.details-summary-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    margin-bottom: 0.3rem;
+}
+
+/* ---------- Events Deposit Config Inline Styles ---------- */
+
+/* Deposit config row (flex with gap)
+ * Replaces: style="margin-bottom:0.75rem;display:flex;align-items:center;gap:0.75rem" */
+.dep-config-row {
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Deposit config label
+ * Replaces: style="font-size:0.95rem;font-weight:600;color:var(--text-secondary)" */
+.dep-config-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* Wallet locked hint
+ * Replaces: style="color:var(--success,green)" */
+.hint-success-sm {
+    color: var(--success);
+}
+
+/* ---------- Admin Deposit Slip Styles ---------- */
+
+/* Attendee name bold
+ * Replaces: style="font-weight:600;margin-bottom:0.25rem" */
+.admin-attendee-name {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+/* Amount line
+ * Replaces: style="margin-bottom:0.25rem" */
+.admin-amount-line {
+    margin-bottom: 0.25rem;
+}
+
+/* Slip URL link
+ * Replaces: style="color:var(--accent)" */
+.link-accent {
+    color: var(--accent);
+}
+
+.link-accent:hover {
+    color: var(--accent-hover);
+}
+
+/* ---------- Admin Events Warning / Error ---------- */
+
+/* Name length warning
+ * Replaces: style="color:var(--warning);font-size:0.75rem;margin-top:0.25rem" */
+.hint-warning-xs {
+    color: var(--warning);
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.hint-info {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+/* ---------- Readonly locked fields (escrow address, wallet, event ID) ---------- */
+.readonly-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.65rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    min-height: 2.25rem;
+}
+
+.readonly-value {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    word-break: break-all;
+}
+
+.readonly-value-mono {
+    font-size: 0.78rem;
+    color: var(--text-primary);
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    word-break: break-all;
+    line-height: 1.3;
+}
+
+.readonly-badge {
+    font-size: 0.65rem;
+    color: var(--success);
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Archive button (outline with warning color)
+ * Replaces: style="margin-left:auto;color:var(--warning)" */
+.btn-archive {
+    margin-left: auto;
+    color: var(--warning);
+}
+
+.btn-archive:hover {
+    color: var(--warning-border);
+}
+.btn-confirm-danger {
+    background: var(--danger-btn);
+    color: white;
+    animation: pulse-danger 1s infinite;
+}
+@keyframes pulse-danger {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
+
+/* Top margin 1rem override */
+.u-mt-1rem {
+    margin-top: 1rem;
+}
+
+/* Note with different bottom margin
+ * Replaces: style="margin:0 0 0.5rem" on hint-note */
+.hint-note-sm {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0 0 0.5rem;
+}
+
+/* Required-field marker — a red asterisk appended to mandatory labels. */
+.required-marker {
+    color: var(--danger);
+    margin-left: 0.15rem;
+    font-weight: 700;
+}
+
+/* NFT reward preview card (plan 016 P2.2) — live "what gets minted" panel in
+   the campaign create form. Mirrors the mint request's three metadata fields;
+   anything not sent to the mint is deliberately absent. */
+.nft-preview {
+    margin-bottom: 1rem;
+}
+
+.nft-preview-label {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin: 0 0 0.5rem;
+}
+
+.nft-preview-card {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.875rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+/* Fixed box so the card does not reflow while an image loads. The placeholder
+   icon is centred underneath the <img>, which covers it when it loads and
+   uncovers it again if the URL is dead (see the on:error handler). */
+.nft-preview-media {
+    position: relative;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    overflow: hidden;
+}
+
+.nft-preview-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.nft-preview-meta {
+    min-width: 0;
+}
+
+.nft-preview-name {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    overflow-wrap: anywhere;
+}
+
+.nft-preview-desc {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Marks a value the organizer left blank, so it is clear the text shown is a
+   default rather than something they typed. */
+.nft-preview-tag {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.35rem;
+    background: var(--bg-hover);
+    border-radius: 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
+/* Waiting on the campaign title, which both defaults interpolate. */
+.nft-preview-pending {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Campaign slug availability verdict — recolours .hint-note-sm in place.
+   Neutral (inherited) is used for "checking" and for a failed probe, so only
+   a definite answer draws the eye. */
+.hint-note-sm.slug-ok {
+    color: var(--success);
+}
+
+.hint-note-sm.slug-bad {
+    color: var(--danger);
+}
+
+/* Post-create draft nudge banner shown in the Detail → Events tab to remind
+   the organizer that a freshly created campaign is still a draft and needs
+   events before it can be activated. */
+.campaign-nudge {
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
+    border-radius: var(--radius);
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    color: var(--warning-bright);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.campaign-nudge strong {
+    color: var(--warning);
+}
+
+/* File input styling — modernized custom file picker */
+.file-input-styled {
+    width: 100%;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding: 0.6rem 0.8rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition:
+        border-color 0.2s,
+        background 0.2s;
+}
+
+.file-input-styled:hover {
+    border-color: var(--accent);
+    background: var(--bg-tertiary);
+}
+
+.file-input-styled::file-selector-button {
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-right: 0.75rem;
+    transition:
+        background 0.2s,
+        color 0.2s;
+}
+
+.file-input-styled::file-selector-button:hover {
+    background: var(--accent);
+    color: white;
+}
+
+/* --- Slip Preview --- */
+.slip-preview-container {
+    position: relative;
+    display: inline-block;
+    margin-top: 0.5rem;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+.slip-preview-img {
+    display: block;
+    max-width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: transform 0.18s ease;
+}
+.slip-preview-img:hover {
+    transform: scale(1.01);
+}
+/* Persistent hint that the slip preview is tap-to-enlarge. Lives at the
+   bottom of the preview container, mirroring the remove button at the top. */
+.slip-preview-zoom-hint {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 0.7rem;
+    pointer-events: none;
+    user-select: none;
+}
+
+.slip-preview-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.slip-preview-remove:hover {
+    background: rgba(220, 38, 38, 0.85);
+}
+
+/* --- Google Sheet Quick Guide --- */
+.sheet-guide-box {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: rgba(255, 92, 57, 0.04);
+}
+
+.sheet-guide-heading {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.sheet-guide-steps {
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+
+.sheet-guide-steps li {
+    margin-bottom: 0.2rem;
+}
+
+.sheet-guide-link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 92, 57, 0.3);
+    text-underline-offset: 2px;
+    font-weight: 500;
+}
+
+.sheet-guide-link:hover {
+    text-decoration-color: var(--accent);
+}
+
+.sheet-guide-url {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    font-size: 0.75rem;
+    margin-top: 0.35rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    font-family: var(--font-mono, monospace);
+}
+
+.sheet-guide-highlight {
+    color: var(--accent);
+    background: rgba(255, 92, 57, 0.12);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-weight: 600;
+}
+
+/* ---------- Responsive overrides for Phase 9f ---------- */
+
+@media (max-width: 480px) {
+    .wallet-connected-bar {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .qr-img-lg {
+        width: 220px;
+        height: 220px;
+    }
+    .dep-config-row {
+        flex-wrap: wrap;
+    }
+}
+
+/* ===== Scanner Event Selector Bar ===== */
+.scanner-event-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    font-size: 0.85rem;
+    z-index: 10;
+    position: relative;
+}
+.scanner-event-select {
+    flex: 1;
+    padding: 0.35rem 0.5rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    max-width: 300px;
+}
+.scanner-event-label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
