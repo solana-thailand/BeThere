@@ -349,9 +349,11 @@ pub async fn wallet_verify(
     // Single-use: delete the challenge so the signature can't be replayed.
     let _ = kv.delete(&kv_key).await;
 
-    // Lookup linked email from D1 contacts/attendees if available
+    // Upgrade to an email identity only when a prior flow proved both the
+    // mailbox (Google) and this wallet (SIWS). Contact and badge wallets are
+    // not authentication bindings.
     let linked_email = if let Some(ref d1) = state.d1 {
-        crate::db::contacts::find_email_by_wallet(d1, &req.wallet_address)
+        crate::db::contacts::find_verified_email_by_wallet(d1, &req.wallet_address)
             .await
             .unwrap_or(None)
     } else {
@@ -402,6 +404,13 @@ pub async fn wallet_bind(
     Extension(claims): Extension<Claims>,
     axum::Json(req): axum::Json<event_checkin_domain::models::auth::WalletBindRequest>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    if !claims.email_verified {
+        return Err(event_checkin_domain::models::error::AppError::Forbidden(
+            "verify your email with Google before linking a wallet".into(),
+        )
+        .into());
+    }
+
     if let Err(e) = crate::solana::validate_wallet_address(&req.wallet_address) {
         return Err(event_checkin_domain::models::error::AppError::Validation(e).into());
     }
@@ -465,8 +474,8 @@ pub async fn wallet_bind(
         .into());
     }
 
-    // Link wallet_address to claims.email in contacts table
-    crate::db::contacts::link_wallet_to_email(d1, &claims.email, &req.wallet_address)
+    // Persist the two-sided identity proof on the developer profile.
+    crate::db::contacts::link_verified_wallet_to_email(d1, &claims.email, &req.wallet_address)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 

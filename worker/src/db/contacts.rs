@@ -567,11 +567,7 @@ pub async fn list_contact_events(
         .collect()
 }
 
-/// Whether an email already has any account footprint (contact, developer
-/// profile, or attendee record). Used to decide whether it's safe to
-/// auto-bind a wallet to a typed email at registration (Plan 017): we only
-/// bind to brand-new emails — an existing email must be linked via the
-/// ownership-verified profile flow instead.
+/// Whether an email already has any account footprint.
 pub async fn email_has_account(db: &D1Database, email: &str) -> Result<bool, String> {
     let sql = "SELECT 1 AS x FROM contacts WHERE LOWER(email) = LOWER(?1) \
                UNION SELECT 1 FROM developer_profiles WHERE LOWER(email) = LOWER(?1) \
@@ -589,10 +585,9 @@ pub async fn email_has_account(db: &D1Database, email: &str) -> Result<bool, Str
 
 /// Find the email a wallet is INTENTIONALLY bound to (developer_profiles only).
 ///
-/// Unlike [`find_email_by_wallet`], this does NOT fall back to the attendees
-/// table — a badge-mint recipient wallet is not an identity binding. This is the
-/// correct check for binding-exclusivity (does this wallet already belong to a
-/// different account?). Deterministic: most recent binding wins.
+/// A badge-mint recipient wallet in `attendees` is not an identity binding.
+/// This is the correct binding-exclusivity check. Deterministic: the most
+/// recently updated legacy binding wins.
 pub async fn find_bound_email_by_wallet(
     db: &D1Database,
     wallet_address: &str,
@@ -612,21 +607,21 @@ pub async fn find_bound_email_by_wallet(
     Ok(None)
 }
 
-/// Find linked email address by wallet_address from developer_profiles or attendees.
+/// Find an email identity whose owner proved both the email and wallet.
 ///
-/// Deterministic on the developer_profiles side (most recent binding wins) so
-/// wallet-login and credit-ownership resolution are stable even if a wallet is
-/// (legacy) bound to more than one email.
-pub async fn find_email_by_wallet(
+/// Legacy profile wallets and attendee badge-recipient wallets are deliberately
+/// excluded: neither proves ownership of the associated mailbox.
+pub async fn find_verified_email_by_wallet(
     db: &D1Database,
     wallet_address: &str,
 ) -> Result<Option<String>, String> {
     let sql = "SELECT email FROM developer_profiles WHERE LOWER(wallet_address) = LOWER(?1) \
+               AND wallet_email_verified = 1 \
                ORDER BY updated_at DESC LIMIT 1";
     let stmt = db.prepare(sql);
     let bound = stmt
         .bind_refs(&[D1Type::Text(wallet_address)])
-        .map_err(|e| format!("D1 find_email_by_wallet bind: {e:?}"))?;
+        .map_err(|e| format!("D1 find_verified_email_by_wallet bind: {e:?}"))?;
     if let Ok(rows) = safe_all_rows(&bound).await
         && let Some(row) = rows.first()
         && let Some(email) = row.get("email").and_then(|v| v.as_str())
@@ -634,39 +629,30 @@ pub async fn find_email_by_wallet(
         return Ok(Some(email.to_string()));
     }
 
-    // Fallback: check attendees table
-    let sql2 = "SELECT email FROM attendees WHERE LOWER(wallet_address) = LOWER(?1) LIMIT 1";
-    let stmt2 = db.prepare(sql2);
-    let bound2 = stmt2
-        .bind_refs(&[D1Type::Text(wallet_address)])
-        .map_err(|e| format!("D1 find_email_by_wallet fallback bind: {e:?}"))?;
-    if let Ok(rows2) = safe_all_rows(&bound2).await
-        && let Some(row2) = rows2.first()
-        && let Some(email2) = row2.get("email").and_then(|v| v.as_str())
-    {
-        return Ok(Some(email2.to_string()));
-    }
-
     Ok(None)
 }
 
-/// Link wallet address to an existing email in developer_profiles.
-pub async fn link_wallet_to_email(
+/// Persist a binding after a verified-email session also proves wallet ownership.
+pub async fn link_verified_wallet_to_email(
     db: &D1Database,
     email: &str,
     wallet_address: &str,
 ) -> Result<(), String> {
-    let sql = "INSERT INTO developer_profiles (email, wallet_address, updated_at) \
-               VALUES (LOWER(?1), ?2, datetime('now')) \
+    let sql = "INSERT INTO developer_profiles \
+               (email, wallet_address, wallet_email_verified, wallet_email_verified_at, wallet_email_issuer, updated_at) \
+               VALUES (LOWER(?1), ?2, 1, datetime('now'), 'google', datetime('now')) \
                ON CONFLICT (email) DO UPDATE SET \
                wallet_address = excluded.wallet_address, \
+               wallet_email_verified = 1, \
+               wallet_email_verified_at = excluded.wallet_email_verified_at, \
+               wallet_email_issuer = excluded.wallet_email_issuer, \
                updated_at = datetime('now')";
     let stmt = db.prepare(sql);
     stmt.bind_refs(&[D1Type::Text(email), D1Type::Text(wallet_address)])
-        .map_err(|e| format!("D1 link_wallet_to_email bind: {e:?}"))?
+        .map_err(|e| format!("D1 link_verified_wallet_to_email bind: {e:?}"))?
         .run()
         .await
-        .map_err(|e| format!("D1 link_wallet_to_email run: {e:?}"))?;
+        .map_err(|e| format!("D1 link_verified_wallet_to_email run: {e:?}"))?;
     Ok(())
 }
 

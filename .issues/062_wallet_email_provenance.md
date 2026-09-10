@@ -1,6 +1,6 @@
 # 062 — Wallet-linked email lacks verification provenance
 
-Priority: P1 security review. Status: open; notification enrollment isolated from it.
+Priority: P1 security review. Status: resolved locally; awaiting migration/deploy.
 
 ## Evidence
 
@@ -15,14 +15,22 @@ be true for such links. It now requires a separate signed `Claims.email_verified
 attestation, minted only by the verified Google callback. Wallet-issued and legacy
 sessions default false. This closes notification enrollment through that path.
 
-## Remaining review (do not infer an exploit from link existence alone)
+## Resolution
 
-Audit every operation relying on a wallet-linked email as authorization, especially
-role resolution, stored-credit access, wallet binding/unbinding, and profile writes.
-Determine which links originated from authenticated email owners and which from
-first-time typed emails. Existing rows do not record this provenance.
+- Migration `0031_wallet_email_provenance.sql` records whether both sides of a
+  wallet/email binding were proved, when that happened, and the email issuer.
+  Existing bindings default to unknown and are never silently upgraded.
+- Wallet login resolves only verified `developer_profiles` bindings. Deposit
+  recipient wallets and typed registration emails remain contact/payment data.
+- Wallet binding requires a Google-verified JWT plus the existing SIWS proof.
+  A partial unique index enforces one verified email per wallet under concurrency.
+- Wallet registration no longer auto-binds a typed email. The UI directs the
+  attendee to sign in with Google and connect the wallet from Profile.
+- Stored-credit ownership resolution uses only a verified wallet/email binding.
+- Executed migration tests cover legacy, recipient, verified, case-insensitive,
+  and conflicting bindings. CI now runs this security SQL suite.
 
-## Proposed fix and acceptance criteria
+## Acceptance criteria
 
 - Store link provenance (`email_verified`, verification time, issuer) separately
   from a self-declared contact address. Wallet possession must not upgrade it.
@@ -34,5 +42,5 @@ first-time typed emails. Existing rows do not record this provenance.
 - Verified email owner can link a wallet and continue intended wallet-only access.
 - Test both first-use and returning-user flows, not just duplicate registration.
 
-This is broader than email delivery; resolve it before claiming the platform's
-wallet/email authorization has been fully reviewed for production.
+Local implementation and checks satisfy these criteria. Production remains on
+the old behavior until migration 0031 and the Worker/frontend release are deployed.
