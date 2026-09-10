@@ -60,6 +60,7 @@
 | [Gradual Deploy Runbook](gradual_deploy_runbook.md) | Step-by-step deployment guide |
 | [Staging Deploy Runbook](staging_deploy_runbook.md) | Staging deploy + verification |
 | [Mainnet Readiness Runbook](mainnet_readiness_runbook.md) | What must be green before mainnet USDC |
+| [Web Verification Runbook](web-verification-runbook.md) | Verify deployed UI and core flows by risk level without accidental production writes |
 | [Mainnet Deployment Checklist](mainnet_deployment_checklist.md) | Ordered mainnet cutover steps |
 | [Mainnet Canary Mitigation Runbook](mainnet_canary_mitigation_runbook.md) | Canary + rollback for the no-native-%-canary edge deploy |
 | [Events Management](events_management.md) | How events are managed in the system |
