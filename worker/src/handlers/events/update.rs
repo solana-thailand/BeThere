@@ -34,22 +34,21 @@ pub async fn update_event(
         None
     };
 
-    let existing_event = match existing_event {
-        Some(e) => e,
-        None => {
-            tracing::info!(event_id = %id, "KV miss, trying D1 for event");
-            if let Some(ref d1) = state.d1 {
-                crate::db::events::get_event(d1, &id)
-                    .await
-                    .map_err(|e| {
-                        tracing::error!(event_id = %id, error = %e, "D1 get event failed");
-                        AppError::Internal(format!("failed to read event from D1: {e}"))
-                    })?
-                    .map(|row| row.to_event_config())
-                    .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?
-            } else {
-                return Err(AppError::NotFound(format!("event '{id}' not found")).into());
-            }
+    let existing_event = if let Some(e) = existing_event {
+        e
+    } else {
+        tracing::info!(event_id = %id, "KV miss, trying D1 for event");
+        if let Some(ref d1) = state.d1 {
+            crate::db::events::get_event(d1, &id)
+                .await
+                .map_err(|e| {
+                    tracing::error!(event_id = %id, error = %e, "D1 get event failed");
+                    AppError::Internal(format!("failed to read event from D1: {e}"))
+                })?
+                .map(|row| row.to_event_config())
+                .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?
+        } else {
+            return Err(AppError::NotFound(format!("event '{id}' not found")).into());
         }
     };
 

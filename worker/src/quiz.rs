@@ -131,10 +131,7 @@ pub async fn get_quiz_config(
     }
 
     // KV fallback
-    let kv_ref = match kv {
-        Some(k) => k,
-        None => return Ok(None),
-    };
+    let Some(kv_ref) = kv else { return Ok(None) };
     let key = quiz_questions_key(event_id);
     let raw: Option<String> = kv_ref
         .get(&key)
@@ -230,7 +227,7 @@ pub async fn update_question(
         .questions
         .iter_mut()
         .find(|q| q.id == question_id)
-        .ok_or_else(|| format!("question '{}' not found", question_id))?;
+        .ok_or_else(|| format!("question '{question_id}' not found"))?;
 
     // Preserve the original ID (path takes precedence)
     let preserved_id = question_id.to_string();
@@ -256,7 +253,7 @@ pub async fn delete_question(
     let original_len = config.questions.len();
     config.questions.retain(|q| q.id != question_id);
     if config.questions.len() == original_len {
-        return Err(format!("question '{}' not found", question_id));
+        return Err(format!("question '{question_id}' not found"));
     }
 
     save_quiz_config(d1, kv, event_id, &config).await?;
@@ -278,7 +275,7 @@ pub async fn toggle_question(
         .questions
         .iter_mut()
         .find(|q| q.id == question_id)
-        .ok_or_else(|| format!("question '{}' not found", question_id))?;
+        .ok_or_else(|| format!("question '{question_id}' not found"))?;
 
     question.enabled = !question.enabled;
     let result = question.clone();
@@ -340,10 +337,7 @@ pub async fn get_quiz_progress(
     }
 
     // KV fallback
-    let kv_ref = match kv {
-        Some(k) => k,
-        None => return Ok(None),
-    };
+    let Some(kv_ref) = kv else { return Ok(None) };
     let key = quiz_progress_key(event_id, claim_token);
     let raw: Option<String> = kv_ref
         .get(&key)
@@ -470,8 +464,7 @@ pub async fn submit_quiz(
         let correct_text = question
             .options
             .get(question.correct_index as usize)
-            .map(|s| s.trim())
-            .unwrap_or("");
+            .map_or("", |s| s.trim());
 
         let is_correct = selected.eq_ignore_ascii_case(correct_text);
         if is_correct {
@@ -547,15 +540,14 @@ pub async fn get_quiz_status(
     claim_token: &str,
 ) -> Result<QuizStatus, String> {
     let config = get_quiz_config(d1, kv, event_id).await?;
-    match config {
-        None => Ok(QuizStatus::NotRequired),
-        Some(_) => {
-            let progress = get_quiz_progress(d1, kv, event_id, claim_token).await?;
-            match progress {
-                None => Ok(QuizStatus::NotStarted),
-                Some(p) if p.passed => Ok(QuizStatus::Passed),
-                Some(_) => Ok(QuizStatus::InProgress),
-            }
+    if config.is_none() {
+        Ok(QuizStatus::NotRequired)
+    } else {
+        let progress = get_quiz_progress(d1, kv, event_id, claim_token).await?;
+        match progress {
+            None => Ok(QuizStatus::NotStarted),
+            Some(p) if p.passed => Ok(QuizStatus::Passed),
+            Some(_) => Ok(QuizStatus::InProgress),
         }
     }
 }
