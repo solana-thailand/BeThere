@@ -391,6 +391,8 @@ pub async fn register_attendee(
             contact_handle.unwrap_or(""),
             body.consent_marketing,
             Some(&claim_token),
+            // Signed verification comes only from Google; a linked wallet is not email proof.
+            claims.email_verified,
         )
         .await
     {

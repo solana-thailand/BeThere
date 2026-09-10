@@ -28,7 +28,7 @@ pub async fn execute_claim(
     use_linked: bool,
     event_id: Option<&str>,
 ) -> Result<ClaimResult, AppError> {
-    tracing::info!(claim_token = %token, use_linked, "claim mint request");
+    tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), use_linked, "claim mint request");
 
     // 1. Resolve event context. Same coalesce as lookup_claim: the public POST
     //    `/claim/{token}` carries no event_id, so recover the attendee's real
@@ -73,29 +73,29 @@ pub async fn execute_claim(
         Ok(Some(a)) => a,
         Ok(None) => {
             // Sheets returned nothing — try D1 fallback
-            tracing::info!(claim_token = %token, "claim mint: Sheets miss, trying D1 fallback");
+            tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: Sheets miss, trying D1 fallback");
             if let Some(ref d1) = state.d1 {
                 match crate::db::attendees::get_attendee_by_claim_token(d1, token).await {
                     Ok(Some(a)) => {
-                        tracing::info!(claim_token = %token, "claim mint: found in D1 fallback");
+                        tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: found in D1 fallback");
                         a
                     }
                     Ok(None) => {
-                        tracing::warn!(claim_token = %token, "claim mint: not found in Sheets or D1");
+                        tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: not found in Sheets or D1");
                         return Err(AppError::NotFound("claim token not found".into()));
                     }
                     Err(e) => {
-                        tracing::error!(claim_token = %token, error = %e, "claim mint D1 fallback failed");
+                        tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "claim mint D1 fallback failed");
                         return Err(AppError::NotFound("claim token not found".into()));
                     }
                 }
             } else {
-                tracing::warn!(claim_token = %token, "claim mint: no attendee found (no D1)");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: no attendee found (no D1)");
                 return Err(AppError::NotFound("claim token not found".into()));
             }
         }
         Err(ref e) => {
-            tracing::error!(claim_token = %token, error = %e, "claim mint lookup failed");
+            tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "claim mint lookup failed");
             return Err(AppError::Internal(format!("failed to look up claim: {e}")));
         }
     };
@@ -128,7 +128,7 @@ pub async fn execute_claim(
             let remaining_hours = remaining_secs / 3600;
             let remaining_mins = (remaining_secs % 3600) / 60;
             tracing::warn!(
-                claim_token = %token,
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                 participation_type = %attendee.participation_type,
                 event_end_ms = event.event_end_ms,
                 now_ms = now_ms,
@@ -161,7 +161,7 @@ pub async fn execute_claim(
                 )
                 .await?;
                 tracing::info!(
-                    claim_token = %token,
+                    claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                     attendee_id = %attendee.api_id,
                     checked_in_at = %virtual_ts,
                     "virtual check-in auto-completed for online attendee"
@@ -169,7 +169,7 @@ pub async fn execute_claim(
                 attendee.checked_in_at = Some(virtual_ts);
             } else {
                 tracing::warn!(
-                    claim_token = %token,
+                    claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                     participation_type = %attendee.participation_type,
                     "online attendee not checked in and quest not completed"
                 );
@@ -212,20 +212,20 @@ pub async fn execute_claim(
                 // Quiz not configured — if quiz_enabled is true, the organizer
                 // intends a quiz but hasn't set it up yet. Block the claim.
                 if event.quiz_enabled {
-                    tracing::warn!(claim_token = %token, "claim mint blocked: quiz enabled but not configured");
+                    tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: quiz enabled but not configured");
                     return Err(AppError::Validation(
                         "quiz is being set up — please try again later".into(),
                     ));
                 }
             }
             QuizStatus::NotStarted => {
-                tracing::warn!(claim_token = %token, "claim mint blocked: quiz not attempted");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: quiz not attempted");
                 return Err(AppError::Validation(
                     "you must complete the quiz before claiming your badge".into(),
                 ));
             }
             QuizStatus::InProgress => {
-                tracing::warn!(claim_token = %token, "claim mint blocked: quiz not passed");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: quiz not passed");
                 return Err(AppError::Validation(
                     "you must pass the quiz before claiming your badge".into(),
                 ));
@@ -238,13 +238,13 @@ pub async fn execute_claim(
         match adv_status {
             AdventureStatus::NotRequired | AdventureStatus::Passed => {}
             AdventureStatus::NotStarted => {
-                tracing::warn!(claim_token = %token, "claim mint blocked: adventure not attempted");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: adventure not attempted");
                 return Err(AppError::Validation(
                     "you must complete the Rust Adventure before claiming your badge".into(),
                 ));
             }
             AdventureStatus::InProgress => {
-                tracing::warn!(claim_token = %token, "claim mint blocked: adventure not passed");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: adventure not passed");
                 return Err(AppError::Validation(
                     "you must complete the Rust Adventure before claiming your badge".into(),
                 ));
@@ -255,7 +255,7 @@ pub async fn execute_claim(
     // 6. Must not be already claimed
     if attendee.claimed_at.is_some() {
         let claimed_at = attendee.claimed_at.as_deref().unwrap_or("unknown");
-        tracing::warn!(claim_token = %token, claimed_at = %claimed_at, "claim already fulfilled");
+        tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), claimed_at = %claimed_at, "claim already fulfilled");
         return Err(AppError::Validation("NFT has already been claimed".into()));
     }
 
@@ -277,7 +277,7 @@ pub async fn execute_claim(
             && !req.eq_ignore_ascii_case(registered)
         {
             tracing::warn!(
-                claim_token = %token,
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                 registered = %mask_wallet(registered),
                 claiming = %mask_wallet(req),
                 "wallet mismatch"
@@ -320,7 +320,7 @@ pub async fn execute_claim(
     };
 
     if let Err(e) = crate::solana::validate_wallet_address(&recipient) {
-        tracing::warn!(claim_token = %token, error = %e, "resolved recipient wallet invalid");
+        tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "resolved recipient wallet invalid");
         return Err(AppError::Validation(e));
     }
     let wallet_address: &str = &recipient;
@@ -359,7 +359,7 @@ pub async fn execute_claim(
     let mint_result = match solana::mint_compressed_nft(&mint_req, lock_kv).await {
         Ok(result) => result,
         Err(ref e) => {
-            tracing::error!(claim_token = %token, error = %e, "mint failed");
+            tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "mint failed");
             // Release lock so attendee can retry
             if let Some(kv) = lock_kv {
                 let _ = release_claim_lock(
@@ -402,7 +402,7 @@ pub async fn execute_claim(
         .await
     {
         tracing::warn!(
-            claim_token = %token,
+            claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
             error = %e,
             "D1 claim write failed (non-fatal)"
         );
@@ -434,7 +434,7 @@ pub async fn execute_claim(
     )
     .await
     {
-        tracing::error!(claim_token = %token, error = %e, "Sheets mark_claimed failed (non-fatal)");
+        tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "Sheets mark_claimed failed (non-fatal)");
     }
 
     // 11. Finalize claim lock (permanent record, no TTL) — non-blocking
@@ -457,7 +457,7 @@ pub async fn execute_claim(
     }
 
     tracing::info!(
-        claim_token = %token,
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
         name = %display_name,
         asset_id = %mint_result.asset_id,
         wallet_address = %wallet_address,

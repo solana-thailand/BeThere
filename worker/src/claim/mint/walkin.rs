@@ -35,7 +35,7 @@ pub(super) async fn execute_walkin_claim(
         None => return Err(AppError::Validation("a wallet address is required".into())),
     };
     if let Err(e) = crate::solana::validate_wallet_address(&recipient) {
-        tracing::warn!(claim_token = %token, error = %e, "walk-in recipient wallet invalid");
+        tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "walk-in recipient wallet invalid");
         return Err(AppError::Validation(e));
     }
     let wallet_address: &str = &recipient;
@@ -44,7 +44,7 @@ pub(super) async fn execute_walkin_claim(
 
     // Already claimed check
     if walkin.claimed_at.is_some() {
-        tracing::warn!(claim_token = %token, "walk-in already claimed");
+        tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "walk-in already claimed");
         return Err(AppError::Validation("NFT has already been claimed".into()));
     }
 
@@ -82,7 +82,7 @@ pub(super) async fn execute_walkin_claim(
     let mint_result = match crate::solana::mint_compressed_nft(&mint_req, kv).await {
         Ok(result) => result,
         Err(ref e) => {
-            tracing::error!(claim_token = %token, error = %e, "walk-in mint failed");
+            tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "walk-in mint failed");
             if let Some(kv) = kv {
                 let _ = release_claim_lock(
                     kv,
@@ -114,7 +114,7 @@ pub(super) async fn execute_walkin_claim(
         .await
     {
         tracing::error!(
-            claim_token = %token,
+            claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
             error = %e,
             "walk-in D1 claim write failed (mint succeeded, data may be inconsistent)"
         );
@@ -141,7 +141,7 @@ pub(super) async fn execute_walkin_claim(
     }
 
     tracing::info!(
-        claim_token = %token,
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
         name = %display_name,
         asset_id = %mint_result.asset_id,
         wallet_address = %wallet_address,

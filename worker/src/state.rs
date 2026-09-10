@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
-use worker::{Bucket, Context, D1Database, Env, KvStore, ObjectNamespace};
+use worker::{Bucket, Context, D1Database, Env, KvStore, ObjectNamespace, RateLimiter};
 
 // JsCast for converting the raw R2 binding handle to `js_sys::Object`.
 use wasm_bindgen::JsCast;
@@ -25,6 +25,10 @@ struct CachedBindings {
     /// object (no options) to bypass that bug. See `storage::get_bytes`.
     r2_raw: Option<js_sys::Object>,
     event_do: Option<ObjectNamespace>,
+    auth_rate_limiter: Option<Arc<RateLimiter>>,
+    claim_rate_limiter: Option<Arc<RateLimiter>>,
+    deposit_rate_limiter: Option<Arc<RateLimiter>>,
+    webhook_rate_limiter: Option<Arc<RateLimiter>>,
 }
 
 static CACHED_BINDINGS: OnceLock<CachedBindings> = OnceLock::new();
@@ -66,7 +70,7 @@ pub struct AppState {
     /// Wrapped in `Arc` because `D1Database` is not `Clone`.
     pub d1: Option<Arc<D1Database>>,
     /// Shared secret for validating webhook `Authorization: Bearer <token>` header.
-    /// If empty, webhook auth validation is skipped (backward compatible).
+    /// Webhook handlers fail closed when this is empty.
     pub webhook_secret: String,
     /// Workers fetch-event context — used for `wait_until()` to detach background
     /// tasks (e.g. Google Sheets sync) so the HTTP response returns immediately.
@@ -82,6 +86,10 @@ pub struct AppState {
     /// Durable Object namespace for ACID event writes (Issue #050).
     /// `None` if the `EVENT_DO` binding is not configured.
     pub event_do: Option<ObjectNamespace>,
+    pub auth_rate_limiter: Option<Arc<RateLimiter>>,
+    pub claim_rate_limiter: Option<Arc<RateLimiter>>,
+    pub deposit_rate_limiter: Option<Arc<RateLimiter>>,
+    pub webhook_rate_limiter: Option<Arc<RateLimiter>>,
 }
 
 impl AppState {
@@ -326,6 +334,16 @@ impl AppState {
                     r2,
                     r2_raw,
                     event_do: env.durable_object("EVENT_DO").ok(),
+                    auth_rate_limiter: env.rate_limiter("AUTH_RATE_LIMITER").ok().map(Arc::new),
+                    claim_rate_limiter: env.rate_limiter("CLAIM_RATE_LIMITER").ok().map(Arc::new),
+                    deposit_rate_limiter: env
+                        .rate_limiter("DEPOSIT_RATE_LIMITER")
+                        .ok()
+                        .map(Arc::new),
+                    webhook_rate_limiter: env
+                        .rate_limiter("WEBHOOK_RATE_LIMITER")
+                        .ok()
+                        .map(Arc::new),
                 };
                 let _ = CACHED_BINDINGS.set(b);
                 CACHED_BINDINGS.get().unwrap()
@@ -338,6 +356,10 @@ impl AppState {
         let r2 = bindings.r2.clone();
         let r2_raw = bindings.r2_raw.clone();
         let event_do = bindings.event_do.clone();
+        let auth_rate_limiter = bindings.auth_rate_limiter.clone();
+        let claim_rate_limiter = bindings.claim_rate_limiter.clone();
+        let deposit_rate_limiter = bindings.deposit_rate_limiter.clone();
+        let webhook_rate_limiter = bindings.webhook_rate_limiter.clone();
 
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
         if webhook_secret.is_empty() {
@@ -365,6 +387,10 @@ impl AppState {
             r2,
             r2_raw,
             event_do,
+            auth_rate_limiter,
+            claim_rate_limiter,
+            deposit_rate_limiter,
+            webhook_rate_limiter,
             webhook_secret,
             worker_ctx: None,
         })

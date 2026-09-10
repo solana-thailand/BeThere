@@ -148,7 +148,18 @@ pub async fn handle_callback(code: &str, state: &AppState) -> Result<GoogleUserI
     // Fetch user info using the access token
     let user_info = http::fetch_user_info(&token_response.access_token).await?;
 
+    validate_google_identity(&user_info)?;
     Ok(user_info)
+}
+
+fn validate_google_identity(user: &GoogleUserInfo) -> Result<(), String> {
+    if !user.verified_email
+        || user.id.trim().is_empty()
+        || !event_checkin_domain::validation::is_plausible_email(&user.email)
+    {
+        return Err("Google did not provide a verified email identity".into());
+    }
+    Ok(())
 }
 
 /// Check if a given email is authorized to access the platform.
@@ -728,6 +739,10 @@ mod tests {
             r2: None,
             r2_raw: None,
             event_do: None,
+            auth_rate_limiter: None,
+            claim_rate_limiter: None,
+            deposit_rate_limiter: None,
+            webhook_rate_limiter: None,
             webhook_secret: String::new(),
             worker_ctx: None,
         }
@@ -784,5 +799,24 @@ mod tests {
         assert!(!is_public_route("/auth/me"));
         assert!(!is_public_route("/staff"));
         assert!(!is_public_route("/admin"));
+    }
+}
+
+#[cfg(test)]
+mod google_identity_tests {
+    use super::*;
+
+    #[test]
+    fn google_email_verification_is_required() {
+        let mut user: GoogleUserInfo =
+            serde_json::from_str(r#"{"id":"google-subject","email":"user@example.com"}"#).unwrap();
+        assert!(validate_google_identity(&user).is_err());
+        user.verified_email = true;
+        assert!(validate_google_identity(&user).is_ok());
+        user.email = "wallet:attacker".into();
+        assert!(validate_google_identity(&user).is_err());
+        user.email = "user@example.com".into();
+        user.id.clear();
+        assert!(validate_google_identity(&user).is_err());
     }
 }

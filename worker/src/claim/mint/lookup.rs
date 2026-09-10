@@ -17,7 +17,7 @@ pub async fn lookup_claim(
     token: &str,
     event_id: Option<&str>,
 ) -> Result<ClaimLookup, AppError> {
-    tracing::info!(claim_token = %token, "claim lookup");
+    tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup");
 
     // Resolve the correct event BEFORE any other logic. The public claim URL
     // `/claim/{token}` carries no event_id; without this coalesce, the fallback
@@ -48,7 +48,7 @@ pub async fn lookup_claim(
     }
 
     if let Some(walkin) = walkin {
-        tracing::info!(claim_token = %token, email = %walkin.email, "claim lookup: found walk-in attendee");
+        tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), email = %walkin.email, "claim lookup: found walk-in attendee");
 
         // API key + image URL are required; metadata_uri/collection_mint are optional
         // enhancements passed to Helius when set.
@@ -105,30 +105,30 @@ pub async fn lookup_claim(
                 // have claim_token in D1 but not yet synced to Sheets). The
                 // event is already correctly resolved above via coalesce_event_id,
                 // so this fallback uses the attendee's real event.
-                tracing::info!(claim_token = %token, "claim lookup: Sheets miss, trying D1 fallback");
+                tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: Sheets miss, trying D1 fallback");
                 if let Some(ref d1) = state.d1 {
                     match crate::db::attendees::get_attendee_by_claim_token(d1, token).await {
                         Ok(Some(a)) => {
-                            tracing::info!(claim_token = %token, "claim lookup: found in D1 fallback");
+                            tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: found in D1 fallback");
                             // Counts unavailable without event_id; claim page shows them as informational only
                             (a, 0, 0)
                         }
                         Ok(None) => {
-                            tracing::warn!(claim_token = %token, "claim lookup: not found in Sheets or D1");
+                            tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: not found in Sheets or D1");
                             return Err(AppError::NotFound("claim token not found".into()));
                         }
                         Err(e) => {
-                            tracing::error!(claim_token = %token, error = %e, "claim lookup D1 fallback failed");
+                            tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "claim lookup D1 fallback failed");
                             return Err(AppError::NotFound("claim token not found".into()));
                         }
                     }
                 } else {
-                    tracing::warn!(claim_token = %token, "claim lookup: no attendee found (no D1)");
+                    tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: no attendee found (no D1)");
                     return Err(AppError::NotFound("claim token not found".into()));
                 }
             }
             Err(ref e) => {
-                tracing::error!(claim_token = %token, error = %e, "claim lookup failed");
+                tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "claim lookup failed");
                 return Err(AppError::Internal(format!("failed to look up claim: {e}")));
             }
         };

@@ -114,16 +114,19 @@ pub async fn auth_callback(
     }
 
     // Create JWT session token for ALL users (staff and non-staff)
-    let token =
-        match auth::create_session_jwt(&user_info.email, &user_info.id, &state.config.jwt_secret)
-            .await
-        {
-            Ok(token) => token,
-            Err(ref e) => {
-                tracing::error!("jwt creation failed: {e}");
-                return Redirect::to("/login?error=token_failed").into_response();
-            }
-        };
+    let token = match crate::crypto::create_verified_email_jwt(
+        &user_info.email,
+        &user_info.id,
+        &state.config.jwt_secret,
+    )
+    .await
+    {
+        Ok(token) => token,
+        Err(ref e) => {
+            tracing::error!("jwt creation failed: {e}");
+            return Redirect::to("/login?error=token_failed").into_response();
+        }
+    };
 
     // Determine redirect: prefer explicit state param (event page redirect),
     // fall back to role-based defaults.
@@ -222,6 +225,7 @@ pub async fn auth_me(
         "role": role,
         "wallet_only": wallet_only,
         "wallet_address": wallet_address,
+        "email_verified": claims.email_verified,
     }))
 }
 

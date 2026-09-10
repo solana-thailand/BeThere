@@ -350,7 +350,7 @@ pub async fn register_walkin(
         email = %email_lower,
         name = %name,
         staff = %claims.email,
-        claim_token = %claim_token,
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&claim_token),
         "walk-in registered"
     );
 

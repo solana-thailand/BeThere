@@ -614,14 +614,14 @@ pub async fn get_attendee_by_claim_token(
     if let Some(ref d1) = state.d1 {
         match crate::db::attendees::get_attendee_by_claim_token(d1, claim_token).await {
             Ok(Some(attendee)) => {
-                tracing::debug!(claim_token = %claim_token, "D1 hit: attendee by claim_token");
+                tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 hit: attendee by claim_token");
                 return Ok(Some(attendee));
             }
             Ok(None) => {
-                tracing::debug!(claim_token = %claim_token, "D1 miss: attendee by claim_token, falling back to Sheets");
+                tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 miss: attendee by claim_token, falling back to Sheets");
             }
             Err(e) => {
-                tracing::warn!(claim_token = %claim_token, error = %e, "D1 error: attendee by claim_token, falling back to Sheets");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), error = %e, "D1 error: attendee by claim_token, falling back to Sheets");
             }
         }
     }
@@ -650,15 +650,15 @@ pub async fn get_attendee_with_claim_counts(
     if let (Some(d1), Some(eid)) = (&state.d1, event_id) {
         match crate::db::attendees::get_attendee_with_claim_counts(d1, claim_token, eid).await {
             Ok((Some(attendee), checked_in, claimed)) => {
-                tracing::debug!(claim_token = %claim_token, "D1 hit: attendee with claim counts");
+                tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 hit: attendee with claim counts");
                 return Ok((Some(attendee), checked_in, claimed));
             }
             Ok((None, _checked_in, _claimed)) => {
-                tracing::debug!(claim_token = %claim_token, "D1 miss: attendee with claim counts, falling back to Sheets");
+                tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 miss: attendee with claim counts, falling back to Sheets");
                 // D1 returned counts but no attendee — still use counts from Sheets fallback
             }
             Err(e) => {
-                tracing::warn!(claim_token = %claim_token, error = %e, "D1 error: attendee with claim counts, falling back to Sheets");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), error = %e, "D1 error: attendee with claim counts, falling back to Sheets");
             }
         }
     }

@@ -149,7 +149,7 @@ pub(crate) async fn acquire_claim_lock(
 
         if !resp.success {
             tracing::warn!(
-                claim_token = %token,
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                 error = ?resp.error,
                 "claim lock race: already locked (DO)"
             );
@@ -171,7 +171,7 @@ pub(crate) async fn acquire_claim_lock(
         }
 
         tracing::info!(
-            claim_token = %token,
+            claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
             lock_id = %lock_id,
             "claim lock acquired (DO+KV)"
         );
@@ -187,7 +187,7 @@ pub(crate) async fn acquire_claim_lock(
 
         if !acquired {
             tracing::warn!(
-                claim_token = %token,
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                 "claim lock race: already locked (D1)"
             );
             return Err("claim is already being processed or has been completed".to_string());
@@ -206,7 +206,7 @@ pub(crate) async fn acquire_claim_lock(
         }
 
         tracing::info!(
-            claim_token = %token,
+            claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
             lock_id = %lock_id,
             "claim lock acquired (D1+KV)"
         );
@@ -248,7 +248,7 @@ pub(crate) async fn acquire_claim_lock(
 
             if stored_id.as_deref() == Some(&lock_id) {
                 tracing::info!(
-                    claim_token = %token,
+                    claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                     lock_id = %lock_id,
                     "claim lock acquired (write-first verify)"
                 );
@@ -256,7 +256,7 @@ pub(crate) async fn acquire_claim_lock(
             } else {
                 // Another request won — the winner's lock is authoritative.
                 tracing::warn!(
-                    claim_token = %token,
+                    claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                     our_lock_id = %lock_id,
                     ?stored_id,
                     "claim lock race: another request won"
@@ -269,7 +269,7 @@ pub(crate) async fn acquire_claim_lock(
             // (could happen with eventual consistency across regions).
             // Proceed optimistically — the lock was written.
             tracing::warn!(
-                claim_token = %token,
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                 "claim lock write succeeded but verify read returned None"
             );
             Ok(())
@@ -323,7 +323,7 @@ pub(crate) async fn finalize_claim_lock(
         )
         .await;
         if let Some(e) = do_err.as_deref() {
-            tracing::warn!(claim_token = %token, error = %e, "DO finalize claim lock failed");
+            tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "DO finalize claim lock failed");
         }
 
         // Also finalize in KV for read compatibility
@@ -345,7 +345,7 @@ pub(crate) async fn finalize_claim_lock(
         return match do_err {
             Some(e) => Err(e),
             None => {
-                tracing::info!(claim_token = %token, "claim lock finalized (DO+KV)");
+                tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lock finalized (DO+KV)");
                 Ok(())
             }
         };
@@ -413,7 +413,7 @@ pub(crate) async fn release_claim_lock(
         )
         .await;
         if let Some(e) = do_err.as_deref() {
-            tracing::warn!(claim_token = %token, error = %e, "DO release claim lock failed");
+            tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "DO release claim lock failed");
         }
 
         // Always delete from KV
@@ -424,7 +424,7 @@ pub(crate) async fn release_claim_lock(
         return match do_err {
             Some(e) => Err(e),
             None => {
-                tracing::info!(claim_token = %token, "claim lock released (DO+KV)");
+                tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lock released (DO+KV)");
                 Ok(())
             }
         };
@@ -436,9 +436,11 @@ pub(crate) async fn release_claim_lock(
     let mut d1_err = None;
     if let Some(db) = d1 {
         match db::release_claim_lock(db, event_id, token).await {
-            Ok(()) => tracing::info!(claim_token = %token, "claim lock released (D1+KV)"),
+            Ok(()) => {
+                tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lock released (D1+KV)")
+            }
             Err(e) => {
-                tracing::warn!(claim_token = %token, error = %e, "D1 release claim lock failed");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "D1 release claim lock failed");
                 d1_err = Some(e);
             }
         }
@@ -449,7 +451,7 @@ pub(crate) async fn release_claim_lock(
     kv.delete(&key)
         .await
         .map_err(|e| format!("claim lock release failed: {e:?}"))?;
-    tracing::info!(claim_token = %token, "claim lock released");
+    tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lock released");
 
     match d1_err {
         Some(e) => Err(e),

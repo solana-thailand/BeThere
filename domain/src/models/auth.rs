@@ -8,6 +8,10 @@ pub struct Claims {
     pub email: String,
     /// Subject (Google user ID)
     pub sub: String,
+    /// True only when the session issuer verified the email with the identity provider.
+    /// Wallet links and legacy tokens do not prove mailbox ownership.
+    #[serde(default)]
+    pub email_verified: bool,
     /// Issued at (Unix timestamp)
     pub iat: u64,
     /// Expiration (Unix timestamp)
@@ -24,6 +28,7 @@ impl Claims {
         Self {
             email,
             sub,
+            email_verified: false,
             iat,
             exp,
         }
@@ -148,4 +153,32 @@ pub struct WalletBindRequest {
     pub wallet_address: String,
     pub signature: String,
     pub message: String,
+}
+
+#[cfg(test)]
+mod email_identity_tests {
+    use super::Claims;
+
+    #[test]
+    fn legacy_sessions_do_not_gain_email_verification() {
+        let claims: Claims = serde_json::from_str(
+            r#"{"email":"user@example.com","sub":"wallet-or-google","iat":1,"exp":2}"#,
+        )
+        .unwrap();
+        assert!(!claims.email_verified);
+    }
+
+    #[test]
+    fn new_sessions_start_unverified_until_issuer_attests() {
+        assert!(!Claims::new("user@example.com".into(), "wallet-address".into()).email_verified);
+    }
+
+    #[test]
+    fn signed_verification_field_round_trips() {
+        let mut claims = Claims::new("user@example.com".into(), "google-subject".into());
+        claims.email_verified = true;
+        let decoded: Claims =
+            serde_json::from_str(&serde_json::to_string(&claims).unwrap()).unwrap();
+        assert!(decoded.email_verified);
+    }
 }

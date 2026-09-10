@@ -214,8 +214,7 @@ pub struct OnchainWebhookRequest {
 /// Parses each transaction, resolves the event ID, and stores in KV.
 ///
 /// **Authentication**: Validates `Authorization: Bearer <token>` header
-/// against the `WEBHOOK_SECRET` env var. If the var is not set or empty,
-/// validation is skipped for backward compatibility.
+/// against the `WEBHOOK_SECRET` env var. Missing configuration fails closed.
 #[worker::send]
 pub async fn onchain_webhook_handler(
     State(state): State<AppState>,
@@ -235,8 +234,11 @@ pub async fn onchain_webhook_handler(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
     if auth_header != expected {
+        // A rejected value is still credential material; never copy it into logs.
         tracing::warn!(
-            auth = %auth_header,
+            auth_present = !auth_header.is_empty(),
+            auth_is_bearer = auth_header.starts_with("Bearer "),
+            auth_len = auth_header.len(),
             "onchain webhook rejected: invalid or missing Authorization header"
         );
         return Err(
