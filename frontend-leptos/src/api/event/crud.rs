@@ -62,6 +62,26 @@ pub async fn list_events() -> Result<EventsListData, ApiError> {
     })
 }
 
+/// GET /api/events/readiness — aggregate core-service warnings for visible events.
+pub async fn get_core_readiness() -> Result<CoreReadinessData, ApiError> {
+    let response = api_get("/events/readiness").await?;
+    let result: ApiResponse<CoreReadinessData> =
+        response_json(&response).await.map_err(|error| ApiError {
+            message: format!("Failed to parse readiness response: {error}"),
+            status: 0,
+        })?;
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or_else(|| "Unknown error".to_string()),
+            status: 0,
+        });
+    }
+    result.data.ok_or_else(|| ApiError {
+        message: "No readiness data in response".to_string(),
+        status: 0,
+    })
+}
+
 /// GET /api/events/{id} — get full event config.
 pub async fn get_event_detail(id: &str) -> Result<EventDetailData, ApiError> {
     let path = format!("/events/{id}");

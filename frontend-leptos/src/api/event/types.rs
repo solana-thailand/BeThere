@@ -167,6 +167,28 @@ pub struct EventsListData {
     pub next_cursor: Option<String>,
 }
 
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct QuizReadinessProblem {
+    #[serde(default)]
+    pub event_id: String,
+    #[serde(default)]
+    pub event_name: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub reason: String,
+    #[serde(default)]
+    pub blocked_attendees: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct CoreReadinessData {
+    #[serde(default)]
+    pub quiz_problems: Vec<QuizReadinessProblem>,
+    #[serde(default)]
+    pub blocked_attendees: u64,
+}
+
 /// Response for GET /api/events/{id} — single event detail.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct EventDetailData {

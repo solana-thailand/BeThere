@@ -33,8 +33,8 @@ No attendee PII was queried for this audit.
 - [x] Add one shared readiness validator for event activation and admin quiz update.
 - [x] Reject transitions to `active + quiz_enabled` unless an enabled, structurally valid quiz
       config with at least one enabled question exists.
-- [ ] Show the same readiness failure in the admin event form and dashboard.
-- [ ] Add an aggregate admin repair report for existing invalid events.
+- [x] Show quiz readiness failures in the admin Events page.
+- [x] Add an authorization-filtered aggregate admin repair report for existing invalid events.
 - [ ] For each affected production event, explicitly configure the quiz or
       disable the gate; do not bulk-disable without organizer review.
 - [ ] Re-check the 37 affected attendee records after repair and verify claim

@@ -57,6 +57,7 @@ pub fn EventsPage(
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (next_events_cursor, set_next_events_cursor) = signal(None::<String>);
     let (loading_more_events, set_loading_more_events) = signal(false);
+    let (readiness, set_readiness) = signal(api::CoreReadinessData::default());
 
     // Ctrl+K keyboard shortcut to focus search
     Effect::new(move |_| {
@@ -97,6 +98,12 @@ pub fn EventsPage(
                         &format!("Failed to load events: {e}"),
                         components::ToastType::Error,
                     );
+                }
+            }
+            match api::get_core_readiness().await {
+                Ok(report) => set_readiness.set(report),
+                Err(error) => {
+                    log::warn!("[events-page] failed to load readiness report: {error}");
                 }
             }
             set_loading.set(false);
@@ -149,6 +156,43 @@ pub fn EventsPage(
                         </Show>
                     </div>
                 </div>
+
+                <Show
+                    when=move || !readiness.get().quiz_problems.is_empty()
+                    fallback=|| view! { <div></div> }
+                >
+                    {move || {
+                        let report = readiness.get();
+                        let event_count = report.quiz_problems.len();
+                        let blocked = report.blocked_attendees;
+                        view! {
+                            <div class="card" role="alert">
+                                <div class="card-header">
+                                    <div>
+                                        <span class="card-title">"⚠ Quiz setup needs attention"</span>
+                                        <p>
+                                            {format!(
+                                                "{event_count} visible event(s) have an invalid quiz gate; {blocked} checked-in attendee(s) may be unable to claim their NFT."
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="quiz-settings-grid">
+                                    {report.quiz_problems.into_iter().map(|problem| view! {
+                                        <div class="quiz-setting-item">
+                                            <span class="quiz-setting-label">
+                                                {format!("{} ({})", problem.event_name, problem.status)}
+                                            </span>
+                                            <span class="setting-value">
+                                                {format!("{} · {} blocked", problem.reason, problem.blocked_attendees)}
+                                            </span>
+                                        </div>
+                                    }).collect_view()}
+                                </div>
+                            </div>
+                        }
+                    }}
+                </Show>
 
                 // Event detail summary card (shows when dropdown selects an event)
                 <Show when=move || active_event_id.get().is_some() fallback=|| view! { <div></div> }>
