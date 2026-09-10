@@ -38,7 +38,8 @@ if [ -n "$FNM_NODE_BIN" ] && [ -d "$FNM_NODE_BIN" ]; then
   export PATH="$FNM_NODE_BIN:$PATH"
 fi
 
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
 PNP_FILE="$HOME/.pnp.cjs"
 PNP_BACKUP="$HOME/.pnp.cjs.bak"
@@ -110,7 +111,7 @@ trap restore_pnp EXIT INT TERM
 #
 # This guard reads the crate version from Cargo.lock and compares it to the
 # installed CLI up front, failing fast with the exact remediation command.
-REPO_LOCK="$(cd "$(dirname "$0")/.." && pwd)/Cargo.lock"
+REPO_LOCK="$(cd "$SCRIPT_DIR/.." && pwd)/Cargo.lock"
 
 check_wasm_bindgen_version() {
   # Non-fatal if we can't determine the expected version (don't block deploys
@@ -195,7 +196,7 @@ verify_content_types() {
 # run within the last hour (PREFLIGHT_MAX_AGE_SECONDS). --force bypasses the
 # gate but appends a mandatory audit entry to worker/scripts/.preflight-bypass.log
 # (gate is bypassable but never silently). Staging/dev deploys skip the gate.
-SCRIPTS_DIR="$(cd "$(dirname "$0")/scripts" && pwd)"
+SCRIPTS_DIR="$SCRIPT_DIR/scripts"
 PREFLIGHT_SCRIPT="$SCRIPTS_DIR/preflight.sh"
 PREFLIGHT_AUDIT_LOG="$SCRIPTS_DIR/.preflight-bypass.log"
 
