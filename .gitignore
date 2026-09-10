@@ -79,6 +79,9 @@ scripts/.metrics.json
 !.dev.vars.example
 target
 
+# cargo-heal local account, metering, and trajectory state
+/.heal/
+
 # Claude Code personal overrides (project settings.json stays tracked)
 .claude/settings.local.json
 
