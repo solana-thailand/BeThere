@@ -63,6 +63,7 @@
 | [Mainnet Deployment Checklist](mainnet_deployment_checklist.md) | Ordered mainnet cutover steps |
 | [Mainnet Canary Mitigation Runbook](mainnet_canary_mitigation_runbook.md) | Canary + rollback for the no-native-%-canary edge deploy |
 | [Events Management](events_management.md) | How events are managed in the system |
+| [Attendee Notifications](notifications.md) | Email outbox, reminders, organizer delivery history, and sender activation |
 | [Campaigns Guide](campaigns_guide.md) | Multi-event series setup, attendee rewards, and UX gaps |
 | [Sheet Setup](sheet_setup.md) | Google Sheets structure + service-account setup |
 | [Business Flows — Event Page](business_flows_event_page.md) | UX and business flows for the event page |
