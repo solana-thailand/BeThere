@@ -20,16 +20,16 @@ Remaining work, ordered by impact:
    <https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/>.
    It is intentionally not treated as exact accounting, and authorization plus
    idempotency remain the primary controls.
-2. **Event/admin pagination — response boundary implemented.** `GET /api/events`
+2. **Event/admin pagination — implemented.** `GET /api/events`
    now returns at most 50 events by default (caller cap 100), with a snapshot-bound
    cursor that expires after inserts, deletes, or reordering instead of skipping
    data. The event-management page exposes Load more; dashboard, scanner, and
    campaign selectors use one shared client helper to consume all pages without
-   losing older events. Per-page authorization happens before serialization and
-   the cursor exposes no private event identifier. A later D1-primary cutover
-   should push the cursor into SQL; today production reads the single bounded KV
-   metadata index, while the D1 disaster-recovery fallback still reconstructs
-   that index with `db::events::list_events`.
+   losing older events. D1 is now primary for this endpoint: authorization and
+   stable `(created_at,id)` keyset pagination happen in one indexed SQL query.
+   KV remains a first-page availability fallback and uses a snapshot-bound cursor.
+   Rebuild/seeding jobs retain the intentional unbounded internal D1 reader because
+   they must reconstruct the complete KV index and are not request-facing lists.
 3. **Measured dashboard cadence — implemented.** Polling remains at 2.5 seconds
    while data changes, backs off to 5 seconds after three unchanged responses,
    and resets immediately after a change. Hidden and unmounted tabs do not poll;

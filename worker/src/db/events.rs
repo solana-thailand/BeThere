@@ -832,6 +832,103 @@ pub async fn list_events_as_meta(
     Ok(rows.iter().map(|r| r.to_event_config().to_meta()).collect())
 }
 
+/// One authorization-filtered keyset page for the admin event listing.
+pub struct EventMetaPage {
+    pub events: Vec<event_checkin_domain::models::event::EventMeta>,
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug)]
+pub enum EventPageError {
+    InvalidCursor,
+    Storage(String),
+}
+
+impl std::fmt::Display for EventPageError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::InvalidCursor => formatter.write_str("invalid or expired event cursor"),
+            Self::Storage(error) => formatter.write_str(error),
+        }
+    }
+}
+
+/// Read a bounded event page from D1. `email=None` grants the already-checked
+/// super-admin view; every other caller is filtered before rows leave D1.
+pub async fn list_event_meta_page(
+    db: &D1Database,
+    email: Option<&str>,
+    cursor: Option<&str>,
+    limit: usize,
+) -> Result<EventMetaPage, EventPageError> {
+    if limit == 0 || limit >= i32::MAX as usize {
+        return Err(EventPageError::Storage("invalid event page limit".into()));
+    }
+    let (cursor_created_at, cursor_id) = match cursor {
+        None => (String::new(), String::new()),
+        Some(raw) => {
+            let (source, created_at, id): (String, String, String) =
+                serde_json::from_str(raw).map_err(|_| EventPageError::InvalidCursor)?;
+            if source != "d1" || created_at.is_empty() || id.is_empty() {
+                return Err(EventPageError::InvalidCursor);
+            }
+            (created_at, id)
+        }
+    };
+    let is_super_admin = email.is_none();
+    let email = email.unwrap_or("").trim().to_lowercase();
+    let fetch_limit = limit
+        .checked_add(1)
+        .ok_or_else(|| EventPageError::Storage("event page limit overflow".into()))?;
+    let sql = include_str!("sql/list_event_meta_page.sql");
+    let stmt = db
+        .prepare(sql)
+        .bind_refs(&[
+            D1Type::Integer(i32::from(is_super_admin)),
+            D1Type::Text(&email),
+            D1Type::Text(&cursor_created_at),
+            D1Type::Text(&cursor_id),
+            D1Type::Integer(fetch_limit as i32),
+        ])
+        .map_err(|e| EventPageError::Storage(format!("D1 list_event_meta_page bind: {e:?}")))?;
+    let values = crate::db::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| EventPageError::Storage(format!("D1 list_event_meta_page execute: {e}")))?;
+    let mut rows: Vec<D1EventRow> = values
+        .into_iter()
+        .map(|value| {
+            serde_json::from_value(value).map_err(|e| {
+                EventPageError::Storage(format!("D1 list_event_meta_page deserialize: {e}"))
+            })
+        })
+        .collect::<Result<_, _>>()?;
+    let has_more = rows.len() > limit;
+    if has_more {
+        rows.pop();
+    }
+    let next_cursor = if has_more {
+        rows.last()
+            .map(|row| {
+                serde_json::to_string(&(
+                    "d1",
+                    row.created_at.as_deref().unwrap_or(""),
+                    row.id.as_deref().unwrap_or(""),
+                ))
+                .map_err(|e| EventPageError::Storage(format!("D1 event cursor serialize: {e}")))
+            })
+            .transpose()?
+    } else {
+        None
+    };
+    Ok(EventMetaPage {
+        events: rows
+            .iter()
+            .map(|row| row.to_event_config().to_meta())
+            .collect(),
+        next_cursor,
+    })
+}
+
 /// Raw column subset for public event listings.
 /// Avoids `results::<D1EventRow>()` which can panic on nullable columns
 /// when deserialized via the workers-rs serde bridge.

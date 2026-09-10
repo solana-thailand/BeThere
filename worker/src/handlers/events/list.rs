@@ -42,6 +42,9 @@ fn page_range<T>(
     let start = match cursor {
         None => 0,
         Some(cursor) => {
+            let cursor = cursor
+                .strip_prefix("kv.")
+                .ok_or_else(|| AppError::Validation("invalid event cursor".into()))?;
             let (offset, supplied_snapshot) = cursor
                 .split_once('.')
                 .ok_or_else(|| AppError::Validation("invalid event cursor".into()))?;
@@ -58,7 +61,7 @@ fn page_range<T>(
         }
     };
     let end = start.saturating_add(limit).min(items.len());
-    let next_cursor = (end < items.len() && end > start).then(|| format!("{end}.{snapshot}"));
+    let next_cursor = (end < items.len() && end > start).then(|| format!("kv.{end}.{snapshot}"));
     Ok((start..end, next_cursor))
 }
 
@@ -79,54 +82,71 @@ pub async fn list_events(
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(staff_email = %claims.email, "list events requested");
 
-    let kv = state.events_kv.as_ref();
+    let limit = query.limit.unwrap_or(DEFAULT_PAGE_SIZE);
+    if !(1..=MAX_PAGE_SIZE).contains(&limit) {
+        return Err(
+            AppError::Validation(format!("limit must be between 1 and {MAX_PAGE_SIZE}")).into(),
+        );
+    }
+    let is_super_admin = state
+        .config
+        .super_admin_emails
+        .iter()
+        .any(|email| email.eq_ignore_ascii_case(&claims.email));
 
+    // D1 is the primary event store and can apply authorization plus keyset
+    // pagination in one bounded query. KV remains the availability fallback.
+    let kv_cursor = query
+        .cursor
+        .as_deref()
+        .is_some_and(|cursor| cursor.starts_with("kv."));
+    if let Some(ref d1) = state.d1
+        && !kv_cursor
+    {
+        let email_filter = (!is_super_admin).then_some(claims.email.as_str());
+        match crate::db::events::list_event_meta_page(
+            d1,
+            email_filter,
+            query.cursor.as_deref(),
+            limit,
+        )
+        .await
+        {
+            Ok(page) => {
+                return Ok(ApiOk::new(json!({
+                    "events": page.events,
+                    "next_cursor": page.next_cursor,
+                })));
+            }
+            Err(crate::db::events::EventPageError::InvalidCursor) => {
+                return Err(AppError::Validation("invalid or expired event cursor".into()).into());
+            }
+            Err(crate::db::events::EventPageError::Storage(error)) if query.cursor.is_none() => {
+                tracing::warn!(error = %error, "D1 event page failed, falling back to KV");
+            }
+            Err(crate::db::events::EventPageError::Storage(error)) => {
+                return Err(AppError::Internal(format!("failed to list events: {error}")).into());
+            }
+        }
+    }
+
+    let kv = state.events_kv.as_ref();
     let all_events = if let Some(kv_ref) = kv {
-        let events = crate::event_store::list_events(kv_ref).await.map_err(|e| {
+        crate::event_store::list_events(kv_ref).await.map_err(|e| {
             tracing::error!(error = %e, "failed to list events");
             AppError::Internal(format!("failed to list events: {e}"))
-        })?;
-        if !events.is_empty() {
-            events
-        } else if let Some(ref d1) = state.d1 {
-            tracing::info!("KV empty, falling back to D1 for event list");
-            crate::db::events::list_events_as_meta(d1)
-                .await
-                .map_err(|e| {
-                    tracing::error!(error = %e, "D1 list events failed");
-                    AppError::Internal(format!("failed to list events from D1: {e}"))
-                })?
-        } else {
-            events
-        }
-    } else if let Some(ref d1) = state.d1 {
-        tracing::info!("no KV, reading event list from D1");
-        crate::db::events::list_events_as_meta(d1)
-            .await
-            .map_err(|e| {
-                tracing::error!(error = %e, "D1 list events failed");
-                AppError::Internal(format!("failed to list events from D1: {e}"))
-            })?
+        })?
     } else {
-        return Err(AppError::Internal(
-            "events KV namespace not configured — add EVENTS binding in wrangler.toml".into(),
-        )
-        .into());
+        return Err(AppError::Internal("event storage unavailable".into()).into());
     };
 
-    let limit = query.limit.unwrap_or(DEFAULT_PAGE_SIZE);
     let (range, next_cursor) = page_range(&all_events, query.cursor.as_deref(), limit, |event| {
         event.id.as_str()
     })?;
     let page = &all_events[range];
 
     // SuperAdmin sees everything in this bounded page.
-    if state
-        .config
-        .super_admin_emails
-        .iter()
-        .any(|e| e.eq_ignore_ascii_case(&claims.email))
-    {
+    if is_super_admin {
         return Ok(ApiOk::new(json!({
             "events": page,
             "next_cursor": next_cursor,
@@ -182,7 +202,7 @@ mod tests {
         let ids = vec!["new", "middle", "old"];
         let (first, next) = page_range(&ids, None, 2, |id| *id).unwrap();
         assert_eq!(&ids[first], &["new", "middle"]);
-        assert!(next.as_deref().unwrap().starts_with("2."));
+        assert!(next.as_deref().unwrap().starts_with("kv.2."));
         let (second, next) = page_range(&ids, next.as_deref(), 2, |id| *id).unwrap();
         assert_eq!(&ids[second], &["old"]);
         assert!(next.is_none());
@@ -192,7 +212,7 @@ mod tests {
     fn cursor_and_limit_fail_closed() {
         let ids = vec!["event"];
         assert!(page_range(&ids, Some("missing"), 1, |id| *id).is_err());
-        assert!(page_range(&ids, Some("2.bad"), 1, |id| *id).is_err());
+        assert!(page_range(&ids, Some("kv.2.bad"), 1, |id| *id).is_err());
         assert!(page_range(&ids, None, 0, |id| *id).is_err());
         assert!(page_range(&ids, None, MAX_PAGE_SIZE + 1, |id| *id).is_err());
     }

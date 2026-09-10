@@ -243,10 +243,11 @@ fn the_enum_parse_has_exactly_one_home() {
         .join("\n");
 
     assert_eq!(
-        code.matches("serde_json::from_value").count(),
+        code.matches("serde_json::from_value(serde_json::Value::String")
+            .count(),
         1,
-        "every enum column must be parsed through `parse_enum_column`; a second \
-         `serde_json::from_value` means a reader grew its own copy of the rule"
+        "enum strings must be parsed only through `parse_enum_column`; a second \
+         string-to-enum conversion means a reader grew its own copy of the rule"
     );
     assert!(
         code.matches("parse_enum_column(").count() >= 11,
