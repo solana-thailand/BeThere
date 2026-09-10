@@ -111,10 +111,12 @@ pub async fn delete_request(
             );
 
             // D1: Clear PII columns
-            if let Err(e) = crate::db::attendees::clear_attendee_pii(db, attendee_id).await {
-                tracing::warn!(attendee_id = %attendee_id, error = %e, "D1 clear_attendee_pii failed");
-            } else {
-                summary.d1_attendees_cleared += 1;
+            match crate::db::attendees::clear_attendee_pii(db, attendee_id).await {
+                Ok(()) => summary.d1_attendees_cleared += 1,
+                Err(e) => {
+                    tracing::warn!(attendee_id = %attendee_id, error = %e, "D1 clear_attendee_pii failed");
+                    summary.record_failure("clear_attendee_pii");
+                }
             }
 
             // KV: Delete all attendee-related keys
@@ -202,24 +204,30 @@ pub async fn delete_request(
         }
 
         // 2. Clear contact PII
-        if let Err(e) = crate::db::contacts::clear_contact_pii(db, &email).await {
-            tracing::warn!(email = %email, error = %e, "D1 clear_contact_pii failed");
-        } else {
-            summary.d1_contacts_cleared += 1;
+        match crate::db::contacts::clear_contact_pii(db, &email).await {
+            Ok(()) => summary.d1_contacts_cleared += 1,
+            Err(e) => {
+                tracing::warn!(email = %email, error = %e, "D1 clear_contact_pii failed");
+                summary.record_failure("clear_contact_pii");
+            }
         }
 
         // 3. Clear developer profile PII
-        if let Err(e) = crate::db::developers::clear_developer_pii(db, &email).await {
-            tracing::warn!(email = %email, error = %e, "D1 clear_developer_pii failed");
-        } else {
-            summary.d1_developer_cleared += 1;
+        match crate::db::developers::clear_developer_pii(db, &email).await {
+            Ok(()) => summary.d1_developer_cleared += 1,
+            Err(e) => {
+                tracing::warn!(email = %email, error = %e, "D1 clear_developer_pii failed");
+                summary.record_failure("clear_developer_pii");
+            }
         }
 
         // 4. Delete registration responses
-        if let Err(e) = crate::db::developers::delete_developer_responses(db, &email).await {
-            tracing::warn!(email = %email, error = %e, "D1 delete_developer_responses failed");
-        } else {
-            summary.d1_responses_deleted += 1;
+        match crate::db::developers::delete_developer_responses(db, &email).await {
+            Ok(n) => summary.d1_responses_deleted += n,
+            Err(e) => {
+                tracing::warn!(email = %email, error = %e, "D1 delete_developer_responses failed");
+                summary.record_failure("delete_developer_responses");
+            }
         }
     }
 
@@ -233,8 +241,11 @@ pub async fn delete_request(
                 crate::audit_store::AuditAction::DataDeletionRequested,
                 &email,
                 &format!(
-                    "PDPA deletion: {} events, {} KV keys, {} R2 objects",
-                    summary.events_affected, summary.kv_keys_deleted, summary.r2_objects_deleted
+                    "PDPA deletion: {} events, {} KV keys, {} R2 objects, {} failures",
+                    summary.events_affected,
+                    summary.kv_keys_deleted,
+                    summary.r2_objects_deleted,
+                    summary.failures.len()
                 ),
             ),
             state.d1.as_deref(),
@@ -248,15 +259,25 @@ pub async fn delete_request(
         d1_attendees = summary.d1_attendees_cleared,
         kv_keys = summary.kv_keys_deleted,
         r2_objects = summary.r2_objects_deleted,
-        "PDPA data deletion completed"
+        failures = summary.failures.len(),
+        "PDPA data deletion finished"
     );
 
-    let status = if blocked_events.is_empty() {
-        "completed"
-    } else if summary.events_affected > 0 {
-        "partial"
-    } else {
-        "blocked"
+    // Precedence: a D1 write failure outranks the time gate, because a caller who
+    // sees "blocked" retries after the event ends, while one who sees "completed"
+    // assumes their data is gone when it is not.
+    let status = match (
+        summary.failures.is_empty(),
+        blocked_events.is_empty(),
+        summary.any_d1_write_succeeded(),
+    ) {
+        (false, _, false) => "failed",
+        (false, _, true) => "partial",
+        (true, true, _) => "completed",
+        (true, false, _) => match summary.events_affected > 0 {
+            true => "partial",
+            false => "blocked",
+        },
     };
 
     Ok(ApiOk::new(json!({
@@ -271,6 +292,7 @@ pub async fn delete_request(
         "d1_responses_deleted": summary.d1_responses_deleted,
         "kv_keys_deleted": summary.kv_keys_deleted,
         "r2_objects_deleted": summary.r2_objects_deleted,
+        "failures": summary.failures,
         "on_chain_note": "On-chain data (wallet addresses, transaction signatures) is immutable and cannot be deleted. This is disclosed in our privacy policy as a technical limitation per PDPA Section 37.",
         "time_gate_note": "Data deletion is only available after event conclusion per PDPA Section 38 (contract performance exemption). Blocked events retain data until their end date.",
     })))
@@ -343,6 +365,26 @@ struct DeletionSummary {
     d1_responses_deleted: usize,
     kv_keys_deleted: usize,
     r2_objects_deleted: usize,
+    /// D1 writes that returned an error. A PDPA erasure that silently no-ops is
+    /// worse than one that reports failure, so these are surfaced to the caller
+    /// instead of only being logged.
+    failures: Vec<String>,
+}
+
+impl DeletionSummary {
+    /// Records only the operation name. The underlying D1 error is logged at the
+    /// call site — it carries SQL text and a JS stack trace, neither of which
+    /// should reach the caller.
+    fn record_failure(&mut self, operation: &str) {
+        self.failures.push(operation.to_string());
+    }
+
+    /// True when at least one D1 erasure write actually landed.
+    fn any_d1_write_succeeded(&self) -> bool {
+        self.d1_attendees_cleared > 0
+            || self.d1_contacts_cleared > 0
+            || self.d1_developer_cleared > 0
+    }
 }
 
 /// Clear PII columns in the Google Sheet for a specific row.

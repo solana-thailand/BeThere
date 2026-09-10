@@ -3,7 +3,8 @@
 use worker::KvStore;
 
 use event_checkin_domain::models::event::{
-    CreateEventRequest, EscrowStatus, EventConfig, EventIndex, EventStatus,
+    CreateEventRequest, DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus,
+    EventConfig, EventIndex, EventStatus, normalize_sheet_name,
 };
 
 use crate::event_store::read::get_event_index;
@@ -55,6 +56,12 @@ pub async fn create_event(
         ));
     }
 
+    // Tab names are organiser free text and reach a Google Sheets A1 range on
+    // every read and write; reject here rather than at the API, which fails
+    // silently because the Sheets calls are detached best-effort work.
+    let sheet_name = normalize_sheet_name(&req.sheet_name, DEFAULT_ATTENDEE_SHEET_NAME)?;
+    let staff_sheet_name = normalize_sheet_name(&req.staff_sheet_name, DEFAULT_STAFF_SHEET_NAME)?;
+
     // Generate slug from name if not provided
     let slug = if req.slug.trim().is_empty() {
         slugify(&req.name)
@@ -98,16 +105,8 @@ pub async fn create_event(
         event_end_ms: req.event_end_ms,
         time_tba: req.time_tba,
         sheet_id: req.sheet_id.trim().to_string(),
-        sheet_name: if req.sheet_name.is_empty() {
-            "Attendees".to_string()
-        } else {
-            req.sheet_name.clone()
-        },
-        staff_sheet_name: if req.staff_sheet_name.is_empty() {
-            "staff".to_string()
-        } else {
-            req.staff_sheet_name.clone()
-        },
+        sheet_name,
+        staff_sheet_name,
         quiz_enabled: req.quiz_enabled,
         nft_collection_mint: req.nft_collection_mint.trim().to_string(),
         nft_metadata_uri: req.nft_metadata_uri.trim().to_string(),

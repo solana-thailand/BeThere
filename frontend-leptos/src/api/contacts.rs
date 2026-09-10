@@ -10,9 +10,9 @@
 
 use serde::Deserialize;
 
+use super::api_get;
 use super::fetch::response_json;
 use super::types::{ApiError, ApiResponse};
-use super::api_get;
 
 // ===== Audience types =====
 
@@ -167,9 +167,7 @@ pub async fn get_audience(event_ids: Option<&[&str]>) -> Result<AudienceResponse
 /// Mirrors `export_walkin_csv` — the caller triggers a browser download using
 /// the returned `csv` / `filename`. `total` is also returned so the UI can show
 /// "Exported N emails" without re-parsing the CSV.
-pub async fn export_audience_csv(
-    event_ids: Option<&[&str]>,
-) -> Result<AudienceResponse, ApiError> {
+pub async fn export_audience_csv(event_ids: Option<&[&str]>) -> Result<AudienceResponse, ApiError> {
     let path = build_audience_path(event_ids, true);
     let response = api_get(&path).await?;
 

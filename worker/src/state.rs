@@ -100,11 +100,12 @@ impl AppState {
             .or_else(|_| get_var(env, "GOOGLE_REDIRECT_URI"))
             .unwrap_or_else(|_| format!("{server_url}/api/auth/callback"));
 
-        let redirect_uri = if raw_redirect_uri.contains("localhost") && server_url.contains("workers.dev") {
-            format!("{server_url}/api/auth/callback")
-        } else {
-            raw_redirect_uri
-        };
+        let redirect_uri =
+            if raw_redirect_uri.contains("localhost") && server_url.contains("workers.dev") {
+                format!("{server_url}/api/auth/callback")
+            } else {
+                raw_redirect_uri
+            };
 
         let google_oauth = GoogleOAuthConfig {
             client_id: get_secret(env, "GOOGLE_CLIENT_ID").unwrap_or_default(),
@@ -241,7 +242,9 @@ impl AppState {
 
         if dev_mode {
             // Refuse DEV_MODE on live production domain only
-            let is_live_production = google_oauth.redirect_uri.contains("bethere.solana-thailand.workers.dev")
+            let is_live_production = google_oauth
+                .redirect_uri
+                .contains("bethere.solana-thailand.workers.dev")
                 && !google_oauth.redirect_uri.contains("staging");
             if is_live_production {
                 return Err(

@@ -57,6 +57,12 @@ pub(crate) async fn upsert_attendee(
     Ok(())
 }
 
+/// One `RETURNING id` row from [`upsert_post_event_attendee`].
+#[derive(serde::Deserialize)]
+struct AttendeeIdRow {
+    id: String,
+}
+
 /// Insert a post-event registration attendee row (Plan 008 — Phase 3).
 ///
 /// Mirrors `upsert_attendee` but sets `registration_phase = 'post_event'` and
@@ -64,6 +70,21 @@ pub(crate) async fn upsert_attendee(
 /// post-event registrants are leads, not attendees. They're naturally excluded
 /// from capacity / check-in queries that filter on `approval_status = 'approved'`
 /// or `registration_phase = 'pre_event'`.
+///
+/// Returns the id of the row that now holds the registration — `id` for a fresh
+/// insert, the pre-existing row's id when the submission was a repeat.
+///
+/// The conflict target is the partial unique index
+/// `idx_attendees_unique_event_email (event_id, LOWER(email)) WHERE
+/// participation_type <> 'walkin'`, **not** `id`: the caller mints a fresh
+/// `Uuid::now_v7()` per request, so an `ON CONFLICT (id)` clause can never fire
+/// and a repeat submission would abort on the unique index instead of updating.
+///
+/// The `DO UPDATE` set deliberately omits `approval_status`,
+/// `participation_type` and `registration_phase`. The conflicting row may be a
+/// real pre-event registration (an in-person attendee filling in the lead form
+/// afterwards); refreshing their consent and contact details is right, demoting
+/// them to an `online` `post_event_registered` lead is not.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn upsert_post_event_attendee(
     db: &D1Database,
@@ -75,37 +96,43 @@ pub(crate) async fn upsert_post_event_attendee(
     contact_channel: &str,
     contact_handle: &str,
     consent_marketing: Option<bool>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let cm = consent_marketing.unwrap_or(false);
     let stmt = db.prepare(
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
          contact_channel, contact_handle, consent_marketing, consent_marketing_at, registration_phase, created_at, updated_at) \
          VALUES (?1, ?2, ?3, ?4, 'post_event_registered', ?5, ?6, ?7, ?8, datetime('now'), 'post_event', datetime('now'), datetime('now')) \
-         ON CONFLICT (id) DO UPDATE SET \
+         ON CONFLICT (event_id, LOWER(email)) WHERE participation_type <> 'walkin' DO UPDATE SET \
          name = excluded.name, \
-         participation_type = excluded.participation_type, \
          contact_channel = excluded.contact_channel, \
          contact_handle = excluded.contact_handle, \
          consent_marketing = excluded.consent_marketing, \
          consent_marketing_at = excluded.consent_marketing_at, \
-         updated_at = datetime('now')",
+         updated_at = datetime('now') \
+         RETURNING id",
     );
-    stmt.bind_refs(&[
-        D1Type::Text(id),
-        D1Type::Text(event_id),
-        D1Type::Text(email),
-        D1Type::Text(name),
-        D1Type::Text(participation_type),
-        D1Type::Text(contact_channel),
-        D1Type::Text(contact_handle),
-        D1Type::Integer(if cm { 1 } else { 0 }),
-    ])
-    .map_err(|e| format!("D1 upsert_post_event_attendee bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 upsert_post_event_attendee run: {e:?}"))?;
+    let rows = stmt
+        .bind_refs(&[
+            D1Type::Text(id),
+            D1Type::Text(event_id),
+            D1Type::Text(email),
+            D1Type::Text(name),
+            D1Type::Text(participation_type),
+            D1Type::Text(contact_channel),
+            D1Type::Text(contact_handle),
+            D1Type::Integer(if cm { 1 } else { 0 }),
+        ])
+        .map_err(|e| format!("D1 upsert_post_event_attendee bind: {e:?}"))?
+        .all()
+        .await
+        .map_err(|e| format!("D1 upsert_post_event_attendee run: {e:?}"))?
+        .results::<AttendeeIdRow>()
+        .map_err(|e| format!("D1 upsert_post_event_attendee deserialize: {e:?}"))?;
 
-    Ok(())
+    rows.into_iter()
+        .next()
+        .map(|row| row.id)
+        .ok_or_else(|| "D1 upsert_post_event_attendee: no row returned".to_string())
 }
 
 /// Write check-in data to D1 (dual-write alongside Sheets).

@@ -19,8 +19,8 @@ use leptos_meta::Title;
 use leptos_router::hooks::use_query_map;
 
 use crate::api::{
-    self, action_emoji, format_usdc, ActivityEntry, DashboardTotals, FunnelStage,
-    LiveDashboardResponse,
+    self, ActivityEntry, DashboardTotals, FunnelStage, LiveDashboardResponse, action_emoji,
+    format_usdc,
 };
 use wasm_bindgen::JsValue;
 
@@ -104,11 +104,7 @@ pub fn DashboardLive() -> impl IntoView {
                 // Pause-aware sleep: short 500ms re-checks while paused so
                 // resume takes effect promptly without busy-spinning.
                 loop {
-                    let wait = if polling.get() {
-                        POLL_INTERVAL_MS
-                    } else {
-                        500
-                    };
+                    let wait = if polling.get() { POLL_INTERVAL_MS } else { 500 };
                     gloo_timers::future::TimeoutFuture::new(wait).await;
                     if polling.get() {
                         break;
@@ -165,9 +161,8 @@ pub fn DashboardLive() -> impl IntoView {
             DashboardLoadState::Idle | DashboardLoadState::Loading
         ) && data.get().is_none()
     };
-    let is_hard_failure = move || {
-        matches!(load_state.get(), DashboardLoadState::Failed(_)) && data.get().is_none()
-    };
+    let is_hard_failure =
+        move || matches!(load_state.get(), DashboardLoadState::Failed(_)) && data.get().is_none();
     let has_data = move || data.get().is_some();
 
     view! {
@@ -607,11 +602,7 @@ fn parse_iso_to_epoch_ms(iso: &str) -> Option<f64> {
     // `get_time()` returns epoch ms; NaN indicates parse failure.
     let parsed = js_sys::Date::new(&JsValue::from_str(iso));
     let ms = parsed.get_time();
-    if ms.is_nan() {
-        None
-    } else {
-        Some(ms)
-    }
+    if ms.is_nan() { None } else { Some(ms) }
 }
 
 /// Map a funnel stage identifier to an emoji for the funnel renderer.

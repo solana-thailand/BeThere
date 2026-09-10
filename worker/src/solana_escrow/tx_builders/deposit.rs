@@ -2,7 +2,7 @@ use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
 use super::super::{DepositTransaction, EscrowError};
-use super::{EscrowCtx, acct_sw, acct_w, acct_r, finalize_tx};
+use super::{EscrowCtx, acct_r, acct_sw, acct_w, finalize_tx};
 
 /// Build a serialized deposit transaction for the bethere-escrow program.
 ///

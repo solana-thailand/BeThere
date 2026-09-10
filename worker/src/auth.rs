@@ -534,7 +534,10 @@ pub async fn require_org_access(
     }
     if let Some(db) = state.d1.as_deref()
         && let Ok(Some(org)) = crate::db::organizations::get_org_config(db, organization_id).await
-        && org.owner_emails.iter().any(|e| e.eq_ignore_ascii_case(email))
+        && org
+            .owner_emails
+            .iter()
+            .any(|e| e.eq_ignore_ascii_case(email))
     {
         return Ok(());
     }

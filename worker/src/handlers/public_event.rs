@@ -111,7 +111,7 @@ pub async fn get_public_event(
         state.d1.as_deref(),
     )
     .await
-    .map_err(AppError::NotFound)?;
+    .map_err(AppError::from)?;
 
     // Read form config for dynamic rendering (Issue #049 Phase 2)
     let form_config = if config.dev_profile_enabled {
@@ -324,8 +324,9 @@ pub async fn get_public_recap(
         state.d1.as_deref(),
     )
     .await
-    // 404 (not "unpublished") — slug doesn't resolve to any event.
-    .map_err(|_| AppError::NotFound(format!("event '{slug}' not found")))?;
+    // 404 (not "unpublished") when the slug resolves to nothing; a KV/D1 outage
+    // stays a 500 rather than masquerading as a missing event.
+    .map_err(AppError::from)?;
 
     // 2. Public recap requires the event to be Completed and published.
     //    Any other state returns 404 (indistinguishable from "no recap").
@@ -356,6 +357,11 @@ pub async fn get_public_recap(
     //    primitives — we don't want the full EventSummary (financials/no-show
     //    are sensitive), so we read the persisted row directly and project out
     //    only the three headline numbers.
+    //
+    //    A read failure is fatal rather than a zero-fill: the zeros are
+    //    indistinguishable from a real "nobody came" and would be published as
+    //    the event's attendance. `get_recap` above already propagates its read
+    //    error; this read hits the same row and must agree.
     let funnel = match crate::db::event_summaries::get_summary(db, &config.id).await {
         Ok(Some(s)) => json!({
             "registered_count": s.funnel.registered_count,
@@ -363,15 +369,30 @@ pub async fn get_public_recap(
             "checked_in_count": s.funnel.checked_in_count,
             "claimed_count": s.funnel.claimed_count,
         }),
-        _ => json!({
+        // Unreachable in practice — `get_recap` found this row a few lines up.
+        Ok(None) => json!({
             "registered_count": 0,
             "deposited_count": 0,
             "checked_in_count": 0,
             "claimed_count": 0,
         }),
+        Err(e) => {
+            tracing::error!(slug = %slug, event_id = %config.id, error = %e, "recap funnel read failed");
+            return Err(
+                AppError::Internal("could not load the recap — please try again".into()).into(),
+            );
+        }
     };
 
     tracing::info!(slug = %slug, event_id = %config.id, "public recap served");
+
+    // The public payload reports whether registration *accepts a submission
+    // now*, not the raw organizer toggle: the flag stays `true` after the
+    // deadline lapses, and the recap page's CTA is rendered straight from this
+    // value. Gating on the raw flag would invite a visitor to sign in and fill
+    // a form that `post_event::register` then answers 410 Gone. The server
+    // clock decides — the same clock that endpoint checks against.
+    let accepting = config.post_event_registration_accepting(chrono::Utc::now().timestamp_millis());
 
     Ok(ApiOk::new(json!({
         "event": {
@@ -385,7 +406,7 @@ pub async fn get_public_recap(
             "event_format": config.event_format.as_str(),
             "poster_url": config.poster_url,
             "nft_image_url": config.nft_image_url,
-            "post_event_registration_open": config.post_event_registration_open,
+            "post_event_registration_open": accepting,
         },
         "recap_markdown": recap.recap_markdown,
         "recap_image_url": recap.recap_image_url,

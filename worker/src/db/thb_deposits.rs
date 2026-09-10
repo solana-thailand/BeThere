@@ -117,13 +117,27 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
     Ok(())
 }
 
-/// Update an existing THB deposit (for verify / refund operations).
+/// Update an existing THB deposit (for verify / slip-upload operations).
 ///
 /// Uses parameterized `bind_refs` — see `insert_thb_deposit` for rationale.
+///
+/// **The five settlement columns are deliberately absent from the `SET` list**:
+/// `refunded`, `refunded_at`, `held_as_credit`, `held_as_credit_at` and
+/// `refund_proof_url` are owned exclusively by [`try_settle_refund`] and
+/// [`try_settle_hold_credit`] (and, for the proof URL, by
+/// [`set_refund_proof_url`]). This is a blanket read-modify-write of every other
+/// column, so including them would let any caller holding a row it read earlier
+/// retract a settlement that landed in between — resetting `refunded` to 0 on a
+/// deposit whose cash has already gone out, which re-arms the refund CAS for a
+/// second payout. The callers that do set them in memory (`refund.rs`,
+/// `hold_credit.rs`, `hold_admin.rs`) all do so *after* their CAS has already
+/// written D1, so dropping them here changes nothing on the intended paths; it
+/// only removes the clobber. The KV fallback in `save_thb_deposit` still
+/// serialises the whole struct, which is correct — there is no CAS there.
 pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
     let stmt = db.prepare(
-        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, refunded = ?6, refunded_at = ?7, attendee_name = ?8, bank_account = ?9, bank_name = ?10, account_name = ?11, refund_proof_url = ?12, held_as_credit = ?13, held_as_credit_at = ?14 \
-         WHERE event_id = ?15 AND attendee_id = ?16",
+        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, attendee_name = ?6, bank_account = ?7, bank_name = ?8, account_name = ?9 \
+         WHERE event_id = ?10 AND attendee_id = ?11",
     );
     stmt.bind_refs(&[
         D1Type::Integer(deposit.amount_thb as i32),
@@ -131,15 +145,10 @@ pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         D1Type::Integer(deposit.verified as i32),
         D1Type::Text(deposit.verified_by.as_deref().unwrap_or("")),
         D1Type::Text(deposit.verified_at.as_deref().unwrap_or("")),
-        D1Type::Integer(deposit.refunded as i32),
-        D1Type::Text(deposit.refunded_at.as_deref().unwrap_or("")),
         D1Type::Text(deposit.attendee_name.as_deref().unwrap_or("")),
         D1Type::Text(deposit.bank_account.as_deref().unwrap_or("")),
         D1Type::Text(deposit.bank_name.as_deref().unwrap_or("")),
         D1Type::Text(deposit.account_name.as_deref().unwrap_or("")),
-        D1Type::Text(deposit.refund_proof_url.as_deref().unwrap_or("")),
-        D1Type::Integer(deposit.held_as_credit as i32),
-        D1Type::Text(deposit.held_as_credit_at.as_deref().unwrap_or("")),
         D1Type::Text(&deposit.event_id),
         D1Type::Text(&deposit.attendee_id),
     ])
@@ -227,6 +236,35 @@ pub async fn try_settle_refund(
         .and_then(|m| m.changes)
         .unwrap_or(0);
     Ok(changes > 0)
+}
+
+/// Rewrite `refund_proof_url` in place, without touching any other column.
+///
+/// The only writer of a settlement column outside the CAS pair. It exists for
+/// the `data:` URL → R2 migration (`handlers/deposit/thb/handlers/mod.rs`),
+/// which replaces a multi-MB inline base64 blob with a compact serving path for
+/// the *same* proof. It cannot retract a settlement: it never writes `refunded`.
+pub async fn set_refund_proof_url(
+    db: &D1Database,
+    event_id: &str,
+    attendee_id: &str,
+    refund_proof_url: &str,
+) -> Result<(), String> {
+    let stmt = db.prepare(
+        "UPDATE thb_deposits SET refund_proof_url = ?1 \
+         WHERE event_id = ?2 AND attendee_id = ?3",
+    );
+    stmt.bind_refs(&[
+        D1Type::Text(refund_proof_url),
+        D1Type::Text(event_id),
+        D1Type::Text(attendee_id),
+    ])
+    .map_err(|e| format!("D1 set_refund_proof_url bind: {e:?}"))?
+    .run()
+    .await
+    .map_err(|e| format!("D1 set_refund_proof_url run: {e:?}"))?;
+
+    Ok(())
 }
 
 /// Delete all THB deposits for an event (cleanup).

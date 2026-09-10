@@ -236,10 +236,7 @@ pub async fn list_campaigns(
             status: 0,
         })?;
 
-    Ok(result
-        .data
-        .map(|d| d.campaigns)
-        .unwrap_or_default())
+    Ok(result.data.map(|d| d.campaigns).unwrap_or_default())
 }
 
 /// GET /api/campaigns/{id} — get campaign detail with events
@@ -254,16 +251,18 @@ pub async fn get_campaign(id: &str) -> Result<CampaignDetailResponse, ApiError> 
         });
     }
 
-    response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse campaign: {e}"),
-        status: 0,
-    })
-    .and_then(|r: super::types::ApiResponse<CampaignDetailResponse>| {
-        r.data.ok_or_else(|| ApiError {
-            message: "No data in response".to_string(),
+    response_json(&response)
+        .await
+        .map_err(|e| ApiError {
+            message: format!("Failed to parse campaign: {e}"),
             status: 0,
         })
-    })
+        .and_then(|r: super::types::ApiResponse<CampaignDetailResponse>| {
+            r.data.ok_or_else(|| ApiError {
+                message: "No data in response".to_string(),
+                status: 0,
+            })
+        })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -287,9 +286,7 @@ pub async fn campaign_exists(id: &str) -> Result<bool, ApiError> {
 }
 
 /// POST /api/campaigns — create campaign
-pub async fn create_campaign(
-    req: &CreateCampaignRequest,
-) -> Result<CampaignDetail, ApiError> {
+pub async fn create_campaign(req: &CreateCampaignRequest) -> Result<CampaignDetail, ApiError> {
     api_post_json("/campaigns", req).await
 }
 
@@ -318,10 +315,7 @@ pub async fn delete_campaign(id: &str) -> Result<(), ApiError> {
 }
 
 /// PATCH /api/campaigns/{id}/status — update campaign status
-pub async fn update_campaign_status(
-    id: &str,
-    status: &str,
-) -> Result<CampaignDetail, ApiError> {
+pub async fn update_campaign_status(id: &str, status: &str) -> Result<CampaignDetail, ApiError> {
     let path = format!("/campaigns/{id}/status");
     let req = UpdateStatusRequest {
         status: status.to_string(),
@@ -342,9 +336,7 @@ pub async fn set_campaign_events(
 }
 
 /// GET /api/campaigns/{id}/progress — list developer progress
-pub async fn list_campaign_progress(
-    id: &str,
-) -> Result<Vec<DeveloperProgressItem>, ApiError> {
+pub async fn list_campaign_progress(id: &str) -> Result<Vec<DeveloperProgressItem>, ApiError> {
     let path = format!("/campaigns/{id}/progress");
     let response = api_get(&path).await?;
 
@@ -376,16 +368,18 @@ pub async fn get_campaign_stats(id: &str) -> Result<CampaignStatsResponse, ApiEr
         });
     }
 
-    response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse stats: {e}"),
-        status: 0,
-    })
-    .and_then(|r: super::types::ApiResponse<CampaignStatsResponse>| {
-        r.data.ok_or_else(|| ApiError {
-            message: "No data in response".to_string(),
+    response_json(&response)
+        .await
+        .map_err(|e| ApiError {
+            message: format!("Failed to parse stats: {e}"),
             status: 0,
         })
-    })
+        .and_then(|r: super::types::ApiResponse<CampaignStatsResponse>| {
+            r.data.ok_or_else(|| ApiError {
+                message: "No data in response".to_string(),
+                status: 0,
+            })
+        })
 }
 
 /// GET /api/campaigns/my-progress — current user's campaign progress

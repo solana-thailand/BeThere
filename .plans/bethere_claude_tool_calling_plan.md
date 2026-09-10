@@ -72,7 +72,7 @@ Four decisions settle most of the questionnaire:
 |---|---|
 | **Q15 [LATENCY]** | Streaming (SSE worker→Leptos). Single-shot only for trivial reads. |
 | **Q16 [LATENCY]** | p95 ~5–8s per single-tool turn; hard ceiling 30s CPU. Cap chain depth (≤3 tool calls/turn); longer chains go async. |
-| **Q17 [LATENCY]** | Reuse existing 60–120s `EVENTS` KV TTL for read tools; separate namespace only for conversation state, not tool results. |
+| **Q17 [LATENCY]** | ~~Reuse existing 60–120s `EVENTS` KV TTL for read tools~~ — **premise void (2026-09-04, §6.4): the `EVENTS` event-config keys are written with no expiration, and no TTL in the worker is in the 60–120s band.** Read-tool caching must be designed from scratch. Unchanged: a separate namespace only for conversation state, not tool results. |
 | **Q18 [LATENCY]** | One request for short chains; persist state (Durable Object / D1) for longer or multi-turn. |
 
 ### 6.6 Safety & reversibility
@@ -180,7 +180,7 @@ Leptos chat → POST /api/agent/chat (SSE)
 
 ---
 
-## 6. Risk register (owners TBD at ratification)
+## 6. Risk register (owners assigned 2026-09-04 — see §6.3 *Ownership model*)
 
 Severity is the blast radius **if the mitigation fails**, not the likelihood.
 "Ratification must establish" is the concrete question each owner has to answer
@@ -188,16 +188,16 @@ yes/no to — without it, "reviewed" means nothing and the checkbox is theatre.
 
 | Risk | Mitigation | Severity | Ratification must establish | Owner |
 |---|---|---|---|---|
-| Privilege escalation via inherited JWT | §4 `is_staff` recompute + `∩ agent_scope` (Q7/Q8/Q10) | **Critical** | That `agent_scope` is intersected **server-side on every call**, and that a captured staff JWT cannot widen it by replay. Who signs off on the `auth.rs` addendum? | _tbd_ |
-| PII leak into Anthropic context | §3 redaction at proxy (Q11/Q12) | **Critical** | The exact redacted column list, checked against the live schema — prod currently holds 467 `attendees` and 172 `contacts` rows — and that redaction runs at the proxy, not as a prompt instruction. | _tbd_ |
-| Hallucinated id → mutation | §5 layer-2 existence check (Q20) | High | That every Bucket M/D tool resolves ids against D1 before acting, and what a miss does (refuse vs. ask). | _tbd_ |
-| Auto-executed refund drains escrow | Bucket D never auto; browser-signed (Q19) | **Critical** | That no Bucket D route is reachable without a browser signature. Note prod runs `mainnet-beta` today, so a failure here spends real funds. | _tbd_ |
-| API key in bundle | server-side secret only (Q2) | High | That the Anthropic key is a Worker secret and never reaches `frontend-leptos/dist` — verifiable by grepping the built bundle in CI. | _tbd_ |
-| 30s CPU overrun | streaming + chain-depth cap + async queue (Q15/Q16/Q18) | Medium | The chain-depth cap's actual number and what the user sees when it trips. | _tbd_ |
-| Lands before SIWS | pinned after Plan 006 (Q23) | Medium | Plan 006's status at ratification. This is a sequencing gate, not a code change — it either holds or the plan slips. | _tbd_ |
-| No audit trail | D1 audit table day one (Q21) | High | The table schema and retention, and that the row is written **before** the tool result returns, so a crash cannot lose it. | _tbd_ |
-| Reads stale (CSV) | tools use Plan 008 JOIN path (Q5) | Medium | That no tool reads the Sheets/CSV path. | _tbd_ |
-| D1 hammering | reuse `EVENTS` KV TTL (Q17) | Medium | The TTL value, and whether it suits an agent's read pattern (bursty, repeated) rather than a page load's. | _tbd_ |
+| Privilege escalation via inherited JWT | §4 `is_staff` recompute + `∩ agent_scope` (Q7/Q8/Q10) | **Critical** | That `agent_scope` is intersected **server-side on every call**, and that a captured staff JWT cannot widen it by replay. Who signs off on the `auth.rs` addendum? | @ozoneRatchapon |
+| PII leak into Anthropic context | §3 redaction at proxy (Q11/Q12) | **Critical** | The exact redacted column list, checked against the live schema — prod currently holds 467 `attendees` and 172 `contacts` rows — and that redaction runs at the proxy, not as a prompt instruction. | @ozoneRatchapon |
+| Hallucinated id → mutation | §5 layer-2 existence check (Q20) | High | That every Bucket M/D tool resolves ids against D1 before acting, and what a miss does (refuse vs. ask). | @ozoneRatchapon |
+| Auto-executed refund drains escrow | Bucket D never auto; browser-signed (Q19) | **Critical** | That no Bucket D route is reachable without a browser signature. Note prod runs `mainnet-beta` today, so a failure here spends real funds. | @ozoneRatchapon |
+| API key in bundle | server-side secret only (Q2) | High | That the Anthropic key is a Worker secret and never reaches `frontend-leptos/dist` — verifiable by grepping the built bundle in CI. | @ozoneRatchapon |
+| 30s CPU overrun | streaming + chain-depth cap + async queue (Q15/Q16/Q18) | Medium | The chain-depth cap's actual number and what the user sees when it trips. | @ozoneRatchapon |
+| Lands before SIWS | pinned after Plan 006 (Q23) | Medium | Plan 006's status at ratification. This is a sequencing gate, not a code change — it either holds or the plan slips. | @ozoneRatchapon |
+| No audit trail | D1 audit table day one (Q21) | High | The table schema and retention, and that the row is written **before** the tool result returns, so a crash cannot lose it. | @ozoneRatchapon |
+| Reads stale (CSV) | aggregate tools use the Plan 008 JOIN path (Q5); `get_attendee` / `list_attendees` stay Sheet-latency reads and may not ground a mutation | Medium | That no tool reads the denormalized `contacts.events_joined` CSV column, and that the two Sheet-reading Bucket R tools are read-only — never the basis for a Bucket M/D call. | @ozoneRatchapon |
+| D1 hammering | ~~reuse `EVENTS` KV TTL (Q17)~~ — no such TTL exists (§6.4); the agent's read caching must be **designed**, not inherited | Medium | The cache layer the agent read tools actually get: a TTL on a new namespace, request-scoped memoization, or neither — and the number, once there is one. Q17's premise is void. | @ozoneRatchapon |
 
 ### 6.1 Mitigation review — 2026-08-21, against `develop` @ `446b6d8`
 
@@ -217,13 +217,18 @@ mitigated**.
 | 7 | Lands before SIWS | ✅ **SATISFIED — gate cleared** | `/auth/wallet/nonce` + `/auth/wallet/verify` are live (`handlers/mod.rs:81-82`); the frontend SIWS flow shipped in `wallet_signin.rs` |
 | 8 | No audit trail | ✅ **Already available** — `audit_log` exists with a working insert/query layer and 29 rows in prod. "Day one" is satisfied by construction; the agent only has to call it | `worker/src/db/audit.rs`, prod `/api/health` |
 | 9 | Reads stale (CSV) | ✅ **Audited 2026-08-21 — one real defect found and fixed; two tools constrained by design.** See §6.2 | `handlers/contacts.rs`, tool inventory §3.1 |
-| 10 | D1 hammering | **Available** — the `EVENTS` KV binding exists in both prod and staging config, so the TTL reuse this row assumes is real | `worker/wrangler.toml:152,248` |
+| 10 | D1 hammering | ~~**Available**~~ → **Design only** (corrected 2026-09-04, §6.4). The `EVENTS` binding is real, but the event-config keys an agent would cache are written with **no** `expiration_ttl`, and no TTL in the worker is in Q17's 60–120s band — there is no cache to inherit | `worker/wrangler.toml:152,248`; `worker/src/event_store/write/` |
 
 **What this changes.** Risk 7 was a sequencing gate and it is now cleared — the
 plan is no longer blocked behind Plan 006. Risk 8's mitigation is already built.
 Risk 3 has a working precedent shipped in prod, so the layer-2 pattern is no
 longer speculative. That leaves six design-only rows plus one (R9) that still
 needs a look — a materially smaller ratification than the blank table suggested.
+
+*Corrected 2026-09-04:* R9 has since been audited (§6.2), and R10 was re-graded
+from **Available** to **Design only** (§6.4 — the TTL it assumed does not exist).
+The standing count is therefore **seven design-only rows**; R7 and R8 remain the
+only two whose mitigation is already built.
 
 ### 6.2 R9 audit — stale Sheets/CSV read paths (2026-08-21)
 
@@ -271,22 +276,125 @@ paths. Rewriting them to read D1 would change behaviour for the live admin UI an
 check-in flow, and depends on an unanswered question — whether D1 is authoritative
 for attendees or a lagging mirror of the Sheet.
 
-**Therefore R9's mitigation needs one word changed at ratification.** It currently
-reads *"tools use Plan 008 JOIN path"*, which is not achievable for these two
-tools as written. The honest mitigation is: **prefer D1-backed aggregate tools
-(`list_attendees` → counts via `audience_aggregate` / `dashboard/live`) and treat
-`get_attendee` / `list_attendees` as Sheet-latency reads** — acceptable for an
-agent answering questions, not acceptable as the basis for a mutation. Whoever
-owns this row should confirm that wording.
+**R9's mitigation wording has been corrected in §6 (2026-09-04).** It previously
+read *"tools use Plan 008 JOIN path"*, which is not achievable for these two
+tools as written. The register row now says: **aggregate tools use the Plan 008
+JOIN path (counts via `audience_aggregate` / `dashboard/live`); `get_attendee` /
+`list_attendees` stay Sheet-latency reads and may not ground a mutation** —
+acceptable for an agent answering questions, not acceptable as the basis for a
+Bucket M/D call. The ratification question was narrowed to match: no tool may
+read the denormalized `contacts.events_joined` CSV column, and the two
+Sheet-reading Bucket R tools must stay read-only. Whoever owns this row still
+confirms the wording; only the unachievable claim was removed.
 
-**Why the owners are still `_tbd_`.** Asked directly on 2026-08-20; the answer was
-that the owners aren't known yet. Inventing names would make the Definition of
-Done pass while leaving every mitigation unaccounted for, which is the exact
-failure this row exists to prevent — so §7's checkbox stays unticked. What was
-missing for a real review has been added instead: severity, and a specific
-question per row. `git shortlog` shows a single human contributor, so if this
-stays a solo project the honest resolution is one name in all ten cells — but
-that is a call for the plan's owner, not for this document to assume.
+**Owners — resolved 2026-09-04.** This was open from 2026-08-20 (asked twice; the
+answer both times was that the owners weren't known). It is now closed the way the
+previous revision of this paragraph said it should be: the plan's owner made the
+call, and the call is that all ten rows are owned by the sole maintainer. See
+**§6.3 *Ownership model*** for the evidence, the limits of a single-owner
+register, and the trigger that re-opens it.
+
+### 6.3 Ownership model — single owner, and what that does and does not buy
+
+**Assignment.** All ten rows: **@ozoneRatchapon** (Ratchapon Pockathum).
+
+**Evidence for a single owner.** `git shortlog -sne --all` on 2026-09-04 returns
+two identities and one human:
+
+| Identity | Commits |
+|---|---|
+| `ozoneRatchapon <ratchapon.poc@gmail.com>` | 996 |
+| `Ratchapon Pockathum <61614162+ozoneRatchapon@users.noreply.github.com>` | 49 |
+
+The second is the GitHub web/noreply identity of the first. There is no
+`CODEOWNERS` file and no other maintainer to route a row to. Splitting ten rows
+across one person by pretending to specialise them (auth vs. money vs. data)
+would be the same theatre the previous revision refused, wearing a different hat.
+
+**What this assignment buys.** Accountability for *answering*: before ratification,
+one named person must give a yes/no to each row's "Ratification must establish"
+question, and the answers are attributable. That was the point of the column, and
+it is now satisfiable.
+
+**What it does not buy — stated plainly.** Separation of duties. Rows 1, 2 and 4
+are **Critical**, and they cover privilege escalation, PII belonging to 468 live
+attendees, and a refund path running against `mainnet-beta` with real funds. On
+those three, "the owner attests" means the person who wrote the mitigation is also
+the person who signs off that it works. That is a real weakness of this register,
+not a formality — a single-owner sign-off is *not* equivalent to review, and this
+document should not be read as claiming otherwise.
+
+**Compensating control (the reason this is acceptable anyway).** Ownership is
+weakest where it rests on attestation, so the register should lean on attestation
+as little as possible. Six of the ten rows already have, or can have, a mechanical
+answer that does not depend on who is asked — though for one of them (row 10) the
+mechanical answer turned out to be *"the thing this row assumes does not exist"*,
+which is exactly why the check is worth more than the attestation:
+
+| # | Row | Mechanical check instead of attestation |
+|---|---|---|
+| 3 | Hallucinated id → mutation | The shipped `validate_campaign_id` (`worker/src/handlers/campaigns.rs:251`) / `campaign_exists` (`worker/src/db/campaigns/crud.rs:101`) precedent — an existence check is testable, not attestable |
+| 5 | API key in bundle | The CI bundle grep §6 already names. Must become a **blocking CI step** when the integration lands, not a manual check |
+| 7 | Lands before SIWS | Route existence — `/auth/wallet/nonce` + `/auth/wallet/verify` are live; verifiable by request, not by opinion |
+| 8 | No audit trail | `audit_log` schema + row count are queryable; "written before the tool result returns" is an integration test |
+| 9 | Reads stale (CSV) | Audited in code §6.2, with the tally pinned by 5 unit tests |
+| 10 | D1 hammering | Grep the `EVENTS` event-config write path (`worker/src/event_store/write/`) for `expiration_ttl` — readable, not attestable. **Run 2026-09-04: no matches.** See §6.4 *R10 correction* |
+
+Rows **1, 2, 4 and 6** have no mechanical substitute today because the code they
+would check does not exist yet. Each must ship with its own test or CI gate in the
+same PR that introduces the mitigation — the register's single owner is not a
+substitute for that, and P1 should not merge with any of the four resting on
+attestation alone.
+
+**Trigger that re-opens this row.** A second regular contributor, an external
+security review, or the first Bucket D (money-moving) tool reaching staging —
+whichever comes first. At that point the four Critical/attestation-only rows should
+be re-assigned to someone who did not write their mitigation.
+
+### 6.4 R10 correction — the `EVENTS` KV TTL Q17 reuses does not exist (2026-09-04)
+
+Found while verifying the citations for §6.3, and recorded here rather than
+silently dropped.
+
+**The claim.** Q17 answers the caching question with *"reuse existing 60–120s
+`EVENTS` KV TTL for read tools"*, R10's mitigation is *"reuse `EVENTS` KV TTL"*,
+and §6.1 row 10 graded that **Available** because the `EVENTS` binding exists in
+prod and staging config (`worker/wrangler.toml:152,248`). The binding half is
+correct and still verifies. The TTL half does not follow.
+
+**What is actually in the namespace.** `EVENTS` is resolved by `resolve_kv`
+(`worker/src/handlers/ext.rs` — `state.events_kv.as_ref().or(state.quiz_kv.as_ref())`)
+and holds two unrelated classes of key:
+
+| Key class | Written by | Expiration |
+|---|---|---|
+| Event config / index / form / deposit config | `worker/src/event_store/write/` (`index.rs:17,33`, `form.rs:25`, `deposit.rs:31,60,92,123`) | **none** — `rg 'expiration_ttl' worker/src/event_store/` returns no matches |
+| Claim locks | `worker/src/claim/lock.rs:194` | 300s |
+| Claim-lock finalize markers | `claim/lock.rs:300,329` (`CLAIM_LOCK_FINALIZE_TTL_SECS`, `lock.rs:21`) | 90 days |
+| Crossmint pending-mint markers | `worker/src/solana.rs:160`, via `lock_kv` = `resolve_kv(state)` | 86 400s |
+
+So the namespace is not TTL-free — but the keys that carry TTLs are short-lived
+*operational* markers, and the **event-config keys an agent read tool would
+actually cache have no expiration at all**. `EVENTS` is a persistent store for
+that data, not a cache.
+
+**And the number does not exist either.** No `expiration_ttl` anywhere in the
+worker is in the 60–120s band Q17 quotes. The full set of values is 300s
+(`claim/lock.rs`, `KV_LEADERBOARD_TTL` at `handlers/wallet.rs:145`), 3 500s
+(`GOOGLE_TOKEN_TTL_SECS`, `sheets/mod.rs:31`), 86 400s (`solana.rs:160`) and 90
+days (`claim/lock.rs:21`).
+
+**Consequence for ratification.** R10's owner question — *"The TTL value, and
+whether it suits an agent's read pattern"* — has no answer today, because there is
+no value to quote and no cache to inherit. Three places have been corrected in
+place rather than left to be re-derived: Q17 in §2, the R10 row in the §6 table,
+and row 10's grade in §6.1 (**Available** → **Design only**).
+
+**Not fixed here.** Putting a TTL on the `EVENTS` event-config writes would change
+caching behaviour for the live event-read path, which is well outside "assign
+risk-register owners". Filed as a correction, and left as an input to whoever
+designs the agent's read path in P1 — the honest starting point is that agent read
+caching is **new work**, not a reused knob.
 
 ---
 
@@ -301,12 +409,16 @@ that is a call for the plan's owner, not for this document to assume.
       2026-08-20 (§6, §6.1). Outcome: R7's sequencing gate is cleared, R8 is
       already built, R3 has a shipped precedent, and **R9 was audited 2026-08-21
       (§6.2) — one real stale-read defect found and fixed in `9388ddf`**. Six
-      rows remain design-only, and R9's mitigation wording needs a correction at
-      ratification (see §6.2).
-- [ ] Risk register **owners** assigned (§6). *Blocked on one input only: who owns
-      each row. Asked 2026-08-20 and again 2026-08-21; still unknown. Split from
-      the review item above so the completed half is not hidden behind the
-      blocked half.*
+      rows remain design-only. R9's mitigation wording was corrected in the
+      register on 2026-09-04 (see §6.2) — the unachievable "no tool reads the
+      Sheets path" claim is gone; the owner still confirms the replacement.
+- [x] Risk register **owners** assigned (§6) — all ten rows to @ozoneRatchapon on
+      2026-09-04, on the plan owner's call. Grounded in `git shortlog` (one human
+      contributor, no `CODEOWNERS`), not in an invented name. §6.3 *Ownership
+      model* records what a
+      single-owner register does **not** buy — no separation of duties on the three
+      Critical rows — and names the mechanical check that replaces attestation on
+      six of ten rows, plus the trigger to re-assign.
 - [x] Output: this `.plans/` design doc.
 
 ---
@@ -322,7 +434,7 @@ that is a call for the plan's owner, not for this document to assume.
 ## 9. Open items for team ratification
 - Confirm `agent_scope` default grants per staff role.
 - Confirm PDPA/GDPR posture: redact-only vs redact + DPA + zero-retention (recommend all three).
-- Assign risk-register owners.
+- ~~Assign risk-register owners.~~ Resolved 2026-09-04 — §6.3.
 - Decide conversation-state store: Durable Object vs D1 (Q18).
 - Confirm whether `create_event` (`POST /events`) is Bucket M or D.
 

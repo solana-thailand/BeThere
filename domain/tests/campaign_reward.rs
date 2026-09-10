@@ -34,7 +34,10 @@ fn configured_values_win_over_defaults() {
 fn missing_keys_fall_back_to_title_defaults() {
     let resolved = resolve_reward(TITLE, &json!({}));
     assert_eq!(resolved.name, "Solana Hacker Series - Campaign Complete");
-    assert_eq!(resolved.description, "Completed the Solana Hacker Series campaign");
+    assert_eq!(
+        resolved.description,
+        "Completed the Solana Hacker Series campaign"
+    );
     assert_eq!(resolved.image_url, "");
 }
 
@@ -111,7 +114,10 @@ fn unparseable_config_resolves_to_defaults() {
 
 #[test]
 fn empty_config_string_resolves_to_defaults() {
-    assert_eq!(resolve_reward_str(TITLE, ""), resolve_reward(TITLE, &json!(null)));
+    assert_eq!(
+        resolve_reward_str(TITLE, ""),
+        resolve_reward(TITLE, &json!(null))
+    );
 }
 
 #[test]

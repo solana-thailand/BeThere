@@ -9,8 +9,8 @@
 //! `on_success` callback fires; the caller decides what to do next (navigate,
 //! reload, re-check auth).
 
-use leptos::prelude::*;
 use leptos::portal::Portal;
+use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 
 use crate::icons::{Icon, IconName};
@@ -269,7 +269,8 @@ pub fn WalletSignInButton(
     Effect::new(move |_| {
         set_detected_wallets.set(get_detected_wallets_js());
         leptos::task::spawn_local(async move {
-            let Ok(val) = wasm_bindgen_futures::JsFuture::from(get_detected_wallets_async_js()).await
+            let Ok(val) =
+                wasm_bindgen_futures::JsFuture::from(get_detected_wallets_async_js()).await
             else {
                 return;
             };
@@ -306,10 +307,9 @@ pub fn WalletSignInButton(
                         .await
                         {
                             Ok(resp) if resp.status() == 200 => {
-                                if let Ok(data) = crate::api::fetch::response_json::<
-                                    serde_json::Value,
-                                >(&resp)
-                                .await
+                                if let Ok(data) =
+                                    crate::api::fetch::response_json::<serde_json::Value>(&resp)
+                                        .await
                                 {
                                     let nonce = data["data"]["nonce"]
                                         .as_str()
@@ -322,18 +322,20 @@ pub fn WalletSignInButton(
 
                                     // Sign the server-issued challenge
                                     let sig_promise = sign_message_js(&wallet_name, &message);
-                                    let signature = match wasm_bindgen_futures::JsFuture::from(
-                                        sig_promise,
-                                    )
-                                    .await
-                                    {
-                                        Ok(v) => v.as_string().unwrap_or_default(),
-                                        Err(e) => {
-                                            log::error!("[wallet_signin] signMessage failed: {e:?}");
-                                            String::new()
-                                        }
-                                    };
-                                    if signature.is_empty() || signature.contains("__wallet_error__")
+                                    let signature =
+                                        match wasm_bindgen_futures::JsFuture::from(sig_promise)
+                                            .await
+                                        {
+                                            Ok(v) => v.as_string().unwrap_or_default(),
+                                            Err(e) => {
+                                                log::error!(
+                                                    "[wallet_signin] signMessage failed: {e:?}"
+                                                );
+                                                String::new()
+                                            }
+                                        };
+                                    if signature.is_empty()
+                                        || signature.contains("__wallet_error__")
                                     {
                                         set_error_msg.set(Some(
                                             "Message signing was cancelled or failed.".into(),
@@ -373,8 +375,9 @@ pub fn WalletSignInButton(
                             }
                         }
                     } else {
-                        set_error_msg
-                            .set(Some(format!("{wallet_name} connection failed or cancelled.")));
+                        set_error_msg.set(Some(format!(
+                            "{wallet_name} connection failed or cancelled."
+                        )));
                     }
                 }
                 Err(e) => {

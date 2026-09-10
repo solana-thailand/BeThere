@@ -30,8 +30,8 @@ pub async fn get_event(
     )
     .await
     .map_err(|e| {
-        tracing::error!(event_id = %id, error = %e, "failed to get event");
-        AppError::Internal(format!("failed to read event: {e}"))
+        tracing::warn!(event_id = %id, error = %e, "failed to get event");
+        AppError::from(e)
     })?;
 
     // Access check: non-super_admin must be assigned to this event

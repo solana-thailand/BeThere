@@ -149,14 +149,11 @@ pub async fn hold_deposit_handler(
     let now = Utc::now().to_rfc3339();
 
     let settled = match d1 {
-        Some(db) => crate::db::thb_deposits::try_settle_hold_credit(
-            db,
-            &event.id,
-            &body.attendee_id,
-            &now,
-        )
-        .await
-        .map_err(AppError::Internal)?,
+        Some(db) => {
+            crate::db::thb_deposits::try_settle_hold_credit(db, &event.id, &body.attendee_id, &now)
+                .await
+                .map_err(AppError::Internal)?
+        }
         // No D1 (tests/local) — fall back to the non-atomic KV write.
         None => true,
     };
@@ -167,7 +164,9 @@ pub async fn hold_deposit_handler(
         .into());
     }
 
-    // Mirror the settled state into KV (D1 already flipped by the CAS above).
+    // Reflect the settled state on the in-memory record for the writes below.
+    // D1 was already flipped by the CAS; the save persists the non-settlement
+    // columns (and the whole struct on the KV fallback path, where there is no CAS).
     thb_deposit.held_as_credit = true;
     thb_deposit.held_as_credit_at = Some(now);
     event_store::save_thb_deposit(kv, &thb_deposit, d1)
@@ -271,20 +270,38 @@ pub async fn credit_balance_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<CreditBalanceResponse>, WorkerError> {
-    // Source of truth is the org-scoped credit ledger. No event context here, so
-    // report the default org ("") balance — single-org today; a per-org breakdown
-    // is a future multi-org enhancement (Issue #029).
+    // Source of truth is the org-scoped credit ledger. There is no event context
+    // here, so sum every org the caller holds credit in rather than guessing one:
+    // hard-coding `""` under-reports to zero for any event whose Org ID column is
+    // set. The number is what the attendee holds in total; what is *spendable* at
+    // a given event is still resolved per-org at registration (plan 022 §6).
     let (credit_thb, credit_usdc) = match state.d1.as_deref() {
-        Some(db) => (
-            crate::db::credit_ledger::balance(db, &claims.email, "", "thb")
+        Some(db) => {
+            // Degrading to zero is safe *here* because nothing spends against
+            // this number — registration resolves the balance server-side via
+            // `try_spend`, so a false zero costs the attendee reassurance, not
+            // money. It must not be silent though: without this log a D1 flake
+            // is indistinguishable from "this attendee holds no credit".
+            let buckets = crate::db::credit_ledger::positive_balances(db, &claims.email)
                 .await
-                .unwrap_or(0)
-                .max(0) as u64,
-            crate::db::credit_ledger::balance(db, &claims.email, "", "usdc")
-                .await
-                .unwrap_or(0)
-                .max(0) as u64,
-        ),
+                .unwrap_or_else(|e| {
+                    tracing::warn!(
+                        email = %claims.email,
+                        error = %e,
+                        "credit balance read failed — reporting 0 (display only)"
+                    );
+                    Vec::new()
+                });
+            let sum = |currency: &str| -> u64 {
+                buckets
+                    .iter()
+                    .filter(|b| b.currency == currency)
+                    .map(|b| b.balance)
+                    .sum::<i64>()
+                    .max(0) as u64
+            };
+            (sum("thb"), sum("usdc"))
+        }
         None => (0, 0),
     };
 

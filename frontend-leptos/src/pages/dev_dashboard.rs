@@ -12,11 +12,11 @@ use leptos_meta::Title;
 use wasm_bindgen::prelude::*;
 
 use crate::api::{
-    self, DeveloperProgressItem,
-    calculate_weighted_score, compute_tier, get_wallet_nfts, NftItem, Tier,
+    self, DeveloperProgressItem, NftItem, Tier, calculate_weighted_score, compute_tier,
+    get_wallet_nfts,
 };
-use crate::components::{show_toast, Toast, ToastMessage, ToastType};
-use crate::icons::{wallet_icon_name, Icon, IconName};
+use crate::components::{Toast, ToastMessage, ToastType, show_toast};
+use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::metaplex_explorer_url;
 
 // ---------------------------------------------------------------------------
@@ -369,8 +369,7 @@ pub fn DevDashboard() -> impl IntoView {
     let (state, set_state) = signal(DashboardState::Connect);
     let (wallet_input, set_wallet_input) = signal(String::new());
     let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
-    let (connected_wallet, set_connected_wallet) =
-        signal(None::<(String, String)>); // (wallet_name, public_key)
+    let (connected_wallet, set_connected_wallet) = signal(None::<(String, String)>); // (wallet_name, public_key)
     let (cluster, set_cluster) = signal("devnet".to_string());
     let (campaign_progress, set_campaign_progress) = signal(Vec::<DeveloperProgressItem>::new());
     let (auth_checked, set_auth_checked) = signal(false);
@@ -432,11 +431,8 @@ pub fn DevDashboard() -> impl IntoView {
             match get_wallet_nfts(&addr).await {
                 Ok(resp) => {
                     // Classify NFTs as campaign vs event using campaign_mints from backend
-                    let campaign_mint_set: std::collections::HashSet<&str> = resp
-                        .campaign_mints
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect();
+                    let campaign_mint_set: std::collections::HashSet<&str> =
+                        resp.campaign_mints.iter().map(|s| s.as_str()).collect();
 
                     let mut event_nfts = 0i64;
                     let mut campaign_nfts = 0i64;

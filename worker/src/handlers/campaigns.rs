@@ -317,8 +317,13 @@ pub async fn create_campaign(
     let d1 = require_d1(&state)?;
 
     // S3: only an owner of the target org (or super-admin) may create in it.
-    crate::auth::require_org_access(&claims.email, &body.organization_id, &state, "create campaign")
-        .await?;
+    crate::auth::require_org_access(
+        &claims.email,
+        &body.organization_id,
+        &state,
+        "create campaign",
+    )
+    .await?;
 
     validate_campaign_id(&body.id)?;
     validate_create_status(&body.status)?;
@@ -383,7 +388,13 @@ pub async fn get_campaign(
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
-    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign").await?;
+    crate::auth::require_org_access(
+        &claims.email,
+        &campaign_org(d1, &id).await?,
+        &state,
+        "view campaign",
+    )
+    .await?;
 
     let campaign = crate::db::campaigns::get_campaign(d1, &id)
         .await
@@ -413,7 +424,13 @@ pub async fn update_campaign(
     axum::Json(body): axum::Json<UpdateCampaignRequest>,
 ) -> Result<ApiOk<CampaignDetail>, WorkerError> {
     let d1 = require_d1(&state)?;
-    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "update campaign").await?;
+    crate::auth::require_org_access(
+        &claims.email,
+        &campaign_org(d1, &id).await?,
+        &state,
+        "update campaign",
+    )
+    .await?;
 
     validate_reward_type(&body.reward_type)?;
 
@@ -451,7 +468,13 @@ pub async fn delete_campaign(
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
-    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "delete campaign").await?;
+    crate::auth::require_org_access(
+        &claims.email,
+        &campaign_org(d1, &id).await?,
+        &state,
+        "delete campaign",
+    )
+    .await?;
 
     // Cascade delete: events + progress first, then campaign
     crate::db::campaigns::set_campaign_events(d1, &id, &[])
@@ -459,9 +482,10 @@ pub async fn delete_campaign(
         .map_err(|e| AppError::Internal(format!("failed to clear campaign events: {e}")))?;
 
     // Delete progress for this campaign
-    let delete_progress_sql =
-        format!("DELETE FROM developer_campaign_progress WHERE campaign_id = '{id}'");
-    d1.exec(&delete_progress_sql)
+    d1.prepare("DELETE FROM developer_campaign_progress WHERE campaign_id = ?")
+        .bind_refs(&[worker::d1::D1Type::Text(&id)])
+        .map_err(|e| AppError::Internal(format!("D1 delete campaign progress bind: {e:?}")))?
+        .run()
         .await
         .map_err(|e| format!("D1 delete campaign progress: {e:?}"))
         .map_err(AppError::Internal)?;
@@ -482,7 +506,13 @@ pub async fn update_campaign_status(
     axum::Json(body): axum::Json<UpdateStatusRequest>,
 ) -> Result<ApiOk<CampaignDetail>, WorkerError> {
     let d1 = require_d1(&state)?;
-    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "update campaign status").await?;
+    crate::auth::require_org_access(
+        &claims.email,
+        &campaign_org(d1, &id).await?,
+        &state,
+        "update campaign status",
+    )
+    .await?;
 
     validate_campaign_status(&body.status)?;
 
@@ -516,7 +546,13 @@ pub async fn list_campaign_events(
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
-    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign events").await?;
+    crate::auth::require_org_access(
+        &claims.email,
+        &campaign_org(d1, &id).await?,
+        &state,
+        "view campaign events",
+    )
+    .await?;
 
     let events = crate::db::campaigns::list_campaign_events(d1, &id)
         .await
@@ -544,7 +580,13 @@ pub async fn set_campaign_events(
     axum::Json(body): axum::Json<SetCampaignEventsRequest>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
-    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "set campaign events").await?;
+    crate::auth::require_org_access(
+        &claims.email,
+        &campaign_org(d1, &id).await?,
+        &state,
+        "set campaign events",
+    )
+    .await?;
 
     // Verify campaign exists
     let _ = crate::db::campaigns::get_campaign(d1, &id)
@@ -589,7 +631,13 @@ pub async fn list_campaign_progress(
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
-    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign progress").await?;
+    crate::auth::require_org_access(
+        &claims.email,
+        &campaign_org(d1, &id).await?,
+        &state,
+        "view campaign progress",
+    )
+    .await?;
 
     let progress = crate::db::campaigns::list_campaign_progress(d1, &id)
         .await
@@ -647,7 +695,13 @@ pub async fn campaign_stats(
     Path(id): Path<String>,
 ) -> Result<ApiOk<CampaignStatsResponse>, WorkerError> {
     let d1 = require_d1(&state)?;
-    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign stats").await?;
+    crate::auth::require_org_access(
+        &claims.email,
+        &campaign_org(d1, &id).await?,
+        &state,
+        "view campaign stats",
+    )
+    .await?;
 
     let stats = crate::db::campaigns::campaign_completion_stats(d1, &id)
         .await
@@ -890,10 +944,9 @@ mod tests {
     /// plan 016 P2.3, when the handler hardcoded `'draft'`.
     #[test]
     fn omitted_status_defaults_to_draft() {
-        let body: CreateCampaignRequest = serde_json::from_str(
-            r#"{"id":"c1","title":"T","organization_id":"org"}"#,
-        )
-        .expect("request without status should deserialize");
+        let body: CreateCampaignRequest =
+            serde_json::from_str(r#"{"id":"c1","title":"T","organization_id":"org"}"#)
+                .expect("request without status should deserialize");
         assert_eq!(body.status, "draft");
         assert!(validate_create_status(&body.status).is_ok());
     }

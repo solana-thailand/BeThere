@@ -45,9 +45,10 @@ pub async fn verify_thb_slip_handler(
     // re-approving one could resurrect it into the refund queue or muddle its
     // state. Cash slips awaiting review are the only verifiable target.
     if thb_deposit.refunded {
-        return Err(
-            AppError::Validation("deposit already refunded — cannot re-verify".to_string()).into(),
-        );
+        return Err(AppError::Validation(
+            "deposit already refunded — cannot re-verify".to_string(),
+        )
+        .into());
     }
     if thb_deposit.held_as_credit {
         return Err(AppError::Validation(

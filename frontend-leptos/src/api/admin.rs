@@ -127,15 +127,15 @@ impl EscrowInstruction {
 
     pub fn color(&self) -> &'static str {
         match self {
-            Self::CreateEvent => "#6366f1",    // indigo
-            Self::Deposit => "#3b82f6",       // blue
-            Self::MarkCheckedIn => "#22c55e",  // green
-            Self::Refund => "#eab308",        // yellow
-            Self::ClaimForfeited => "#f97316", // orange
-            Self::CloseEvent => "#ef4444",     // red
+            Self::CreateEvent => "#6366f1",     // indigo
+            Self::Deposit => "#3b82f6",         // blue
+            Self::MarkCheckedIn => "#22c55e",   // green
+            Self::Refund => "#eab308",          // yellow
+            Self::ClaimForfeited => "#f97316",  // orange
+            Self::CloseEvent => "#ef4444",      // red
             Self::DeactivateEvent => "#a855f7", // purple
-            Self::CloseDeposit => "#64748b",   // slate
-            Self::Unknown => "#94a3b8",        // gray
+            Self::CloseDeposit => "#64748b",    // slate
+            Self::Unknown => "#94a3b8",         // gray
         }
     }
 }
@@ -218,10 +218,11 @@ pub async fn get_admin_quiz(event_id: Option<&str>) -> Result<AdminQuizData, Api
         _ => "/admin/quiz".to_string(),
     };
     let response = api_get(&path).await?;
-    let result: ApiResponse<AdminQuizData> = response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse admin quiz response: {e}"),
-        status: 0,
-    })?;
+    let result: ApiResponse<AdminQuizData> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse admin quiz response: {e}"),
+            status: 0,
+        })?;
 
     if !result.success {
         return Err(ApiError {
@@ -237,7 +238,10 @@ pub async fn get_admin_quiz(event_id: Option<&str>) -> Result<AdminQuizData, Api
 }
 
 /// Save quiz configuration (admin only).
-pub async fn put_admin_quiz(config: &QuizConfigAdmin, event_id: Option<&str>) -> Result<AdminQuizSaveData, ApiError> {
+pub async fn put_admin_quiz(
+    config: &QuizConfigAdmin,
+    event_id: Option<&str>,
+) -> Result<AdminQuizSaveData, ApiError> {
     let path = match event_id {
         Some(eid) if !eid.is_empty() => format!("/admin/quiz?event_id={eid}"),
         _ => "/admin/quiz".to_string(),
@@ -251,7 +255,9 @@ pub async fn delete_quiz_question(
     event_id: Option<&str>,
 ) -> Result<(), ApiError> {
     let path = match event_id {
-        Some(eid) if !eid.is_empty() => format!("/admin/quiz/questions/{question_id}?event_id={eid}"),
+        Some(eid) if !eid.is_empty() => {
+            format!("/admin/quiz/questions/{question_id}?event_id={eid}")
+        }
         _ => format!("/admin/quiz/questions/{question_id}"),
     };
     let response = super::api_delete(&path).await?;
@@ -300,12 +306,15 @@ pub async fn toggle_quiz_question(
     }
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Toggle failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Toggle failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or("Toggle failed".to_string()),
             status: response.status(),
@@ -313,10 +322,13 @@ pub async fn toggle_quiz_question(
     }
 
     // Backend returns { success: true, data: { question: {...} } }
-    let raw: serde_json::Value = super::fetch::response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse toggle response: {e}"),
-        status: 0,
-    })?;
+    let raw: serde_json::Value =
+        super::fetch::response_json(&response)
+            .await
+            .map_err(|e| ApiError {
+                message: format!("Failed to parse toggle response: {e}"),
+                status: 0,
+            })?;
 
     if !raw["success"].as_bool().unwrap_or(false) {
         let err_msg = raw["error"].as_str().unwrap_or("Toggle failed");
@@ -354,14 +366,19 @@ pub async fn get_admin_adventure_config(
     let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to fetch adventure config".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Failed to fetch adventure config".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
-            message: body.error.unwrap_or("Failed to fetch adventure config".to_string()),
+            message: body
+                .error
+                .unwrap_or("Failed to fetch adventure config".to_string()),
             status: response.status(),
         });
     }
@@ -372,18 +389,17 @@ pub async fn get_admin_adventure_config(
         config: Option<AdventureConfigData>,
     }
 
-    let wrapper: ApiResponse<ConfigResponse> = super::fetch::response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse adventure config: {e}"),
-        status: 0,
-    })?;
-
-    wrapper
-        .data
-        .and_then(|d| d.config)
-        .ok_or_else(|| ApiError {
-            message: "No config data".to_string(),
+    let wrapper: ApiResponse<ConfigResponse> = super::fetch::response_json(&response)
+        .await
+        .map_err(|e| ApiError {
+            message: format!("Failed to parse adventure config: {e}"),
             status: 0,
-        })
+        })?;
+
+    wrapper.data.and_then(|d| d.config).ok_or_else(|| ApiError {
+        message: "No config data".to_string(),
+        status: 0,
+    })
 }
 
 /// PUT /api/admin/adventure
@@ -401,14 +417,19 @@ pub async fn put_admin_adventure_config(
     let response = super::fetch::put(&url, &hdrs, Some(body_str)).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to save adventure config".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Failed to save adventure config".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
-            message: body.error.unwrap_or("Failed to save adventure config".to_string()),
+            message: body
+                .error
+                .unwrap_or("Failed to save adventure config".to_string()),
             status: response.status(),
         });
     }
@@ -593,10 +614,11 @@ pub async fn get_event_audit(event_id: &str) -> Result<AuditResponse, ApiError> 
         });
     }
 
-    let result: ApiResponse<AuditResponse> = response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse audit response: {e}"),
-        status: 0,
-    })?;
+    let result: ApiResponse<AuditResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse audit response: {e}"),
+            status: 0,
+        })?;
 
     if !result.success {
         return Err(ApiError {
@@ -631,10 +653,11 @@ pub async fn get_onchain_events(event_id: &str) -> Result<OnchainEventsResponse,
         });
     }
 
-    let result: ApiResponse<OnchainEventsResponse> = response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse on-chain events: {e}"),
-        status: 0,
-    })?;
+    let result: ApiResponse<OnchainEventsResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse on-chain events: {e}"),
+            status: 0,
+        })?;
 
     if !result.success {
         return Err(ApiError {

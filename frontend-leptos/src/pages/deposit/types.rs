@@ -342,10 +342,10 @@ pub fn compute_refund_info(data: &DepositStatusResponse) -> Option<(String, Stri
     }
 }
 
-/// Format a USDC amount (micro-USDC to display string).
-pub fn format_usdc(micro_usdc: u64) -> String {
-    format!("{:.2}", micro_usdc as f64 / 1_000_000.0)
-}
+/// Canonical USDC formatter, re-exported so the glob `use super::types::*` in
+/// the deposit pages keeps resolving. Previously a local `f64` division that
+/// rounded where every other page truncated. See [`crate::utils::money`].
+pub use crate::utils::money::format_usdc;
 
 /// Truncate a signature for display.
 pub fn truncate_sig(sig: &str) -> String {

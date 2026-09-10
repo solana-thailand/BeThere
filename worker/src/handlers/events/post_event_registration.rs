@@ -20,9 +20,11 @@ use crate::db::events::set_post_event_registration;
 use crate::error::ApiOk;
 use crate::state::AppState;
 
+use super::common::{enforce_organizer, load_event};
+
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
-use event_checkin_domain::models::event::{EventConfig, EventStatus};
+use event_checkin_domain::models::event::EventStatus;
 
 /// PUT /api/events/{id}/post-event-registration request body.
 #[derive(Debug, Deserialize)]
@@ -51,7 +53,7 @@ pub async fn put_post_event_registration(
 
     // ── 1. Resolve event + role gate ───────────────────────────────────────
     let event = load_event(&state, kv, &id).await?;
-    enforce_organizer(&claims, &state, &event).await?;
+    enforce_organizer(&claims, &state, &event, "toggle post-event registration").await?;
 
     // ── 2. Validate: only completed events can open post-event registration ─
     // Opening lead capture for an active/draft event is nonsensical — that's
@@ -167,37 +169,3 @@ pub async fn put_post_event_registration(
 // ---------------------------------------------------------------------------
 // Internal helpers — mirror recap.rs::load_event / enforce_organizer.
 // ---------------------------------------------------------------------------
-
-/// Load an event by id, KV first then D1 fallback.
-async fn load_event(
-    state: &AppState,
-    kv: Option<&worker::KvStore>,
-    id: &str,
-) -> Result<EventConfig, AppError> {
-    if let Some(kv_ref) = kv
-        && let Ok(Some(c)) = crate::event_store::get_event(kv_ref, id).await
-    {
-        return Ok(c);
-    }
-    if let Some(ref d1) = state.d1
-        && let Ok(Some(row)) = crate::db::events::get_event(d1, id).await
-    {
-        return Ok(row.to_event_config());
-    }
-    Err(AppError::NotFound(format!("event '{id}' not found")))
-}
-
-/// Reject non-organizers.
-async fn enforce_organizer(
-    claims: &Claims,
-    state: &AppState,
-    event: &EventConfig,
-) -> Result<(), AppError> {
-    let role = crate::auth::resolve_user_role(&claims.email, state, Some(event)).await;
-    if role < crate::auth::UserRole::Organizer {
-        return Err(AppError::Forbidden(
-            "only super admins or organizers can toggle post-event registration".into(),
-        ));
-    }
-    Ok(())
-}

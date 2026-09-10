@@ -7,9 +7,9 @@
 
 use serde::Deserialize;
 
-use super::types::{ApiError, ApiResponse};
-use super::fetch::response_json;
 use super::api_get_no_cache;
+use super::fetch::response_json;
+use super::types::{ApiError, ApiResponse};
 
 // ---------------------------------------------------------------------------
 // Response types — mirror `worker/src/handlers/dashboard.rs`
@@ -94,16 +94,10 @@ pub struct LiveDashboardResponse {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/// Format an atomic USDC amount (1 USDC = 1_000_000 units) as a human-readable
-/// string with 2 decimal places, e.g. `25_000_000` → `"25.00"`.
-///
-/// Returns `"0.00"` for zero or empty values. Used by the dashboard tiles
-/// to render `usdc_locked_total` without pulling in a decimal crate.
-pub fn format_usdc(amount_atomic: u64) -> String {
-    let whole = amount_atomic / 1_000_000;
-    let cents = (amount_atomic % 1_000_000) / 10_000;
-    format!("{whole}.{cents:02}")
-}
+/// Re-export of the canonical USDC formatter so `crate::api::format_usdc`
+/// keeps working for the dashboard tiles. The implementation (and its tests)
+/// live in [`crate::utils::money`] — one renderer for every page.
+pub use crate::utils::money::format_usdc;
 
 /// Map an audit_log action string to a short emoji tag for the live feed.
 ///
@@ -185,24 +179,6 @@ pub async fn get_live_dashboard(event_id: Option<&str>) -> Result<LiveDashboardR
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn format_usdc_handles_zero() {
-        assert_eq!(format_usdc(0), "0.00");
-    }
-
-    #[test]
-    fn format_usdc_handles_exact_usdc() {
-        assert_eq!(format_usdc(25_000_000), "25.00");
-        assert_eq!(format_usdc(10_000_000), "10.00");
-    }
-
-    #[test]
-    fn format_usdc_handles_fractional() {
-        assert_eq!(format_usdc(1_500_000), "1.50");
-        assert_eq!(format_usdc(1_005_000), "1.00"); // truncates sub-cent
-        assert_eq!(format_usdc(99), "0.00");
-    }
 
     #[test]
     fn action_emoji_returns_pulse_for_unknown() {

@@ -198,8 +198,12 @@ pub struct PublicEventData {
     pub event_end_ms: i64,
     pub time_tba: bool,
     pub deposit_enabled: bool,
-    pub deposit_amount_usdc: f64,
-    pub deposit_amount_thb: f64,
+    /// USDC deposit in the 6-decimal smallest unit — mirrors
+    /// `EventConfig::deposit_amount_usdc` (u64). Was `f64` here, which forced a
+    /// magnitude-guessing formatter; the wire value is an integer.
+    pub deposit_amount_usdc: u64,
+    /// THB deposit in whole baht — mirrors `EventConfig::deposit_amount_thb` (u64).
+    pub deposit_amount_thb: u64,
     pub event_format: EventFormat,
     pub nft_image_url: String,
     #[serde(default)]
@@ -396,17 +400,15 @@ pub fn scroll_to_element(id: &str) {
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-pub fn format_usdc(val: f64) -> String {
-    let usdc = if val > 1000.0 { val / 1_000_000.0 } else { val };
-    format!("{usdc:.2} USDC")
-}
-
-pub fn format_thb(amount: f64) -> String {
-    if amount >= 1.0 {
-        format!("{amount:.0}")
-    } else {
-        format!("{amount:.2}")
-    }
+/// USDC deposit amount with its unit suffix, e.g. `"15.00 USDC"`.
+///
+/// Delegates to the canonical [`crate::utils::money::format_usdc`]. The previous
+/// local version took an `f64` and guessed the scale from magnitude
+/// (`if val > 1000.0 { val / 1_000_000.0 }`) — a guess that was only ever needed
+/// because this mirror typed an integer wire field as `f64`.
+pub fn format_usdc(atomic_usdc: u64) -> String {
+    let usdc = crate::utils::money::format_usdc(atomic_usdc);
+    format!("{usdc} USDC")
 }
 
 pub fn format_event_date(ms: i64) -> String {

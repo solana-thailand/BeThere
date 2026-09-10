@@ -56,15 +56,10 @@ pub(crate) async fn apply_rollover_deposit_status(
     // that's exactly what the rollover is creating).
     let attendee_wallet = event.attendee.as_deref().unwrap_or("");
     let attendee_api_id = if let Some(kv_ref) = kv {
-        crate::event_store::find_attendee_by_wallet(
-            kv_ref,
-            &target_id,
-            attendee_wallet,
-            d1,
-        )
-        .await
-        .ok()
-        .flatten()
+        crate::event_store::find_attendee_by_wallet(kv_ref, &target_id, attendee_wallet, d1)
+            .await
+            .ok()
+            .flatten()
     } else if let Some(db) = d1 {
         crate::db::deposit_statuses::find_attendee_by_wallet(db, &target_id, attendee_wallet)
             .await
@@ -147,8 +142,7 @@ pub(crate) async fn apply_rollover_deposit_status(
             if let Some(src_id) = source_event_id
                 && let Some(kv_ref) = kv
                 && let Ok(Some(src_status)) =
-                    crate::event_store::get_deposit_status(kv_ref, &src_id, &api_id, d1)
-                        .await
+                    crate::event_store::get_deposit_status(kv_ref, &src_id, &api_id, d1).await
             {
                 found = src_status.amount;
             }

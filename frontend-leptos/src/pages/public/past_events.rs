@@ -52,15 +52,13 @@ pub fn PastEvents() -> impl IntoView {
         });
     });
 
-    let is_loading = move || {
-        matches!(load_state.get(), PastEventsLoadState::Loading) && events.get().is_empty()
-    };
+    let is_loading =
+        move || matches!(load_state.get(), PastEventsLoadState::Loading) && events.get().is_empty();
     let is_hard_failure = move || {
         matches!(load_state.get(), PastEventsLoadState::Failed(_)) && events.get().is_empty()
     };
-    let is_empty = move || {
-        matches!(load_state.get(), PastEventsLoadState::Loaded) && events.get().is_empty()
-    };
+    let is_empty =
+        move || matches!(load_state.get(), PastEventsLoadState::Loaded) && events.get().is_empty();
 
     view! {
         <Title text="Past Events — BeThere" />

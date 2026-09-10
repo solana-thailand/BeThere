@@ -8,7 +8,7 @@
 //! small enough that compression barely helps, and this eliminates the
 //! `miniz_oxide` + `simd-adler32` + `adler2` dependency tree (~200 KB WASM).
 
-use qrcode::{types::Color as QrColor, QrCode};
+use qrcode::{QrCode, types::Color as QrColor};
 
 /// Quiet zone width in modules (standard is 4).
 const QUIET_ZONE_MODULES: u32 = 4;

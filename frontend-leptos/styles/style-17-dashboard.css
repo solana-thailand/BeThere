@@ -1,0 +1,651 @@
+/* ===== Developer Dashboard ===== */
+
+.dev-dashboard {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.dev-dashboard-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.dev-dashboard-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.dev-dashboard-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+/* Wallet section */
+.dev-dashboard-wallet {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.dev-wallet-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.dev-wallet-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* Score card */
+.dev-score-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.dev-score-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.dev-score-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.dev-score-desc {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.dev-score-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 1rem;
+}
+
+.dev-score-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.dev-score-row-val {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dev-score-total {
+    border-top: 1px solid var(--border);
+    padding-top: 0.35rem;
+    margin-top: 0.25rem;
+    font-weight: 700;
+}
+
+.dev-score-progress {
+    margin-top: 0.75rem;
+}
+
+.dev-score-progress-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+
+.dev-score-progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.dev-score-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.dev-score-max {
+    text-align: center;
+    color: var(--success);
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+/* Sections */
+.dev-section {
+    margin-bottom: 1.5rem;
+}
+
+.dev-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 1rem;
+}
+
+/* NFT grid */
+.dev-nft-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.dev-nft-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+
+.dev-nft-card:hover {
+    border-color: var(--accent-border);
+}
+
+.dev-nft-image-wrap {
+    aspect-ratio: 1;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.dev-nft-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.dev-nft-placeholder {
+    color: var(--text-muted);
+}
+
+.dev-nft-info {
+    padding: 0.75rem;
+}
+
+.dev-nft-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.25rem;
+}
+
+.dev-nft-symbol {
+    font-size: 0.7rem;
+    color: var(--accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+}
+
+.dev-nft-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: monospace;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dev-nft-link:hover {
+    color: var(--accent);
+}
+
+.dev-nft-empty,
+.dev-nft-empty p {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 2rem 0;
+}
+
+/* Campaign progress */
+.dev-campaign-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.dev-campaign-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+}
+
+.dev-campaign-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.dev-campaign-id {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: monospace;
+}
+
+.dev-campaign-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.dev-campaign-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.dev-campaign-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.dev-campaign-count {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.dev-campaign-reward {
+    font-size: 0.8rem;
+    color: var(--success);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.dev-campaign-reward-pending {
+    color: var(--warning);
+}
+
+/* --- Campaign Progress: per-event attendance chips --- */
+.attendance-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.attendance-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    border: 1px solid transparent;
+    max-width: 220px;
+}
+
+.attendance-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attendance-chip-done {
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: var(--success);
+}
+
+.attendance-chip-pending {
+    background: var(--bg-tertiary);
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+.attendance-chip-required {
+    font-weight: 600;
+}
+
+.dev-campaign-empty {
+    text-align: center;
+    padding: 2rem 0;
+    color: var(--text-muted);
+}
+
+.dev-campaign-empty p {
+    margin-bottom: 0.25rem;
+}
+
+/* States */
+.dev-empty-state,
+.dev-loading,
+.dev-error {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
+}
+
+.dev-loading p,
+.dev-error p {
+    margin-top: 0.75rem;
+}
+
+.dev-error {
+    color: var(--danger);
+}
+
+.dev-error .btn {
+    margin-top: 1rem;
+}
+
+/* Content area */
+.dev-content {
+    margin-top: 1rem;
+}
+
+/* Footer */
+.dev-dashboard-footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.dev-dashboard-footer p {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .dev-dashboard {
+        padding: 1rem 0.75rem;
+    }
+
+    .dev-dashboard-title {
+        font-size: 1.35rem;
+    }
+
+    .dev-nft-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .dev-wallet-buttons {
+        flex-direction: column;
+    }
+}
+
+/* ── Calendar Links ── */
+.ticket-calendar-links {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+.ticket-calendar-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-decoration: none;
+    transition:
+        border-color 0.2s,
+        background 0.2s;
+}
+.ticket-calendar-link:hover {
+    border-color: var(--accent);
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+/* =========================================================================
+   Developer Profile Page (/profile)
+   ========================================================================= */
+
+.dev-profile-page {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.dev-profile-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.dev-profile-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.dev-profile-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.dev-profile-saved-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    background: rgba(72, 187, 120, 0.1);
+    border: 1px solid rgba(72, 187, 120, 0.3);
+    border-radius: var(--radius);
+    color: #48bb78;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.dev-profile-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.dev-profile-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.dev-profile-label {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.dev-profile-hint {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.dev-profile-readonly {
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-hover);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.dev-profile-input,
+.dev-profile-select,
+.dev-profile-textarea {
+    padding: 0.5rem 0.75rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    font-family: inherit;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+}
+
+.dev-profile-input:focus,
+.dev-profile-select:focus,
+.dev-profile-textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+.dev-profile-textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.dev-profile-select {
+    cursor: pointer;
+}
+
+.dev-profile-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+}
+
+.dev-profile-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    margin: 0;
+}
+
+.dev-profile-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.dev-profile-tag {
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition:
+        background 0.2s,
+        border-color 0.2s,
+        color 0.2s;
+    font-family: inherit;
+}
+
+.dev-profile-tag:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.dev-profile-tag.selected {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.dev-profile-checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    line-height: 1.4;
+}
+
+.dev-profile-checkbox-label input[type="checkbox"] {
+    margin-top: 0.15rem;
+    accent-color: var(--accent);
+}
+
+.dev-profile-actions {
+    display: flex;
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+}
+
+.dev-profile-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: var(--bg-hover);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.dev-profile-stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+
+.dev-profile-stat-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+

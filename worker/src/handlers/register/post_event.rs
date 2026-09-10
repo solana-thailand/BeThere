@@ -60,7 +60,7 @@ pub async fn register_post_event(
     let kv = state.events_kv.as_ref();
     let config = crate::event_store::resolve_event_by_slug(kv, slug, state.d1.as_deref())
         .await
-        .map_err(AppError::NotFound)?;
+        .map_err(AppError::from)?;
     let event_id = config.id.clone();
 
     // 3. Validate lifecycle: must be Completed (active events use normal reg).
@@ -80,15 +80,17 @@ pub async fn register_post_event(
         .into());
     }
 
-    // 5. Validate the deadline (if set) has not passed.
-    if let Some(until) = config.post_event_registration_until_ms {
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        if now_ms >= until {
-            return Err(AppError::Gone(
-                "post-event registration for this event has closed".to_string(),
-            )
-            .into());
-        }
+    // 5. Validate the deadline (if set) has not passed. Shares the comparison
+    //    with the public recap payload's CTA gate via
+    //    `EventConfig::post_event_registration_deadline_passed`, so the form
+    //    cannot disappear while this endpoint still accepts, or vice versa.
+    //    The two branches stay separate because the codes differ: never opened
+    //    is a 409, opened-then-lapsed is a 410.
+    if config.post_event_registration_deadline_passed(chrono::Utc::now().timestamp_millis()) {
+        return Err(AppError::Gone(
+            "post-event registration for this event has closed".to_string(),
+        )
+        .into());
     }
 
     let contact_channel = body
@@ -133,9 +135,16 @@ pub async fn register_post_event(
 
         let (attendee_result, contact_result) = futures_util::join!(attendee_fut, contact_fut);
 
-        if let Err(e) = attendee_result {
-            tracing::warn!(%api_id, %email, error = %e, "D1 post-event attendee upsert failed (non-fatal)");
-        }
+        // The attendee row *is* the lead. Unlike normal registration — where
+        // Google Sheets is the primary store and D1 a mirror — this endpoint has
+        // no other destination, so a failed write means the lead is gone.
+        // Answering "Thanks!" then would be a lie, and the visitor would never
+        // know to retry.
+        let attendee_id = attendee_result.map_err(|e| {
+            tracing::error!(%api_id, %email, %event_id, error = %e, "D1 post-event attendee upsert failed");
+            AppError::Internal("could not save your registration — please try again".to_string())
+        })?;
+
         if let Err(e) = contact_result {
             tracing::warn!(%email, error = %e, "D1 post-event contact upsert failed (non-fatal)");
         }
@@ -174,10 +183,10 @@ pub async fn register_post_event(
         })
         .await;
 
-        tracing::info!(%email, %event_id, %api_id, "post-event registration captured");
+        tracing::info!(%email, %event_id, %attendee_id, "post-event registration captured");
 
         return Ok(ApiOk::new(serde_json::json!({
-            "attendee_id": api_id,
+            "attendee_id": attendee_id,
             "message": "Thanks! We'll notify you about future events.",
         })));
     }

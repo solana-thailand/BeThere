@@ -215,7 +215,9 @@ pub fn AdminDeposits(
         set_clear_pending.set(Some(email.clone()));
 
         leptos::task::spawn_local(async move {
-            let body = ClearCreditRefundRequest { email: email.clone() };
+            let body = ClearCreditRefundRequest {
+                email: email.clone(),
+            };
             match api::clear_credit_refund_request(&body).await {
                 Ok(_) => {
                     components::show_toast(
@@ -282,7 +284,8 @@ pub fn AdminDeposits(
             let set_confirm = set_confirm_reject_id;
             gloo_timers::callback::Timeout::new(3000, move || {
                 set_confirm.set(None);
-            }).forget();
+            })
+            .forget();
             return;
         }
 
@@ -300,11 +303,7 @@ pub fn AdminDeposits(
             };
             match api::verify_thb_slip(&body).await {
                 Ok(_) => {
-                    components::show_toast(
-                        &set_toast,
-                        "Slip rejected",
-                        ToastType::Warning,
-                    );
+                    components::show_toast(&set_toast, "Slip rejected", ToastType::Warning);
                     refresh_data();
                 }
                 Err(e) => {
@@ -347,7 +346,10 @@ pub fn AdminDeposits(
         });
 
         leptos::task::spawn_local(async move {
-            let body = MarkRefundRequest { event_id, refund_proof_url };
+            let body = MarkRefundRequest {
+                event_id,
+                refund_proof_url,
+            };
             match api::mark_refund(&attendee_id, &body).await {
                 Ok(_) => {
                     components::show_toast(
@@ -594,7 +596,7 @@ pub fn AdminDeposits(
                     <div class="admin-section-header" style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;">
                         <h3 style="margin:0;">{format!("{} pending slip{}", pending_count.get(), if pending_count.get() != 1 { "s" } else { "" })}</h3>
                         <button
-                            class="btn btn-secondary btn-sm"
+                            class="btn btn-outline btn-sm"
                             title="Record a slip on behalf of an attendee who cannot upload themselves (slip sent via LINE/email, JWT expired, browser bug, etc.). Staff-authed + audited."
                             on:click=move |_| set_show_record_slip_modal.set(true)
                         >
@@ -856,7 +858,7 @@ pub fn AdminDeposits(
                                             // button. Credits the attendee's contact row.
                                             <div class="admin-dep-hold-row">
                                                 <button
-                                                    class="btn btn-secondary btn-sm"
+                                                    class="btn btn-outline btn-sm"
                                                     disabled=hold_disabled
                                                     title="Hold this deposit as rolling credit for the attendee's next event (use when the attendee confirmed hold verbally)"
                                                     on:click=move |_| handle_admin_hold(item_for_hold.clone())

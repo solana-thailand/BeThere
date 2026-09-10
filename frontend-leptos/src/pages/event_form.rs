@@ -3,8 +3,11 @@
 //! Contains the `EventForm` struct, all form helpers, and the `<EventFormComponent>`
 //! that renders the full form UI with validation, save, and escrow init logic.
 
-use std::sync::Arc;
+use event_checkin_domain::models::event::{
+    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, normalize_sheet_name,
+};
 use leptos::prelude::*;
+use std::sync::Arc;
 use wasm_bindgen::JsCast;
 
 use crate::api;
@@ -90,9 +93,10 @@ fn parse_date_to_ms(date_str: &str) -> Option<i64> {
     }
     // Try parsing as epoch ms first
     if let Ok(ms) = date_str.parse::<i64>()
-        && ms > 1_000_000_000_000 {
-            return Some(ms);
-        }
+        && ms > 1_000_000_000_000
+    {
+        return Some(ms);
+    }
     // Parse as ISO datetime-local format (YYYY-MM-DDTHH:MM)
     let cleaned = date_str.replace('T', " ");
     let parsed = js_sys::Date::parse(&cleaned);
@@ -170,8 +174,8 @@ pub fn default_form() -> EventForm {
         event_end: String::new(),
         time_tba: false,
         sheet_id: String::new(),
-        sheet_name: "Attendees".to_string(),
-        staff_sheet_name: "staff".to_string(),
+        sheet_name: DEFAULT_ATTENDEE_SHEET_NAME.to_string(),
+        staff_sheet_name: DEFAULT_STAFF_SHEET_NAME.to_string(),
         quiz_enabled: false,
         nft_collection_mint: String::new(),
         nft_metadata_uri: String::new(),
@@ -233,12 +237,12 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         time_tba: detail.time_tba,
         sheet_id: detail.sheet_id.clone(),
         sheet_name: if detail.sheet_name.is_empty() {
-            "Attendees".to_string()
+            DEFAULT_ATTENDEE_SHEET_NAME.to_string()
         } else {
             detail.sheet_name.clone()
         },
         staff_sheet_name: if detail.staff_sheet_name.is_empty() {
-            "staff".to_string()
+            DEFAULT_STAFF_SHEET_NAME.to_string()
         } else {
             detail.staff_sheet_name.clone()
         },
@@ -257,8 +261,19 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         status: detail.status.clone(),
         event_format: detail.event_format.clone(),
         deposit_enabled: detail.deposit_enabled,
-        deposit_amount_usdc: if detail.deposit_amount_usdc > 0 { format!("{:.6}", detail.deposit_amount_usdc as f64 / 1_000_000.0).trim_end_matches('0').trim_end_matches('.').to_string() } else { String::new() },
-        deposit_amount_thb: if detail.deposit_amount_thb > 0 { detail.deposit_amount_thb.to_string() } else { String::new() },
+        deposit_amount_usdc: if detail.deposit_amount_usdc > 0 {
+            format!("{:.6}", detail.deposit_amount_usdc as f64 / 1_000_000.0)
+                .trim_end_matches('0')
+                .trim_end_matches('.')
+                .to_string()
+        } else {
+            String::new()
+        },
+        deposit_amount_thb: if detail.deposit_amount_thb > 0 {
+            detail.deposit_amount_thb.to_string()
+        } else {
+            String::new()
+        },
         require_contact_info: detail.require_contact_info,
         require_photo_consent: detail.require_photo_consent,
         promptpay_id: detail.promptpay_id.clone(),
@@ -282,11 +297,20 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         },
         location: detail.location.clone(),
         video_url: detail.video_url.clone(),
-        in_person_capacity: detail.in_person_capacity.map(|v| v.to_string()).unwrap_or_default(),
-        online_capacity: detail.online_capacity.map(|v| v.to_string()).unwrap_or_default(),
+        in_person_capacity: detail
+            .in_person_capacity
+            .map(|v| v.to_string())
+            .unwrap_or_default(),
+        online_capacity: detail
+            .online_capacity
+            .map(|v| v.to_string())
+            .unwrap_or_default(),
         online_open_mode: detail.online_open_mode.clone(),
         online_registration_open: detail.online_registration_open,
-        deposit_deadline_hours: detail.deposit_deadline_hours.map(|h| h.to_string()).unwrap_or_default(),
+        deposit_deadline_hours: detail
+            .deposit_deadline_hours
+            .map(|h| h.to_string())
+            .unwrap_or_default(),
         visibility: detail.visibility.clone(),
         updated_at: detail.updated_at.clone(),
         community_links: detail.community_links.clone(),
@@ -425,9 +449,10 @@ pub fn EventFormComponent(
             return;
         }
         let editing = editing_id.get().unwrap_or_default();
-        let taken = events.get().iter().any(|e| {
-            e.slug.to_lowercase() == current_slug && e.id != editing
-        });
+        let taken = events
+            .get()
+            .iter()
+            .any(|e| e.slug.to_lowercase() == current_slug && e.id != editing);
         set_slug_taken.set(taken);
     };
 
@@ -440,21 +465,61 @@ pub fn EventFormComponent(
 
         // Validate required fields
         if current_form.name.trim().is_empty() {
-            components::show_toast(&set_toast, "Event name is required", components::ToastType::Error);
+            components::show_toast(
+                &set_toast,
+                "Event name is required",
+                components::ToastType::Error,
+            );
             return;
         }
         if current_form.slug.trim().is_empty() {
-            components::show_toast(&set_toast, "Event slug is required", components::ToastType::Error);
+            components::show_toast(
+                &set_toast,
+                "Event slug is required",
+                components::ToastType::Error,
+            );
             return;
         }
         // Check slug availability (client-side against loaded events)
         if slug_taken.get() {
-            components::show_toast(&set_toast, "This slug is already taken by another event", components::ToastType::Error);
+            components::show_toast(
+                &set_toast,
+                "This slug is already taken by another event",
+                components::ToastType::Error,
+            );
             return;
         }
         if current_form.sheet_id.trim().is_empty() {
-            components::show_toast(&set_toast, "Google Sheet ID is required", components::ToastType::Error);
+            components::show_toast(
+                &set_toast,
+                "Google Sheet ID is required",
+                components::ToastType::Error,
+            );
             return;
+        }
+        // Tab names reach a Google Sheets A1 range on every sync. The backend
+        // rejects a name Google would refuse to create; check here too so the
+        // organiser sees which field is wrong without a round trip.
+        for (label, raw, fallback) in [
+            (
+                "Attendee tab name",
+                &current_form.sheet_name,
+                DEFAULT_ATTENDEE_SHEET_NAME,
+            ),
+            (
+                "Staff tab name",
+                &current_form.staff_sheet_name,
+                DEFAULT_STAFF_SHEET_NAME,
+            ),
+        ] {
+            if let Err(e) = normalize_sheet_name(raw, fallback) {
+                components::show_toast(
+                    &set_toast,
+                    &format!("{label}: {e}"),
+                    components::ToastType::Error,
+                );
+                return;
+            }
         }
 
         // Validate schedule — backend requires positive start_ms and end > start
@@ -462,46 +527,81 @@ pub fn EventFormComponent(
         let start_ms = parse_date_to_ms(&current_form.event_start).unwrap_or(0);
         let end_ms = parse_date_to_ms(&current_form.event_end).unwrap_or(0);
         if start_ms <= 0 {
-            components::show_toast(&set_toast, "Event start date is required", components::ToastType::Error);
+            components::show_toast(
+                &set_toast,
+                "Event start date is required",
+                components::ToastType::Error,
+            );
             return;
         }
         if !time_tba && end_ms <= 0 {
-            components::show_toast(&set_toast, "Event end date is required", components::ToastType::Error);
+            components::show_toast(
+                &set_toast,
+                "Event end date is required",
+                components::ToastType::Error,
+            );
             return;
         }
         if !time_tba && end_ms <= start_ms {
-            components::show_toast(&set_toast, "Event end must be after event start", components::ToastType::Error);
+            components::show_toast(
+                &set_toast,
+                "Event end must be after event start",
+                components::ToastType::Error,
+            );
             return;
         }
         // TBA mode: default end_ms to start_ms + 24h if not set
-        let end_ms = if time_tba && end_ms <= 0 { start_ms + 86_400_000 } else { end_ms };
+        let end_ms = if time_tba && end_ms <= 0 {
+            start_ms + 86_400_000
+        } else {
+            end_ms
+        };
 
         // Validate deposit fields when deposit is enabled
         if current_form.deposit_enabled {
-            let usdc_val = current_form.deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
+            let usdc_val = current_form
+                .deposit_amount_usdc
+                .parse::<f64>()
+                .unwrap_or(0.0);
             let thb_val = current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0);
 
             // At least one deposit amount must be set
             if usdc_val == 0.0 && thb_val == 0 {
-                components::show_toast(&set_toast, "At least one deposit amount (USDC or THB) is required when deposit is enabled", components::ToastType::Error);
+                components::show_toast(
+                    &set_toast,
+                    "At least one deposit amount (USDC or THB) is required when deposit is enabled",
+                    components::ToastType::Error,
+                );
                 return;
             }
 
             // USDC minimum precision (6 decimals → 0.01 smallest meaningful)
             if usdc_val > 0.0 && usdc_val < 0.01 {
-                components::show_toast(&set_toast, "Minimum deposit is 0.01 USDC", components::ToastType::Error);
+                components::show_toast(
+                    &set_toast,
+                    "Minimum deposit is 0.01 USDC",
+                    components::ToastType::Error,
+                );
                 return;
             }
 
             // USDC max cap (SEC-003: backend enforces $1,000 = 1,000,000,000 lamports)
             if usdc_val > 1000.0 {
-                components::show_toast(&set_toast, "Maximum deposit is 1,000 USDC", components::ToastType::Error);
+                components::show_toast(
+                    &set_toast,
+                    "Maximum deposit is 1,000 USDC",
+                    components::ToastType::Error,
+                );
                 return;
             }
 
             // THB amount set but no PromptPay ID — QR generation will fail
             if thb_val > 0 && current_form.promptpay_id.trim().is_empty() {
-                components::show_toast(&set_toast, "PromptPay ID is required when THB amount is set", components::ToastType::Error);
+                components::show_toast(
+                    &set_toast,
+                    "PromptPay ID is required when THB amount is set",
+                    components::ToastType::Error,
+                );
                 return;
             }
 
@@ -516,8 +616,8 @@ pub fn EventFormComponent(
             }
 
             // Escrow init requires USDC amount — check early when wallet is connected
-            let do_escrow_init = !create_wallet_pk.get().is_empty()
-                && !create_wallet_name.get().is_empty();
+            let do_escrow_init =
+                !create_wallet_pk.get().is_empty() && !create_wallet_name.get().is_empty();
             if do_escrow_init && usdc_val == 0.0 {
                 components::show_toast(
                     &set_toast,
@@ -527,9 +627,16 @@ pub fn EventFormComponent(
                 return;
             }
 
-            let deadline_hrs = current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0);
+            let deadline_hrs = current_form
+                .refund_deadline_hours
+                .parse::<u32>()
+                .unwrap_or(0);
             if deadline_hrs == 0 {
-                components::show_toast(&set_toast, "Refund deadline must be at least 1 hour", components::ToastType::Error);
+                components::show_toast(
+                    &set_toast,
+                    "Refund deadline must be at least 1 hour",
+                    components::ToastType::Error,
+                );
                 return;
             }
         }
@@ -561,7 +668,11 @@ pub fn EventFormComponent(
                 organizer_emails: parse_emails(&current_form.organizer_emails),
                 staff_emails: parse_emails(&current_form.staff_emails),
                 deposit_enabled: current_form.deposit_enabled,
-                deposit_amount_usdc: (current_form.deposit_amount_usdc.parse::<f64>().unwrap_or(0.0) * 1_000_000.0) as u64,
+                deposit_amount_usdc: (current_form
+                    .deposit_amount_usdc
+                    .parse::<f64>()
+                    .unwrap_or(0.0)
+                    * 1_000_000.0) as u64,
                 deposit_amount_thb: current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),
                 promptpay_id: current_form.promptpay_id.trim().to_string(),
                 escrow_address: current_form.escrow_address.trim().to_string(),
@@ -571,19 +682,33 @@ pub fn EventFormComponent(
                     create_wallet_pk.get()
                 },
                 on_chain_event_id: current_form.on_chain_event_id.parse::<u64>().unwrap_or(0),
-                refund_deadline_hours: current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0),
-                max_refundable_deposits: current_form.max_refundable_deposits.parse::<u32>().unwrap_or(0),
+                refund_deadline_hours: current_form
+                    .refund_deadline_hours
+                    .parse::<u32>()
+                    .unwrap_or(0),
+                max_refundable_deposits: current_form
+                    .max_refundable_deposits
+                    .parse::<u32>()
+                    .unwrap_or(0),
                 event_format: current_form.event_format.clone(),
                 require_contact_info: current_form.require_contact_info,
                 require_photo_consent: current_form.require_photo_consent,
                 time_tba,
-                location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
+                location: if current_form.location.trim().is_empty() {
+                    None
+                } else {
+                    Some(current_form.location.trim().to_string())
+                },
                 video_url: current_form.video_url.trim().to_string(),
                 in_person_capacity: current_form.in_person_capacity.trim().parse::<u32>().ok(),
                 online_capacity: current_form.online_capacity.trim().parse::<u32>().ok(),
                 online_open_mode: current_form.online_open_mode.clone(),
                 online_registration_open: current_form.online_registration_open,
-                deposit_deadline_hours: current_form.deposit_deadline_hours.trim().parse::<u32>().ok(),
+                deposit_deadline_hours: current_form
+                    .deposit_deadline_hours
+                    .trim()
+                    .parse::<u32>()
+                    .ok(),
                 visibility: current_form.visibility.clone(),
                 community_links: cl_links.get(),
                 calendar_subscribe_url: current_form.calendar_subscribe_url.trim().to_string(),
@@ -616,7 +741,10 @@ pub fn EventFormComponent(
 
                 // Step 2: Initialize escrow on-chain (if wallet connected + deposit enabled)
                 if do_escrow_init {
-                    log::info!("[event-form] initializing escrow for event {}...", created.id);
+                    log::info!(
+                        "[event-form] initializing escrow for event {}...",
+                        created.id
+                    );
                     let req = api::InitEscrowRequest {
                         event_id: created.id.clone(),
                     };
@@ -624,7 +752,10 @@ pub fn EventFormComponent(
                         Ok(resp) => {
                             // SEC-014: Verify wallet cluster matches expected network.
                             let expected_cluster = crate::utils::get_cluster();
-                            if let Err(cluster_err) = super::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await {
+                            if let Err(cluster_err) =
+                                super::escrow_init::check_wallet_cluster(&wn, &expected_cluster)
+                                    .await
+                            {
                                 log::error!("[event-form] cluster mismatch: {cluster_err}");
                                 components::show_toast(
                                     &set_toast,
@@ -637,19 +768,34 @@ pub fn EventFormComponent(
                             log::info!("[event-form] escrow TX built, signing via {wn}...");
 
                             // Pre-sign simulation.
-                            match super::escrow_init::simulate_transaction_js(&wn, &resp.transaction).await {
+                            match super::escrow_init::simulate_transaction_js(
+                                &wn,
+                                &resp.transaction,
+                            )
+                            .await
+                            {
                                 Ok(sim) if sim.ok => {}
                                 Ok(sim) => {
-                                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                                    let err_msg = sim
+                                        .error
+                                        .unwrap_or_else(|| "Simulation failed".to_string());
                                     log::error!("[event-form] escrow simulation failed: {err_msg}");
-                                    components::show_toast(&set_toast, &format!("Transaction would fail: {err_msg}"), components::ToastType::Error);
+                                    components::show_toast(
+                                        &set_toast,
+                                        &format!("Transaction would fail: {err_msg}"),
+                                        components::ToastType::Error,
+                                    );
                                     set_saving.set(false);
                                     return;
                                 }
-                                Err(e) => { log::warn!("[event-form] simulate error (not blocking): {e}"); }
+                                Err(e) => {
+                                    log::warn!("[event-form] simulate error (not blocking): {e}");
+                                }
                             }
 
-                            match super::escrow_init::sign_and_send_tx_js(&wn, &resp.transaction).await {
+                            match super::escrow_init::sign_and_send_tx_js(&wn, &resp.transaction)
+                                .await
+                            {
                                 crate::wallet_error::WalletResult::Success(signature) => {
                                     log::info!("[event-form] escrow TX confirmed: {}", signature);
                                     // Update the event with escrow fields from the response
@@ -658,24 +804,42 @@ pub fn EventFormComponent(
                                         escrow_status: Some(api::EscrowStatus::Initialized),
                                         organizer_wallet: Some(pk.clone()),
                                         on_chain_event_id: Some(resp.on_chain_event_id),
-                                        expected_updated_at: if created.updated_at.is_empty() { None } else { Some(created.updated_at.clone()) },
+                                        expected_updated_at: if created.updated_at.is_empty() {
+                                            None
+                                        } else {
+                                            Some(created.updated_at.clone())
+                                        },
                                         ..Default::default()
                                     };
-                                    if let Err(e) = api::update_event(&created.id, &update_body).await {
-                                        log::warn!("[event-form] failed to save escrow fields: {e}");
+                                    if let Err(e) =
+                                        api::update_event(&created.id, &update_body).await
+                                    {
+                                        log::warn!(
+                                            "[event-form] failed to save escrow fields: {e}"
+                                        );
                                     }
                                     components::show_toast(
                                         &set_toast,
-                                        &format!("Event '{}' created + escrow initialized", created.name),
+                                        &format!(
+                                            "Event '{}' created + escrow initialized",
+                                            created.name
+                                        ),
                                         components::ToastType::Success,
                                     );
                                 }
                                 crate::wallet_error::WalletResult::Error(e) => {
                                     let msg = crate::wallet_error::user_friendly_message(&e);
-                                    log::error!("[event-form] escrow TX error: code={:?} msg={}", e.code, e.raw_message);
+                                    log::error!(
+                                        "[event-form] escrow TX error: code={:?} msg={}",
+                                        e.code,
+                                        e.raw_message
+                                    );
                                     components::show_toast(
                                         &set_toast,
-                                        &format!("Event '{}' created, but escrow failed: {}. Edit event to retry.", created.name, msg),
+                                        &format!(
+                                            "Event '{}' created, but escrow failed: {}. Edit event to retry.",
+                                            created.name, msg
+                                        ),
                                         components::ToastType::Warning,
                                     );
                                 }
@@ -683,7 +847,10 @@ pub fn EventFormComponent(
                                     log::error!("[event-form] escrow TX rejected by wallet");
                                     components::show_toast(
                                         &set_toast,
-                                        &format!("Event '{}' created, but escrow TX failed. Edit event to retry.", created.name),
+                                        &format!(
+                                            "Event '{}' created, but escrow TX failed. Edit event to retry.",
+                                            created.name
+                                        ),
                                         components::ToastType::Warning,
                                     );
                                 }
@@ -693,7 +860,10 @@ pub fn EventFormComponent(
                             log::error!("[event-form] init_escrow failed: {e}");
                             components::show_toast(
                                 &set_toast,
-                                &format!("Event '{}' created, but escrow init failed: {e}. Edit event to retry.", created.name),
+                                &format!(
+                                    "Event '{}' created, but escrow init failed: {e}. Edit event to retry.",
+                                    created.name
+                                ),
                                 components::ToastType::Warning,
                             );
                         }
@@ -730,36 +900,74 @@ pub fn EventFormComponent(
                 poster_url: Some(current_form.poster_url.trim().to_string()),
                 nft_name_template: Some(current_form.nft_name_template.trim().to_string()),
                 nft_symbol: Some(current_form.nft_symbol.trim().to_string()),
-                nft_description_template: Some(current_form.nft_description_template.trim().to_string()),
+                nft_description_template: Some(
+                    current_form.nft_description_template.trim().to_string(),
+                ),
                 merkle_tree: Some(current_form.merkle_tree.trim().to_string()),
                 claim_base_url: Some(current_form.claim_base_url.trim().to_string()),
                 organizer_emails: Some(parse_emails(&current_form.organizer_emails)),
                 staff_emails: Some(parse_emails(&current_form.staff_emails)),
                 deposit_enabled: Some(current_form.deposit_enabled),
-                deposit_amount_usdc: Some((current_form.deposit_amount_usdc.parse::<f64>().unwrap_or(0.0) * 1_000_000.0) as u64),
-                deposit_amount_thb: Some(current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0)),
+                deposit_amount_usdc: Some(
+                    (current_form
+                        .deposit_amount_usdc
+                        .parse::<f64>()
+                        .unwrap_or(0.0)
+                        * 1_000_000.0) as u64,
+                ),
+                deposit_amount_thb: Some(
+                    current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),
+                ),
                 promptpay_id: Some(current_form.promptpay_id.trim().to_string()),
                 escrow_address: Some(current_form.escrow_address.trim().to_string()),
                 escrow_status: None, // not updated via general form — escrow panel manages this
                 organizer_wallet: Some(current_form.organizer_wallet.trim().to_string()),
                 on_chain_event_id: Some(current_form.on_chain_event_id.parse::<u64>().unwrap_or(0)),
-                refund_deadline_hours: Some(current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0)),
-                max_refundable_deposits: Some(current_form.max_refundable_deposits.parse::<u32>().unwrap_or(0)),
-                expected_updated_at: if current_form.updated_at.is_empty() { None } else { Some(current_form.updated_at.clone()) },
+                refund_deadline_hours: Some(
+                    current_form
+                        .refund_deadline_hours
+                        .parse::<u32>()
+                        .unwrap_or(0),
+                ),
+                max_refundable_deposits: Some(
+                    current_form
+                        .max_refundable_deposits
+                        .parse::<u32>()
+                        .unwrap_or(0),
+                ),
+                expected_updated_at: if current_form.updated_at.is_empty() {
+                    None
+                } else {
+                    Some(current_form.updated_at.clone())
+                },
                 event_format: Some(current_form.event_format.clone()),
                 require_contact_info: Some(current_form.require_contact_info),
                 require_photo_consent: Some(current_form.require_photo_consent),
                 time_tba: Some(time_tba),
-                location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
+                location: if current_form.location.trim().is_empty() {
+                    None
+                } else {
+                    Some(current_form.location.trim().to_string())
+                },
                 video_url: Some(current_form.video_url.trim().to_string()),
-                in_person_capacity: Some(current_form.in_person_capacity.trim().parse::<u32>().ok()),
+                in_person_capacity: Some(
+                    current_form.in_person_capacity.trim().parse::<u32>().ok(),
+                ),
                 online_capacity: Some(current_form.online_capacity.trim().parse::<u32>().ok()),
                 online_open_mode: Some(current_form.online_open_mode.clone()),
                 online_registration_open: Some(current_form.online_registration_open),
-                deposit_deadline_hours: Some(current_form.deposit_deadline_hours.trim().parse::<u32>().ok()),
+                deposit_deadline_hours: Some(
+                    current_form
+                        .deposit_deadline_hours
+                        .trim()
+                        .parse::<u32>()
+                        .ok(),
+                ),
                 visibility: Some(current_form.visibility.clone()),
                 community_links: Some(cl_links.get()),
-                calendar_subscribe_url: Some(current_form.calendar_subscribe_url.trim().to_string()),
+                calendar_subscribe_url: Some(
+                    current_form.calendar_subscribe_url.trim().to_string(),
+                ),
             };
 
             leptos::task::spawn_local(async move {

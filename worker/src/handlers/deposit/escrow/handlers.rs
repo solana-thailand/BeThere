@@ -727,8 +727,7 @@ pub async fn claim_forfeited_tx_handler(
     // their still-refundable deposits were offered as forfeit candidates. Fix:
     // derive each candidate wallet's deposit PDA and exclude it when that PDA
     // appears in the checked-in set.
-    let mut refunded_wallets: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut refunded_wallets: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut checked_in_pdas: std::collections::HashSet<String> = std::collections::HashSet::new();
     for ev in &onchain_events {
         match ev.instruction {

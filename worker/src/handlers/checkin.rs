@@ -90,16 +90,15 @@ pub async fn check_in(
             return Err(AppError::Validation(e.to_string()).into());
         }
     } else {
-        // Online check-in — still need approval and not already checked in
-        if attendee.is_checked_in() {
-            return Err(AppError::Validation("attendee is already checked in".to_string()).into());
-        }
-        if !attendee.is_approved() {
-            return Err(AppError::Validation(format!(
-                "attendee is not approved (status: {})",
-                attendee.approval_status
-            ))
-            .into());
+        // Online check-in — domain gate (not already checked in, approved).
+        // Shared with the adventure quest-complete path so the two cannot diverge.
+        if let Err(e) = attendee.can_check_in_virtually() {
+            tracing::warn!(
+                attendee_id = %attendee.api_id,
+                error = %e,
+                "online check-in denied",
+            );
+            return Err(AppError::Validation(e.to_string()).into());
         }
         // Verify event supports online track
         if !event.event_format.has_online() {
@@ -273,9 +272,13 @@ pub async fn check_in(
         )
         .await
         {
-            Ok(true) => tracing::info!(%email, event_id = %event.id, amount = dep.amount_thb, "rolling credit returned on check-in (Model B)"),
+            Ok(true) => {
+                tracing::info!(%email, event_id = %event.id, amount = dep.amount_thb, "rolling credit returned on check-in (Model B)")
+            }
             Ok(false) => {} // already returned — idempotent
-            Err(e) => tracing::error!(%email, error = %e, "credit return on check-in failed — reconcile"),
+            Err(e) => {
+                tracing::error!(%email, error = %e, "credit return on check-in failed — reconcile")
+            }
         }
     }
 

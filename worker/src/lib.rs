@@ -4,7 +4,12 @@ mod auth;
 mod claim;
 mod cleanup;
 mod crypto;
-mod db;
+// Public for the same reason as `event_store` below — the worker compiles to a
+// cdylib with no downstream Rust consumer, and
+// `worker/tests/event_enum_column_fallbacks.rs` drives
+// `db::events::D1EventRow::to_event_config` directly. Its items were already
+// `pub`; only the module declaration was private.
+pub mod db;
 mod durable_objects;
 mod error;
 mod escrow_indexer;
@@ -25,6 +30,7 @@ mod solana;
 mod solana_escrow;
 mod state;
 mod storage;
+mod virtual_checkin;
 
 // Export DO class for workers-rs macro registration
 pub use durable_objects::EventDurableObject;
@@ -56,7 +62,9 @@ const INDEX_HTML: &str = include_str!("../../frontend-leptos/dist/index.html");
 /// fallback is Worker-generated for non-asset routes (`/claim/*`, `/staff`,
 /// `/admin`), so the header must be set here, not in `_headers`.
 static SPA_NO_STORE: std::sync::LazyLock<axum::http::HeaderValue> =
-    std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"));
+    std::sync::LazyLock::new(|| {
+        axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0")
+    });
 
 static SPA_PRAGMA: std::sync::LazyLock<axum::http::HeaderValue> =
     std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-cache"));
@@ -86,7 +94,8 @@ fn service_unavailable(e: &str) -> axum::http::Response<axum::body::Body> {
     let body = serde_json::json!({
         "success": false,
         "error": format!("service unavailable: {e}")
-    }).to_string();
+    })
+    .to_string();
 
     axum::http::Response::builder()
         .status(axum::http::StatusCode::SERVICE_UNAVAILABLE)
@@ -159,8 +168,14 @@ async fn fetch(
 /// event configs) based on retention policy defined in `cleanup.rs`.
 #[event(scheduled)]
 async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
-    console_error_panic_hook::set_once();
-    tracing_wasm::set_as_global_default();
+    // Same `OnceLock` guard as `fetch`: `tracing_wasm::set_as_global_default()`
+    // panics with `SetGlobalDefaultError` if a dispatcher is already installed.
+    // The cron and the fetch handler share an isolate, so an unguarded call here
+    // aborted the whole cleanup run on any isolate that had served a request.
+    let _ = LOG_INITIALIZED.get_or_init(|| {
+        console_error_panic_hook::set_once();
+        tracing_wasm::set_as_global_default();
+    });
 
     // Seed the escrow cluster in this isolate too — the cron path does not build AppState,
     // so any escrow read from a future scheduled job would otherwise default to devnet.
@@ -187,14 +202,19 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
                 tracing::error!(
                     orphan_holds = report.orphan_holds,
                     negative_balances = report.negative_balances,
+                    double_settled = report.double_settled,
+                    phantom_holds = report.phantom_holds,
                     "credit ledger reconcile FAILED"
                 );
                 if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
                     && !webhook.is_empty()
                 {
                     let msg = format!(
-                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s). Check credit_ledger vs thb_deposits.",
-                        report.orphan_holds, report.negative_balances
+                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s), {} double-settled deposit(s) (cash refunded AND held as credit), {} phantom hold(s) (ledger credit with no held deposit). Check credit_ledger vs thb_deposits.",
+                        report.orphan_holds,
+                        report.negative_balances,
+                        report.double_settled,
+                        report.phantom_holds
                     );
                     let _ = middleware::alert::post_slack(&webhook, &msg).await;
                 }

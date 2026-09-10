@@ -1,9 +1,6 @@
 //! `register_attendee` — the public self-registration handler.
 
-use axum::{
-    Extension, Json,
-    extract::State,
-};
+use axum::{Extension, Json, extract::State};
 use uuid::Uuid;
 
 use event_checkin_domain::models::attendee::ParticipationType;
@@ -46,7 +43,7 @@ pub async fn register_attendee(
     let is_wallet_session = jwt_email.starts_with("wallet:");
     let email = if is_wallet_session {
         let typed = body.email.trim().to_lowercase();
-        if !is_plausible_email(&typed) {
+        if !event_checkin_domain::validation::is_plausible_email(&typed) {
             return Err(AppError::Validation(
                 "please enter a valid email to reserve your spot".to_string(),
             )
@@ -107,7 +104,7 @@ pub async fn register_attendee(
 
     let config = crate::event_store::resolve_event_by_slug(kv, slug, state.d1.as_deref())
         .await
-        .map_err(AppError::NotFound)?;
+        .map_err(AppError::from)?;
 
     let event_id = config.id.clone();
 
@@ -426,7 +423,11 @@ pub async fn register_attendee(
     // The reverse order (mark covered, then decrement) risks double-spending
     // credit whenever the decrement fails — real money leaking on every retry.
     if let Some(method) = credit_covered_method.clone() {
-        let currency = if method == "credit_thb" { "thb" } else { "usdc" };
+        let currency = if method == "credit_thb" {
+            "thb"
+        } else {
+            "usdc"
+        };
         // Atomic spend against the org-scoped credit ledger: one conditional
         // INSERT (balance >= amount) — no advisory lock or Sheets re-read needed,
         // and two concurrent registrations for the same email can't double-spend
@@ -448,9 +449,7 @@ pub async fn register_attendee(
             None => false,
         };
         // Best-effort Sheets mirror of the spend (display only; ledger is truth).
-        if decremented
-            && let Some(db) = state.d1.as_deref()
-        {
+        if decremented && let Some(db) = state.d1.as_deref() {
             let resolved =
                 crate::org_store::resolve_contacts_sheet(db, &config, &state.config.sheets).await;
             if !resolved.sheet_id.is_empty() {
@@ -489,7 +488,9 @@ pub async fn register_attendee(
                 refund_proof_url: None,
             };
             if let Some(kv_store) = kv
-                && let Err(e) = crate::event_store::save_thb_deposit(kv_store, &thb_dep, state.d1.as_deref()).await
+                && let Err(e) =
+                    crate::event_store::save_thb_deposit(kv_store, &thb_dep, state.d1.as_deref())
+                        .await
             {
                 // Credit already consumed but the deposit record didn't persist.
                 // Non-fatal to the reservation; log loudly for reconciliation.
@@ -512,7 +513,10 @@ pub async fn register_attendee(
                     refundable: false,
                     rejected: false,
                 };
-                if let Err(e) = crate::event_store::save_deposit_status(kv_store, &status, state.d1.as_deref()).await {
+                if let Err(e) =
+                    crate::event_store::save_deposit_status(kv_store, &status, state.d1.as_deref())
+                        .await
+                {
                     tracing::error!(%api_id, %email, error = %e, "credit deposit_status save failed — ticket may show 'waiting'");
                 }
             }
@@ -526,10 +530,7 @@ pub async fn register_attendee(
     // refundable) so the ticket flow proceeds without a real or faked payment.
     // Marked distinctly (STAFF_COMP_WAIVED / ฿0) so refund + held-as-credit
     // tooling never treats it as cash.
-    if deposit_waived
-        && config.deposit_enabled
-        && !is_online_participation(&participation_type)
-    {
+    if deposit_waived && config.deposit_enabled && !is_online_participation(&participation_type) {
         let comp = event_checkin_domain::models::deposit::ThbDeposit {
             event_id: event_id.clone(),
             attendee_id: api_id.clone(),
@@ -804,8 +805,7 @@ pub async fn register_attendee(
     // email was brand-new; an existing email must be linked via the profile
     // flow (ownership-verified) instead of a typed-email bind here.
     let wallet_linked = if is_wallet_session {
-        if email_is_new
-            && let (Some(db), Some(w)) = (state.d1.as_deref(), session_wallet.as_ref())
+        if email_is_new && let (Some(db), Some(w)) = (state.d1.as_deref(), session_wallet.as_ref())
         {
             match crate::db::contacts::link_wallet_to_email(db, &email, w).await {
                 Ok(()) => {
@@ -833,20 +833,6 @@ pub async fn register_attendee(
         next_step,
         wallet_linked,
     }))
-}
-
-/// Minimal sanity check for a typed email (wallet-session reservations).
-/// Not RFC-complete — just rejects obviously-invalid input: one `@`, a dot in
-/// the domain, no spaces, reasonable length.
-fn is_plausible_email(email: &str) -> bool {
-    let e = email.trim();
-    if e.len() < 3 || e.len() > 254 || e.contains(char::is_whitespace) {
-        return false;
-    }
-    let Some((local, domain)) = e.split_once('@') else {
-        return false;
-    };
-    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }
 
 /// Resolve participation type based on event format and user selection.
@@ -878,28 +864,5 @@ fn split_name(name: &str) -> (String, String) {
         [] => (String::new(), String::new()),
         [only] => (only.to_string(), String::new()),
         [first, rest @ ..] => (first.to_string(), rest.join(" ")),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_plausible_email;
-
-    #[test]
-    fn accepts_normal_emails() {
-        assert!(is_plausible_email("a@b.co"));
-        assert!(is_plausible_email("dev.user+tag@example.com"));
-    }
-
-    #[test]
-    fn rejects_malformed_emails() {
-        assert!(!is_plausible_email(""));
-        assert!(!is_plausible_email("no-at-sign"));
-        assert!(!is_plausible_email("@example.com"));
-        assert!(!is_plausible_email("user@nodot"));
-        assert!(!is_plausible_email("user@.com"));
-        assert!(!is_plausible_email("user@example."));
-        assert!(!is_plausible_email("has space@example.com"));
-        assert!(!is_plausible_email("wallet:So1111111111111111111111111111111111111111"));
     }
 }

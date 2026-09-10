@@ -105,12 +105,11 @@ fn nft_preview_card(title: &str, rc: &serde_json::Value) -> AnyView {
     let name_is_default = reward::reward_config_field(rc, "name").is_none();
     let desc_is_default = reward::reward_config_field(rc, "description").is_none();
 
-    let line = |value: String, is_default: bool, prompt: &'static str| match is_default
-        && needs_title
-    {
-        true => (prompt.to_string(), true, false),
-        false => (value, false, is_default),
-    };
+    let line =
+        |value: String, is_default: bool, prompt: &'static str| match is_default && needs_title {
+            true => (prompt.to_string(), true, false),
+            false => (value, false, is_default),
+        };
     let (name_text, name_pending, name_tagged) = line(
         resolved.name,
         name_is_default,
@@ -124,9 +123,8 @@ fn nft_preview_card(title: &str, rc: &serde_json::Value) -> AnyView {
 
     let image_url = resolved.image_url;
     let has_image = !image_url.is_empty();
-    let default_tag = |shown: bool| {
-        shown.then(|| view! { <span class="nft-preview-tag">"default"</span> })
-    };
+    let default_tag =
+        |shown: bool| shown.then(|| view! { <span class="nft-preview-tag">"default"</span> });
     let pending_class = |pending: bool| match pending {
         true => "nft-preview-pending",
         false => "",
@@ -229,8 +227,7 @@ pub fn CampaignsPage(
     let (selected_id, set_selected_id) = signal(None::<String>);
     let (editing_id, set_editing_id) = signal(None::<String>);
     let (campaigns, set_campaigns) = signal(Vec::<api::CampaignDetail>::new());
-    let (campaign_detail, set_campaign_detail) =
-        signal(None::<api::CampaignDetailResponse>);
+    let (campaign_detail, set_campaign_detail) = signal(None::<api::CampaignDetailResponse>);
     let (progress, set_progress) = signal(Vec::<api::DeveloperProgressItem>::new());
     let (stats, set_stats) = signal(None::<api::CampaignStatsResponse>);
     let (loading, set_loading) = signal(true);
@@ -246,9 +243,7 @@ pub fn CampaignsPage(
     let (form_org_id, set_form_org_id) = signal(String::new());
     // Initial status chosen on create (plan 016 P2.3). Draft is the default,
     // matching the behaviour from before the selector existed.
-    let (form_status, set_form_status) = signal(
-        api::CampaignStatus::Draft.as_str().to_string(),
-    );
+    let (form_status, set_form_status) = signal(api::CampaignStatus::Draft.as_str().to_string());
     // Must match the first `<option value="none">` below. An empty default
     // made the select *display* "None" while the signal stayed `""`, which the
     // worker rejects (`invalid reward_type:`) — so creating a campaign without
@@ -572,11 +567,7 @@ pub fn CampaignsPage(
             // be saved.
             let org_id = form_org_id.get();
             if org_id.trim().is_empty() {
-                components::show_toast(
-                    &set_toast,
-                    "Organization is required",
-                    ToastType::Warning,
-                );
+                components::show_toast(&set_toast, "Organization is required", ToastType::Warning);
                 return;
             }
             // Availability is advisory — the probe can fail offline, and an
@@ -676,17 +667,14 @@ pub fn CampaignsPage(
                                     sequence_order: 0,
                                     is_required: true,
                                 }];
-                                if let Err(e) =
-                                    api::set_campaign_events(&id_for_link, events).await
+                                if let Err(e) = api::set_campaign_events(&id_for_link, events).await
                                 {
                                     log::warn!(
                                         "[campaigns-page] auto-link source event failed: {e}"
                                     );
                                     components::show_toast(
                                         &set_toast,
-                                        &format!(
-                                            "Campaign created, but failed to link event: {e}"
-                                        ),
+                                        &format!("Campaign created, but failed to link event: {e}"),
                                         ToastType::Warning,
                                     );
                                 }
@@ -742,11 +730,7 @@ pub fn CampaignsPage(
             leptos::task::spawn_local(async move {
                 match api::delete_campaign(&id).await {
                     Ok(()) => {
-                        components::show_toast(
-                            &set_toast,
-                            "Campaign deleted",
-                            ToastType::Success,
-                        );
+                        components::show_toast(&set_toast, "Campaign deleted", ToastType::Success);
                         do_reload();
                     }
                     Err(e) => {
@@ -791,11 +775,7 @@ pub fn CampaignsPage(
             let id = selected_id.get().unwrap_or_default();
             let new_event_id = add_event_id.get();
             if new_event_id.trim().is_empty() {
-                components::show_toast(
-                    &set_toast,
-                    "Select an event to add",
-                    ToastType::Warning,
-                );
+                components::show_toast(&set_toast, "Select an event to add", ToastType::Warning);
                 return;
             }
 
@@ -824,16 +804,14 @@ pub fn CampaignsPage(
             leptos::task::spawn_local(async move {
                 match api::set_campaign_events(&id, events).await {
                     Ok(()) => {
-                        components::show_toast(
-                            &set_toast,
-                            "Event added",
-                            ToastType::Success,
-                        );
+                        components::show_toast(&set_toast, "Event added", ToastType::Success);
                         set_add_event_id.set(String::new());
                         set_add_seq_order.set(0);
                         set_add_is_required.set(true);
                         // Reload detail
-                        if let Ok(d) = api::get_campaign(&id).await { set_campaign_detail.set(Some(d)) }
+                        if let Ok(d) = api::get_campaign(&id).await {
+                            set_campaign_detail.set(Some(d))
+                        }
                     }
                     Err(e) => {
                         components::show_toast(
@@ -870,12 +848,10 @@ pub fn CampaignsPage(
             leptos::task::spawn_local(async move {
                 match api::set_campaign_events(&id, events).await {
                     Ok(()) => {
-                        components::show_toast(
-                            &set_toast,
-                            "Event removed",
-                            ToastType::Success,
-                        );
-                        if let Ok(d) = api::get_campaign(&id).await { set_campaign_detail.set(Some(d)) }
+                        components::show_toast(&set_toast, "Event removed", ToastType::Success);
+                        if let Ok(d) = api::get_campaign(&id).await {
+                            set_campaign_detail.set(Some(d))
+                        }
                     }
                     Err(e) => {
                         components::show_toast(
@@ -895,7 +871,7 @@ pub fn CampaignsPage(
             <Show when=move || current_view.get() == CampaignView::List fallback=|| view! { <div></div> }>
                 <div class="events-header-row">
                     <h2 class="admin-section-heading">
-                        <Icon icon=IconName::Trophy class="icon-heading" />
+                        <Icon icon=IconName::Trophy class="icon-md" />
                         " Campaigns & Series"
                     </h2>
                     <div class="events-header-actions">
@@ -905,13 +881,13 @@ pub fn CampaignsPage(
                     </div>
                 </div>
                 <Show when=move || loading.get() fallback=|| view! { <div></div> }>
-                    <div class="empty-state">
+                    <div class="admin-empty-state">
                         <span class="status-dot status-dot-loading"></span>
                         " Loading campaigns..."
                     </div>
                 </Show>
                 <Show when=move || !loading.get() && campaigns.get().is_empty() fallback=|| view! { <div></div> }>
-                    <div class="empty-state">
+                    <div class="admin-empty-state">
                         <Icon icon=IconName::Trophy class="icon-lg" />
                         <p>"No campaigns yet. Create your first campaign."</p>
                     </div>
@@ -952,13 +928,13 @@ pub fn CampaignsPage(
                                             </div>
                                             <div class="card-header-actions">
                                                 <button
-                                                    class="btn btn-secondary btn-sm"
+                                                    class="btn btn-outline btn-sm"
                                                     on:click=move |_: web_sys::MouseEvent| handle_view(cid_view.clone())
                                                 >
                                                     "View"
                                                 </button>
                                                 <button
-                                                    class="btn btn-secondary btn-sm"
+                                                    class="btn btn-outline btn-sm"
                                                     on:click={
                                                         let c_edit = c_edit.clone();
                                                         move |_: web_sys::MouseEvent| handle_edit(c_edit.clone())
@@ -1038,7 +1014,7 @@ pub fn CampaignsPage(
                             }
                         }}
                     </h2>
-                    <button class="btn btn-secondary btn-sm" on:click=handle_back>
+                    <button class="btn btn-outline btn-sm" on:click=handle_back>
                         "← Back"
                     </button>
                 </div>
@@ -1279,7 +1255,7 @@ pub fn CampaignsPage(
                             >
                                 {move || if saving.get() { "Saving..." } else { "Save Campaign" }}
                             </button>
-                            <button class="btn btn-secondary" on:click=handle_back>
+                            <button class="btn btn-outline" on:click=handle_back>
                                 "Cancel"
                             </button>
                         </div>
@@ -1292,7 +1268,7 @@ pub fn CampaignsPage(
                     <h2 class="admin-section-heading">
                         {move || campaign_detail.get().map(|d| d.campaign.title.clone()).unwrap_or_default()}
                     </h2>
-                    <button class="btn btn-secondary btn-sm" on:click=handle_back>
+                    <button class="btn btn-outline btn-sm" on:click=handle_back>
                         "← Back"
                     </button>
                 </div>
@@ -1359,7 +1335,7 @@ pub fn CampaignsPage(
                     </div>
                 </div>
                 // Tabs
-                <div class="tab-bar">
+                <div class="tabs">
                     <button
                         class=move || if detail_tab.get() == DetailTab::Events { "tab active" } else { "tab" }
                         on:click=move |_| set_detail_tab.set(DetailTab::Events)
@@ -1414,7 +1390,7 @@ pub fn CampaignsPage(
                                 }
                             }}
                             <button
-                                class="btn btn-sm btn-secondary"
+                                class="btn btn-sm btn-outline"
                                 style="margin-left: 0.75rem; padding: 0.15rem 0.5rem; font-size: 0.75rem;"
                                 on:click=move |_: web_sys::MouseEvent| set_draft_nudge.set(None)
                             >
@@ -1557,7 +1533,7 @@ pub fn CampaignsPage(
                                 }
                                 fallback=|| view! { <div></div> }
                             >
-                                <div class="empty-state">
+                                <div class="admin-empty-state">
                                     <p>"No events in this campaign yet."</p>
                                 </div>
                             </Show>
@@ -1572,7 +1548,7 @@ pub fn CampaignsPage(
                         </div>
                         <div class="card-body">
                             <Show when=move || progress.get().is_empty() fallback=|| view! { <div></div> }>
-                                <div class="empty-state">
+                                <div class="admin-empty-state">
                                     <p>"No developer progress yet."</p>
                                 </div>
                             </Show>
@@ -1698,7 +1674,7 @@ pub fn CampaignsPage(
                                     let rate = s.completion_rate;
                                     let rate_pct = format!("{:.1}%", rate * 100.0);
                                     view! {
-                                        <div class="stats-overview">
+                                        <div class="stats-grid">
                                             <div class="stat-card">
                                                 <div class="stat-value">{s.total_enrolled.to_string()}</div>
                                                 <div class="stat-label">"Enrolled"</div>
@@ -1712,9 +1688,9 @@ pub fn CampaignsPage(
                                                 <div class="stat-label">"Completion Rate"</div>
                                             </div>
                                         </div>
-                                        <div class="progress-bar-wrapper">
+                                        <div class="progress-bar">
                                             <div
-                                                class="progress-bar-fill"
+                                                class="progress-fill"
                                                 style=format!("width: {}%", (rate * 100.0).min(100.0))
                                             ></div>
                                         </div>
@@ -1775,7 +1751,10 @@ mod tests {
 
     #[test]
     fn slugify_produces_kebab_case() {
-        assert_eq!(slugify("Solana Hacker Series 2025"), "solana-hacker-series-2025");
+        assert_eq!(
+            slugify("Solana Hacker Series 2025"),
+            "solana-hacker-series-2025"
+        );
     }
 
     #[test]

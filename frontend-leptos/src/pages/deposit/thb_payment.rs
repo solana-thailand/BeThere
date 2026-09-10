@@ -5,10 +5,10 @@
 
 use leptos::prelude::*;
 
-use crate::api::DepositStatusResponse;
-use crate::components::LightboxImage;
 use super::js_interop;
 use super::types::*;
+use crate::api::DepositStatusResponse;
+use crate::components::LightboxImage;
 
 // ---------------------------------------------------------------------------
 // THB payment form (ChoosePayment → Thb)
@@ -42,7 +42,9 @@ pub fn thb_payment_form_view(
 
     log::trace!(
         "[thb_payment] promptpay_id='{}' amount={} has_promptpay={}",
-        promptpay_id, deposit_amount_thb, has_promptpay
+        promptpay_id,
+        deposit_amount_thb,
+        has_promptpay
     );
 
     let handle_upload_slip = handle_upload_slip.clone();
@@ -319,7 +321,7 @@ pub fn thb_uploading_view() -> AnyView {
             </div>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 // ---------------------------------------------------------------------------
@@ -327,10 +329,7 @@ pub fn thb_uploading_view() -> AnyView {
 // ---------------------------------------------------------------------------
 
 /// THB uploaded successfully view — auto-redirects to ticket page.
-pub fn thb_uploaded_view(
-    attendee_id: &str,
-    event_id: &str,
-) -> AnyView {
+pub fn thb_uploaded_view(attendee_id: &str, event_id: &str) -> AnyView {
     let aid = attendee_id.to_string();
     let eid = event_id.to_string();
     leptos::task::spawn_local(async move {
@@ -385,7 +384,7 @@ pub fn thb_rejected_view(
             </button>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 // ---------------------------------------------------------------------------

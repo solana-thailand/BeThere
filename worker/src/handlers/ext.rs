@@ -45,7 +45,7 @@ pub async fn resolve_event_with_access(
         state.d1.as_deref(),
     )
     .await
-    .map_err(AppError::Internal)?;
+    .map_err(AppError::from)?;
 
     if let Err(e) = crate::auth::check_event_access(&claims.email, state, &event).await {
         tracing::warn!(
@@ -72,7 +72,7 @@ pub async fn resolve_event(
         state.d1.as_deref(),
     )
     .await
-    .map_err(AppError::Internal)
+    .map_err(AppError::from)
 }
 
 /// Helper to get the KV store from state (events_kv or quiz_kv fallback).

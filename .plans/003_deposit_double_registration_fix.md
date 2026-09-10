@@ -152,11 +152,13 @@ EXISTS` so it is safe to apply on already-deployed DBs.
 
 ## Out of scope (deliberately)
 
-- **Refactoring `confirm_deposit_handler` / `verify_and_confirm_deposit` to
+- ~~**Refactoring `confirm_deposit_handler` / `verify_and_confirm_deposit` to
   share the new guard.** Those paths take the signature from a request body or
   webhook and already enforce the wallet→attendee link via
   `get_deposit_status_with_fallback` + signer cross-check. Folding them in is
-  a separate, riskier change and not required to close this hole.
+  a separate, riskier change and not required to close this hole.~~
+  **Wrong — reversed 2026-09-04 in `bd33825`. The signer cross-check does not
+  enforce the wallet→attendee link. See §7.**
 - **Frontend changes.** The backend rejects with a clear `Validation` error;
   the existing error toast path is sufficient.
 - **Removing the orphaned prior-session files** (`DEMO.md`,
@@ -174,3 +176,118 @@ EXISTS` so it is safe to apply on already-deployed DBs.
 - **Rollback:** revert the two code commits (handler + mod) and the migration.
   The migration is additive (no data change), so reverting it leaves orphan
   indexes that are harmless and can be dropped later.
+
+
+---
+
+## §7 — The webhook path never got the guards (2026-09-04, `bd33825`)
+
+**The deferral above was the defect — and it named both paths that were
+missing the guards.** Three entry points could set `DepositStatus::verified = true`:
+
+| | read path | webhook path | polling endpoint |
+|---|---|---|---|
+| entry | `recover_and_verify_deposit` (`recover.rs`) | `verify_and_confirm_deposit` (`confirm.rs`) | `confirm_deposit_handler` (`handlers/confirm.rs`) |
+| reached from | `/public/ticket` and friends | `POST /api/deposit/usdc/webhook`, detached via `wait_until` | `GET /api/deposit/usdc/confirm`, polled by the frontend |
+| signer cross-check | ✅ | ✅ | ✅ |
+| **F1** — on-chain `AttendeeDeposit` PDA | ✅ | ❌ | ❌ |
+| **Guard 2** — `binding_conflict` | ✅ | ❌ | ❌ |
+| discovery rate-limit cooldown | ✅ | n/a | ❌ |
+
+The deferral rested on "already enforce the wallet→attendee link via
+`get_deposit_status_with_fallback` + signer cross-check." Both halves are false:
+
+1. **The signer cross-check does not prove a deposit happened.** `recover.rs`'s
+   own F1 comment says so: *"the signer cross-check proves the wallet signed *a*
+   confirmed tx — NOT that it was a real deposit … a confirmed-but-unrelated tx
+   by the right fee-payer (e.g. a self-transfer) could earn a free verified
+   ticket."* F1 was added to `recover.rs` afterwards and never mirrored here.
+   `parse_get_transaction_response` checks confirmation and `accountKeys[0]` —
+   never the destination, the mint, or the amount.
+2. **When the record has no `wallet_address` there is no cross-check at all.**
+   `verify_tx_with_signer(_, _, None)` returns `signer_matched: true` — "no
+   expected wallet" is treated as a match (pinned by the pre-existing
+   `test_parse_confirmed_no_expected_wallet_backfills_signer`). Such records
+   demonstrably exist: `confirm.rs` and `recover.rs` both carry a
+   `wallet_address` backfill for "older record or web2 hiccup at deposit
+   creation time." On that record, **any** confirmed signature on the cluster
+   flipped the deposit to verified and backfilled a stranger's pubkey.
+
+Reachable: the route is mounted at `handlers/mod.rs:152` and the JWT branch
+accepts *any* valid token — it never binds the caller to `body.attendee_id`.
+
+**Fix — delete the copy, don't patch it.** `recover_and_verify_deposit` was
+already a strict superset of `verify_and_confirm_deposit`: same
+`verified = true` transition, same D1 dual-write, same audit entry, same sheet
+write and QR auto-gen (and it detaches those via `wait_until` rather than
+blocking). `confirm.rs` is now a ~100-line adapter that loads the `EventConfig`
+and the `DepositStatus` and hands both over. One implementation is what stops
+the two from drifting apart a third time.
+
+It **fails closed** on an unloadable event config: F1 needs `organizer_wallet`,
+`on_chain_event_id` and `deposit_amount_usdc` to check the PDA, so no config
+means no provable deposit and no verification. Four bail-outs total (config
+missing / unreadable, status missing / unreadable).
+
+**Two further defects in the same handler**, both fixed in the same commit:
+
+- **The rejection log leaked the credential.** `tracing::warn!(auth = %auth_header, …)`
+  wrote the full `Authorization` header into Cloudflare request logs on every
+  failed attempt — a near-miss `WEBHOOK_SECRET`, or a JWT valid on another
+  route. Now logs only its shape (`auth_present`, `auth_is_bearer`, `auth_len`).
+- **A verified deposit's signature could be clobbered.** The handler wrote
+  `deposit_status.tx_signature = Some(body.tx_signature)` unconditionally. The
+  JWT branch authenticates the caller but does not bind them to
+  `body.attendee_id`, so any token holder could replace a settled money
+  record's proof-of-payment with an arbitrary string — `verified` would survive
+  while the signature backing it, and every refund/audit path reading it, would
+  not. Now returns the recorded signature unchanged once `verified`; re-sending
+  the same signature stays a no-op success, so Helius retries are safe.
+
+**Guard: `worker/tests/deposit_verify_guard.rs`** (5 tests), mutation-tested
+three ways — restoring the pre-fix `confirm.rs` verbatim, deleting the
+verified-clobber guard, and restoring the raw-header log each turn it red.
+Source restored, all gates green (`fmt`, `clippy -D warnings`, 530 workspace
+tests, wasm32 release build).
+
+### The polling endpoint — the third copy (`e8fc217`)
+
+`confirm_deposit_handler` was ~270 lines duplicating `recover.rs` end to end:
+PDA discovery in the no-signature arm, signer cross-check, `verified = true`,
+D1 dual-write, detached sheet write, QR auto-gen, and a blocking fallback for
+tests. Same two guards missing. The route requires identity (the VULN-004 fix)
+but never binds the caller to `query.attendee_id`, so any signed-in attendee
+could drive it on anyone's behalf — and it is the endpoint the frontend
+actually polls in a loop, while it was the only one of the three *without* the
+read path's `DISCOVERY_COOLDOWN_SECS` rate limit on `getSignaturesForAddress`.
+
+Now ~100 lines: load the config and the record, hand both to
+`recover_and_verify_deposit`, map the returned status onto
+`ConfirmDepositResponse`. Every observable response is preserved — verified,
+pending-with-signature, and the Solana Pay retry URL when nothing is recorded or
+discoverable. "Not yet confirmed", "RPC error" and "a guard refused" all collapse
+to the same pending response, which is what the endpoint already did and the only
+thing the frontend can act on. **Net −331 lines across the two fixes.**
+
+**The re-exports were narrowed to match.** `usdc/mod.rs` no longer exports
+`verify_tx_with_signer`, `VerifyWithSignerOutcome` or
+`discover_deposit_tx_on_chain` — clippy flagged all three as unused the moment
+the last duplicate went away, which is the collapse proving itself. They are now
+private to the module, so **restoring either pre-fix handler verbatim no longer
+compiles**. That is a stronger guard than a test; `deposit_verify_guard.rs` (7
+tests) covers the shapes that still would, and was mutation-tested against one.
+
+### Still open
+
+- **The JWT branch does not bind the caller to `body.attendee_id`.** Any valid
+  token may report a signature for any attendee in any event. The money impact
+  is now closed by F1 + Guard 2 + the verified-clobber guard, but the authz
+  model is still wider than the endpoint needs. Narrowing it means deciding
+  whether legitimate callers include organiser/admin tokens — an owner call,
+  not a mechanical fix.
+- **`auth_header == expected` for the webhook secret is not constant-time.**
+  Remote timing analysis across the Cloudflare edge is impractical, and the
+  comparison is on a `String` of fixed expected length; left alone, recorded
+  here so it is a decision rather than an oversight.
+- **Not deployed.** This branch is unpushed; the vulnerable code is what runs
+  in production today.

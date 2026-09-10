@@ -162,17 +162,23 @@ fn SeriesNeighborCard(
                         view! { <span class="ticket-series-card-chevron">"←"</span> }.into_any()
                     }}
                 </a>
-            }.into_any()
+            }
+            .into_any()
         }
         // Keep the grid balanced with an inert spacer (no link affordance —
         // a real <a href=""> would navigate and confuse screen readers).
         None => {
-            let label = if is_next { "Last in series" } else { "First in series" };
+            let label = if is_next {
+                "Last in series"
+            } else {
+                "First in series"
+            };
             view! {
                 <div class="ticket-series-card ticket-series-card--empty">
                     <span class="ticket-series-card-label">{label}</span>
                 </div>
-            }.into_any()
+            }
+            .into_any()
         }
     }
 }

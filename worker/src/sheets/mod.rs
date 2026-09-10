@@ -4,6 +4,7 @@
 //! `worker::Fetch` (via `crate::http`) and SubtleCrypto (via `crate::crypto`)
 //! instead of `reqwest` and the `rsa` crate.
 
+pub mod a1;
 pub mod bg_sync;
 pub mod contacts;
 pub mod events_tab;
@@ -341,7 +342,8 @@ pub async fn get_column_mapping(
 
     // 2. Read row 1 headers from Google Sheets
     let access_token = get_cached_access_token(state, kv).await?;
-    let range = format!("{sheet_name}!1:1");
+    let sheet_ref = a1::sheet_ref(sheet_name);
+    let range = format!("{sheet_ref}!1:1");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -418,8 +420,9 @@ async fn fetch_sheet_range_with_retry(
                 range = %initial_range,
                 "sheet range too wide, retrying with A2:Z"
             );
+            let sheet_ref = a1::sheet_ref(sheet_name);
             // Fallback 1: A2:Z (26 columns)
-            let fallback_range = format!("{sheet_name}!A2:Z");
+            let fallback_range = format!("{sheet_ref}!A2:Z");
             let fb_url = format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
                 urlencoding::encode(&fallback_range)
@@ -432,7 +435,7 @@ async fn fetch_sheet_range_with_retry(
                         "A2:Z also failed, retrying with A2:Q"
                     );
                     // Fallback 2: A2:Q (17 columns — covers through checked_in_by)
-                    let fb2_range = format!("{sheet_name}!A2:Q");
+                    let fb2_range = format!("{sheet_ref}!A2:Q");
                     let fb2_url = format!(
                         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
                         urlencoding::encode(&fb2_range)
@@ -518,7 +521,8 @@ async fn get_attendees_inner(
     let mapping = get_column_mapping(state, sheet_id, sheet_name, kv).await?;
 
     let last_col = mapping.last_column_letter();
-    let range = format!("{sheet_name}!A2:{last_col}");
+    let sheet_ref = a1::sheet_ref(sheet_name);
+    let range = format!("{sheet_ref}!A2:{last_col}");
 
     let value_range: ValueRange =
         fetch_sheet_range_with_retry(sheet_id, sheet_name, &range, &access_token).await?;
@@ -737,7 +741,8 @@ pub async fn get_staff_members(
 
     // Cache miss or no KV — fetch from Google Sheets
     let access_token = get_cached_access_token(state, kv).await?;
-    let range = format!("{staff_sheet_name}!A2:B");
+    let sheet_ref = a1::sheet_ref(staff_sheet_name);
+    let range = format!("{sheet_ref}!A2:B");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)

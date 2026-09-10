@@ -4,7 +4,7 @@ use leptos::prelude::*;
 
 use super::types::DepositFlow;
 use crate::components::{self, ToastType};
-use crate::icons::{wallet_icon_name, Icon, IconName};
+use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::{get_cluster, solscan_tx_url};
 
 /// Wallet list with connect buttons.

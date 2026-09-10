@@ -1,0 +1,912 @@
+.landing-persona-btn:not(:first-child) {
+    border-left: none;
+}
+
+.landing-persona-btn--active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.landing-persona-btn:hover:not(.landing-persona-btn--active) {
+    background: var(--bg-secondary);
+    color: #fff;
+}
+
+/* ── Tabbed Features ─────────────────────────────────────────────── */
+
+.landing-features-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 1.5rem;
+}
+
+.landing-features-tab {
+    padding: 0.5rem 1.25rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.landing-features-tab:first-child {
+    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+
+.landing-features-tab:last-child {
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.landing-features-tab:not(:first-child) {
+    border-left: none;
+}
+
+.landing-features-tab--active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+.landing-features-tab:hover:not(.landing-features-tab--active) {
+    background: var(--bg-secondary);
+    color: #fff;
+}
+
+.landing-feature-timeline {
+    max-width: 560px;
+    margin: 0 auto;
+}
+
+.landing-timeline-step {
+    display: flex;
+    gap: 1rem;
+    position: relative;
+    padding-bottom: 1.5rem;
+}
+
+.landing-timeline-step:last-child {
+    padding-bottom: 0;
+}
+
+.landing-timeline-step:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    left: 19px;
+    top: 40px;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+}
+
+.landing-timeline-dot {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+
+.landing-timeline-dot--indigo {
+    background: rgba(255, 92, 57, 0.15);
+    border: 1.5px solid rgba(255, 92, 57, 0.4);
+}
+
+.landing-timeline-dot--green {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1.5px solid rgba(34, 197, 94, 0.4);
+}
+
+.landing-timeline-dot--amber {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1.5px solid rgba(245, 158, 11, 0.4);
+}
+
+.landing-timeline-body {
+    flex: 1;
+    padding-top: 0.25rem;
+}
+
+.landing-timeline-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.2rem;
+}
+
+.landing-timeline-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.75;
+}
+
+.landing-footer-partner {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.75rem;
+    opacity: 0.7;
+    text-decoration: none;
+}
+
+.landing-footer-partner:hover {
+    opacity: 1;
+    color: var(--solana);
+}
+
+/* ── Landing FAQ ─────────────────────────────────────────────────── */
+
+.landing-faq-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.landing-faq-card {
+    background: rgba(10, 10, 14, 0.9);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem 1.75rem;
+}
+
+.landing-faq-q {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.4rem;
+}
+
+.landing-faq-a {
+    font-size: 0.9375rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+
+.landing-faq-cta {
+    text-align: center;
+    margin-top: 2rem;
+}
+
+.landing-faq-cta-link {
+    padding: 0.75rem 1.5rem;
+    text-decoration: none;
+}
+
+/* ── Landing Waitlist ────────────────────────────────────────────── */
+
+.landing-waitlist-inner {
+    text-align: center;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.landing-waitlist-form {
+    display: flex;
+    gap: 0.5rem;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.landing-waitlist-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.landing-waitlist-submit {
+    white-space: nowrap;
+    padding: 0.75rem 1.25rem;
+}
+
+.landing-waitlist-success {
+    padding: 1.5rem;
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    border-radius: var(--radius);
+    text-align: center;
+}
+
+.landing-waitlist-success-icon {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.landing-waitlist-success-title {
+    font-weight: 600;
+    color: var(--success);
+    margin-bottom: 0.25rem;
+}
+
+.landing-waitlist-success-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.landing-waitlist-error {
+    color: var(--danger);
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+}
+
+/* ── Landing Events ──────────────────────────────────────────────── */
+
+.landing-events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.landing-events-loading {
+    text-align: center;
+    padding: 2rem 0;
+}
+
+.landing-events-loading-spinner {
+    display: inline-block;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+.landing-events-loading-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-top: 0.75rem;
+}
+
+/* ── Sandbox Demo Card ───────────────────────────────────────────── */
+
+.landing-sandbox-card {
+    background: var(--bg-secondary);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 2rem 1.5rem;
+    max-width: 420px;
+    margin: 1.5rem auto 0;
+    text-align: center;
+}
+
+.landing-sandbox-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.landing-sandbox-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.35rem;
+}
+
+.landing-sandbox-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.landing-sandbox-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.landing-sandbox-secondary {
+    text-align: center;
+    margin-top: 1rem;
+    max-width: 420px;
+    margin-left: auto;
+    margin-right: auto;
+}
+.landing-waitlist-signed-in {
+    margin-top: 1rem;
+    text-align: center;
+}
+.landing-waitlist-signed-in .btn {
+    margin-top: 0.5rem;
+}
+
+.landing-event-card {
+    text-align: left;
+    padding: 1.25rem 1.5rem;
+}
+
+.landing-event-badge-img {
+    margin-bottom: 0.5rem;
+}
+
+.landing-event-badge-img img {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px 6px 0 0;
+    display: block;
+}
+
+.landing-event-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.35rem;
+}
+
+.landing-event-tagline {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+    font-style: italic;
+}
+
+.landing-event-meta {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+
+.landing-event-location {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.landing-event-deposit {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.landing-inline-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* ── Landing Registrations ───────────────────────────────────────── */
+
+.landing-reg-section {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1rem 1.5rem 2rem;
+}
+
+.landing-reg-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow);
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 1rem;
+}
+
+@media (max-width: 640px) {
+    .landing-reg-card {
+        grid-template-columns: 1fr auto;
+    }
+}
+
+.landing-reg-info {
+    min-width: 0;
+}
+
+.landing-reg-identity {
+    display: flex;
+    align-items: center;
+}
+
+.landing-reg-identity-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.landing-reg-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: capitalize;
+    white-space: nowrap;
+}
+
+.landing-reg-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.landing-reg-empty {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+
+.landing-reg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.landing-reg-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.landing-reg-grid {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.landing-reg-event-name {
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.landing-reg-event-date {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin-top: 0.15rem;
+}
+
+.landing-reg-empty-text {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.landing-reg-action {
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+/* ── Landing Footer ──────────────────────────────────────────────── */
+
+.landing-footer-built-with {
+    margin-top: 0.5rem;
+}
+
+.landing-footer-crab {
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+}
+
+.landing-footer-trust {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.landing-footer-trust-icon {
+    display: inline-flex;
+    color: var(--success);
+}
+
+/* ── Landing Mobile Menu ─────────────────────────────────────────── */
+
+.landing-mobile-divider {
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.landing-mobile-signout {
+    margin-top: 0.5rem;
+    width: 100%;
+}
+
+/* ── Scanner Inline Style Extractions ────────────────────────────── */
+
+.scanner-event-bar--danger {
+    background: rgba(239, 68, 68, 0.1);
+    border-bottom-color: rgba(239, 68, 68, 0.3);
+}
+
+.scanner-event-label--danger {
+    color: var(--danger);
+}
+
+.scanner-event-name {
+    font-size: 0.85rem;
+}
+
+.scanner-scan-hint--danger {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: var(--danger-border);
+    color: var(--danger);
+}
+
+.scanner-walkin-form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.scanner-walkin-label {
+    display: block;
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+    color: var(--muted);
+}
+
+.scanner-walkin-input {
+    width: 100%;
+}
+
+.scanner-session-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.scanner-settings-wrap {
+    position: relative;
+}
+
+.scanner-stat-value--success {
+    color: var(--success);
+}
+
+.scanner-stat-value--warning {
+    color: var(--warning);
+}
+
+.scanner-walkin-register-wrap {
+    margin-top: 0.75rem;
+    padding: 0 0.25rem;
+}
+
+.scanner-status-warning {
+    color: var(--warning);
+}
+
+.scanner-mt-1 {
+    margin-top: 1rem;
+}
+
+.scanner-mt-half {
+    margin-top: 0.5rem;
+}
+
+.scanner-mt-075 {
+    margin-top: 0.75rem;
+}
+
+.scanner-btn-escrow {
+    margin-top: 0.75rem;
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.scanner-undo-confirm {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.scanner-undo-btn {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.scanner-hint-timer {
+    margin-top: 0.25rem;
+}
+
+.scanner-wallet-warning {
+    padding: 0.75rem;
+}
+
+.scanner-wallet-warning-text {
+    margin: 0;
+}
+
+.scanner-wallet-connect-btn {
+    margin-bottom: 0.5rem;
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.scanner-muted-text {
+    color: var(--muted);
+}
+
+.scanner-tx-detail {
+    font-size: 0.8rem;
+    color: var(--muted);
+    word-break: break-all;
+}
+
+.scanner-solscan-link {
+    font-size: 0.8rem;
+    color: var(--accent);
+}
+
+.scanner-error-warning {
+    font-size: 0.85rem;
+    color: var(--warning);
+}
+
+.scanner-capacity-card {
+    width: 100%;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+    border: 2px solid var(--warning);
+}
+
+.scanner-capacity-card-inner {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.scanner-capacity-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.scanner-capacity-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--warning);
+    margin: 0;
+}
+
+.scanner-capacity-desc {
+    color: var(--muted);
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.scanner-capacity-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* ── Admin Cancel ───────────────────────────────────────────────── */
+
+.admin-cancel-actions-row {
+    margin-bottom: 0.75rem;
+}
+
+.admin-cancel-loading {
+    padding: 1rem;
+}
+
+.admin-cancel-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.admin-cancel-stat-card {
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    text-align: center;
+}
+
+.admin-cancel-stat-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.admin-cancel-stat-label {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+}
+
+.admin-cancel-stat-value-success {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--success);
+}
+
+.admin-cancel-stat-value-warning {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--warning);
+}
+
+.admin-cancel-stat-escrow {
+    font-size: 0.85rem;
+}
+
+.admin-cancel-warning-card {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+}
+
+.admin-cancel-section-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.admin-cancel-section-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.admin-cancel-desc {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.admin-cancel-info-text {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.admin-cancel-btn-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.admin-cancel-btn-cancel {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.8rem;
+    text-decoration: none;
+}
+
+.admin-cancel-hint {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.admin-cancel-danger-text {
+    font-size: 0.8rem;
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.admin-cancel-btn-dismiss {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+}
+
+.admin-cancel-panel {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+}
+
+.admin-cancel-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.admin-cancel-icon-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-cancel-emoji {
+    font-size: 1rem;
+}
+
+.admin-cancel-success-text {
+    font-size: 0.75rem;
+    color: var(--success);
+    padding: 0.25rem 0;
+}
+
+.admin-cancel-scroll-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.admin-cancel-queue-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.75rem;
+}
+
+.admin-cancel-queue-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.admin-cancel-queue-name {
+    color: var(--text-primary);
+}
+
+.admin-cancel-queue-wallet {
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+}
+
+.admin-cancel-queue-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-cancel-queue-amount {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.admin-cancel-badge-xs {
+    font-size: 0.6rem;
+}
+
+.admin-cancel-cancelled-banner {
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed var(--success);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.admin-cancel-cancelled-banner strong {
+    color: var(--success);
+}
+
+.admin-cancel-info-note {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+

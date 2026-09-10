@@ -260,7 +260,8 @@ pub async fn auth_logout(State(state): State<AppState>, req: axum::extract::Requ
 pub async fn wallet_nonce(
     State(state): State<AppState>,
     axum::Json(req): axum::Json<event_checkin_domain::models::auth::WalletNonceRequest>,
-) -> Result<ApiOk<event_checkin_domain::models::auth::WalletNonceResponse>, crate::error::WorkerError> {
+) -> Result<ApiOk<event_checkin_domain::models::auth::WalletNonceResponse>, crate::error::WorkerError>
+{
     if let Err(e) = crate::solana::validate_wallet_address(&req.wallet_address) {
         return Err(event_checkin_domain::models::error::AppError::Validation(e).into());
     }
@@ -287,11 +288,13 @@ pub async fn wallet_nonce(
         tracing::error!("SIWS nonce cannot be stored — EVENTS KV binding missing");
     }
 
-    Ok(ApiOk::new(event_checkin_domain::models::auth::WalletNonceResponse {
-        nonce,
-        message,
-        expires_at,
-    }))
+    Ok(ApiOk::new(
+        event_checkin_domain::models::auth::WalletNonceResponse {
+            nonce,
+            message,
+            expires_at,
+        },
+    ))
 }
 
 /// POST /api/auth/wallet/verify
@@ -356,9 +359,10 @@ pub async fn wallet_verify(
         .unwrap_or_else(|| format!("wallet:{}", req.wallet_address));
 
     // Create session JWT token
-    let jwt_token = auth::create_session_jwt(&user_id, &req.wallet_address, &state.config.jwt_secret)
-        .await
-        .map_err(event_checkin_domain::models::error::AppError::Internal)?;
+    let jwt_token =
+        auth::create_session_jwt(&user_id, &req.wallet_address, &state.config.jwt_secret)
+            .await
+            .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
     let cookie_api = format!(
         "event_checkin_token={}; HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age=86400",
@@ -377,7 +381,13 @@ pub async fn wallet_verify(
         authenticated: true,
     };
 
-    Ok((headers, axum::Json(event_checkin_domain::models::api::ApiResponse::data(resp_body))).into_response())
+    Ok((
+        headers,
+        axum::Json(event_checkin_domain::models::api::ApiResponse::data(
+            resp_body,
+        )),
+    )
+        .into_response())
 }
 
 /// POST /api/auth/wallet/bind
@@ -462,4 +472,3 @@ pub async fn wallet_bind(
         "wallet_address": req.wallet_address,
     })))
 }
-

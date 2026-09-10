@@ -419,7 +419,13 @@ async fn count_claimed(db: &D1Database, event_id: &str) -> Result<usize, String>
     count_by_status(db, event_id, "claimed_at").await
 }
 
-async fn count_by_status(db: &D1Database, event_id: &str, column: &str) -> Result<usize, String> {
+/// `column` is `&'static str` so only a compile-time literal can be
+/// interpolated — SQLite cannot parameterise an identifier. `event_id` is bound.
+async fn count_by_status(
+    db: &D1Database,
+    event_id: &str,
+    column: &'static str,
+) -> Result<usize, String> {
     let stmt = db.prepare(format!(
         "SELECT COUNT(*) as cnt FROM attendees WHERE event_id = ?1 AND {column} IS NOT NULL"
     ));

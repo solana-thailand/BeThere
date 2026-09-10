@@ -149,4 +149,3 @@ pub struct WalletBindRequest {
     pub signature: String,
     pub message: String,
 }
-

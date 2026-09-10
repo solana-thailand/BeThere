@@ -47,11 +47,23 @@ pub async fn sync_event_to_d1(d1: Option<&worker::D1Database>, config: &EventCon
     }
 }
 
-/// Dual-write: delete event from D1 alongside KV.
+/// Dual-write: delete an event from D1 alongside KV, with its derived rows.
+///
+/// `event_summaries` holds a frozen funnel snapshot keyed by `event_id` with no
+/// FK to `events`, so a permanent delete would otherwise orphan it forever.
+/// Rows that carry standalone record-keeping value (`audit_log`,
+/// `credit_ledger`, `attendees`) are deliberately left in place.
+///
+/// Errors are logged, not propagated — KV remains the source of truth, and the
+/// summary delete must not mask a successful event delete.
 pub async fn sync_delete_event_from_d1(d1: Option<&worker::D1Database>, event_id: &str) {
-    if let Some(db) = d1
-        && let Err(e) = crate::db::events::delete_event(db, event_id).await
-    {
+    let Some(db) = d1 else { return };
+
+    if let Err(e) = crate::db::events::delete_event(db, event_id).await {
         tracing::warn!(event_id = %event_id, error = %e, "D1 event delete failed");
+    }
+
+    if let Err(e) = crate::db::event_summaries::delete_summary(db, event_id).await {
+        tracing::warn!(event_id = %event_id, error = %e, "D1 event summary delete failed");
     }
 }

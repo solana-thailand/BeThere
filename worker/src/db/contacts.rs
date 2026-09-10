@@ -75,44 +75,23 @@ pub(crate) async fn upsert_contact(
     Ok(())
 }
 
-/// Update deposit credit for a contact (rolling balance across events).
-#[allow(dead_code)]
-pub(crate) async fn update_deposit_credit(
-    db: &D1Database,
-    email: &str,
-    credit_thb: i64,
-    credit_usdc: i64,
-) -> Result<(), String> {
-    let stmt = db.prepare(
-        "UPDATE contacts \
-         SET deposit_credit_thb = ?1, deposit_credit_usdc = ?2, \
-         deposit_credit_since = datetime('now') \
-         WHERE email = ?3",
-    );
-    stmt.bind_refs(&[
-        D1Type::Integer(credit_thb as i32),
-        D1Type::Integer(credit_usdc as i32),
-        D1Type::Text(email),
-    ])
-    .map_err(|e| format!("D1 update_deposit_credit bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 update_deposit_credit run: {e:?}"))?;
-
-    Ok(())
-}
-
 /// Clear PII for a contact (PDPA right to erasure).
 /// Keeps the row but blanks name and contact fields.
+///
+/// `contact_channel` and `contact_handle` are `TEXT NOT NULL DEFAULT ''`, so they
+/// are blanked rather than nulled — the same defect class as `clear_developer_pii`.
+/// A NULL aborted the whole statement on the NOT NULL constraint, so the erasure
+/// silently cleared nothing, `name` included.
 pub(crate) async fn clear_contact_pii(db: &D1Database, email: &str) -> Result<(), String> {
-    let sql = format!(
-        "UPDATE contacts SET \
+    let sql = "UPDATE contacts SET \
          name = '[DELETED]', \
-         contact_channel = NULL, contact_handle = NULL, \
+         contact_channel = '', contact_handle = '', \
          last_registered = datetime('now') \
-         WHERE LOWER(email) = '{email}'"
-    );
-    db.exec(&sql)
+         WHERE LOWER(email) = ?";
+    db.prepare(sql)
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 clear_contact_pii bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 clear_contact_pii: {e:?}"))?;
     Ok(())
@@ -304,12 +283,19 @@ pub struct CreditLiability {
 /// (surfaces "still waiting" to the organizer without a separate counter). The
 /// organizer clears the flag manually after processing the payout — there is
 /// no automated state machine for v1 (Issue #061 §D3). Lowercases the email
-/// because `contacts.email` is the lowercased primary key (matches
-/// [`update_deposit_credit`]).
+/// because `contacts.email` is the lowercased primary key.
+///
+/// Returns `true` when a row was actually flagged. An `UPDATE` that matches no
+/// contact is **not** a D1 error — it succeeds having changed nothing — so the
+/// caller cannot distinguish "queued" from "silently dropped" without this
+/// flag. [`credit_refund_requests`] sources the organizer's payout queue from
+/// this column alone, so a 0-row update means the attendee's request will never
+/// be seen by anyone; the caller must fail closed on `false` rather than report
+/// success (plan 022 §6d).
 pub(crate) async fn set_credit_refund_requested(
     db: &D1Database,
     email: &str,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let email_lower = email.to_lowercase();
     let stmt = db.prepare(
         "UPDATE contacts \
@@ -317,13 +303,20 @@ pub(crate) async fn set_credit_refund_requested(
          credit_refund_requested_at = datetime('now') \
          WHERE email = ?1",
     );
-    stmt.bind_refs(&[D1Type::Text(&email_lower)])
+    let result = stmt
+        .bind_refs(&[D1Type::Text(&email_lower)])
         .map_err(|e| format!("D1 set_credit_refund_requested bind: {e:?}"))?
         .run()
         .await
         .map_err(|e| format!("D1 set_credit_refund_requested run: {e:?}"))?;
 
-    Ok(())
+    let changes = result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0);
+    Ok(changes > 0)
 }
 
 /// Clear the `credit_refund_requested` flag on a contact (organizer-side
@@ -379,17 +372,29 @@ pub struct CreditRefundRequest {
 /// match the [`CreditRefundRequest`] field names so `serde_json::from_value`
 /// deserializes directly without remap. Returns an empty vec when D1 is
 /// unreachable — the admin view must still render.
+///
+/// **The amounts come from the ledger, not from `contacts.deposit_credit_*`.**
+/// The organizer reads this queue to decide how much cash to hand back, so the
+/// number has to be the one the reversal will remove. Those two columns are the
+/// mutable cells the append-only ledger replaced after the 2026-08-14 loss;
+/// nothing writes them any more (`update_deposit_credit` was deleted), so the
+/// queue was rendering "0 THB" against a live balance — the same defect that
+/// made the old liability chip always read zero. Summing across orgs is correct
+/// here and only here: the flag is on the contact, and `reverse_held_credit`
+/// reverses every bucket, so the displayed total is exactly what gets reversed.
 pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest> {
     let sql = "\
          SELECT \
-           email, \
-           COALESCE(name, '')                       AS name, \
-           COALESCE(deposit_credit_thb, 0)          AS credit_thb, \
-           COALESCE(deposit_credit_usdc, 0)         AS credit_usdc, \
-           COALESCE(credit_refund_requested_at, '') AS requested_at \
-         FROM contacts \
-         WHERE credit_refund_requested = 1 \
-         ORDER BY credit_refund_requested_at DESC";
+           c.email                                    AS email, \
+           COALESCE(c.name, '')                       AS name, \
+           COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                     WHERE l.email = LOWER(c.email) AND l.currency = 'thb'),  0) AS credit_thb, \
+           COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                     WHERE l.email = LOWER(c.email) AND l.currency = 'usdc'), 0) AS credit_usdc, \
+           COALESCE(c.credit_refund_requested_at, '') AS requested_at \
+         FROM contacts c \
+         WHERE c.credit_refund_requested = 1 \
+         ORDER BY c.credit_refund_requested_at DESC";
 
     let stmt = db.prepare(sql);
     match safe_all_rows(&stmt).await {
@@ -562,7 +567,6 @@ pub async fn list_contact_events(
         .collect()
 }
 
-
 /// Whether an email already has any account footprint (contact, developer
 /// profile, or attendee record). Used to decide whether it's safe to
 /// auto-bind a wallet to a typed email at registration (Plan 017): we only
@@ -613,11 +617,16 @@ pub async fn find_bound_email_by_wallet(
 /// Deterministic on the developer_profiles side (most recent binding wins) so
 /// wallet-login and credit-ownership resolution are stable even if a wallet is
 /// (legacy) bound to more than one email.
-pub async fn find_email_by_wallet(db: &D1Database, wallet_address: &str) -> Result<Option<String>, String> {
+pub async fn find_email_by_wallet(
+    db: &D1Database,
+    wallet_address: &str,
+) -> Result<Option<String>, String> {
     let sql = "SELECT email FROM developer_profiles WHERE LOWER(wallet_address) = LOWER(?1) \
                ORDER BY updated_at DESC LIMIT 1";
     let stmt = db.prepare(sql);
-    let bound = stmt.bind_refs(&[D1Type::Text(wallet_address)]).map_err(|e| format!("D1 find_email_by_wallet bind: {e:?}"))?;
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(wallet_address)])
+        .map_err(|e| format!("D1 find_email_by_wallet bind: {e:?}"))?;
     if let Ok(rows) = safe_all_rows(&bound).await
         && let Some(row) = rows.first()
         && let Some(email) = row.get("email").and_then(|v| v.as_str())
@@ -628,7 +637,9 @@ pub async fn find_email_by_wallet(db: &D1Database, wallet_address: &str) -> Resu
     // Fallback: check attendees table
     let sql2 = "SELECT email FROM attendees WHERE LOWER(wallet_address) = LOWER(?1) LIMIT 1";
     let stmt2 = db.prepare(sql2);
-    let bound2 = stmt2.bind_refs(&[D1Type::Text(wallet_address)]).map_err(|e| format!("D1 find_email_by_wallet fallback bind: {e:?}"))?;
+    let bound2 = stmt2
+        .bind_refs(&[D1Type::Text(wallet_address)])
+        .map_err(|e| format!("D1 find_email_by_wallet fallback bind: {e:?}"))?;
     if let Ok(rows2) = safe_all_rows(&bound2).await
         && let Some(row2) = rows2.first()
         && let Some(email2) = row2.get("email").and_then(|v| v.as_str())
@@ -640,7 +651,11 @@ pub async fn find_email_by_wallet(db: &D1Database, wallet_address: &str) -> Resu
 }
 
 /// Link wallet address to an existing email in developer_profiles.
-pub async fn link_wallet_to_email(db: &D1Database, email: &str, wallet_address: &str) -> Result<(), String> {
+pub async fn link_wallet_to_email(
+    db: &D1Database,
+    email: &str,
+    wallet_address: &str,
+) -> Result<(), String> {
     let sql = "INSERT INTO developer_profiles (email, wallet_address, updated_at) \
                VALUES (LOWER(?1), ?2, datetime('now')) \
                ON CONFLICT (email) DO UPDATE SET \
@@ -654,7 +669,6 @@ pub async fn link_wallet_to_email(db: &D1Database, email: &str, wallet_address: 
         .map_err(|e| format!("D1 link_wallet_to_email run: {e:?}"))?;
     Ok(())
 }
-
 
 #[cfg(test)]
 mod tests {

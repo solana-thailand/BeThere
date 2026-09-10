@@ -1,5 +1,6 @@
 //! Row append, delete, participation type update, and cell clear operations.
 
+use crate::sheets::a1;
 use event_checkin_domain::models::attendee::ColumnMapping;
 use worker::KvStore;
 
@@ -40,6 +41,7 @@ pub async fn append_attendee_row(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
@@ -112,11 +114,11 @@ pub async fn append_attendee_row(
 
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:{last_col_letter}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
-        urlencoding::encode(sheet_name)
+        urlencoding::encode(&sheet_ref)
     );
 
     let body = crate::http::ValueRange {
-        range: format!("{sheet_name}!A:{last_col_letter}"),
+        range: format!("{sheet_ref}!A:{last_col_letter}"),
         values: vec![row],
     };
 
@@ -158,6 +160,7 @@ pub async fn append_walkin_row(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
@@ -211,11 +214,11 @@ pub async fn append_walkin_row(
 
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:{last_col_letter}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
-        urlencoding::encode(sheet_name)
+        urlencoding::encode(&sheet_ref)
     );
 
     let body = crate::http::ValueRange {
-        range: format!("{sheet_name}!A:{last_col_letter}"),
+        range: format!("{sheet_ref}!A:{last_col_letter}"),
         values: vec![row],
     };
 
@@ -341,13 +344,14 @@ pub async fn update_participation_type(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
     let col = mapping.column_letter(CK::ParticipationType);
 
     let data = vec![ValueRange {
-        range: format!("{sheet_name}!{col}{row_index}"),
+        range: format!("{sheet_ref}!{col}{row_index}"),
         values: vec![vec![new_value.to_string()]],
     }];
 
@@ -383,11 +387,12 @@ pub async fn clear_sheet_cells_batch(
     if ranges.is_empty() {
         return Ok(());
     }
+    let sheet_ref = a1::sheet_ref(sheet_name);
 
     let access_token = get_cached_access_token(state, kv).await?;
 
     // Build full A1-notation ranges (prepend sheet name)
-    let full_ranges: Vec<String> = ranges.iter().map(|r| format!("{sheet_name}!{r}")).collect();
+    let full_ranges: Vec<String> = ranges.iter().map(|r| format!("{sheet_ref}!{r}")).collect();
 
     // Use batchClear to wipe values in multiple ranges
     // POST /v4/spreadsheets/{id}/values:batchClear

@@ -76,8 +76,7 @@ pub fn PostEventRegister() -> impl IntoView {
             match crate::api::get_me().await {
                 Ok(_) => set_state.set(RegState::Form),
                 Err(_) => {
-                    let _ =
-                        web_sys::window().map(|w| w.location().set_href("/login"));
+                    let _ = web_sys::window().map(|w| w.location().set_href("/login"));
                 }
             }
         });
@@ -303,5 +302,9 @@ pub fn PostEventRegister() -> impl IntoView {
 /// Map an empty string to `None` so it's skipped during serialization.
 fn opt_str(s: String) -> Option<String> {
     let trimmed = s.trim().to_string();
-    if trimmed.is_empty() { None } else { Some(trimmed) }
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }

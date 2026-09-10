@@ -198,7 +198,8 @@ pub async fn admin_hold_deposit_handler(
     // itself created from credit (free ticket + restored balance).
     if thb_deposit.is_non_cash() {
         return Err(AppError::Validation(
-            "this is a credit-covered / comp deposit — it cannot be held as rolling credit".to_string(),
+            "this is a credit-covered / comp deposit — it cannot be held as rolling credit"
+                .to_string(),
         )
         .into());
     }
@@ -244,6 +245,9 @@ pub async fn admin_hold_deposit_handler(
         .into());
     }
 
+    // Reflect the settled state on the in-memory record for the writes below.
+    // D1 was already flipped by the CAS; the save persists the non-settlement
+    // columns (and the whole struct on the KV fallback path, where there is no CAS).
     thb_deposit.held_as_credit = true;
     thb_deposit.held_as_credit_at = Some(now);
     event_store::save_thb_deposit(kv, &thb_deposit, d1)
@@ -401,11 +405,16 @@ pub async fn admin_apply_credit_handler(
     }
 
     // Load attendee — credit applies to the attendee's email, not the admin's.
-    let attendee =
-        crate::sheets::get_attendee_by_id(&attendee_id, &state, &event.sheet_id, &event.sheet_name, Some(kv))
-            .await
-            .map_err(AppError::Internal)?
-            .ok_or_else(|| AppError::NotFound(format!("attendee '{attendee_id}' not found")))?;
+    let attendee = crate::sheets::get_attendee_by_id(
+        &attendee_id,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+    )
+    .await
+    .map_err(AppError::Internal)?
+    .ok_or_else(|| AppError::NotFound(format!("attendee '{attendee_id}' not found")))?;
     let email = attendee.email.trim().to_lowercase();
     if email.is_empty() {
         return Err(AppError::Validation("attendee has no email".to_string()).into());

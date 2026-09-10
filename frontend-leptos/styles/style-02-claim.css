@@ -1,0 +1,992 @@
+/* ===== Attendee List ===== */
+.attendee-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* attendee-item gradient styles defined below (near EOF) */
+
+.attendee-name {
+    font-weight: 600;
+    color: var(--text-heading);
+    font-size: 1rem;
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 0.5rem;
+}
+
+.attendee-row-top {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.attendee-row-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+    padding-left: 32px; /* align with name (checkbox width + gap) */
+}
+
+.attendee-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
+    flex-wrap: wrap;
+}
+
+.attendee-email-inline {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 220px;
+}
+
+.admin-ticket-tag {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+.admin-time-ago-inline {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+.attendee-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+}
+
+/* Participation-type toggle — visually distinct from other outline buttons
+   because it changes a consequential field (In-Person ⇄ Online), not just
+   navigates. Dashed border signals "state change"; accent color on hover
+   reinforces that it's an active mutation. */
+.admin-participation-toggle {
+    border-style: dashed;
+}
+
+.admin-participation-toggle:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.admin-participation-toggle:disabled {
+    opacity: 0.5;
+    cursor: progress;
+}
+
+/* .attendee-status removed — replaced by .attendee-actions in card layout */
+
+/* ===== Badges ===== */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-success {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success-border);
+}
+
+.badge-warning {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+}
+
+.badge-info {
+    background: var(--info-bg);
+    color: var(--info-bright);
+    border: 1px solid var(--info-border);
+}
+
+/* Small badge variants for event list indicators */
+.badge-warning-xs {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+    font-size: 0.65rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-success-xs {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success-border);
+    font-size: 0.65rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Enhanced pill variant for participation type badges (scanner) */
+.badge-pill {
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    font-size: 0.65rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 9999px;
+}
+
+@keyframes scan {
+    0%,
+    100% {
+        top: 20%;
+    }
+    50% {
+        top: 75%;
+    }
+}
+
+.manual-input-group {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.manual-input-group input {
+    flex: 1;
+    padding: 0.7rem 0.85rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.manual-input-group input:focus {
+    border-color: var(--accent);
+}
+
+.manual-input-group input::placeholder {
+    color: var(--text-muted);
+}
+
+/* result-success/error/warning gradient styles defined below (near EOF) */
+
+.result-details {
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.result-details p {
+    margin-bottom: 0.25rem;
+}
+
+/* ===== Alerts / Messages ===== */
+.error-msg {
+    margin-top: 1.25rem;
+    padding: 0.85rem 1rem;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    border-radius: var(--radius);
+    color: var(--danger-bright);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    display: none;
+}
+
+.error-msg.visible {
+    display: block;
+}
+
+/* ===== Loading / Spinner ===== */
+.loading {
+    display: none;
+    margin-top: 1rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    text-align: center;
+}
+
+.loading.visible {
+    display: block;
+}
+
+.spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--text-secondary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 0.5rem;
+}
+
+.spinner-lg {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+}
+
+.spinner-sm {
+    width: 12px;
+    height: 12px;
+    border-width: 1.5px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes claim-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.page-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    color: var(--text-secondary);
+    gap: 0.75rem;
+}
+
+/* ===== Search ===== */
+.search-box {
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.search-box input {
+    width: 100%;
+    padding: 0.7rem 0.85rem 0.7rem 2.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.search-box input:focus {
+    border-color: var(--accent);
+}
+
+.search-box input::placeholder {
+    color: var(--text-muted);
+}
+
+.search-box .search-icon {
+    position: absolute;
+    left: 0.85rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--text-muted);
+    border-radius: 50%;
+}
+
+.search-box .search-icon::after {
+    content: "";
+    position: absolute;
+    width: 6px;
+    height: 2px;
+    background: var(--text-muted);
+    bottom: -3px;
+    right: -4px;
+    transform: rotate(45deg);
+    border-radius: 1px;
+}
+.mt-3 {
+    margin-top: 1.5rem;
+}
+.mb-2 {
+    margin-bottom: 1rem;
+}
+.hidden {
+    display: none !important;
+}
+
+.claim-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    margin-bottom: 0.25rem;
+}
+
+.claim-subtitle {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+.claim-tagline {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* ===== Deposit Page: Event Context Header ===== */
+.event-context-header {
+    margin: 0.375rem auto 0.75rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    text-align: center;
+    max-width: 480px;
+    width: 100%;
+}
+.event-context-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+.event-context-tagline {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+/* ===== Landing Page: Event Card ===== */
+.event-card-link {
+    text-decoration: none;
+}
+
+.event-card {
+    cursor: pointer;
+    transition:
+        transform 0.15s,
+        border-color 0.15s;
+}
+
+.event-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
+}
+
+/* ===== Claim Page: Event Info Card ===== */
+/* ===== Claim Page: Welcome Card ===== */
+.claim-welcome-card {
+    background: linear-gradient(
+        135deg,
+        rgba(255, 92, 57, 0.08) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid rgba(255, 92, 57, 0.2);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.claim-welcome-card h3 {
+    color: var(--text-heading);
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.claim-welcome-card .checked-in-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* ===== Claim Page: NFT Badge Preview ===== */
+.nft-preview-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 92, 57, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid rgba(255, 92, 57, 0.2);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.nft-preview-card::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: var(--radius);
+    background: linear-gradient(
+        135deg,
+        rgba(255, 92, 57, 0.4),
+        transparent,
+        rgba(255, 123, 92, 0.3)
+    );
+    z-index: -1;
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    padding: 1px;
+}
+
+.nft-preview-badge {
+    flex-shrink: 0;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.85;
+}
+
+.nft-preview-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.nft-preview-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    margin-bottom: 0.25rem;
+}
+
+.nft-preview-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* ===== Claim Page: NFT Coming Soon ===== */
+.claim-nft-soon-card {
+    background: linear-gradient(
+        135deg,
+        rgba(245, 158, 11, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: var(--radius);
+    padding: 1.5rem 1.25rem;
+    margin-bottom: 1rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.claim-nft-soon-card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(245, 158, 11, 0.04),
+        transparent
+    );
+    animation: shimmer-slide 3s ease-in-out infinite;
+}
+
+@keyframes shimmer-slide {
+    0% {
+        left: -60%;
+    }
+    100% {
+        left: 160%;
+    }
+}
+
+.claim-nft-soon-card h3 {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    position: relative;
+}
+
+.claim-nft-soon-card p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    position: relative;
+}
+
+.claim-nft-soon-card .nft-description {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(245, 158, 11, 0.15);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    position: relative;
+}
+
+/* ===== Claim Page: Wallet Input ===== */
+.claim-wallet-input {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    padding: 0.75rem 0.85rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    outline: none;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
+}
+
+.claim-wallet-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255, 92, 57, 0.15);
+}
+
+.claim-wallet-input::placeholder {
+    color: var(--text-muted);
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ===== Claim Page: Locked Wallet Indicator ===== */
+.claim-wallet-locked {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    color: var(--accent);
+    background: rgba(255, 92, 57, 0.1);
+    border: 1px solid rgba(255, 92, 57, 0.25);
+    border-radius: 9999px;
+    padding: 0.3rem 0.65rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.claim-wallet-locked svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.claim-wallet-locked .locked-wallet-addr {
+    font-family: var(
+        --font-mono,
+        ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        monospace
+    );
+    color: var(--text-secondary);
+    font-weight: 400;
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* ===== Claim Page: Paste Button ===== */
+.claim-paste-btn {
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: 0.65rem 1rem;
+    background: rgba(255, 92, 57, 0.15);
+    border: 1px solid rgba(255, 92, 57, 0.3);
+    border-radius: var(--radius-sm);
+    color: var(--text-heading);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.claim-paste-btn:hover {
+    background: rgba(255, 92, 57, 0.25);
+    border-color: rgba(255, 92, 57, 0.5);
+}
+
+.claim-paste-btn:active {
+    transform: scale(0.95);
+}
+
+/* ===== Claim Page: Claim Button ===== */
+.claim-btn-mint {
+    background: linear-gradient(135deg, #ff5c39 0%, #ff7b5c 100%);
+    color: var(--text-heading);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.9rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.2s;
+    box-shadow: 0 2px 16px rgba(255, 92, 57, 0.3);
+    margin-top: 0.5rem;
+}
+
+.claim-btn-mint:hover:not(:disabled) {
+    background: linear-gradient(135deg, #ff7b5c 0%, #ffa184 100%);
+    box-shadow: 0 4px 24px rgba(255, 92, 57, 0.4);
+    transform: translateY(-1px);
+}
+
+.claim-btn-mint:active:not(:disabled) {
+    transform: scale(0.98) translateY(0);
+}
+
+.claim-btn-mint:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* ===== Claim Page: Component Styles ===== */
+
+/* Main claim container — centered column layout */
+.claim-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Claim state wrapper — full width within center-page */
+.claim-state-full {
+    width: 100%;
+}
+
+/* Shimmer skeleton row — avatar + text lines */
+.claim-shimmer-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Shimmer inner column — text line placeholders */
+.claim-shimmer-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Shimmer NFT square */
+.claim-shimmer-nft {
+    width: 72px;
+    height: 72px;
+    border-radius: var(--radius);
+    flex-shrink: 0;
+}
+
+/* Shimmer input bar */
+.claim-shimmer-input {
+    width: 100%;
+    height: 42px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 0.5rem;
+}
+
+/* Wallet label */
+.claim-wallet-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+/* Wallet input row — flex for input + paste button */
+.claim-wallet-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Wallet divider between adapter buttons and manual input */
+.claim-wallet-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+.claim-wallet-divider::before,
+.claim-wallet-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+}
+
+/* Wallet hint text */
+.claim-wallet-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+/* Minting state container */
+.claim-minting {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem 0;
+    animation: claim-fade-in 0.3s ease-out;
+}
+
+/* Minting spinner wrapper */
+.claim-minting-spinner {
+    position: relative;
+    width: 64px;
+    height: 64px;
+}
+
+/* Minting spinner shimmer bg */
+.claim-minting-shimmer {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+/* Minting spinner position */
+.claim-minting-spinner .spinner-lg {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+    z-index: 1;
+}
+
+/* Minting title */
+.claim-minting-title {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Minting sub-detail */
+.claim-minting-detail {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* Minting timing hint */
+.claim-minting-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* Adventure gate — shown when adventure is required before claiming */
+.claim-adventure-gate {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem 1.5rem;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 107, 53, 0.08) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid var(--warning-border);
+    border-radius: var(--radius);
+    text-align: center;
+    animation: claim-fade-in 0.3s ease-out;
+}
+
+.claim-adventure-gate h2 {
+    color: var(--warning);
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.claim-adventure-status {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.claim-adventure-info {
+    max-width: 400px;
+}
+
+.claim-adventure-info p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 0.5rem 0;
+}
+
+.claim-adventure-hint {
+    color: var(--text-muted);
+    font-size: 0.85rem !important;
+}
+
+.claim-adventure-btn {
+    margin-top: 0.5rem;
+    font-size: 1.1rem;
+    padding: 0.75rem 2rem;
+}
+
+/* Pixelated SVG rendering for avatar */
+.claim-avatar-svg {
+    image-rendering: pixelated;
+}
+
+/* Retry button margin */
+.claim-retry-btn {
+    margin-top: 1rem;
+}
+
+/* ===== Claim Page: Success State ===== */
+.claim-success {
+    width: 100%;
+    background: linear-gradient(
+        135deg,
+        rgba(34, 197, 94, 0.08) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: var(--radius);
+    padding: 2rem 1.5rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 0 40px rgba(34, 197, 94, 0.08);
+}
+
+.claim-success::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: var(--radius);
+    background: linear-gradient(
+        135deg,
+        rgba(34, 197, 94, 0.3),
+        transparent,
+        rgba(255, 92, 57, 0.2)
+    );
+    z-index: -1;
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    padding: 1px;
+}
+
+.claim-success h2 {
+    color: var(--success);
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.claim-success .success-check,
+.success-check {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+}
+
+.claim-success .success-check svg,
+.success-check svg {
+    width: 24px;
+    height: 24px;
+    stroke: var(--text-heading);
+    stroke-width: 3;
+    fill: none;
+}
+
+.claim-success .success-actions {
+    margin-top: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* ===== Claim Page: Error State ===== */
+.claim-error {
+    width: 100%;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    text-align: center;
+    animation: claim-fade-in 0.3s ease-out;
+}
+
+.claim-error h2 {
+    color: var(--danger);
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+/* ===== Claim Page: Bookmark Footer ===== */
+.claim-bookmark-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+.claim-bookmark-hint a {
+    color: var(--accent);
+    text-decoration: underline;
+    font-weight: 500;
+}
+
+.claim-bookmark-hint a:hover {
+    color: var(--accent-hover);
+}
+

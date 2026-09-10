@@ -675,13 +675,14 @@ pub fn HoldDepositCard(
                     }.into_any(),
 
                     HoldDepositState::Confirmed { credit_thb, credit_usdc } => {
-                        let balance_str = if credit_thb > 0 && credit_usdc > 0 {
-                            format!("{} THB + {} USDC", credit_thb, credit_usdc)
-                        } else if credit_thb > 0 {
-                            format!("{} THB", credit_thb)
-                        } else {
-                            format!("{} USDC", credit_usdc)
-                        };
+                        // Shared formatter: USDC is the 6-decimal smallest unit and
+                        // must not be printed raw (15_000_000 is $15, not $15M).
+                        // Falls back to the amount just held if the server reports a
+                        // zero balance — impossible right after a hold, but it keeps
+                        // the sentence well-formed rather than emitting "Total credit: .".
+                        let balance_str =
+                            super::credit_chip::credit_balance_label(credit_thb, credit_usdc)
+                                .unwrap_or_else(|| format!("{amount} THB"));
                         view! {
                             <div class="ticket-action-title ticket-action-title-success">
                                 "Deposit Held as Credit ✓"

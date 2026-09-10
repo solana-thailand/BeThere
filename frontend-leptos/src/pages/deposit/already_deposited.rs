@@ -107,8 +107,14 @@ pub fn already_deposited_view(
     let is_credit = matches!(
         info.method,
         DepositMethod::CreditThb | DepositMethod::CreditUsdc
-    ) || info.tx_signature.as_ref().is_some_and(|s| s.contains("CREDIT"))
-        || info.wallet_address.as_ref().is_some_and(|w| w.contains("CREDIT"));
+    ) || info
+        .tx_signature
+        .as_ref()
+        .is_some_and(|s| s.contains("CREDIT"))
+        || info
+            .wallet_address
+            .as_ref()
+            .is_some_and(|w| w.contains("CREDIT"));
     let display_method_label = if is_credit {
         "Rolling Credit (Previous Event)".to_string()
     } else {

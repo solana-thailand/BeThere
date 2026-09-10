@@ -247,7 +247,8 @@ async fn crossmint_request(
     if !(200..300).contains(&status) {
         return Err(format!("crossmint returned HTTP {status}: {text}"));
     }
-    serde_json::from_str(&text).map_err(|e| format!("failed to parse crossmint response: {e}: {text}"))
+    serde_json::from_str(&text)
+        .map_err(|e| format!("failed to parse crossmint response: {e}: {text}"))
 }
 
 /// Extract the on-chain status (lowercased) from a Crossmint NFT/action body.
@@ -507,10 +508,12 @@ pub fn verify_siws_signature(
 
     let pubkey_bytes = crate::solana_escrow::crypto::base58_decode(wallet_address)
         .map_err(|e| format!("invalid wallet public key: {e:?}"))?;
-    let pubkey_arr: [u8; 32] = pubkey_bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| format!("wallet public key must be 32 bytes, got {}", pubkey_bytes.len()))?;
+    let pubkey_arr: [u8; 32] = pubkey_bytes.as_slice().try_into().map_err(|_| {
+        format!(
+            "wallet public key must be 32 bytes, got {}",
+            pubkey_bytes.len()
+        )
+    })?;
     let verifying_key = VerifyingKey::from_bytes(&pubkey_arr)
         .map_err(|e| format!("wallet public key is not a valid ed25519 point: {e}"))?;
 
@@ -646,7 +649,8 @@ mod tests {
 
     #[test]
     fn test_parse_success_extracts_asset_and_signature() {
-        let v = json!({ "onChain": { "status": "success", "assetId": "AID123", "txId": "SIG456" } });
+        let v =
+            json!({ "onChain": { "status": "success", "assetId": "AID123", "txId": "SIG456" } });
         let r = parse_crossmint_success(&v).expect("should parse");
         assert_eq!(r.asset_id, "AID123");
         assert_eq!(r.signature, "SIG456");

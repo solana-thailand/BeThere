@@ -451,26 +451,210 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
 
 ### Integration
 
-- [ ] `worker/tests/event_summary_flow.rs` — full freeze flow:
-  1. Seed event with `event_end_ms` in the past.
-  2. Seed N attendees, M deposits, K check-ins.
-  3. `GET /summary` → assert `frozen: true`, correct counts.
-  4. Refund a deposit after freeze.
-  5. `GET /summary` → assert numbers **unchanged** (freeze is durable).
-- [ ] `worker/tests/post_event_registration.rs` — toggle + register + contact upsert + `registration_phase` correctness + capacity invariant (post-event regs do not affect capacity).
-- [ ] `worker/tests/pr_pack.rs` — endpoint smoke test against a fixture event.
+- [x] `worker/tests/event_summary_flow.rs` — **superseded: exercised against
+      local D1 instead (2026-09-04).** Same reasoning as the post-event box
+      below — the handler is `#[worker::send]` axum over a D1 binding, so a
+      host-target `tests/*.rs` could only re-implement it. Ran all five steps
+      under `wrangler dev --local` against a seeded `completed` event
+      (3 approved in-person attendees, 2 checked in, 1 claimed, 2 verified USDC
+      deposits). Verified there are no `sheets::` calls anywhere in
+      `handlers/events/summary.rs`, `db/event_summaries.rs` or `db/dashboard.rs`
+      first, so nothing left the machine.
+
+      **What held.** Step 3 froze correctly: registered 3, checked-in 2,
+      claimed 1, deposited 2, no-show 1, 2 USDC deposited. `registered_count`
+      counts `approval_status = 'approved'` only, so a seeded
+      `post_event_registered` row was correctly excluded while
+      `post_event_reg_count` picked it up. Step 4 un-verified a deposit and
+      added a late check-in + late claim; step 5 returned **byte-identical**
+      numbers. Freeze is durable. Also confirmed: an event still running returns
+      a preview with `frozen: false` and persists **no** row; `POST
+      /summary/freeze` on it is rejected 400; a manual re-freeze after the event
+      ended does update the numbers (intended — it is an explicit organizer
+      action) and leaves `recap_markdown` / `recap_published_at` intact, because
+      `upsert_summary`'s `DO UPDATE` set omits the recap columns.
+
+      **Defect — a read failure destroyed the snapshot (fixed, `893bd01`).**
+      Step 4 of the handler matched the existing-freeze lookup on `Ok(Some(_))`
+      and let `Err` fall through to step 5, which recomputes and
+      `upsert_summary`s over the durable row. A transient D1 read failure would
+      therefore replace the official record with post-drift numbers — silently,
+      and unrecoverably, since the whole point of the freeze is that the source
+      rows have since moved. Now returns 500 and leaves the row alone. **Not
+      reproduced locally**: `get_summary` only errs when D1 itself fails, and a
+      `SELECT` cannot be made to fail from SQLite (triggers do not fire on
+      reads) while the write path still succeeds. Reasoned from the code, fixed
+      because refusing is cheap and a destroyed snapshot is not recoverable.
+
+      The mirror of it in the **public** recap (`handlers/public_event.rs`) was
+      fixed in the same commit: a failed funnel read fell into a `_ =>` arm that
+      published `registered_count: 0, checked_in_count: 0, claimed_count: 0` —
+      indistinguishable from a real "nobody came", on a public page. It now
+      propagates, agreeing with the `get_recap` call two lines above it.
+
+      **Also fixed in `893bd01`:** `summary` / `recap` / `pr_pack` /
+      `post_event_registration` each carried a byte-identical private
+      `load_event` + `enforce_organizer`, with a comment in `pr_pack.rs`
+      deferring extraction "only if a fourth consumer appears". It had. They now
+      share `handlers/events/common.rs`, which also fixes the defect all four
+      copies shared: `if let Ok(Some(_))` on both the KV and D1 reads, so a
+      backend outage was reported to the organizer as *"event not found"* —
+      the same masking `resolve_event_by_slug` carried before `734aa4b`.
+- [x] `worker/tests/post_event_registration.rs` — **superseded: exercised against
+      local D1 instead (2026-09-04), and it found two live defects.** The
+      endpoint is `#[worker::send]` axum over a D1 binding, so a host-target
+      `tests/*.rs` can only re-implement it, not run it. Ran the real handler
+      under `wrangler dev --local` (see `.plans/020_sql_parameter_binding.md`
+      for the harness) against a seeded `completed` event with
+      `post_event_registration_open = 1`.
+
+      **What held.** `registration_phase = 'post_event'` /
+      `approval_status = 'post_event_registered'` are written correctly, and the
+      capacity invariant holds *by construction* rather than by an explicit
+      filter: `count_registered` selects `approval_status = 'approved'`
+      (`db/dashboard.rs:57`), and post-event rows are never written to Sheets, so
+      neither the dashboard nor the Sheets capacity check can see them.
+      `post_event_registered` appears in exactly two files repo-wide — nothing
+      else needs to exclude it.
+
+      **Defect 1 — a repeat submission was silently discarded (fixed, `2f25910`).**
+      `upsert_post_event_attendee` carried `ON CONFLICT (id) DO UPDATE`, but the
+      caller mints a fresh `Uuid::now_v7()` per request, so that clause could
+      never fire. The real conflict is on `idx_attendees_unique_event_email`
+      (migration 0026, partial on `participation_type <> 'walkin'` — post-event
+      rows use `online`, so they are covered). Reproduced: second submission →
+      `UNIQUE constraint failed: index 'idx_attendees_unique_event_email'`,
+      swallowed by the handler's "non-fatal" warn → **HTTP 200 "Thanks!"** with a
+      brand-new `attendee_id` matching no row, and the attendee row unchanged.
+      A visitor who resubmitted **withdrawing marketing consent** was told
+      "Thanks!" while `attendees.consent_marketing` stayed `1` — and
+      `write_developer_data` did succeed, so `developer_profiles.consent_outreach`
+      went to `0`. The two stores then disagreed on consent, with the permissive
+      value surviving in `attendees`. Fixed by targeting the real index and
+      `RETURNING id`. The `DO UPDATE` set deliberately omits `approval_status` /
+      `participation_type` / `registration_phase`: the conflicting row may be a
+      genuine pre-event in-person attendee, and refreshing their contact details
+      is right while demoting them to an `online` lead is not. Verified: repeat
+      submission now updates the one row and returns its real id; a seeded
+      `approved` / `in_person` / `pre_event` row keeps all three fields.
+
+      **Defect 2 — a failed write reported success (fixed, `2f25910`).** Every D1
+      write in this handler was warn-and-continue. That is defensible in
+      `signup.rs`, where Sheets is the primary store and D1 a mirror — but this
+      endpoint has **no** Sheets write, so a failed attendee insert loses the lead
+      outright and still answers `200 {"message": "Thanks!..."}`. The attendee
+      write is now fatal (contact/profile enrichment stays non-fatal). Verified
+      with a `BEFORE UPDATE … RAISE(ABORT)` trigger on `attendees`: **500** with
+      `"could not save your registration — please try again"` — no SQL text or JS
+      stack in the response, detail stays in the log.
+
+      A host-target regression test still cannot cover either defect; both are
+      properties of the SQL against a live SQLite. Re-run the local harness when
+      touching this path.
+- [x] `worker/tests/pr_pack.rs` — **superseded: smoke-tested against local D1
+      (2026-09-04).** `GET /api/events/{id}/pr-pack` returned all seven fields
+      for a seeded fixture event; generation is a pure function over
+      `EventConfig` already covered by 17 unit tests in `domain/src/pr_pack.rs`,
+      so the only thing a host-target test could add is the handler's
+      load-event + role check, which `events::common` now shares with three
+      other endpoints.
+
+      **Defect — the "Register here" link was wrong in both branches (fixed,
+      `1c156d0`).** `registration_url` returned `claim_base_url` verbatim when
+      set. That is a *claim* endpoint — `handlers/walkin.rs:346` builds
+      `{claim_base_url}/{claim_token}` — so every generated tweet, blurb and
+      email invited readers to a token-gated claim page rather than the
+      registration page. When it was unset the function returned a root-relative
+      `/e/{slug}`, which the doc comment described as "clickable"; it is not,
+      the moment the copy is pasted into an email or a tweet, which is the only
+      thing this feature produces. Now resolves in order: the organizer's
+      external `link`, else `origin(claim_base_url) + /e/{slug}`, else the
+      relative path. Verified live: the blurb went from
+      `Register: https://bethere.app/claim` to
+      `Register: https://bethere.app/e/freeze-test`.
 
 ### Manual
+
+**Status 2026-09-04 (second pass):** all four remain open and all four are
+genuinely blocked on a browser + a real event — the API side of each is now verified against local D1
+(see the Integration notes and the Phase 3 acceptance list), so what is left is
+specifically *rendering and copy*, not behaviour. Nothing here is owner-gated;
+it just cannot be done from a shell.
 
 - [ ] Run through Phase 1 UI on a real completed event (e.g. an old dev event in the DB). Verify funnel numbers match the live dashboard's last-known values.
 - [ ] Run Phase 2 publish flow. Visit `/events/{slug}/recap` in incognito. Confirm sanitized payload.
 - [ ] Run Phase 3 toggle + register flow. Verify a new row appears in `developer_profiles` with the post-event registrant's interests.
 - [ ] Run Phase 4 generator on an upcoming event. Copy each field, paste into actual social/email, sanity-check readability.
+      (The *generated text* was sanity-checked from a shell on 2026-09-04 via
+      `domain/examples/pr_pack_preview.rs`, which found and fixed two defects —
+      see Phase 4 above. What is left here is the paste-into-a-real-surface
+      check: line wrapping, link unfurls, emoji rendering in a real client.)
 
 ### CI
 
-- [ ] New tests must be wired into the worker `pnpm test` + `cargo test` flow.
-- [ ] No new clippy warnings on changed files (the wider 183-warning debt is documented elsewhere — plan 004 §7).
+- [x] New tests must be wired into the worker `pnpm test` + `cargo test` flow.
+      **Reworded on completion (2026-09-04): there is no `pnpm test`, and this
+      workstream added no new test *files*.** Both integration boxes above were
+      closed by exercising the real handlers against local D1 rather than by
+      adding host-target tests, so the only new automated coverage is unit
+      tests inside existing crates (`domain/src/pr_pack.rs` is now 17 tests).
+      Those run under `cargo test --workspace --locked`, which
+      `.github/workflows/ci.yml` (job `build-test`) already executes on every
+      push to `develop`/`main` and every PR. Verified locally at `cd49a11`:
+      **477 tests, 0 failed** across `domain` (121 lib + 5 integration files),
+      `worker` (210 lib + 5 integration files) and both doc-test targets.
+
+      `pnpm test` does not exist and never did — `worker/package.json` defines
+      only `test:e2e*` (Playwright). See the new box below for that gap.
+- [x] No new clippy warnings on changed files (the wider 183-warning debt is
+      documented elsewhere — plan 004 §7). Verified at `cd49a11`:
+      `cargo clippy --workspace --locked --all-targets -- -D warnings` is
+      **clean**, as is the frontend's separate gate
+      (`cd frontend-leptos && cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings`).
+
+      **Defect found by running the real CI invocation (fixed, `cd49a11`).**
+      The gate this workstream had been using day to day —
+      `cargo clippy -p event-checkin-worker --target wasm32-unknown-unknown -- -D warnings`
+      — omits `--all-targets`, so it never lints `#[cfg(test)]` code. CI's
+      invocation does. A `useless_vec` in `worker/src/handlers/contacts.rs:693`
+      (introduced 2026-08-21 by `9388ddf`, i.e. **pre-existing**, not from this
+      plan) therefore sat red on the branch: `cargo clippy --workspace
+      --all-targets` failed with `could not compile event-checkin-worker (lib
+      test)`. Any PR from this branch would have gone red on the `build-test`
+      job. Use `--all-targets` when checking clippy locally.
+- [x] **Closed 2026-09-04 — the Playwright e2e suite is now in CI.** `e2e/` holds
+      5 smoke specs (`auth-guards`, `claim`, `landing`, `login`, `routes`; 95
+      lines total) driven by `worker/playwright.config.ts`, whose `testDir` is
+      `../e2e`. The config has no `webServer` block and nothing in
+      `.github/workflows/ci.yml` ran them, so a frontend regression that still
+      compiles — a renamed CSS hook, a dead route, a broken auth guard — only
+      surfaced in a browser. `frontend-clippy` compiles the SPA but never runs it.
+
+      New `e2e` job: trunk-build the SPA, then serve **everything from the
+      worker** on one port rather than `trunk serve` + a proxy. The worker's
+      `[assets]` block already points at `frontend-leptos/dist` with SPA
+      fallback, so 8788 answers both the app and `/api` — the production
+      topology. That matters for `claim.spec.ts`, which asserts an error state
+      for a bad token: against the real handler it gets a genuine 404, not a
+      proxy failure that happens to render the same way.
+
+      `BASE_URL` overrides the config's `localhost:3001` default; the config's
+      own `CI` branches (`retries: 2`, `workers: 1`, `forbidOnly`) apply
+      unchanged. `trunk` and `wasm-bindgen-cli@0.2.118` come from
+      `taiki-e/install-action` (`wasm-bindgen-cli` is a documented alias of
+      `wasm-bindgen`); the exact wasm-bindgen version matters because the
+      worker's `[build]` command in `wrangler.toml` shells out to it directly
+      and a mismatch fails at bindgen, not at compile.
+
+      **Verified locally before wiring**, since a green YAML file proves
+      nothing: built the SPA with trunk, ran `wrangler dev --local` with
+      `worker/.dev.vars` moved aside to simulate a secretless runner, and ran
+      `BASE_URL=http://localhost:8788 npx playwright test` → **13 passed in
+      3.6s**. Also grepped the dev log for `sheets::` afterwards → **0 hits**,
+      confirming the job cannot reach a live Google Sheet (see plan 020 §4.4 —
+      `--local` does not sandbox Sheets, so this is not free by default; it
+      holds here only because every spec is unauthenticated and no role
+      resolution fires).
 
 ---
 
@@ -575,7 +759,33 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
       (Verified 2026-07-09: delivered at `63270ac feat(event-lifecycle): Plan 008 Phase 4 — PR pack generator` (2026-07-09 08:53 +0700). Generator pure-fns in `domain/src/pr_pack.rs` (471 lines, 14 unit tests) + `domain/src/lib.rs` re-export; endpoint `worker/src/handlers/events/pr_pack.rs` (99 lines) + route `GET /api/events/{id}/pr-pack` in `handlers/mod.rs`; frontend page `frontend-leptos/src/pages/pr_pack.rs` (286 lines) + `api/event.rs` client + `lib.rs` route + `pages/mod.rs`. §3.4 sub-item checkboxes already `[x]` for all 4 details.)
 - [x] Same branch / PR flow.
       (Verified 2026-07-09: committed at `63270ac` on `feature/event_recap`, same feature-branch flow as Phases 1–3. No separate PR — Phase 4 landed directly on the feature branch per the project's single-branch convention for this plan.)
-- [ ] Validate: copy a generated social post → post to a test account → confirm readability.
+- [~] Validate: copy a generated social post → post to a test account → confirm readability.
+      **Readability half done 2026-09-04 (`7f3c0bf`); posting is still manual.**
+      `domain/examples/pr_pack_preview.rs` (`cargo run -p event-checkin-domain
+      --example pr_pack_preview`) prints every field of a full pack for two
+      fixtures modelled on real events from `.plans/018` §8 — the recurring
+      hybrid with a THB 500 deposit, and a no-deposit online session. Reading the
+      output found **two copy defects that all 17 existing unit tests missed**:
+
+      1. **`deposit_terms` advertised "$0" on every production event.**
+         `format_usdc(event.deposit_amount_usdc)` was emitted unconditionally,
+         and production deposits are THB-only (`deposit_amount_usdc == 0`), so a
+         real event's pack read *"A deposit is required to secure your spot: $0
+         (or 500 THB via PromptPay)"* — which a reader parses as "this is free".
+         The amount clause now branches on which currencies are actually set:
+         both, USDC-only, THB-only, or neither (deposits enabled with no amount
+         is a misconfiguration, so the copy states the requirement without
+         inventing a price). Now reads *"…your spot: 500 THB via PromptPay."*
+      2. **An empty tagline left a blank line mid-post.** `social_post` always
+         rendered the tagline line, so a tagline-less event produced
+         `🗓️ … @ Online\n\nhttps://…`. The line is now omitted, not emptied.
+
+      The existing suite passed throughout because it only ever exercised the
+      both-currencies, tagline-present fixture. Four regression tests added
+      (THB-only, USDC-only, no-amount, no-tagline); the suite is 17 → 21.
+
+      **Still manual:** actually posting to a test account. That is an
+      outward-facing publish, not something to do unprompted.
 
 ### Rollback
 
@@ -693,13 +903,73 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 
 ### Phase 3 — Post-Event Registration
 
-- [ ] An organizer can toggle post-event registration on a Completed event, with an optional deadline.
-- [ ] A signed-in user can register post-event; the form captures developer-profile fields.
-- [ ] The new `attendees` row has `registration_phase = 'post_event'` and `approval_status = 'post_event_registered'`.
-- [ ] The registrant's `developer_profiles` row is upserted with submitted fields.
-- [ ] Post-event registrants are NOT counted in capacity, check-in, or normal-attendance queries.
-- [ ] The summary page's "post-event registrations" tile increments correctly.
-- [ ] When the deadline passes (or the toggle is flipped off), the public form 404s/410s.
+All API-level criteria below were exercised against **local D1** under
+`wrangler dev --local` on 2026-09-04 (harness: `.plans/020_sql_parameter_binding.md`).
+The two boxes that need a *browser* rather than an API call are marked `[~]` and
+belong to the Manual section.
+
+- [x] An organizer can toggle post-event registration on a Completed event, with an optional deadline.
+      (Verified 2026-09-04 against local D1, `PUT /api/events/{id}/post-event-registration`
+      as the organizer: open + future deadline → `200 {"open":true,"until_ms":…}` and the
+      `events` row carries both; open + past deadline → **400** `"deadline … must be in the
+      future"`; open on a KV-cold `active` event → **400** `"can only be opened for completed
+      events (current status: active)"`; close → `200` and the deadline is cleared to `NULL`.
+      Closing is deliberately allowed in any status. Frontend toggle control itself is UI —
+      see Manual.)
+
+      **Harness note, not a defect.** `events::common::load_event` is KV-first, so the
+      status gate reads the *cached* config. Editing `events.status` straight in D1 (as a
+      seed script does) is invisible to this handler until KV is refreshed — every
+      in-app status change mirrors to KV, so this only bites out-of-band writes. Seed a
+      fresh event id when you need a KV-cold read.
+- [~] A signed-in user can register post-event; the form captures developer-profile fields.
+      (API half verified 2026-09-04 — see the `post_event_registration.rs` integration note
+      above, which also found and fixed two defects. Rendering the form is Manual.)
+- [x] The new `attendees` row has `registration_phase = 'post_event'` and `approval_status = 'post_event_registered'`.
+      (Verified against local D1 2026-09-04 — integration note above.)
+- [x] The registrant's `developer_profiles` row is upserted with submitted fields.
+      (Verified against local D1 2026-09-04 — integration note above; the consent-divergence
+      defect found there is fixed in `2f25910`.)
+- [x] Post-event registrants are NOT counted in capacity, check-in, or normal-attendance queries.
+      (Verified against local D1 2026-09-04. Holds *by construction*: `count_registered`
+      selects `approval_status = 'approved'` (`db/dashboard.rs:57`) and post-event rows are
+      never written to Sheets, so neither the dashboard nor the Sheets capacity check can
+      see them. `post_event_registered` appears in exactly two files repo-wide.)
+- [x] The summary page's "post-event registrations" tile increments correctly.
+      (Verified against local D1 2026-09-04 during the freeze run: a seeded
+      `post_event_registered` row was excluded from `registered_count` and counted by
+      `post_event_reg_count` in the same snapshot. The tile renders that field.)
+- [x] When the deadline passes (or the toggle is flipped off), the public form 404s/410s.
+      (Verified 2026-09-04 against local D1 on `POST /api/public/event/{slug}/register-post-event`:
+      past deadline → **410** `"post-event registration for this event has closed"`;
+      toggle off → **409** `"post-event registration is not open for this event"`.)
+
+      **Defect — the recap page kept advertising a closed form (fixed, `3cee479`).**
+      `GET /api/public/event/{slug}/recap` returned the raw
+      `post_event_registration_open` flag, and `pages/public/event_recap.rs:304` renders the
+      "Missed this event? / Join the community" CTA straight from it. The flag stays `true`
+      after the deadline lapses — only the *submit* endpoint checks the deadline — so a
+      visitor arriving one minute late was invited to sign in with Google, fill the whole
+      form, and only then be told `410 Gone`. The public payload now reports whether
+      registration **accepts a submission now**, computed on the server clock (the same
+      clock the submit endpoint compares against) rather than the browser's.
+
+      The comparison itself is now shared: `EventConfig::post_event_registration_accepting`
+      / `post_event_registration_deadline_passed` in `domain/src/models/event.rs`, used by
+      both the payload and `register::post_event` — so the CTA cannot disappear while the
+      endpoint still accepts, or vice versa. The two error branches stay separate because
+      the codes differ (never-opened is a 409, opened-then-lapsed a 410). 4 new unit tests
+      cover the `now_ms >= until` boundary, the `None` = indefinite case, and toggle-off
+      beating a future deadline. Verified end-to-end: past deadline → payload flag `false`
+      *and* submit `410`; future deadline → `true` *and* the form accepts; toggle off →
+      `false` *and* `409`.
+
+      **Out of scope, flagged not fixed:** `hard_delete_event` removes the KV entry and the
+      `events` row only (`event_store::write::index::sync_delete_event_from_d1` →
+      `db::events::delete_event`). `event_summaries` has no FK to `events` and no cascade,
+      so permanently deleting an event leaves its frozen funnel snapshot behind — observed
+      while cleaning up the fixtures above. `attendees` and the audit rows survive too, which
+      may well be intentional for record-keeping; the orphan summary probably is not.
 
 ### Phase 4 — PR Pack
 

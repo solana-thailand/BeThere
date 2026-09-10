@@ -97,37 +97,96 @@ pub struct D1EventRow {
     pub post_event_registration_until_ms: Option<i64>,
 }
 
+/// Parse an enum column stored as its `as_str()` snake_case spelling.
+///
+/// Three cases, deliberately kept distinct — the previous
+/// `from_value(...).unwrap_or_default()` collapsed them into one and logged
+/// nothing, so a corrupt column was indistinguishable from a fresh one:
+///
+/// - **absent or empty** — `NULL` on a row written before the column existed.
+///   Returns `legacy`, the value that row semantically had.
+/// - **parses** — use it. Surrounding whitespace is tolerated.
+/// - **present but unrecognised** — every writer goes through `as_str()`, so
+///   this is only reachable through an out-of-band D1 edit or a migration
+///   default. Returns `corrupt`, chosen per column to fail closed, and warns:
+///   the fallback is a guess, and the row needs a human.
+fn parse_enum_column<T: serde::de::DeserializeOwned>(
+    event_id: &str,
+    column: &str,
+    stored: Option<&str>,
+    legacy: T,
+    corrupt: T,
+) -> T {
+    let raw = stored.unwrap_or("").trim();
+    match raw.is_empty() {
+        true => legacy,
+        false => match serde_json::from_value(serde_json::Value::String(raw.to_string())) {
+            Ok(parsed) => parsed,
+            Err(_) => {
+                tracing::warn!(
+                    event_id = %event_id,
+                    column = %column,
+                    value = %raw,
+                    "unrecognised enum value in D1 — falling back to the fail-closed variant"
+                );
+                corrupt
+            }
+        },
+    }
+}
+
 impl D1EventRow {
     /// Convert D1 row to domain EventConfig.
-    /// Uses `unwrap_or_default` for columns added by migration 0003
-    /// so it's safe even if the migration hasn't run yet.
+    /// Missing columns fall back to their pre-migration value via
+    /// [`parse_enum_column`] / `unwrap_or_default`, so a row written before a
+    /// migration ran still converts.
     pub fn to_event_config(&self) -> event_checkin_domain::models::event::EventConfig {
         use event_checkin_domain::models::event::*;
 
-        let status: EventStatus = serde_json::from_value(serde_json::Value::String(
-            self.status.clone().unwrap_or_default(),
-        ))
-        .unwrap_or_default();
-        let escrow_status: EscrowStatus = serde_json::from_value(serde_json::Value::String(
-            self.escrow_status.clone().unwrap_or_default(),
-        ))
-        .unwrap_or_default();
-        let event_format: EventFormat = serde_json::from_value(serde_json::Value::String(
-            self.event_format.clone().unwrap_or_default(),
-        ))
-        .unwrap_or_default();
-        let visibility: EventVisibility = serde_json::from_value(serde_json::Value::String(
-            self.visibility
-                .clone()
-                .unwrap_or_else(|| "public".to_string()),
-        ))
-        .unwrap_or_default();
-        let online_open_mode: OnlineOpenMode = serde_json::from_value(serde_json::Value::String(
-            self.online_open_mode
-                .clone()
-                .unwrap_or_else(|| "auto_on_full".to_string()),
-        ))
-        .unwrap_or_default();
+        let event_id = self.id.as_deref().unwrap_or("<unknown>");
+        let status = parse_enum_column(
+            event_id,
+            "status",
+            self.status.as_deref(),
+            EventStatus::Draft,
+            // A corrupt status keeps the event out of every listing.
+            EventStatus::Draft,
+        );
+        let escrow_status = parse_enum_column(
+            event_id,
+            "escrow_status",
+            self.escrow_status.as_deref(),
+            EscrowStatus::None,
+            // Treat a corrupt escrow status as live: `is_active()` then blocks
+            // archiving, deleting and repointing an escrow that may still hold
+            // funds. Degrading to `None` would unlock all three.
+            EscrowStatus::Initialized,
+        );
+        let event_format = parse_enum_column(
+            event_id,
+            "event_format",
+            self.event_format.as_deref(),
+            EventFormat::InPerson,
+            EventFormat::InPerson,
+        );
+        let visibility = parse_enum_column(
+            event_id,
+            "visibility",
+            self.visibility.as_deref(),
+            // NULL predates migration 0016; those events were all public.
+            EventVisibility::Public,
+            // A corrupt visibility must not publish a private event.
+            EventVisibility::Private,
+        );
+        let online_open_mode = parse_enum_column(
+            event_id,
+            "online_open_mode",
+            self.online_open_mode.as_deref(),
+            OnlineOpenMode::AutoOnFull,
+            // A corrupt mode must not fling online registration open; `Manual`
+            // waits for the organizer.
+            OnlineOpenMode::Manual,
+        );
 
         let organizer_emails: Vec<String> = self
             .organizer_emails
@@ -230,8 +289,11 @@ pub async fn get_form_config(
     db: &D1Database,
     event_id: &str,
 ) -> Result<Option<event_checkin_domain::models::event::RegistrationFormConfig>, String> {
-    let sql = format!("SELECT form_config FROM events WHERE id = '{event_id}' LIMIT 1");
-    let bound = db.prepare(&sql);
+    let sql = "SELECT form_config FROM events WHERE id = ? LIMIT 1";
+    let bound = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 get_form_config bind: {e:?}"))?;
 
     // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
     let raw_first = JsFuture::from(
@@ -281,10 +343,11 @@ pub async fn save_form_config(
 ) -> Result<(), String> {
     let json_str = serde_json::to_string(config)
         .map_err(|e| format!("failed to serialize form config: {e:?}"))?;
-    // Escape single quotes for SQL
-    let json_escaped = json_str.replace('\'', "''");
-    let sql = format!("UPDATE events SET form_config = '{json_escaped}' WHERE id = '{event_id}'");
-    db.exec(&sql)
+    let args = [D1Type::Text(&json_str), D1Type::Text(event_id)];
+    db.prepare("UPDATE events SET form_config = ? WHERE id = ?")
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 save_form_config bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 save_form_config: {e:?}"))?;
     Ok(())
@@ -305,8 +368,11 @@ pub async fn set_recap_published_flag(
     published: bool,
 ) -> Result<(), String> {
     let value = if published { 1 } else { 0 };
-    let sql = format!("UPDATE events SET recap_published = {value} WHERE id = '{event_id}'");
-    db.exec(&sql)
+    let sql = format!("UPDATE events SET recap_published = {value} WHERE id = ?");
+    db.prepare(&sql)
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 set_recap_published_flag bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 set_recap_published_flag: {e:?}"))?;
     Ok(())
@@ -332,9 +398,12 @@ pub async fn set_post_event_registration(
     };
     let sql = format!(
         "UPDATE events SET post_event_registration_open = {open_val}, \
-         post_event_registration_until_ms = {until_sql} WHERE id = '{event_id}'"
+         post_event_registration_until_ms = {until_sql} WHERE id = ?"
     );
-    db.exec(&sql)
+    db.prepare(&sql)
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 set_post_event_registration bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 set_post_event_registration: {e:?}"))?;
     Ok(())
@@ -404,20 +473,30 @@ pub async fn list_past_events_raw(db: &D1Database) -> Result<Vec<serde_json::Val
     Ok(rows
         .into_iter()
         .map(|r| {
-            let status: EventStatus = serde_json::from_value(serde_json::Value::String(
-                r.status.clone().unwrap_or_default(),
-            ))
-            .unwrap_or_default();
-            let event_format: EventFormat = serde_json::from_value(serde_json::Value::String(
-                r.event_format.clone().unwrap_or_default(),
-            ))
-            .unwrap_or_default();
-            let visibility: EventVisibility = serde_json::from_value(serde_json::Value::String(
-                r.visibility
-                    .clone()
-                    .unwrap_or_else(|| "public".to_string()),
-            ))
-            .unwrap_or_default();
+            let status = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "status",
+                r.status.as_deref(),
+                EventStatus::Draft,
+                EventStatus::Draft,
+            );
+            let event_format = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "event_format",
+                r.event_format.as_deref(),
+                EventFormat::InPerson,
+                EventFormat::InPerson,
+            );
+            let visibility = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "visibility",
+                r.visibility.as_deref(),
+                // NULL predates migration 0016; those events were all public.
+                EventVisibility::Public,
+                // This listing is the landing page's source — a corrupt
+                // visibility must not put a private event on it.
+                EventVisibility::Private,
+            );
 
             serde_json::json!({
                 "id": r.id.unwrap_or_default(),
@@ -460,6 +539,8 @@ pub async fn upsert_event(
     let event_format_str = config.event_format.as_str();
     let visibility_str = config.visibility.as_str();
     let online_open_mode_str = config.online_open_mode.as_str();
+    let community_links_json =
+        serde_json::to_string(&config.community_links).unwrap_or_else(|_| "[]".to_string());
 
     let sql = format!(
         "INSERT INTO events (\
@@ -481,25 +562,25 @@ pub async fn upsert_event(
          online_open_mode, online_registration_open, \
          deposit_deadline_hours, updated_by, dev_profile_enabled, community_links, \
          calendar_subscribe_url, poster_url, recap_published) \
-         VALUES ('{id}', '{name}', '{slug}', '{status}', '{event_format}', \
+         VALUES (?, ?, ?, ?, ?, \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
-         '{escrow_status}', '{escrow_pda}', '{location}', '{tagline}', \
-         '{organizer_emails}', '{organization_id}', '{video_url}', \
-         '{sheet_id}', '{sheet_name}', '{staff_sheet_name}', \
-         {capacity}, {total_attendees}, '{created_at}', '{updated_at}', \
-         '{link}', {time_tba}, {quiz_enabled}, \
-         '{nft_collection_mint}', '{nft_metadata_uri}', '{nft_image_url}', \
-         '{nft_name_template}', '{nft_symbol}', '{nft_description_template}', \
-         '{merkle_tree}', '{staff_emails}', '{claim_base_url}', \
-         '{promptpay_id}', '{escrow_address}', '{organizer_wallet}', \
+         ?, ?, ?, ?, \
+         ?, ?, ?, \
+         ?, ?, ?, \
+         {capacity}, {total_attendees}, ?, ?, \
+         ?, {time_tba}, {quiz_enabled}, \
+         ?, ?, ?, \
+         ?, ?, ?, \
+         ?, ?, ?, \
+         ?, ?, ?, \
          {on_chain_event_id}, {refund_deadline_hours}, {max_refundable_deposits}, \
-         '{description}', '{visibility}', \
+         ?, ?, \
          {require_contact_info}, {require_photo_consent}, \
          {in_person_capacity}, {online_capacity}, \
-         '{online_open_mode}', {online_registration_open}, \
-         {deposit_deadline_hours}, '{updated_by}', {dev_profile_enabled}, '{community_links}', \
-         '{calendar_subscribe_url}', '{poster_url}', {recap_published}) \
+         ?, {online_registration_open}, \
+         {deposit_deadline_hours}, ?, {dev_profile_enabled}, ?, \
+         ?, ?, {recap_published}) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -547,70 +628,76 @@ pub async fn upsert_event(
          calendar_subscribe_url = excluded.calendar_subscribe_url, \
          poster_url = excluded.poster_url, \
          recap_published = excluded.recap_published",
-        id = config.id,
-        name = config.name.replace('\'', "''"),
-        slug = config.slug,
-        status = status_str,
-        event_format = event_format_str,
         event_start_ms = config.event_start_ms,
         event_end_ms = config.event_end_ms,
         deposit_enabled = config.deposit_enabled as i32,
         deposit_amount_usdc = config.deposit_amount_usdc,
         deposit_amount_thb = config.deposit_amount_thb,
-        escrow_status = escrow_status_str,
-        escrow_pda = config.escrow_address,
-        location = config.location.replace('\'', "''"),
-        tagline = config.tagline.replace('\'', "''"),
-        organizer_emails = organizer_emails.replace('\'', "''"),
-        organization_id = config.organization_id,
-        video_url = config.video_url,
-        sheet_id = config.sheet_id,
-        sheet_name = config.sheet_name,
-        staff_sheet_name = config.staff_sheet_name,
         capacity = config.in_person_capacity.unwrap_or(0),
         total_attendees = 0,
-        created_at = config.created_at,
-        updated_at = config.updated_at,
-        link = config.link.replace('\'', "''"),
         time_tba = config.time_tba as i32,
         quiz_enabled = config.quiz_enabled as i32,
-        nft_collection_mint = config.nft_collection_mint,
-        nft_metadata_uri = config.nft_metadata_uri,
-        nft_image_url = config.nft_image_url,
-        nft_name_template = config.nft_name_template.replace('\'', "''"),
-        nft_symbol = config.nft_symbol,
-        nft_description_template = config.nft_description_template.replace('\'', "''"),
-        merkle_tree = config.merkle_tree,
-        staff_emails = staff_emails.replace('\'', "''"),
-        claim_base_url = config.claim_base_url,
-        promptpay_id = config.promptpay_id,
-        escrow_address = config.escrow_address,
-        organizer_wallet = config.organizer_wallet,
         on_chain_event_id = config.on_chain_event_id,
         refund_deadline_hours = config.refund_deadline_hours,
         max_refundable_deposits = config.max_refundable_deposits,
-        description = config.description.replace('\'', "''"),
-        visibility = visibility_str,
         require_contact_info = config.require_contact_info as i32,
         require_photo_consent = config.require_photo_consent as i32,
         in_person_capacity = config.in_person_capacity.map(|v| v as i64).unwrap_or(-1),
         online_capacity = config.online_capacity.map(|v| v as i64).unwrap_or(-1),
-        online_open_mode = online_open_mode_str,
         online_registration_open = config.online_registration_open as i32,
         deposit_deadline_hours = config
             .deposit_deadline_hours
             .map(|v| v as i64)
             .unwrap_or(-1),
-        updated_by = config.updated_by,
         dev_profile_enabled = config.dev_profile_enabled as i32,
-        community_links =
-            serde_json::to_string(&config.community_links).unwrap_or_else(|_| "[]".to_string()),
-        calendar_subscribe_url = config.calendar_subscribe_url,
-        poster_url = config.poster_url,
         recap_published = config.recap_published as i32,
     );
 
-    db.exec(&sql)
+    // Order MUST match the `?` placeholders in the VALUES clause above.
+    let args = [
+        D1Type::Text(&config.id),
+        D1Type::Text(&config.name),
+        D1Type::Text(&config.slug),
+        D1Type::Text(status_str),
+        D1Type::Text(event_format_str),
+        D1Type::Text(escrow_status_str),
+        D1Type::Text(&config.escrow_address), // escrow_pda
+        D1Type::Text(&config.location),
+        D1Type::Text(&config.tagline),
+        D1Type::Text(&organizer_emails),
+        D1Type::Text(&config.organization_id),
+        D1Type::Text(&config.video_url),
+        D1Type::Text(&config.sheet_id),
+        D1Type::Text(&config.sheet_name),
+        D1Type::Text(&config.staff_sheet_name),
+        D1Type::Text(&config.created_at),
+        D1Type::Text(&config.updated_at),
+        D1Type::Text(&config.link),
+        D1Type::Text(&config.nft_collection_mint),
+        D1Type::Text(&config.nft_metadata_uri),
+        D1Type::Text(&config.nft_image_url),
+        D1Type::Text(&config.nft_name_template),
+        D1Type::Text(&config.nft_symbol),
+        D1Type::Text(&config.nft_description_template),
+        D1Type::Text(&config.merkle_tree),
+        D1Type::Text(&staff_emails),
+        D1Type::Text(&config.claim_base_url),
+        D1Type::Text(&config.promptpay_id),
+        D1Type::Text(&config.escrow_address),
+        D1Type::Text(&config.organizer_wallet),
+        D1Type::Text(&config.description),
+        D1Type::Text(visibility_str),
+        D1Type::Text(online_open_mode_str),
+        D1Type::Text(&config.updated_by),
+        D1Type::Text(&community_links_json),
+        D1Type::Text(&config.calendar_subscribe_url),
+        D1Type::Text(&config.poster_url),
+    ];
+
+    db.prepare(&sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 upsert_event bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 upsert_event: {e:?}"))?;
 
@@ -619,8 +706,10 @@ pub async fn upsert_event(
 
 /// Delete an event row from D1.
 pub async fn delete_event(db: &D1Database, event_id: &str) -> Result<(), String> {
-    let sql = format!("DELETE FROM events WHERE id = '{event_id}'");
-    db.exec(&sql)
+    db.prepare("DELETE FROM events WHERE id = ?")
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 delete_event bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 delete_event: {e:?}"))?;
     Ok(())
@@ -642,11 +731,19 @@ pub async fn get_event(db: &D1Database, event_id: &str) -> Result<Option<D1Event
 /// with `.unwrap()` — panics on certain nullable column types.
 async fn get_event_raw(
     db: &D1Database,
-    column: &str,
+    column: &'static str,
     value: &str,
 ) -> Result<Option<D1EventRow>, String> {
-    let sql = format!("SELECT * FROM events WHERE {column} = '{value}' LIMIT 1");
-    let stmt = db.prepare(&sql);
+    // `column` is `&'static str`, so only a compile-time literal ("id" / "slug")
+    // can reach the SQL — SQLite cannot parameterise an identifier, and the type
+    // is what makes the interpolation safe. `value` comes from a URL path
+    // segment and is bound.
+    let sql = format!("SELECT * FROM events WHERE {column} = ? LIMIT 1");
+    let args = [D1Type::Text(value)];
+    let stmt = db
+        .prepare(&sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 get_event_raw bind: {e:?}"))?;
     let raw_first = JsFuture::from(
         stmt.inner()
             .first(None)
@@ -794,20 +891,30 @@ pub async fn list_public_events_raw(db: &D1Database) -> Result<Vec<serde_json::V
     Ok(rows
         .into_iter()
         .map(|r| {
-            let status: EventStatus = serde_json::from_value(serde_json::Value::String(
-                r.status.clone().unwrap_or_default(),
-            ))
-            .unwrap_or_default();
-            let event_format: EventFormat = serde_json::from_value(serde_json::Value::String(
-                r.event_format.clone().unwrap_or_default(),
-            ))
-            .unwrap_or_default();
-            let visibility: EventVisibility = serde_json::from_value(serde_json::Value::String(
-                r.visibility
-                    .clone()
-                    .unwrap_or_else(|| "public".to_string()),
-            ))
-            .unwrap_or_default();
+            let status = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "status",
+                r.status.as_deref(),
+                EventStatus::Draft,
+                EventStatus::Draft,
+            );
+            let event_format = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "event_format",
+                r.event_format.as_deref(),
+                EventFormat::InPerson,
+                EventFormat::InPerson,
+            );
+            let visibility = parse_enum_column(
+                r.id.as_deref().unwrap_or("<unknown>"),
+                "visibility",
+                r.visibility.as_deref(),
+                // NULL predates migration 0016; those events were all public.
+                EventVisibility::Public,
+                // This listing is the landing page's source — a corrupt
+                // visibility must not put a private event on it.
+                EventVisibility::Private,
+            );
 
             serde_json::json!({
                 "id": r.id.unwrap_or_default(),

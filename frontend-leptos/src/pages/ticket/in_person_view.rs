@@ -7,6 +7,7 @@ use wasm_bindgen::prelude::*;
 use super::access_logistics::access_logistics_section;
 use super::action_cards::*;
 use super::calendar_links::CalendarLinks;
+use super::credit_chip::CreditBalanceChip;
 use super::event_context::EventContext;
 use super::nft_badge::NftClaimedBadge;
 use super::qr_section::QrSection;
@@ -232,6 +233,15 @@ pub fn InPersonView(
             </div>
 
             // ── Status section: deposit/refund/claim action cards ──
+            // Rolling deposit-credit balance (Issue #061 Phase 1 polish). The chip
+            // fetches the attendee's own balance on mount and renders nothing when
+            // it is zero, so attendees without credit see no change. Gated on
+            // check-in because that is when holding a deposit becomes possible.
+            {if is_checked_in {
+                view! { <CreditBalanceChip /> }.into_any()
+            } else {
+                view! { <div></div> }.into_any()
+            }}
             // Deposit status
             {if let Some(ref dep) = deposit_info {
                 view! {

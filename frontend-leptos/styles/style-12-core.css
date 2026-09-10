@@ -1,0 +1,483 @@
+/* === Image Lightbox (shared click-to-fullscreen image overlay) ===
+ * Used by: event poster, deposit slip preview, ticket QR fullscreen.
+ * Driven by `ImageLightbox` / `LightboxImage` in components.rs.
+ */
+/* Always rendered in the DOM; visibility is toggled via the `.is-visible`
+ * class so the opacity transition runs on both open AND close (display:none
+ * would yank the element out of the render tree and skip the fade-out). */
+.lightbox-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+        opacity 200ms ease,
+        visibility 200ms ease;
+}
+.lightbox-overlay.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+.lightbox-card {
+    cursor: default;
+    background: #fff;
+    border-radius: var(--radius);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    /* Match the image's natural proportions (capped by viewport) so the card
+       hugs the image rather than letting it overflow. `overflow: hidden` is a
+       safety net — if an edge case miscalculation happens, the image clips to
+       the card edge instead of bleeding outside. */
+    max-width: min(90vw, 85vh);
+    max-height: 90vh;
+    overflow: hidden;
+    transform: scale(0.96);
+    transition: transform 200ms ease;
+}
+.lightbox-overlay.is-visible .lightbox-card {
+    transform: scale(1);
+}
+/* Default sizing: large image, aspect ratio preserved. Posters & slips.
+ * Fades in slightly after the backdrop so the layering feels deliberate.
+ *
+ * The two `min-*: 0` rules are the critical fix for the overflow bug:
+ * `.lightbox-card` is `display: flex; flex-direction: column`, so the `<img>`
+ * is a flex item and defaults to `min-width: auto` / `min-height: auto` —
+ * which equals the image's intrinsic pixel size (e.g. 1080x1920 for a poster).
+ * Per CSS spec, `min-width` WINS over `max-width` when they conflict, so
+ * `max-width: 100%` was being ignored and the image overflowed the card.
+ * Setting `min-width: 0; min-height: 0` lets the image actually shrink. */
+.lightbox-img {
+    display: block;
+    min-width: 0;
+    min-height: 0;
+    max-width: 100%;
+    max-height: calc(90vh - 8rem);
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+    opacity: 0;
+    transition: opacity 200ms ease 40ms;
+}
+.lightbox-overlay.is-visible .lightbox-img {
+    opacity: 1;
+}
+.lightbox-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    /* When caption is empty, header collapses so the image gets the space. */
+    min-height: 1.5rem;
+}
+.lightbox-caption {
+    font-weight: 700;
+    color: #111;
+    font-size: 1.1rem;
+}
+.lightbox-caption:empty {
+    display: none;
+}
+.lightbox-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 0 0.25rem;
+}
+.lightbox-close:hover {
+    color: #111;
+}
+
+/* Square sizing: QR codes stay scannable rather than filling the viewport. */
+.lightbox-img--square {
+    width: min(70vw, 70vh);
+    height: min(70vw, 70vh);
+    max-width: none;
+    max-height: none;
+    object-fit: fill;
+}
+.lightbox-hint {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+/* --- Community Links --- */
+.ticket-action-card--community {
+    border-left-color: var(--accent);
+    background: linear-gradient(
+        135deg,
+        var(--accent-bg) 0%,
+        var(--bg-card) 100%
+    );
+}
+
+.community-links-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.community-links-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.community-links-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.community-link-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition:
+        background 0.15s,
+        transform 0.1s;
+}
+
+.community-link-item:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.community-link-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.community-link-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Access & Logistics card (in-person ticket only) — guide links tagged
+   with platform "guide": building access, ID exchange, transportation.
+   Builds on the ticket-action-card--info base class. */
+
+.access-logistics-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.access-logistics-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.access-logistics-title .icon-sm {
+    color: var(--info);
+    flex-shrink: 0;
+}
+
+.access-logistics-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.access-logistics-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.access-logistics-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition:
+        background 0.15s,
+        transform 0.1s;
+}
+
+.access-logistics-item:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.access-logistics-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.access-logistics-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--info);
+    flex-shrink: 0;
+}
+
+/* Public event page community links */
+.pe-community-title-icon {
+    display: inline-flex;
+    vertical-align: middle;
+    margin-right: 0.25rem;
+    color: var(--accent);
+}
+
+.pe-community-links-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pe-community-link-item {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.625rem 0.875rem;
+    border-radius: var(--radius);
+    background: var(--bg-secondary);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition:
+        background 0.15s,
+        transform 0.1s,
+        box-shadow 0.15s;
+}
+
+.pe-community-link-item:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.pe-community-link-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+/* Brand colors per platform */
+.pe-cl-discord {
+    color: #5865f2;
+}
+.pe-cl-telegram {
+    color: #26a5e4;
+}
+.pe-cl-x {
+    color: var(--text-primary);
+}
+.pe-cl-facebook {
+    color: #1877f2;
+}
+.pe-cl-line {
+    color: #06c755;
+}
+.pe-cl-website {
+    color: var(--accent);
+}
+
+.pe-community-link-label {
+    flex: 1;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.pe-community-link-arrow {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: transform 0.15s;
+}
+
+.pe-community-link-item:hover .pe-community-link-arrow {
+    transform: translateX(2px);
+    color: var(--accent);
+}
+
+/* Admin form — community link row */
+.community-link-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.community-link-platform {
+    width: 120px !important;
+    flex-shrink: 0;
+}
+
+.community-link-url {
+    flex: 1;
+    min-width: 200px;
+}
+
+.community-link-label {
+    width: 150px;
+    flex-shrink: 0;
+}
+
+.community-link-remove {
+    flex-shrink: 0;
+    padding: 0.25rem 0.5rem !important;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.community-link-add {
+    margin-top: 0.25rem;
+}
+
+@media (max-width: 600px) {
+    .community-link-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .community-link-platform,
+    .community-link-url,
+    .community-link-label {
+        width: 100% !important;
+        min-width: unset;
+    }
+}
+
+/* ===== Bank Dropdown (deposit page) ===== */
+.bank-dropdown {
+    position: relative;
+}
+.bank-dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--card-bg, #1a1a2e);
+    border: 1px solid var(--border);
+    border-radius: 0 0 0.5rem 0.5rem;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.bank-dropdown-item {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+}
+.bank-dropdown-item:last-child {
+    border-bottom: none;
+}
+.bank-dropdown-item:hover {
+    background: rgba(255, 92, 57, 0.15);
+}
+.bank-dropdown-name {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* Slip upload hint below file input */
+.thb-slip-hint {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    margin: 0.25rem 0 0.5rem;
+}
+
+/* Small centered disclaimer under upload button */
+.thb-upload-disclaimer {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-align: center;
+    margin-top: 0.25rem;
+    margin-bottom: 0;
+}
+
+.thb-success-redirect {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin-top: 0.75rem;
+}
+
+/* ===== End THB Payment Flow ===== */
+
+/* Quiz session grouping */
+.quiz-preview-session-header {
+    margin: 1rem 0 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 92, 57, 0.08);
+    border-left: 3px solid var(--accent, #ff5c39);
+    border-radius: var(--radius, 8px);
+}
+
+.quiz-preview-session-title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent, #ff5c39);
+}
+
+/* Claim page session header */
+.claim-quiz-session {
+    margin: 1.25rem 0 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 92, 57, 0.08);
+    border-left: 3px solid var(--accent, #ff5c39);
+    border-radius: var(--radius, 8px);
+}
+
+.claim-quiz-session-title {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--accent, #ff5c39);
+}
+
+/* ===== iOS Auto-Zoom Prevention ===== */
+/* iOS Safari auto-zooms into inputs with font-size < 16px and never zooms back out.
+   This global rule ensures all form elements use 16px minimum on touch devices. */
+@supports (-webkit-touch-callout: none) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+            [type="submit"]
+        ):not([type="button"]):not([type="reset"]):not([type="hidden"]),
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
+

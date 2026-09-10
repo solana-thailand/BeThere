@@ -4,15 +4,18 @@
 //! equivalent: **the escrow lifecycle allowlist must be pinned and drift-proof**.
 //!
 //! The Phase 2.4 type-state audit (handover 116) found that the runtime
-//! transition allowlist for `EscrowStatus` lives in TWO independent copies
-//! inside `worker/src/event_store/write.rs`:
+//! transition allowlist for `EscrowStatus` lived in TWO independent copies —
+//! one in the async, DB-backed `update_event`, one in the pure `apply_update`.
+//! They have since been collapsed: `update_event` loads the config, calls
+//! `apply_update`, and persists. So Layer 2 below pins the *opposite* property
+//! to the one this file was written for — the allowlist must appear exactly
+//! ONCE, and a reintroduced second copy fails the guard.
 //!
-//!   1. `update_event` (async, DB-backed) — called by escrow-init confirmation,
-//!      poster upload/delete handlers.
-//!   2. `apply_update` (pure, no IO) — called by the main `PUT /events/{id}`
-//!      handler, which is the primary UI-driven path for escrow status changes.
+//! The allowlist now lives in `worker/src/event_store/write/update.rs` (issue
+//! #052 split the old single `write.rs` into a directory); `WRITE_RS_REL` is
+//! the single place that path is written down.
 //!
-//! Both copies enumerate the same 5 legal transitions:
+//! The allowlist enumerates 5 legal transitions:
 //!
 //!   None → Initialized
 //!   Initialized → Deactivated
@@ -35,33 +38,41 @@
 //!
 //! ## Layer 2 — Source-scan drift guard
 //!
-//! Reads `worker/src/event_store/write.rs` as raw text and asserts that:
-//!   - Each of the 5 canonical arm-strings appears exactly 2× (once per
-//!     function copy). If someone edits one copy but not the other, the
-//!     count drops to 1 and the guard fires.
-//!   - The total `(EscrowStatus::` arm-pattern count is exactly 10
-//!     (5 arms × 2 functions). If someone adds a 6th transition to either
-//!     copy, the count rises to 11+ and the guard fires.
-//!   - The error format string appears exactly 2× (once per function).
+//! Reads the allowlist's source file as raw text and asserts that:
+//!   - Each of the 5 canonical arm-strings appears exactly 1×. A second copy of
+//!     the allowlist, or an edited arm, moves the count off 1 and fires.
+//!   - The total `(EscrowStatus::` arm-pattern count is exactly 5 — one per
+//!     legal transition. A 6th transition raises it and fires.
+//!   - The error format string appears exactly 1×.
+//!
+//! ## Layer 3 — Writer-set guard
+//!
+//! Layers 1 and 2 pin the allowlist but not *who may bypass it*. Every event
+//! write persists a whole `EventConfig` through `save_event_config` / the D1
+//! `upsert_event`, so a handler that loads a config, assigns `escrow_status`
+//! and saves would skip `apply_update` entirely with both layers above still
+//! green. Layer 3 walks `worker/src` and fails on any `.escrow_status =`
+//! assignment outside the licensed file. (`==` comparisons and the SQL
+//! `escrow_status = ?` bind text are excluded — neither is a transition.)
 //!
 //! ## What this guard deliberately allows
 //!
-//! - Adding a new `EscrowStatus` variant — as long as BOTH function copies
-//!   and `LEGAL_TRANSITIONS` in this file are updated in the same diff.
-//! - Changing the error message wording — as long as both copies are updated
-//!   and the error-format count stays at 2.
+//! - Adding a new `EscrowStatus` variant — as long as the allowlist and
+//!   `LEGAL_TRANSITIONS` in this file are updated in the same diff.
+//! - Changing the error message wording — as long as this file is updated too.
 //!
 //! ## What this guard deliberately forbids
 //!
-//! - Silent drift between the two copies of the allowlist.
-//! - Adding a transition to one copy without the other.
+//! - Reintroducing a second copy of the allowlist (the original drift risk).
 //! - Changing the allowlist without updating the canonical list in this file.
+//! - Any writer of `escrow_status` other than `apply_update`.
 //!
 //! ## Audit baseline (2026-06-27)
 //!
-//! The Phase 2.4 audit confirmed: 5 legal transitions, 20 illegal, exact
-//! error format with U+2192 arrow, two copies in write.rs. This test pins
-//! all of those properties.
+//! The Phase 2.4 audit confirmed: 5 legal transitions, 20 illegal, exact error
+//! format with U+2192 arrow, and — at the time — two copies of the allowlist.
+//! This test pins all of those properties, with the copy count now pinned at
+//! one (plan 022 §7).
 //!
 //! ## Run
 //!
@@ -93,7 +104,7 @@ use event_checkin_worker::event_store::apply_update;
 /// Both the behavioral test (Layer 1) and the source-scan drift guard
 /// (Layer 2) derive their expectations from this constant. If you add or
 /// remove a transition, update this list AND both copies in
-/// `worker/src/event_store/write.rs`.
+/// the allowlist's source file (see `WRITE_RS_REL`).
 const LEGAL_TRANSITIONS: &[(EscrowStatus, EscrowStatus)] = &[
     (EscrowStatus::None, EscrowStatus::Initialized),
     (EscrowStatus::Initialized, EscrowStatus::Deactivated),
@@ -118,7 +129,7 @@ const ALL_STATUSES: &[EscrowStatus] = &[
 // ================================================================================================
 
 /// Render an `EscrowStatus` variant as it appears in the `matches!` arms of
-/// `write.rs` — e.g., `EscrowStatus::None`.
+/// the allowlist source — e.g., `EscrowStatus::None`.
 ///
 /// Used to construct arm-strings for the source-scan drift guard. Takes a
 /// reference because `EscrowStatus` is `Clone` but not `Copy`; the const
@@ -268,40 +279,73 @@ fn illegal_transition_leaves_config_unchanged() {
 /// Root of the worker crate, resolved from `CARGO_MANIFEST_DIR`.
 const WORKER_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"));
 
-/// Relative path to the file containing both allowlist copies.
+/// Relative path to the file containing the allowlist.
 const WRITE_RS_REL: &str = "src/event_store/write/update.rs";
 
-/// Read `worker/src/event_store/write.rs` as a string.
+/// Read the allowlist's source file (`WRITE_RS_REL`) as a string.
 fn read_write_rs() -> String {
     let path = Path::new(WORKER_ROOT).join(WRITE_RS_REL);
     fs::read_to_string(&path).unwrap_or_else(|e| panic!("failed to read {}: {e}", path.display()))
 }
 
 #[test]
-fn each_canonical_arm_appears_exactly_twice_in_source() {
-    // Each of the 5 legal arm-strings must appear exactly 2× in write.rs —
-    // once in `update_event` and once in `apply_update`. If someone edits
-    // one copy but not the other, the count drops to 1 and this fires.
+fn each_canonical_arm_appears_exactly_once_in_source() {
+    // The allowlist has one home: `apply_update`. A count of 2 means a second
+    // copy was reintroduced (the shape this file was written for); a count of
+    // 0 means an arm was edited or removed.
     let source = read_write_rs();
 
     for (from, to) in LEGAL_TRANSITIONS {
         let arm = format!("({}, {})", arm_str(from), arm_str(to));
         let count = source.matches(&arm).count();
         assert_eq!(
-            count, 2,
-            "arm `{arm}` must appear exactly 2× in write.rs \
-             (once in update_event, once in apply_update); found {count}. \
-             If you added/removed a transition, update LEGAL_TRANSITIONS in \
-             this test AND both copies in write.rs."
+            count, 1,
+            "arm `{arm}` must appear exactly 1× in write/update.rs (in apply_update); \
+             found {count}. More than one means the allowlist was duplicated \
+             again; none means you added/removed a transition, in which case \
+             update LEGAL_TRANSITIONS in this test to match."
         );
     }
 }
 
 #[test]
-fn total_arm_count_is_exactly_ten() {
-    // 5 legal arms × 2 function copies = 10 total `(EscrowStatus::`
-    // occurrences. If someone adds a 6th transition to either copy (or
-    // removes one), this count changes and the guard fires.
+fn escrow_init_confirm_rejects_a_repoint_with_a_clear_error() {
+    // `Initialized → Initialized` is illegal by design (repointing a live escrow
+    // strands the deposits held at the old address). The confirm handler must
+    // therefore catch that case itself and explain it — falling through to
+    // `update_event` turns a legitimate operator state conflict into an opaque
+    // 500 "failed to persist escrow state".
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/handlers/deposit/escrow/status.rs");
+    let src = fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+
+    let guard_at = src
+        .find("event.escrow_status == EscrowStatus::Initialized && !already_persisted")
+        .expect(
+            "confirm_escrow_init must reject a repoint explicitly; without it the illegal              self-transition surfaces as a 500 with no recovery instructions",
+        );
+    let persist_at = src
+        .find("event_store::update_event(")
+        .expect("confirm_escrow_init must persist through update_event");
+    assert!(
+        guard_at < persist_at,
+        "the repoint guard must run BEFORE update_event, or the allowlist rejects it first"
+    );
+    assert!(
+        src[guard_at..persist_at].contains("AppError::Validation"),
+        "a repoint is an operator state conflict, not a server fault — it must be a \
+         Validation error, not an Internal one"
+    );
+    assert!(
+        src[guard_at..persist_at].contains("Deactivated"),
+        "the error must name the wind-down path (Initialized → Deactivated → Closed → \
+         None); a refusal with no recovery just moves the confusion"
+    );
+}
+
+#[test]
+fn total_arm_count_matches_the_allowlist() {
+    // One `(EscrowStatus::` occurrence per legal transition. Adding a 6th
+    // transition, or duplicating the `matches!`, changes this count.
     //
     // The pattern `(EscrowStatus::` is specific enough that it only matches
     // the `matches!` arm tuples — it does not match the standalone
@@ -311,26 +355,26 @@ fn total_arm_count_is_exactly_ten() {
     let total = source.matches("(EscrowStatus::").count();
 
     assert_eq!(
-        total, 10,
-        "expected exactly 10 `(EscrowStatus::` arm-pattern occurrences in \
-         write.rs (5 legal arms × 2 function copies); found {total}. \
-         A change here means a transition was added or removed from one or \
-         both copies. Update LEGAL_TRANSITIONS in this test to match."
+        total,
+        LEGAL_TRANSITIONS.len(),
+        "expected one `(EscrowStatus::` arm-pattern occurrence per legal \
+         transition in write/update.rs; found {total}. A change here means a \
+         transition was added or removed, or the allowlist was duplicated. \
+         Update LEGAL_TRANSITIONS in this test to match."
     );
 }
 
 #[test]
-fn error_format_string_appears_exactly_twice_in_source() {
-    // The error format string must appear exactly 2× — once per function.
-    // If someone changes the wording in one copy, the count drops to 1.
+fn error_format_string_appears_exactly_once_in_source() {
+    // One home for the error wording, matching the one home for the allowlist.
     let source = read_write_rs();
     let error_prefix = "invalid escrow status transition:";
     let count = source.matches(error_prefix).count();
 
     assert_eq!(
-        count, 2,
-        "error format string `{error_prefix}` must appear exactly 2× in \
-         write.rs (once in update_event, once in apply_update); found {count}."
+        count, 1,
+        "error format string `{error_prefix}` must appear exactly 1× in \
+         write/update.rs (in apply_update); found {count}."
     );
 }
 
@@ -415,33 +459,103 @@ mod self_tests {
     #[test]
     fn arm_str_format_matches_real_source() {
         // Live injection: verify that arm_str produces text that actually
-        // appears in write.rs. If the source format changes (e.g., someone
+        // appears in write/update.rs. If the source format changes (e.g., someone
         // aliases the import), this catches it.
         let source = read_write_rs();
         let first = &LEGAL_TRANSITIONS[0];
         let first_arm = format!("({}, {})", arm_str(&first.0), arm_str(&first.1));
         assert!(
             source.contains(&first_arm),
-            "arm_str output `{first_arm}` does not appear in write.rs. \
+            "arm_str output `{first_arm}` does not appear in write/update.rs. \
              The arm format may have changed — update arm_str to match."
         );
     }
 
     #[test]
     fn simulated_arm_removal_would_fail_drift_guard() {
-        // Verify the set logic: if one occurrence of an arm is removed from
-        // the source, the count would drop to 1 and the guard would fire.
+        // Verify the set logic: if the arm is removed from the source, the
+        // count drops to 0 and the guard fires.
         let source = read_write_rs();
         let first = &LEGAL_TRANSITIONS[0];
         let arm = format!("({}, {})", arm_str(&first.0), arm_str(&first.1));
 
-        // Simulate removing one occurrence (replace first match with spaces).
+        // Simulate removing the occurrence (replace the match with spaces).
         let simulated = source.replacen(&arm, &" ".repeat(arm.len()), 1);
         let count = simulated.matches(&arm).count();
         assert_eq!(
-            count, 1,
-            "after simulated removal of one occurrence, count must be 1 \
-             (would trigger the drift guard)"
+            count, 0,
+            "after simulated removal, count must be 0 (would trigger the \
+             drift guard)"
         );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Layer 3 — writer-set guard (plan 022 §7)
+// ---------------------------------------------------------------------------
+
+/// The allowlist only protects the transition if `apply_update` is the *only*
+/// place that assigns `escrow_status`. Every event write ultimately persists a
+/// whole `EventConfig` (`save_event_config` / the D1 `upsert_event`), so a
+/// handler that loads a config, mutates the field and saves would bypass the
+/// allowlist entirely while compiling and passing every test above — the
+/// recurring defect shape plan 022 exists for.
+///
+/// Today the only assignment is in `apply_update`; the creation paths
+/// (`write/create.rs`, `write/seed.rs`, `duplicate.rs`) hard-code
+/// `EscrowStatus::None` in a struct literal, which cannot be a transition.
+#[test]
+fn apply_update_is_the_only_writer_of_escrow_status() {
+    const LICENSED: &str = "src/event_store/write/update.rs";
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut offenders = Vec::new();
+    walk(&root.join("src"), &mut |path, contents| {
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if rel == LICENSED {
+            return;
+        }
+        for line in contents.lines() {
+            let l = line.trim_start();
+            // `==` is a comparison, not a write; the SQL `escrow_status =
+            // excluded.escrow_status` has no leading dot on the left-hand side.
+            if l.starts_with("//") {
+                continue;
+            }
+            if let Some(rest) = l.split(".escrow_status =").nth(1)
+                && !rest.starts_with('=')
+            {
+                offenders.push(format!("{rel}: {}", l.trim()));
+            }
+        }
+    });
+
+    assert!(
+        offenders.is_empty(),
+        "these sites assign `escrow_status` outside `apply_update`, so they \
+         bypass the 5-transition allowlist while still persisting through \
+         `save_event_config` / `upsert_event`: {offenders:?}"
+    );
+}
+
+fn walk(dir: &Path, f: &mut impl FnMut(&Path, &str)) {
+    for entry in std::fs::read_dir(dir)
+        .expect("worker/src must be readable")
+        .flatten()
+    {
+        let path = entry.path();
+        match path.is_dir() {
+            true => walk(&path, f),
+            false if path.extension().is_some_and(|e| e == "rs") => {
+                let contents =
+                    std::fs::read_to_string(&path).expect("source file must be readable");
+                f(&path, &contents);
+            }
+            false => {}
+        }
     }
 }

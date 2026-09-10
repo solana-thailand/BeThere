@@ -53,7 +53,10 @@ async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error::WalletResu
     }
 }
 
-async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
+async fn sign_and_send_tx_js(
+    wallet_name: &str,
+    transaction_b64: &str,
+) -> crate::wallet_error::WalletResult {
     if wallet_name.is_empty() {
         log::warn!("[wasm] sign_and_send_tx_js: empty wallet name");
         return crate::wallet_error::WalletResult::UnknownFailure;
@@ -100,8 +103,12 @@ impl EscrowAction {
 
     fn description(&self) -> &'static str {
         match self {
-            Self::InitEscrow => "Create the on-chain escrow PDA and vault ATA. Required before accepting USDC deposits.",
-            Self::Deactivate => "Stops new deposits. Refunds still allowed. Required before closing.",
+            Self::InitEscrow => {
+                "Create the on-chain escrow PDA and vault ATA. Required before accepting USDC deposits."
+            }
+            Self::Deactivate => {
+                "Stops new deposits. Refunds still allowed. Required before closing."
+            }
             Self::ClaimForfeited => "Transfer forfeited deposits (no-shows) to your USDC account.",
             Self::CloseEvent => "Reclaim rent and close the escrow account. Requires empty vault.",
         }
@@ -277,7 +284,8 @@ pub fn AdminEscrow(
     let (action_to_execute, set_action_to_execute) = signal(None::<EscrowAction>);
 
     // Per-action results — persists Solscan links across steps
-    let (action_results, set_action_results) = signal(Vec::<(EscrowAction, Result<String, String>)>::new());
+    let (action_results, set_action_results) =
+        signal(Vec::<(EscrowAction, Result<String, String>)>::new());
 
     // Step ordering — Deactivate first, then Claim (optional) and Close.
     // Claim Forfeited is skippable: if no deposits exist, on-chain close_event
@@ -342,18 +350,26 @@ pub fn AdminEscrow(
                             set_esl.set(true);
                             match detail.event.escrow_status {
                                 api::EscrowStatus::None => {
-                                    log::info!("[admin-escrow] escrow not initialized — showing Init panel");
+                                    log::info!(
+                                        "[admin-escrow] escrow not initialized — showing Init panel"
+                                    );
                                 }
                                 api::EscrowStatus::Initialized => {
-                                    log::info!("[admin-escrow] escrow initialized — lifecycle ready");
+                                    log::info!(
+                                        "[admin-escrow] escrow initialized — lifecycle ready"
+                                    );
                                 }
                                 api::EscrowStatus::Deactivated => {
-                                    log::info!("[admin-escrow] escrow already deactivated on server — pre-completing step 1");
+                                    log::info!(
+                                        "[admin-escrow] escrow already deactivated on server — pre-completing step 1"
+                                    );
                                     set_s1.set(true);
                                     set_ca.update(|v| v.push(EscrowAction::Deactivate));
                                 }
                                 api::EscrowStatus::Closed | api::EscrowStatus::Cancelled => {
-                                    log::info!("[admin-escrow] escrow already closed/cancelled — pre-completing all steps");
+                                    log::info!(
+                                        "[admin-escrow] escrow already closed/cancelled — pre-completing all steps"
+                                    );
                                     set_s1.set(true);
                                     set_s2.set(true);
                                     set_ca.update(|v| {
@@ -365,7 +381,9 @@ pub fn AdminEscrow(
                             }
                         }
                         Err(e) => {
-                            log::warn!("[admin-escrow] failed to fetch event for escrow status: {e}");
+                            log::warn!(
+                                "[admin-escrow] failed to fetch event for escrow status: {e}"
+                            );
                         }
                     }
                 });
@@ -408,12 +426,20 @@ pub fn AdminEscrow(
         leptos::task::spawn_local(async move {
             match connect_wallet_js(&wallet_name_str).await {
                 crate::wallet_error::WalletResult::Success(pk) => {
-                    log::info!("[admin-escrow] wallet connected: {} ({})", wallet_name_str, pk);
+                    log::info!(
+                        "[admin-escrow] wallet connected: {} ({})",
+                        wallet_name_str,
+                        pk
+                    );
                     set_wn.set(wallet_name_str);
                     set_wp.set(pk);
                 }
                 crate::wallet_error::WalletResult::Error(e) => {
-                    components::show_toast(&set_t, &crate::wallet_error::user_friendly_message(&e), ToastType::Error);
+                    components::show_toast(
+                        &set_t,
+                        &crate::wallet_error::user_friendly_message(&e),
+                        ToastType::Error,
+                    );
                 }
                 crate::wallet_error::WalletResult::UnknownFailure => {
                     components::show_toast(&set_t, "Failed to connect wallet", ToastType::Error);
@@ -447,7 +473,9 @@ pub fn AdminEscrow(
             // 1. Build the init TX (vault ATA + create_event in one TX).
             let init_resp = match api::init_escrow(&api::InitEscrowRequest {
                 event_id: eid.clone(),
-            }).await {
+            })
+            .await
+            {
                 Ok(r) => r,
                 Err(e) => {
                     log::error!("[admin-escrow] init_escrow build failed: {e}");
@@ -504,7 +532,8 @@ pub fn AdminEscrow(
                     // 5. Sync on-chain state to server (idempotent).
                     match api::confirm_escrow_init(&api::ConfirmEscrowInitRequest {
                         event_id: eid.clone(),
-                    }).await
+                    })
+                    .await
                     {
                         Ok(confirmed) => {
                             log::info!(
@@ -517,7 +546,11 @@ pub fn AdminEscrow(
                             // Reset lifecycle steps — fresh start at Step 1 (Deactivate).
                             set_s1.set(false);
                             set_ca.update(|v| v.retain(|a| *a == EscrowAction::InitEscrow));
-                            components::show_toast(&set_t, "Escrow initialized!", ToastType::Success);
+                            components::show_toast(
+                                &set_t,
+                                "Escrow initialized!",
+                                ToastType::Success,
+                            );
                         }
                         Err(e) => {
                             log::error!("[admin-escrow] confirm_escrow_init failed: {e}");
@@ -549,7 +582,11 @@ pub fn AdminEscrow(
                             Err("Escrow initialization failed".to_string()),
                         ))
                     });
-                    components::show_toast(&set_t, "Escrow initialization failed", ToastType::Error);
+                    components::show_toast(
+                        &set_t,
+                        "Escrow initialization failed",
+                        ToastType::Error,
+                    );
                 }
             }
             set_init.set(false);
@@ -586,28 +623,31 @@ pub fn AdminEscrow(
                     set_trigger.set(None);
                     return;
                 }
-                EscrowAction::Deactivate => {
-                    api::deactivate_event(&api::DeactivateEventRequest { event_id: eid.clone() })
-                        .await
-                        .map(|r| r.transaction)
-                }
-                EscrowAction::ClaimForfeited => {
-                    api::claim_forfeited(&api::ClaimForfeitedRequest { event_id: eid.clone() })
-                        .await
-                        .map(|r| r.transaction)
-                }
-                EscrowAction::CloseEvent => {
-                    api::close_event(&api::CloseEventRequest { event_id: eid.clone() })
-                        .await
-                        .map(|r| r.transaction)
-                }
+                EscrowAction::Deactivate => api::deactivate_event(&api::DeactivateEventRequest {
+                    event_id: eid.clone(),
+                })
+                .await
+                .map(|r| r.transaction),
+                EscrowAction::ClaimForfeited => api::claim_forfeited(&api::ClaimForfeitedRequest {
+                    event_id: eid.clone(),
+                })
+                .await
+                .map(|r| r.transaction),
+                EscrowAction::CloseEvent => api::close_event(&api::CloseEventRequest {
+                    event_id: eid.clone(),
+                })
+                .await
+                .map(|r| r.transaction),
             };
 
             match tx_result {
                 Ok(transaction_b64) => {
                     // SEC-014: Verify wallet cluster matches expected network.
                     let expected_cluster = crate::utils::get_cluster();
-                    if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await {
+                    if let Err(cluster_err) =
+                        crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster)
+                            .await
+                    {
                         log::error!("[admin-escrow] cluster mismatch: {cluster_err}");
                         set_ar.update(|v| v.push((action, Err(cluster_err.clone()))));
                         return;
@@ -615,20 +655,34 @@ pub fn AdminEscrow(
                     log::info!("[admin-escrow] {} TX built, signing...", action.label());
 
                     // Pre-sign simulation (Solana Foundation Security Checklist).
-                    match crate::pages::escrow_init::simulate_transaction_js(&wn, &transaction_b64).await {
+                    match crate::pages::escrow_init::simulate_transaction_js(&wn, &transaction_b64)
+                        .await
+                    {
                         Ok(sim) if sim.ok => {}
                         Ok(sim) => {
-                            let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
-                            log::error!("[admin-escrow] {} simulation failed: {err_msg}", action.label());
-                            set_ar.update(|v| v.push((action, Err(format!("Transaction would fail: {err_msg}")))));
+                            let err_msg =
+                                sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                            log::error!(
+                                "[admin-escrow] {} simulation failed: {err_msg}",
+                                action.label()
+                            );
+                            set_ar.update(|v| {
+                                v.push((action, Err(format!("Transaction would fail: {err_msg}"))))
+                            });
                             return;
                         }
-                        Err(e) => { log::warn!("[admin-escrow] simulate error (not blocking): {e}"); }
+                        Err(e) => {
+                            log::warn!("[admin-escrow] simulate error (not blocking): {e}");
+                        }
                     }
 
                     match sign_and_send_tx_js(&wn, &transaction_b64).await {
                         crate::wallet_error::WalletResult::Success(signature) => {
-                            log::info!("[admin-escrow] {} TX confirmed: {}", action.label(), signature);
+                            log::info!(
+                                "[admin-escrow] {} TX confirmed: {}",
+                                action.label(),
+                                signature
+                            );
                             set_done.update(|v| v.push(action));
                             match action {
                                 // InitEscrow never reaches here (handled separately).
@@ -650,7 +704,12 @@ pub fn AdminEscrow(
                         }
                         crate::wallet_error::WalletResult::Error(e) => {
                             let msg = crate::wallet_error::user_friendly_message(&e);
-                            log::error!("[admin-escrow] {} TX error: code={:?} msg={}", action.label(), e.code, e.raw_message);
+                            log::error!(
+                                "[admin-escrow] {} TX error: code={:?} msg={}",
+                                action.label(),
+                                e.code,
+                                e.raw_message
+                            );
                             set_ar.update(|v| v.push((action, Err(msg.clone()))));
                             components::show_toast(&set_t, &msg, ToastType::Error);
                         }
