@@ -55,6 +55,8 @@ pub fn EventsPage(
     let (search_query, set_search_query) = signal(String::new());
     let search_input_ref: NodeRef<leptos::html::Input> = NodeRef::new();
     let (refresh_counter, set_refresh_counter) = signal(0u32);
+    let (next_events_cursor, set_next_events_cursor) = signal(None::<String>);
+    let (loading_more_events, set_loading_more_events) = signal(false);
 
     // Ctrl+K keyboard shortcut to focus search
     Effect::new(move |_| {
@@ -80,11 +82,13 @@ pub fn EventsPage(
     Effect::new(move |_| {
         let _ = refresh_counter.get();
         set_loading.set(true);
+        set_next_events_cursor.set(None);
 
         leptos::task::spawn_local(async move {
-            match api::list_events().await {
+            match api::list_events_page(None).await {
                 Ok(data) => {
                     set_events.set(data.events);
+                    set_next_events_cursor.set(data.next_cursor);
                 }
                 Err(e) => {
                     log::error!("[events-page] failed to load events: {e}");
@@ -762,6 +766,36 @@ pub fn EventsPage(
                             }
                         }).collect_view()
                     }}
+                </Show>
+                <Show when=move || next_events_cursor.get().is_some() fallback=|| view! { <div></div> }>
+                    <div class="admin-load-more">
+                        <button
+                            class="btn btn-outline btn-sm"
+                            disabled=move || loading_more_events.get()
+                            on:click=move |_| {
+                                let Some(cursor) = next_events_cursor.get_untracked() else {
+                                    return;
+                                };
+                                set_loading_more_events.set(true);
+                                leptos::task::spawn_local(async move {
+                                    match api::list_events_page(Some(&cursor)).await {
+                                        Ok(data) => {
+                                            set_events.update(|events| events.extend(data.events));
+                                            set_next_events_cursor.set(data.next_cursor);
+                                        }
+                                        Err(e) => components::show_toast(
+                                            &set_toast,
+                                            &format!("Failed to load more events: {e}"),
+                                            components::ToastType::Error,
+                                        ),
+                                    }
+                                    set_loading_more_events.set(false);
+                                });
+                            }
+                        >
+                            {move || if loading_more_events.get() { "Loading..." } else { "Load more events" }}
+                        </button>
+                    </div>
                 </Show>
             </Show>
 

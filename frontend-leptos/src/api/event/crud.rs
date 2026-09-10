@@ -12,9 +12,13 @@ use super::types::*;
 
 // ===== Event Management API functions (admin) =====
 
-/// GET /api/events — list all events.
-pub async fn list_events() -> Result<EventsListData, ApiError> {
-    let response = api_get("/events").await?;
+/// GET /api/events — fetch one bounded page.
+pub async fn list_events_page(cursor: Option<&str>) -> Result<EventsListData, ApiError> {
+    let path = cursor.map_or_else(
+        || "/events".to_string(),
+        |cursor| format!("/events?cursor={}", urlencoding::encode(cursor)),
+    );
+    let response = api_get(&path).await?;
     let result: ApiResponse<EventsListData> =
         response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse events response: {e}"),
@@ -31,6 +35,30 @@ pub async fn list_events() -> Result<EventsListData, ApiError> {
     result.data.ok_or_else(|| ApiError {
         message: "No data in response".to_string(),
         status: 0,
+    })
+}
+
+/// Fetch every event page for selectors that require the complete set.
+pub async fn list_events() -> Result<EventsListData, ApiError> {
+    let mut all = Vec::new();
+    let mut cursor = None;
+    loop {
+        let page = list_events_page(cursor.as_deref()).await?;
+        all.extend(page.events);
+        match page.next_cursor {
+            Some(next) if cursor.as_deref() != Some(next.as_str()) => cursor = Some(next),
+            Some(_) => {
+                return Err(ApiError {
+                    message: "Events API returned a repeated cursor".into(),
+                    status: 0,
+                });
+            }
+            None => break,
+        }
+    }
+    Ok(EventsListData {
+        events: all,
+        next_cursor: None,
     })
 }
 
