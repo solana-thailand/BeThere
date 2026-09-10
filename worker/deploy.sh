@@ -25,7 +25,7 @@
 #   2. If /versions fails, extracting the assets JWT from the successful upload
 #   3. Using the legacy PUT API with the assets JWT included in metadata
 
-set -uo pipefail
+set -euo pipefail
 
 # Source fnm (Node manager) for npx/node
 # Use fnm's default node installation directly to avoid shell integration issues

@@ -9,6 +9,12 @@
 
 set -euo pipefail
 
+# Trunk reads NO_COLOR as a boolean option. Some shells and agent runtimes use
+# the conventional NO_COLOR=1 form, which Trunk 0.21 rejects before building.
+if [[ -n "${NO_COLOR:-}" && "${NO_COLOR}" != "true" && "${NO_COLOR}" != "false" ]]; then
+    export NO_COLOR=true
+fi
+
 cleanup_html() {
     echo "🧹 Cleaning trunk live-reload script from dist/index.html..."
     python3 << 'PY'
