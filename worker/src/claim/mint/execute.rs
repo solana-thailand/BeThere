@@ -9,7 +9,7 @@ use event_checkin_domain::models::attendee::WalkinAttendee;
 use event_checkin_domain::models::error::AppError;
 
 use crate::handlers::ext::{resolve_event, resolve_kv};
-use crate::solana::{self, MintRequest};
+use crate::solana::MintRequest;
 use crate::state::AppState;
 
 use super::helpers::{coalesce_event_id, crossmint_image_url, orb_nft_url};
@@ -356,7 +356,16 @@ pub async fn execute_claim(
         compressed: true,
         idempotency_key: token,
     };
-    let mint_result = match solana::mint_compressed_nft(&mint_req, lock_kv).await {
+    let mint_result = match super::journal::mint_with_journal(
+        state,
+        &event.id,
+        token,
+        wallet_address,
+        &mint_req,
+        lock_kv,
+    )
+    .await
+    {
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "mint failed");
@@ -391,8 +400,8 @@ pub async fn execute_claim(
     let nft_proof_url = orb_nft_url(&mint_result.asset_id, cluster);
 
     // Write to D1 first (source of truth)
-    if let Some(ref d1) = state.d1
-        && let Err(e) = crate::db::attendees::claim_attendee(
+    if let Some(ref d1) = state.d1 {
+        if let Err(e) = crate::db::attendees::claim_attendee(
             d1,
             token,
             &claimed_at,
@@ -400,12 +409,28 @@ pub async fn execute_claim(
             &mint_result.signature,
         )
         .await
-    {
-        tracing::warn!(
-            claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
-            error = %e,
-            "D1 claim write failed (non-fatal)"
-        );
+        {
+            tracing::error!(
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
+                error = %e,
+                "D1 claim projection failed after confirmed mint; journal retained for retry"
+            );
+            if let Some(kv) = lock_kv {
+                let _ = release_claim_lock(
+                    kv,
+                    &event.id,
+                    token,
+                    state.d1.as_deref(),
+                    state.event_do.as_ref(),
+                )
+                .await;
+            }
+            return Err(AppError::Internal(
+                "Your NFT was confirmed, but your claim record is still syncing. Please retry shortly; you will not be minted twice."
+                    .into(),
+            ));
+        }
+        super::journal::mark_projection_persisted(state, &event.id, token, lock_kv).await;
     }
 
     // Detach Sheets write — non-blocking (Phase 2c)

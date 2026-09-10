@@ -5,6 +5,7 @@
 
 mod execute;
 mod helpers;
+mod journal;
 mod lookup;
 mod quest;
 mod types;

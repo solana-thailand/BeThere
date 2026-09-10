@@ -195,16 +195,27 @@ pub(crate) async fn claim_attendee(
          updated_at = datetime('now') \
          WHERE claim_token = ?4",
     );
-    stmt.bind_refs(&[
-        D1Type::Text(claimed_at),
-        D1Type::Text(claim_asset_id),
-        D1Type::Text(claim_signature),
-        D1Type::Text(claim_token),
-    ])
-    .map_err(|e| format!("D1 claim_attendee bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 claim_attendee run: {e:?}"))?;
+    let result = stmt
+        .bind_refs(&[
+            D1Type::Text(claimed_at),
+            D1Type::Text(claim_asset_id),
+            D1Type::Text(claim_signature),
+            D1Type::Text(claim_token),
+        ])
+        .map_err(|e| format!("D1 claim_attendee bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 claim_attendee run: {e:?}"))?;
+
+    let changes = result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|meta| meta.changes)
+        .unwrap_or(0);
+    if changes == 0 {
+        return Err("D1 claim_attendee updated no attendee row".to_string());
+    }
 
     Ok(())
 }

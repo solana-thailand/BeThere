@@ -6,11 +6,12 @@
 //! signer. Auth is header-based (`X-API-KEY`). The cluster is selected by host
 //! (`staging.crossmint.com` = devnet, `www.crossmint.com` = mainnet).
 //!
-//! Crossmint minting is asynchronous: we POST to fire the mint, then poll the
-//! NFT resource until it confirms on-chain and yields a signature + asset id.
+//! Crossmint minting is asynchronous: attendee claims use the idempotent PUT
+//! endpoint, then poll until confirmation yields a signature + asset id.
 //! DAS reads (`getAssetsByOwner`, below) still use Helius and are unaffected.
 
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use worker::{Fetch, Headers, Method, Request, RequestInit};
 
 /// Crossmint API version segment (path-pinned by Crossmint).
@@ -44,9 +45,8 @@ pub struct MintRequest<'a> {
     pub nft_external_url: &'a str,
     /// Whether to mint compressed (cNFT). Solana only; Crossmint defaults true.
     pub compressed: bool,
-    /// Idempotency key (the claim token). When set alongside a KV store, a mint
-    /// that fired but hasn't confirmed is resumed instead of re-fired on retry,
-    /// preventing a duplicate mint after a poll timeout. Empty = no guard.
+    /// Private idempotency input (the claim token). The provider receives only
+    /// its SHA-256 digest. Empty uses the legacy non-idempotent POST endpoint.
     pub idempotency_key: &'a str,
 }
 
@@ -55,10 +55,25 @@ pub struct MintRequest<'a> {
 // ---------------------------------------------------------------------------
 
 /// Result of a successful NFT mint.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
 pub struct MintResult {
     pub signature: String,
     pub asset_id: String,
+}
+
+/// Derive the opaque custom NFT id used by Crossmint's idempotent PUT route.
+/// The private claim token is never disclosed to the provider.
+pub(crate) fn crossmint_mint_id(idempotency_key: &str) -> Option<String> {
+    (!idempotency_key.is_empty()).then(|| {
+        let digest = Sha256::digest(idempotency_key.as_bytes());
+        digest
+            .iter()
+            .fold(String::with_capacity(64), |mut id, byte| {
+                use std::fmt::Write;
+                write!(&mut id, "{byte:02x}").expect("writing to String cannot fail");
+                id
+            })
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -67,16 +82,15 @@ pub struct MintResult {
 
 /// Mint a (compressed) NFT via Crossmint and wait for on-chain confirmation.
 ///
-/// Fires `POST /collections/{id}/nfts`, then polls the created NFT resource
-/// until Crossmint reports `onChain.status == "success"`, returning the
+/// Uses idempotent `PUT /collections/{id}/nfts/{mint_id}` when an idempotency
+/// key is present, then polls until `onChain.status == "success"`, returning the
 /// transaction signature and asset id. Returns `Err` (which releases the claim
 /// lock upstream so the attendee can retry) on misconfiguration, an API error,
 /// a failed mint, or if confirmation is still pending after the poll budget.
 ///
-/// See [`MintRequest`] for field documentation. `kv`, when present with a
-/// non-empty `idempotency_key`, guards against double-mint: the created NFT id
-/// is persisted before polling, so a retry after a poll timeout resumes the
-/// same mint instead of firing a new one.
+/// See [`MintRequest`] for field documentation. KV caches the provider id for
+/// polling, while Crossmint's custom mint id prevents duplicate submission even
+/// if the Worker crashes before that cache write.
 pub async fn mint_compressed_nft(
     req: &MintRequest<'_>,
     kv: Option<&worker::KvStore>,
@@ -92,10 +106,19 @@ pub async fn mint_compressed_nft(
     } else {
         req.host
     };
-    let base = format!(
+    let collection_url = format!(
         "https://{host}/api/{CROSSMINT_API_VERSION}/collections/{}/nfts",
         req.collection_id
     );
+
+    // Crossmint's PUT /nfts/{id} endpoint uses the caller-supplied NFT id as
+    // an idempotency key. This closes the otherwise unavoidable crash window
+    // between a successful POST and persisting Crossmint's generated id.
+    let idempotent_id = crossmint_mint_id(req.idempotency_key);
+    let mint_url = idempotent_id
+        .as_ref()
+        .map(|id| format!("{collection_url}/{id}"))
+        .unwrap_or_else(|| collection_url.clone());
 
     // Idempotency: a pending-mint marker keyed by the claim token. Present only
     // when both a KV store and a non-empty key are supplied.
@@ -135,8 +158,13 @@ pub async fn mint_compressed_nft(
             .map_err(|e| format!("failed to serialize mint request: {e}"))?;
 
         // Fire the mint.
+        let submit_method = if idempotent_id.is_some() {
+            Method::Put
+        } else {
+            Method::Post
+        };
         let post_json =
-            crossmint_request(&base, Method::Post, req.api_key, Some(&json_body)).await?;
+            crossmint_request(&mint_url, submit_method, req.api_key, Some(&json_body)).await?;
 
         // If Crossmint already confirmed synchronously (unlikely), short-circuit.
         if let Some(result) = parse_crossmint_success(&post_json) {
@@ -169,7 +197,7 @@ pub async fn mint_compressed_nft(
             let _ = kv.delete(key).await;
         }
     };
-    let poll_url = format!("{base}/{nft_id}");
+    let poll_url = format!("{collection_url}/{nft_id}");
     for attempt in 1..=CROSSMINT_MAX_POLLS {
         worker::Delay::from(std::time::Duration::from_millis(CROSSMINT_POLL_DELAY_MS)).await;
 
@@ -191,7 +219,9 @@ pub async fn mint_compressed_nft(
                 let result = parse_crossmint_success(&poll_json).ok_or_else(|| {
                     format!("crossmint reported success but no asset id/signature: {poll_json}")
                 })?;
-                clear_pending().await;
+                // Keep the provider id until the caller durably persists the
+                // confirmed result and attendee projection. A crash in that
+                // window must resume this NFT instead of firing another mint.
                 return Ok(result);
             }
             Some("failed") | Some("rejected") | Some("error") => {
@@ -677,5 +707,15 @@ mod tests {
     fn test_parse_success_failed_status_is_none() {
         let v = json!({ "onChain": { "status": "failed", "assetId": "AID" } });
         assert!(parse_crossmint_success(&v).is_none());
+    }
+
+    #[test]
+    fn crossmint_mint_id_is_stable_and_hides_the_claim_token() {
+        let token = "01991e11-e8c0-7000-8000-secret-claim-token";
+        let id = crossmint_mint_id(token).expect("non-empty key");
+        assert_eq!(id.len(), 64);
+        assert_eq!(Some(id.clone()), crossmint_mint_id(token));
+        assert!(!id.contains(token));
+        assert!(crossmint_mint_id("").is_none());
     }
 }

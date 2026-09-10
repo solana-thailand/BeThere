@@ -14,6 +14,7 @@ pub mod escrow_index;
 pub mod event_summaries;
 pub mod events;
 pub mod jwt_blacklist;
+pub mod nft_mint_jobs;
 pub mod onchain_events;
 pub mod organizations;
 pub mod quiz;

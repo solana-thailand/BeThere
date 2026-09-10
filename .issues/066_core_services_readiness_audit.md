@@ -45,12 +45,18 @@ No attendee PII was queried for this audit.
 - [ ] Replace the current mint-then-best-effort-D1 flow with a durable mint
       intent/outbox state machine (`pending`, `submitted`, `confirmed`,
       `persisted`, `needs_reconciliation`).
-- [ ] Persist provider request/idempotency metadata before calling Crossmint.
-- [ ] Reconcile submitted mints by provider idempotency key after timeouts or D1
+- [x] Persist provider request/idempotency metadata before calling Crossmint.
+- [x] Reconcile submitted mints by provider idempotency key after timeouts or D1
       write failures; never make a second mint while outcome is ambiguous.
-- [ ] Apply the same implementation to pre-registered and walk-in claims.
-- [ ] Make a failed post-mint D1 write observable and recoverable instead of
+- [x] Apply the same implementation to pre-registered and walk-in claims.
+- [x] Make a failed post-mint D1 write observable and recoverable instead of
       returning an untracked success.
+  Implemented by migration `0033_nft_mint_jobs.sql` and the shared mint journal.
+  Crossmint receives a SHA-256 custom mint ID through its idempotent PUT route;
+  D1 records that ID before external I/O, while KV retains confirmed results as
+  a seven-day recovery copy until the attendee projection succeeds. The broader
+  state-machine item remains open for explicit terminal failure/reconciliation
+  states and an automated sweeper.
 - [ ] Validate Crossmint host, collection, and collection network at startup or
       event activation. Production currently uses `www.crossmint.com` while the
       config comment identifies the collection as devnet.
