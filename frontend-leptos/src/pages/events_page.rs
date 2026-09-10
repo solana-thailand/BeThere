@@ -201,6 +201,7 @@ pub fn EventsPage(
                                 let delete_id = evt.id.clone();
                                 let dup_id = evt.id.clone();
                                 let summary_id = evt.id.clone();
+                                let notification_event_id = evt.id.clone();
                                 let can_manage = components::can_manage_events(&user_role.get());
                                 let is_draft = evt.status == api::EventStatus::Draft;
                                 let is_archived = evt.status == api::EventStatus::Archived;
@@ -466,6 +467,7 @@ pub fn EventsPage(
                                                 </span>
                                             </div>
                                         </div>
+                                        {if can_manage {view! {<super::notifications::NotificationPanel event_id=notification_event_id/>}.into_any()} else {view!{<span></span>}.into_any()}}
                                     </div>
                                 }.into_any()
                             }

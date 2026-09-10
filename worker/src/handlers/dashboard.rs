@@ -18,7 +18,7 @@ use crate::state::AppState;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
-use crate::db::dashboard::{self, ActivityEntry, UsdcSummary};
+use crate::db::dashboard::{self, ActivityEntry};
 
 // ---------------------------------------------------------------------------
 // Request / response types
@@ -89,10 +89,9 @@ pub struct LiveDashboardResponse {
 
 /// `GET /api/dashboard/live`
 ///
-/// Returns the live aggregate snapshot for one event. All five sub-queries
-/// are independently resilient: a failure in one (e.g., a transient D1 read
-/// error) degrades gracefully to zero rather than failing the whole response,
-/// so the dashboard keeps rendering during a live demo.
+/// Returns the live aggregate snapshot for one event. Metrics and activity are
+/// fetched concurrently; either failure returns an error so the frontend keeps
+/// its last good snapshot instead of presenting fabricated zero totals.
 ///
 /// Event resolution precedence:
 ///   1. Explicit `?event_id=` query parameter
@@ -137,47 +136,26 @@ pub async fn live_dashboard(
         "live dashboard snapshot requested",
     );
 
-    // Run the five aggregates. Each is independently fault-tolerant: a query
-    // failure logs and degrades to zero / empty rather than poisoning the whole
-    // response. This matters during a live demo where a transient D1 blip
-    // must not blank the big-screen dashboard.
-    let registered = dashboard::count_registered(d1, &event_id)
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!(error = %e, event_id = %event_id, "count_registered failed");
-            0
-        });
-
-    let checked_in = dashboard::count_checked_in(d1, &event_id)
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!(error = %e, event_id = %event_id, "count_checked_in failed");
-            0
-        });
-
-    let claims_minted = dashboard::count_claims_minted(d1, &event_id)
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!(error = %e, event_id = %event_id, "count_claims_minted failed");
-            0
-        });
-
-    let usdc_summary: UsdcSummary = dashboard::verified_usdc_summary(d1, &event_id)
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!(error = %e, event_id = %event_id, "verified_usdc_summary failed");
-            UsdcSummary::default()
-        });
-
-    let recent_activity = dashboard::recent_activity(d1, &event_id, 20)
-        .await
-        .unwrap_or_else(|e| {
-            tracing::warn!(error = %e, event_id = %event_id, "recent_activity failed");
-            Vec::new()
-        });
-
-    let deposits_verified = usdc_summary.count;
-    let usdc_locked_total = usdc_summary.total_amount;
+    // The metrics statement and indexed activity feed are independent, so run
+    // them together. This replaces five sequential D1 round trips per poll.
+    let (metrics, recent_activity) = futures_util::future::join(
+        dashboard::live_metrics(d1, &event_id),
+        dashboard::recent_activity(d1, &event_id, 20),
+    )
+    .await;
+    let metrics = metrics.map_err(|e| {
+        tracing::warn!(error = %e, event_id = %event_id, "live dashboard metrics failed");
+        AppError::Internal("dashboard metrics unavailable".to_string())
+    })?;
+    let recent_activity = recent_activity.map_err(|e| {
+        tracing::warn!(error = %e, event_id = %event_id, "recent_activity failed");
+        AppError::Internal("dashboard activity unavailable".to_string())
+    })?;
+    let registered = metrics.registered;
+    let checked_in = metrics.checked_in;
+    let claims_minted = metrics.claims_minted;
+    let deposits_verified = metrics.deposits_verified;
+    let usdc_locked_total = metrics.usdc_locked_total;
 
     let event_meta = EventDashboardMeta {
         id: event_id.clone(),

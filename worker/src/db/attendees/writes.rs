@@ -20,6 +20,7 @@ pub(crate) async fn upsert_attendee(
     contact_handle: &str,
     consent_marketing: Option<bool>,
     claim_token: Option<&str>,
+    notify_verified_email: bool,
 ) -> Result<(), String> {
     let cm = consent_marketing.unwrap_or(false);
     let stmt = db.prepare(
@@ -37,22 +38,30 @@ pub(crate) async fn upsert_attendee(
          claim_token = COALESCE(attendees.claim_token, excluded.claim_token), \
          updated_at = datetime('now')",
     );
-    stmt.bind_refs(&[
-        D1Type::Text(id),
-        D1Type::Text(event_id),
-        D1Type::Text(email),
-        D1Type::Text(name),
-        D1Type::Text(approval_status),
-        D1Type::Text(participation_type),
-        D1Type::Text(contact_channel),
-        D1Type::Text(contact_handle),
-        D1Type::Integer(if cm { 1 } else { 0 }),
-        D1Type::Text(claim_token.unwrap_or("")),
-    ])
-    .map_err(|e| format!("D1 upsert_attendee bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 upsert_attendee run: {e:?}"))?;
+    let attendee = stmt
+        .bind_refs(&[
+            D1Type::Text(id),
+            D1Type::Text(event_id),
+            D1Type::Text(email),
+            D1Type::Text(name),
+            D1Type::Text(approval_status),
+            D1Type::Text(participation_type),
+            D1Type::Text(contact_channel),
+            D1Type::Text(contact_handle),
+            D1Type::Integer(if cm { 1 } else { 0 }),
+            D1Type::Text(claim_token.unwrap_or("")),
+        ])
+        .map_err(|e| format!("D1 upsert_attendee bind: {e:?}"))?;
+    let mut statements = vec![attendee];
+    if notify_verified_email {
+        statements.push(db.prepare(
+            "INSERT OR IGNORE INTO notification_enrollments(attendee_id,event_id) VALUES (?1,?2)"
+        ).bind_refs(&[D1Type::Text(id),D1Type::Text(event_id)])
+         .map_err(|e| format!("notification enrollment bind: {e:?}"))?);
+    }
+    db.batch(statements)
+        .await
+        .map_err(|e| format!("D1 registration batch: {e:?}"))?;
 
     Ok(())
 }

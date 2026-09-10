@@ -213,7 +213,7 @@ pub async fn check_in(
         attendee_id = %attendee.api_id,
         name = %attendee.display_name(),
         staff_email = %claims.email,
-        claim_token = %claim_token,
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&claim_token),
         checked_in_at = %timestamp,
         "check-in successful",
     );

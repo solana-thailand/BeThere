@@ -129,10 +129,10 @@ from four router groups by increasing privilege
 
 | Router | Guard | Examples |
 |---|---|---|
-| **Public** (`public`, `:104`) | none (Cloudflare rate-limits) | health, public event list/detail, auth endpoints, claim/quiz/adventure play, `deposit/usdc/tx`, `deposit/usdc/webhook`, `escrow/refund`, `escrow/close-deposit`, `escrow/onchain-webhook`, badge/poster serving, wallet NFT reads, `deposit/status/{id}`. |
-| **Attendee-authed** (`attendee_authed`, `:178`) | `require_identity` — valid JWT, verified email, **not** necessarily staff | `public/register`, `my-registration(s)`, `deposit/usdc`(+`/confirm`), `deposit/thb/upload`, `deposit/hold`, `deposit/credit-*`, `escrow/rollover-deposit`, `my-profile`, social linking, privacy self-service. |
+| **Public** (`public`, `:104`) | route-specific native Rate Limiting bindings plus isolate fallback | health, public event list/detail, auth endpoints, claim/quiz/adventure play, `deposit/usdc/tx`, `deposit/usdc/webhook`, `escrow/refund`, `escrow/close-deposit`, `escrow/onchain-webhook`, badge/poster serving, wallet NFT reads, `deposit/status/{id}`. |
+| **Attendee-authed** (`attendee_authed`, `:178`) | `require_identity` — valid JWT, verified email, **not** necessarily staff | `public/register`, `my-registration(s)`, `my-notifications` read APIs, `deposit/usdc`(+`/confirm`), `deposit/thb/upload`, `deposit/hold`, `deposit/credit-*`, `escrow/rollover-deposit`, `my-profile`, social linking, privacy self-service. |
 | **Staff/Protected** (`protected`, `:288`) | `require_auth` — valid JWT **and** staff | attendee list/CRUD, `checkin/{id}`, walk-ins, quiz/adventure admin, event CRUD, `deposit/thb/verify` + `admin-upload`, refund queue / `refund/mark` / `batch-thb` / `hold`, escrow lifecycle (`init`, `mark-checked-in`, `deactivate`, `close-event`, `claim-forfeited`), contacts, orgs, campaigns, community insights. |
-| **Live dashboard** (`protected_no_store`, `:283`) | `require_auth` + `no-store` | `dashboard/live` (polled every 2.5s). |
+| **Protected no-store** (`protected_no_store`, `:294`) | `require_auth` + `no-store` | `dashboard/live` (adaptive polling) and organizer notification history. |
 
 There is no separate "admin" *router*: **admin/super-admin gating is
 per-handler**, done inside protected handlers via `resolve_event_with_access` /

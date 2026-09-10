@@ -17,6 +17,10 @@
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_query_map;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 
 use crate::api::{
     self, ActivityEntry, DashboardTotals, FunnelStage, LiveDashboardResponse, action_emoji,
@@ -28,6 +32,8 @@ use wasm_bindgen::JsValue;
 /// hammering D1 — a demo room of 40 people produces <1 mutation/sec, so 2.5s
 /// polling catches every meaningful state change within one render frame.
 const POLL_INTERVAL_MS: u32 = 2500;
+const IDLE_POLL_INTERVAL_MS: u32 = 5000;
+const POLLS_BEFORE_IDLE: u8 = 3;
 
 /// Coarse tick for "Xs ago" badge refresh. Decoupled from `POLL_INTERVAL_MS`
 /// so the age badge visibly updates between polls (otherwise a 4s-old poll
@@ -60,6 +66,14 @@ enum DashboardLoadState {
 /// `lib.rs`, so staff auth is enforced before this component mounts.
 #[component]
 pub fn DashboardLive() -> impl IntoView {
+    let disposed = Arc::new(AtomicBool::new(false));
+    let request_epoch = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let cleanup_flag = Arc::clone(&disposed);
+    let cleanup_epoch = Arc::clone(&request_epoch);
+    on_cleanup(move || {
+        cleanup_flag.store(true, Ordering::Relaxed);
+        cleanup_epoch.fetch_add(1, Ordering::Relaxed);
+    });
     // Read event_id once at mount, then store in a signal. Signals are `Copy`
     // (they clone their handle, not the underlying value), so they can be
     // captured by multiple `move` closures — the polling `Effect` and the
@@ -85,42 +99,96 @@ pub fn DashboardLive() -> impl IntoView {
     // The Effect body captures signals by value (they are Copy) and does not
     // read them synchronously, so toggling `polling_active` does not re-fire
     // the Effect (which would spawn duplicate loops).
+    let polling_disposed = Arc::clone(&disposed);
+    let polling_epoch = Arc::clone(&request_epoch);
     Effect::new(move |_| {
+        let disposed = Arc::clone(&polling_disposed);
+        let request_epoch = Arc::clone(&polling_epoch);
         let eid = event_id.get();
         let polling = polling_active;
         let set_d = set_data;
         let set_ls = set_load_state;
         let set_lpm = set_last_poll_ms;
         leptos::task::spawn_local(async move {
+            if disposed.load(Ordering::Relaxed) {
+                return;
+            }
             // Mark Loading on first poll so the spinner renders immediately.
             // Subsequent polls keep the previous snapshot on screen
             // (`fetch_dashboard` never clears `set_d` on error), so this
             // initial transition is the only place Loading is entered.
             set_ls.set(DashboardLoadState::Loading);
             // First poll fires immediately so the room doesn't wait 2.5s.
-            fetch_dashboard(eid.as_deref(), set_d, set_ls, set_lpm).await;
+            fetch_dashboard(
+                eid.as_deref(),
+                data,
+                set_d,
+                set_ls,
+                set_lpm,
+                &disposed,
+                &request_epoch,
+            )
+            .await;
+            let mut unchanged_polls = 0u8;
 
-            loop {
+            while !disposed.load(Ordering::Relaxed) {
                 // Pause-aware sleep: short 500ms re-checks while paused so
                 // resume takes effect promptly without busy-spinning.
                 loop {
-                    let wait = if polling.get() { POLL_INTERVAL_MS } else { 500 };
+                    if disposed.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let wait = if !polling.get() {
+                        500
+                    } else if unchanged_polls >= POLLS_BEFORE_IDLE {
+                        IDLE_POLL_INTERVAL_MS
+                    } else {
+                        POLL_INTERVAL_MS
+                    };
                     gloo_timers::future::TimeoutFuture::new(wait).await;
-                    if polling.get() {
+                    if disposed.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let hidden = web_sys::window()
+                        .and_then(|window| window.document())
+                        .is_some_and(|document| document.hidden());
+                    if polling.get() && !hidden {
                         break;
                     }
                 }
-                fetch_dashboard(eid.as_deref(), set_d, set_ls, set_lpm).await;
+                if disposed.load(Ordering::Relaxed) {
+                    break;
+                }
+                if fetch_dashboard(
+                    eid.as_deref(),
+                    data,
+                    set_d,
+                    set_ls,
+                    set_lpm,
+                    &disposed,
+                    &request_epoch,
+                )
+                .await
+                {
+                    unchanged_polls = 0;
+                } else {
+                    unchanged_polls = unchanged_polls.saturating_add(1);
+                }
             }
         });
     });
 
     // Wall-clock tick so age badges update between polls.
+    let age_disposed = Arc::clone(&disposed);
     Effect::new(move |_| {
+        let disposed = Arc::clone(&age_disposed);
         let set_n = set_now_ms;
         leptos::task::spawn_local(async move {
-            loop {
+            while !disposed.load(Ordering::Relaxed) {
                 gloo_timers::future::TimeoutFuture::new(AGE_TICK_MS).await;
+                if disposed.load(Ordering::Relaxed) {
+                    break;
+                }
                 set_n.set(js_sys::Date::now());
             }
         });
@@ -134,6 +202,8 @@ pub fn DashboardLive() -> impl IntoView {
     // shared reference and cloning it on each invocation; it therefore
     // implements `Fn` and can be called any number of times.
     let build_refresh_handler = move || {
+        let disposed = Arc::clone(&disposed);
+        let request_epoch = Arc::clone(&request_epoch);
         // `.get()` on a signal returns an owned `Option<String>` (the signal's
         // `Copy` clone is the handle, not the inner value), so each button
         // captures its own fresh `eid` without aliasing the underlying data.
@@ -142,9 +212,20 @@ pub fn DashboardLive() -> impl IntoView {
         let set_ls = set_load_state;
         let set_lpm = set_last_poll_ms;
         move |_ev: web_sys::MouseEvent| {
+            let disposed = Arc::clone(&disposed);
+            let request_epoch = Arc::clone(&request_epoch);
             let eid = eid.clone();
             leptos::task::spawn_local(async move {
-                fetch_dashboard(eid.as_deref(), set_d, set_ls, set_lpm).await;
+                fetch_dashboard(
+                    eid.as_deref(),
+                    data,
+                    set_d,
+                    set_ls,
+                    set_lpm,
+                    &disposed,
+                    &request_epoch,
+                )
+                .await;
             });
         }
     };
@@ -288,24 +369,39 @@ pub fn DashboardLive() -> impl IntoView {
 /// a non-blocking "last poll failed" hint if desired.
 async fn fetch_dashboard(
     event_id: Option<&str>,
+    data: ReadSignal<Option<LiveDashboardResponse>>,
     set_data: WriteSignal<Option<LiveDashboardResponse>>,
     set_state: WriteSignal<DashboardLoadState>,
     set_last_poll: WriteSignal<Option<f64>>,
-) {
+    disposed: &AtomicBool,
+    request_epoch: &std::sync::atomic::AtomicU64,
+) -> bool {
     // The UI already treats `Idle` as "loading" (see `is_initial_loading`),
     // so we don't need to read state here — we only transition forward to
     // `Loaded` or `Failed` once the fetch resolves. This avoids the
     // ReadSignal/WriteSignal split that would otherwise require passing
     // both ends of the signal into the helper.
-    match api::get_live_dashboard(event_id).await {
+    if disposed.load(Ordering::Relaxed) {
+        return false;
+    }
+    let request = request_epoch.fetch_add(1, Ordering::Relaxed) + 1;
+    let result = api::get_live_dashboard(event_id).await;
+    if disposed.load(Ordering::Relaxed) || request_epoch.load(Ordering::Relaxed) != request {
+        return false;
+    }
+    match result {
         Ok(resp) => {
+            let changed = data.get_untracked().as_ref().is_none_or(|previous| {
+                previous.totals != resp.totals || previous.recent_activity != resp.recent_activity
+            });
             set_data.set(Some(resp));
             set_state.set(DashboardLoadState::Loaded);
             set_last_poll.set(Some(js_sys::Date::now()));
+            changed
         }
         Err(e) => {
             set_state.set(DashboardLoadState::Failed(e.message));
-            set_last_poll.set(Some(js_sys::Date::now()));
+            false
         }
     }
 }

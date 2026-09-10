@@ -65,7 +65,7 @@ pub async fn mark_checked_in(
     tracing::info!(
         row_index = row_index,
         staff_email = %staff_email,
-        claim_token = %claim_token,
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token),
         "marked row as checked in"
     );
 

@@ -83,7 +83,7 @@ pub async fn submit_quiz(
     Json(body): Json<QuizSubmitRequest>,
 ) -> Result<ApiOk<QuizSubmitResponse>, WorkerError> {
     tracing::info!(
-        claim_token = %token,
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token),
         answer_count = body.answers.len(),
         "quiz submit requested"
     );
@@ -113,14 +113,14 @@ pub async fn submit_quiz(
     {
         Ok(Some(_)) => {}
         Ok(None) => {
-            tracing::warn!(claim_token = %token, "quiz submit: invalid claim token");
+            tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), "quiz submit: invalid claim token");
             return Err(AppError::NotFound(
                 "invalid claim token — you must be checked in first".to_string(),
             )
             .into());
         }
         Err(ref e) => {
-            tracing::error!(claim_token = %token, error = ?e, "quiz submit: failed to look up claim token");
+            tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), error = ?e, "quiz submit: failed to look up claim token");
             return Err(AppError::Internal(format!("failed to verify claim: {e}")).into());
         }
     }
@@ -186,13 +186,13 @@ pub async fn submit_quiz(
                     "You've used all your quiz attempts for this event. Ask an organizer to reset them.".to_string(),
                 )
             } else {
-                tracing::error!(claim_token = %token, error = ?e, "quiz submit failed");
+                tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), error = ?e, "quiz submit failed");
                 AppError::Internal(msg)
             }
         })?;
 
     tracing::info!(
-        claim_token = %token,
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token),
         attempt = result.attempt_number,
         score_percent = result.score_percent,
         passed = result.passed,
@@ -212,7 +212,7 @@ pub async fn get_quiz_status(
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
-    tracing::info!(claim_token = %token, "quiz status requested");
+    tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), "quiz status requested");
 
     // Resolve the attendee's real event from the claim token (same as submit and
     // the claim gate) so status reflects the progress the claim will read.
@@ -245,7 +245,7 @@ pub async fn get_quiz_status(
     let status = quiz::get_quiz_status(d1, kv, eid, &token)
         .await
         .map_err(|e| {
-            tracing::error!(claim_token = %token, error = ?e, "quiz status failed");
+            tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), error = ?e, "quiz status failed");
             AppError::Internal(e.to_string())
         })?;
 

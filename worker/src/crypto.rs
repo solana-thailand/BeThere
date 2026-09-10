@@ -5,6 +5,7 @@
 
 use base64::Engine;
 use js_sys::{ArrayBuffer, Object, Reflect, Uint8Array};
+use sha2::{Digest, Sha256};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
@@ -246,6 +247,31 @@ pub(crate) async fn sha256_digest(data: &[u8]) -> Result<Vec<u8>, String> {
     js_buffer_to_vec(&digest_buf)
 }
 
+/// Return a stable, one-way correlation value suitable for logs.
+pub(crate) fn claim_token_fingerprint(token: &str) -> String {
+    let digest = Sha256::digest(token.as_bytes());
+    let mut fingerprint = String::with_capacity(16);
+    for byte in &digest[..8] {
+        use std::fmt::Write;
+        write!(&mut fingerprint, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    fingerprint
+}
+
+#[cfg(test)]
+mod fingerprint_tests {
+    use super::claim_token_fingerprint;
+
+    #[test]
+    fn claim_token_fingerprint_is_short_stable_and_one_way() {
+        let first = claim_token_fingerprint("claim-token-a");
+        assert_eq!(first.len(), 16);
+        assert_eq!(first, claim_token_fingerprint("claim-token-a"));
+        assert_ne!(first, claim_token_fingerprint("claim-token-b"));
+        assert!(!first.contains("claim-token-a"));
+    }
+}
+
 /// Compute HMAC-SHA256 of the given data using the provided key.
 pub(crate) async fn hmac_sha256(key_bytes: &[u8], data: &[u8]) -> Result<Vec<u8>, String> {
     let key = import_hmac_key(key_bytes).await?;
@@ -313,9 +339,23 @@ const JWT_HEADER_B64: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
 ///
 /// This replaces `jsonwebtoken::encode` from the Axum build.
 pub async fn create_jwt(email: &str, sub: &str, secret: &str) -> Result<String, String> {
-    let claims = Claims::new(email.to_string(), sub.to_string());
+    sign_session_claims(&Claims::new(email.to_string(), sub.to_string()), secret).await
+}
+
+/// Only call after validating the provider's email-verification assertion.
+pub async fn create_verified_email_jwt(
+    email: &str,
+    sub: &str,
+    secret: &str,
+) -> Result<String, String> {
+    let mut claims = Claims::new(email.to_string(), sub.to_string());
+    claims.email_verified = true;
+    sign_session_claims(&claims, secret).await
+}
+
+async fn sign_session_claims(claims: &Claims, secret: &str) -> Result<String, String> {
     let payload_bytes =
-        serde_json::to_vec(&claims).map_err(|e| format!("failed to serialize JWT claims: {e}"))?;
+        serde_json::to_vec(claims).map_err(|e| format!("failed to serialize JWT claims: {e}"))?;
     let payload_b64 = base64_url_encode(&payload_bytes);
 
     let sign_input = format!("{JWT_HEADER_B64}.{payload_b64}");

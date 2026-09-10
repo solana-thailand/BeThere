@@ -30,6 +30,7 @@ const POLL: &str = include_str!("../src/handlers/deposit/usdc/handlers/confirm.r
 const USDC_MOD: &str = include_str!("../src/handlers/deposit/usdc/mod.rs");
 const RECOVER: &str = include_str!("../src/handlers/deposit/usdc/recover.rs");
 const WEBHOOK: &str = include_str!("../src/handlers/deposit/usdc/handlers/webhook.rs");
+const ONCHAIN_WEBHOOK: &str = include_str!("../src/handlers/escrow_index.rs");
 
 /// Source with `//`, `///` and `//!` lines stripped, so a rule that talks about
 /// code is never satisfied (or broken) by prose describing it.
@@ -108,7 +109,7 @@ fn the_read_path_still_carries_both_guards() {
 
 #[test]
 fn the_webhook_never_logs_the_authorization_header() {
-    let code = code_only(WEBHOOK);
+    let code = format!("{}\n{}", code_only(WEBHOOK), code_only(ONCHAIN_WEBHOOK));
     assert!(
         !code.contains("auth = %auth_header"),
         "the webhook logs the raw Authorization header on rejection. A rejected \

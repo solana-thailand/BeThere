@@ -5,6 +5,7 @@
 //! No backend calls — purely static marketing content with SPA navigation.
 
 mod auth;
+mod notifications;
 mod page;
 mod registrations;
 mod upcoming;

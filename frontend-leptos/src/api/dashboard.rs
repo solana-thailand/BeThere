@@ -38,7 +38,7 @@ pub struct EventDashboardMeta {
 }
 
 /// Aggregate counts for the dashboard's headline tiles.
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
 pub struct DashboardTotals {
     #[serde(default)]
     pub registered: u64,
@@ -63,7 +63,7 @@ pub struct FunnelStage {
 }
 
 /// A single entry in the dashboard's live activity feed.
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
 pub struct ActivityEntry {
     #[serde(default)]
     pub timestamp: String,

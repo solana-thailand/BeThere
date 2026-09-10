@@ -54,6 +54,13 @@ jobs:
       - name: cargo test (workspace)
         run: cargo test --workspace --locked
 
+      - name: Security and notification SQL behavior
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -m unittest discover -s worker/tests/security -v
+          python3 -m unittest discover -s worker/tests/notifications -v
+
   wasm-build:
     name: worker wasm32 build
     runs-on: ubuntu-latest

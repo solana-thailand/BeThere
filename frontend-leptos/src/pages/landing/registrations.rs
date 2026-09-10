@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use serde::Deserialize;
 
+use super::notifications::NotificationInbox;
 use crate::api::ApiResponse;
 use crate::icons::{Icon, IconName};
 
@@ -35,6 +36,7 @@ struct NextStepData {
 pub(super) fn MyRegistrations() -> impl IntoView {
     let (registrations, set_registrations) = signal(None::<Vec<MyRegistrationItem>>);
     let (email, set_email) = signal(None::<String>);
+    let (email_verified, set_email_verified) = signal(false);
 
     // Check auth and fetch registrations on mount
     Effect::new(move |_| {
@@ -69,6 +71,11 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                 return;
             }
             set_email.set(Some(user_email));
+            set_email_verified.set(
+                auth_data["data"]["email_verified"]
+                    .as_bool()
+                    .unwrap_or(false),
+            );
 
             // Fetch my registrations
             let regs_url = format!("{origin}/api/my-registrations");
@@ -135,6 +142,8 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                 </button>
                             </div>
                         </div>
+
+                        {move || email_verified.get().then(|| view! { <NotificationInbox /> })}
 
                         {if has_regs {
                             view! {

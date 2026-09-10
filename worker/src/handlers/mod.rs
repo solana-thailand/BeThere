@@ -15,6 +15,7 @@ pub mod events;
 pub mod ext;
 pub mod health;
 pub mod metadata;
+pub mod notifications;
 pub mod orgs;
 pub mod privacy;
 pub mod profile;
@@ -180,6 +181,15 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/wallet/{address}/nfts", get(wallet::get_wallet_nfts))
         .merge(public_no_store);
 
+    let attendee_no_store = Router::new()
+        .route("/my-notifications", get(notifications::my_list))
+        .route(
+            "/my-notifications/read-all",
+            post(notifications::my_read_all),
+        )
+        .route("/my-notifications/{id}/read", post(notifications::my_read))
+        .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
+
     // Attendee-authenticated routes — require JWT identity but NOT staff status.
     // Used for endpoints where a verified email is enough (registration, my-registration).
     let attendee_authed = Router::new()
@@ -275,6 +285,7 @@ pub fn routes(state: AppState) -> Router<()> {
             "/campaigns/{id}/claim-reward",
             post(campaigns::claim_campaign_reward),
         )
+        .merge(attendee_no_store)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_identity,
@@ -284,6 +295,7 @@ pub fn routes(state: AppState) -> Router<()> {
     // 2.5s during the demo and must never surface a stale snapshot.
     let protected_no_store = Router::new()
         .route("/dashboard/live", get(dashboard::live_dashboard))
+        .route("/events/{id}/notifications", get(notifications::list))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Protected routes — require staff auth
@@ -371,6 +383,10 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // PR pack generator (Plan 008 — Phase 4): deterministic marketing copy.
         .route("/events/{id}/pr-pack", get(events::get_pr_pack))
+        .route(
+            "/events/{id}/notifications/retry",
+            post(notifications::retry),
+        )
         // Post-event registration toggle (Plan 008 — Phase 3): organizer opens/closes
         // lead capture + optional deadline for a completed event.
         .route(

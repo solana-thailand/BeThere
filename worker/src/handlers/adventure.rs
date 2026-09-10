@@ -162,14 +162,21 @@ pub async fn save_adventure_progress(
     {
         Ok(Some(_)) => {} // valid checked-in attendee
         Ok(None) => {
-            tracing::warn!("adventure save: invalid claim token {token}");
+            tracing::warn!(
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token),
+                "adventure save: invalid claim token"
+            );
             return Err(AppError::NotFound(
                 "invalid claim token — you must be checked in first".to_string(),
             )
             .into());
         }
         Err(ref e) => {
-            tracing::error!("adventure save: failed to look up claim token {token}: {e}");
+            tracing::error!(
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token),
+                error = %e,
+                "adventure save: failed to look up claim token"
+            );
             return Err(AppError::Internal("failed to verify claim token".to_string()).into());
         }
     }

@@ -19,7 +19,7 @@ pub(super) async fn resolve_event_id_from_token(state: &AppState, token: &str) -
     match crate::db::attendees::get_attendee_event_id_by_claim_token(d1, token).await {
         Ok(Some(id)) => {
             tracing::info!(
-                claim_token = %token,
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                 resolved_event_id = %id,
                 "claim: resolved event_id from D1 by claim token"
             );
@@ -28,7 +28,7 @@ pub(super) async fn resolve_event_id_from_token(state: &AppState, token: &str) -
         Ok(None) => None,
         Err(e) => {
             tracing::warn!(
-                claim_token = %token,
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
                 error = %e,
                 "claim: could not peek event_id from D1, falling back to active event"
             );

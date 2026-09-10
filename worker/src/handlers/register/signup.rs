@@ -38,7 +38,7 @@ pub async fn register_attendee(
     // Google sessions: email comes from the verified JWT. Wallet-only sessions
     // have a synthetic `wallet:<address>` identity and MUST supply a real email
     // in the body to reserve — the reservation is filed under that email, and
-    // (only if the email is brand-new) the proven wallet is bound to it.
+    // the typed address remains contact data until its owner verifies it.
     let jwt_email = claims.email.trim().to_lowercase();
     let is_wallet_session = jwt_email.starts_with("wallet:");
     let email = if is_wallet_session {
@@ -87,7 +87,7 @@ pub async fn register_attendee(
         true
     } else if let (Some(db), Some(wallet)) = (state.d1.as_deref(), session_wallet.as_deref()) {
         matches!(
-            crate::db::contacts::find_email_by_wallet(db, wallet).await,
+            crate::db::contacts::find_verified_email_by_wallet(db, wallet).await,
             Ok(Some(bound_email)) if bound_email.eq_ignore_ascii_case(&email)
         )
     } else {
@@ -391,6 +391,8 @@ pub async fn register_attendee(
             contact_handle.unwrap_or(""),
             body.consent_marketing,
             Some(&claim_token),
+            // Signed verification comes only from Google; a linked wallet is not email proof.
+            claims.email_verified,
         )
         .await
     {
@@ -801,29 +803,9 @@ pub async fn register_attendee(
         "attendee self-registered"
     );
 
-    // Plan 017: converge wallet→email. Bind the proven wallet only when the
-    // email was brand-new; an existing email must be linked via the profile
-    // flow (ownership-verified) instead of a typed-email bind here.
-    let wallet_linked = if is_wallet_session {
-        if email_is_new && let (Some(db), Some(w)) = (state.d1.as_deref(), session_wallet.as_ref())
-        {
-            match crate::db::contacts::link_wallet_to_email(db, &email, w).await {
-                Ok(()) => {
-                    tracing::info!(%email, "wallet bound to new email at registration");
-                    Some(true)
-                }
-                Err(e) => {
-                    tracing::warn!(%email, error = %e, "wallet bind at registration failed");
-                    Some(false)
-                }
-            }
-        } else {
-            tracing::info!(%email, "email already has an account — wallet not auto-bound");
-            Some(false)
-        }
-    } else {
-        None
-    };
+    // A typed address is contact data, not proof of mailbox ownership. The
+    // wallet can be linked later from a Google-verified profile session.
+    let wallet_linked = is_wallet_session.then_some(false);
 
     Ok(ApiOk::new(RegisterResponse {
         attendee_id: api_id,

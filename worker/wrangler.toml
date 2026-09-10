@@ -64,6 +64,9 @@ SHIM
 
 # Environment variables (non-secret config)
 [vars]
+# Set to 1 only after migration 0030 and verified sender setup (docs/notifications.md).
+NOTIFICATIONS_ENABLED = "0"
+NOTIFICATION_FROM = ""
 SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 # Telegram Login Widget bot username (public). The widget stays OFF until the
@@ -135,6 +138,37 @@ crons = ["0 3 * * *"]
 # Reduces check-in latency by minimizing network round-trips. Zero cost on all plans.
 [placement]
 mode = "smart"
+
+# Native per-location counters are included as Worker bindings and avoid a
+# D1/KV/DO operation on every protected request. The in-process limiter remains
+# a fallback for local development and binding failures.
+[[ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "63201"
+[ratelimits.simple]
+limit = 20
+period = 60
+
+[[ratelimits]]
+name = "CLAIM_RATE_LIMITER"
+namespace_id = "63202"
+[ratelimits.simple]
+limit = 120
+period = 60
+
+[[ratelimits]]
+name = "DEPOSIT_RATE_LIMITER"
+namespace_id = "63203"
+[ratelimits.simple]
+limit = 60
+period = 60
+
+[[ratelimits]]
+name = "WEBHOOK_RATE_LIMITER"
+namespace_id = "63204"
+[ratelimits.simple]
+limit = 120
+period = 60
 
 # Phase 4: Quiz KV namespace — REMOVED (Option C).
 # Quiz data is now D1-only. QUIZ KV binding removed from wrangler.toml.
@@ -258,3 +292,7 @@ bucket_name = "bethere-assets-staging"
 # fallback in deploy.sh rejects durable_object bindings (10021). When the CF
 # versions API recovers and DOs are re-enabled in production, mirror the binding
 # here. The worker already handles event_do=None gracefully.
+
+# Enable after onboarding a sender domain to Cloudflare Email Sending:
+# [[send_email]]
+# name = "EMAIL"

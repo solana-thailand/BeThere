@@ -496,6 +496,7 @@ dependencies = [
  "md-5",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tower-service",
  "tracing",

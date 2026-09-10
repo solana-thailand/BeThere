@@ -22,6 +22,7 @@ pub mod event_store;
 mod handlers;
 mod http;
 mod middleware;
+pub mod notifications;
 mod org_store;
 mod quiz;
 
@@ -141,7 +142,10 @@ async fn fetch(
 
     // Build the API router with middleware stack.
     let mut api_routes = handlers::routes(state.clone())
-        .layer(axum::middleware::from_fn(middleware::rate_limit_layer))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::rate_limit_layer,
+        ))
         .layer(axum::middleware::from_fn(middleware::correlation_id_layer))
         // Outside correlation so it can read the x-correlation-id it stamps on the
         // response; fires a best-effort Slack alert on 5xx (no-op if unconfigured).
@@ -162,7 +166,7 @@ async fn fetch(
     }
 }
 
-/// Cron-triggered cleanup — runs daily at 03:00 UTC.
+/// Scheduled job: cleanup daily at 03:00 UTC.
 ///
 /// Deletes expired KV entries (session progress, deposits, claim locks,
 /// event configs) based on retention policy defined in `cleanup.rs`.
