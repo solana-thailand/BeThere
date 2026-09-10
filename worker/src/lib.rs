@@ -226,5 +226,37 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
             Ok(_) => tracing::info!("credit ledger reconcile clean"),
             Err(e) => tracing::warn!(error = %e, "credit ledger reconcile query failed"),
         }
+
+        match db::nft_mint_jobs::reconcile(db).await {
+            Ok(report) if !report.is_clean() => {
+                tracing::error!(
+                    attendee_projections_repaired = report.attendee_projections_repaired,
+                    jobs_marked_persisted = report.jobs_marked_persisted,
+                    confirmed_remaining = report.confirmed_remaining,
+                    stale_pending = report.stale_pending,
+                    "NFT mint journal reconcile requires attention"
+                );
+                if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
+                    && !webhook.is_empty()
+                {
+                    let message = format!(
+                        ":warning: BeThere NFT journal reconcile — repaired {} attendee projection(s), finalized {} job(s), {} confirmed job(s) still inconsistent, {} pending job(s) older than one hour.",
+                        report.attendee_projections_repaired,
+                        report.jobs_marked_persisted,
+                        report.confirmed_remaining,
+                        report.stale_pending
+                    );
+                    let _ = middleware::alert::post_slack(&webhook, &message).await;
+                }
+            }
+            Ok(report) => tracing::info!(
+                attendee_projections_repaired = report.attendee_projections_repaired,
+                jobs_marked_persisted = report.jobs_marked_persisted,
+                "NFT mint journal reconcile clean"
+            ),
+            Err(error) => {
+                tracing::warn!(error = %error, "NFT mint journal reconcile query failed")
+            }
+        }
     }
 }
