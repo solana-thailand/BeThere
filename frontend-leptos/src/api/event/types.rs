@@ -163,6 +163,8 @@ pub struct EventDetail {
 pub struct EventsListData {
     #[serde(default)]
     pub events: Vec<EventMeta>,
+    #[serde(default)]
+    pub next_cursor: Option<String>,
 }
 
 /// Response for GET /api/events/{id} — single event detail.
