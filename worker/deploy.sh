@@ -73,10 +73,10 @@ while [ $# -gt 0 ]; do
 done
 
 WORKER_NAME="bethere"
-WRANGLER_ENV_FLAG=""
+WRANGLER_ENV_ARGS=("--env=")
 if [ "$DEPLOY_ENV" = "staging" ]; then
   WORKER_NAME="bethere-staging"
-  WRANGLER_ENV_FLAG="--env staging"
+  WRANGLER_ENV_ARGS=("--env" "staging")
 fi
 ACCOUNT_ID="bb8f9ffa91e24d9ce850cbbc4fd45935"
 DIST_DIR="../frontend-leptos/dist"
@@ -158,17 +158,19 @@ verify_content_types() {
   js=$(grep -o 'event-checkin-frontend-[a-z0-9]*\.js' "$index" | head -1)
 
   echo "🔎 Verifying served Content-Type (edge propagation may lag a few seconds)..."
-  local bad=0 attempt ct
+  local bad=0 ct expected
   for path in "/" "/$js"; do
     [ "$path" = "/" ] || [ -n "$js" ] || continue
+    expected="text/html"
+    [ "$path" = "/" ] || expected="text/javascript"
     # Retry a few times to ride out edge propagation right after deploy.
-    for attempt in 1 2 3 4 5; do
+    for _ in 1 2 3 4 5; do
       ct=$(curl -s -D - -o /dev/null "${base}${path}" | tr -d '\r' | grep -i '^content-type:' | sed 's/[Cc]ontent-[Tt]ype: *//')
-      echo "$ct" | grep -qi 'octet-stream' || break
+      echo "$ct" | grep -qi "^${expected}" && break
       sleep 4
     done
-    if echo "$ct" | grep -qi 'octet-stream'; then
-      echo "   ❌ ${path} → ${ct}"
+    if ! echo "$ct" | grep -qi "^${expected}"; then
+      echo "   ❌ ${path} → ${ct:-<missing>} (expected ${expected})"
       bad=1
     else
       echo "   ✅ ${path} → ${ct}"
@@ -177,8 +179,7 @@ verify_content_types() {
 
   if [ "$bad" -ne 0 ]; then
     echo ""
-    echo "❌ DEPLOY SERVED octet-stream — the site will download/blank instead of render." >&2
-    echo "   Likely a poisoned content-addressed asset object on the CDN." >&2
+    echo "❌ DEPLOY SERVED an invalid Content-Type — the site may download or render HTML for an asset." >&2
     echo "   Remediation:" >&2
     echo "     1. Roll back:  npx wrangler rollback <last-good-version-id>" >&2
     echo "     2. Bump BUILD_TAG in frontend-leptos/src/lib.rs (forces a fresh JS-glue" >&2
@@ -274,7 +275,7 @@ if [ "$DEPLOY_ENV" = "dev" ]; then
     npx wrangler dev --port 8787 --remote
   fi
 else
-  if [ -n "$WRANGLER_ENV_FLAG" ]; then
+  if [ "$DEPLOY_ENV" = "staging" ]; then
     echo "🚀 Deploying to Cloudflare Workers (STAGING: ${WORKER_NAME})..."
   else
     echo "🚀 Deploying to Cloudflare Workers (production: ${WORKER_NAME})..."
@@ -289,7 +290,7 @@ else
   fi
 
   # ── Step 1: Try standard wrangler deploy ──
-  if CI=true npx wrangler deploy $WRANGLER_ENV_FLAG 2>&1; then
+  if CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" 2>&1; then
     echo "✅ Deployed via wrangler"
     if verify_content_types; then
       restore_pnp
@@ -302,7 +303,7 @@ else
 
   # Staging has no PUT API fallback (that path is production-hardcoded; see
   # header note). Surface the failure clearly and stop.
-  if [ -n "$WRANGLER_ENV_FLAG" ]; then
+  if [ "$DEPLOY_ENV" = "staging" ]; then
     echo "❌ wrangler deploy --env staging failed."
     echo "   Staging intentionally does not use the production PUT API fallback."
     echo "   Re-run once the Cloudflare versions API recovers, or check [env.staging] config."
@@ -510,7 +511,7 @@ print(completion_jwt)
   # ── Step 4: Bundle and deploy worker code via PUT API with assets JWT ──
   DRY_DIR=$(mktemp -d)
   echo "📦 Bundling worker (dry-run)..."
-  if ! npx wrangler deploy --dry-run --outdir "$DRY_DIR" 2>&1; then
+  if ! npx wrangler deploy --env="" --dry-run --outdir "$DRY_DIR" 2>&1; then
     echo "❌ Dry-run bundling failed."
     rm -rf "$DRY_DIR"
     restore_pnp
