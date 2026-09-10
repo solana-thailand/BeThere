@@ -252,6 +252,14 @@ name = "bethere-staging"
 # environment"). Below mirrors production and overrides the env-specific ones.
 SERVER_URL = "https://bethere-staging.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere-staging.solana-thailand.workers.dev/claim"
+# Keep outbound notifications and NFT minting fail-closed in staging until their
+# staging-only credentials and resources are deliberately configured.
+NOTIFICATIONS_ENABLED = "0"
+NOTIFICATION_FROM = ""
+TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
+HELIUS_RPC_URL = "https://devnet.helius-rpc.com"
+CROSSMINT_HOST = "staging.crossmint.com"
+CROSSMINT_COLLECTION_ID = ""
 # Staging targets devnet (vars are non-inheritable, so it must be redeclared here).
 SOLANA_CLUSTER = "devnet"
 GOOGLE_SHEET_NAME = "Attendees"
@@ -287,6 +295,36 @@ preview_id = "dd1d541c936242ecb1533ba6ac6a9851"   # staging shares the main name
 [[env.staging.r2_buckets]]
 binding = "ASSETS_BUCKET"
 bucket_name = "bethere-assets-staging"
+
+# Rate Limit bindings are non-inheritable. Staging uses distinct namespaces so
+# load tests and flow-harness runs cannot consume production counters.
+[[env.staging.ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "63301"
+[env.staging.ratelimits.simple]
+limit = 20
+period = 60
+
+[[env.staging.ratelimits]]
+name = "CLAIM_RATE_LIMITER"
+namespace_id = "63302"
+[env.staging.ratelimits.simple]
+limit = 120
+period = 60
+
+[[env.staging.ratelimits]]
+name = "DEPOSIT_RATE_LIMITER"
+namespace_id = "63303"
+[env.staging.ratelimits.simple]
+limit = 60
+period = 60
+
+[[env.staging.ratelimits]]
+name = "WEBHOOK_RATE_LIMITER"
+namespace_id = "63304"
+[env.staging.ratelimits.simple]
+limit = 120
+period = 60
 
 # NOTE: DO bindings (EVENT_DO) remain commented out for staging too — the PUT API
 # fallback in deploy.sh rejects durable_object bindings (10021). When the CF
