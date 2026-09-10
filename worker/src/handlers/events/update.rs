@@ -8,6 +8,7 @@ use crate::state::AppState;
 
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
+use event_checkin_domain::models::event::EventStatus;
 use event_checkin_domain::models::event::UpdateEventRequest;
 
 #[worker::send]
@@ -113,6 +114,23 @@ pub async fn update_event(
     // Apply partial update to existing config (works regardless of KV vs D1 source)
     let mut config = existing_event.clone();
     crate::event_store::apply_update(&mut config, &body).map_err(AppError::Validation)?;
+
+    // Only gate the transitions that can newly expose attendees to the quiz.
+    // Existing active events with legacy-invalid data remain editable so an
+    // organizer can repair or disable them without being locked out.
+    let activates_event =
+        existing_event.status != EventStatus::Active && config.status == EventStatus::Active;
+    let enables_quiz = !existing_event.quiz_enabled && config.quiz_enabled;
+    if config.quiz_enabled && (activates_event || enables_quiz) {
+        let quiz_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
+        crate::quiz::ensure_event_quiz_ready(state.d1.as_deref(), quiz_kv, &config.id)
+            .await
+            .map_err(|reason| {
+                AppError::Validation(format!(
+                    "event cannot be activated with quiz enabled: {reason}"
+                ))
+            })?;
+    }
     config.updated_by = claims.email.clone();
     config.updated_at = chrono::Utc::now().to_rfc3339();
 

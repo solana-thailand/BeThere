@@ -30,8 +30,8 @@ No attendee PII was queried for this audit.
 
 ### Quiz/adventure configuration integrity
 
-- [ ] Add one shared readiness validator for event activation and update.
-- [ ] Reject `active + quiz_enabled` unless an enabled, structurally valid quiz
+- [x] Add one shared readiness validator for event activation and admin quiz update.
+- [x] Reject transitions to `active + quiz_enabled` unless an enabled, structurally valid quiz
       config with at least one enabled question exists.
 - [ ] Show the same readiness failure in the admin event form and dashboard.
 - [ ] Add an aggregate admin repair report for existing invalid events.

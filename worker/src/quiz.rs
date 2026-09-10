@@ -32,6 +32,76 @@ fn default_config() -> QuizConfig {
     }
 }
 
+/// Validate that a quiz can safely gate attendee claims.
+///
+/// This is intentionally shared by event activation and admin quiz writes so
+/// the two paths cannot disagree about production readiness.
+pub fn validate_ready_config(config: &QuizConfig) -> Result<(), String> {
+    if config.questions.is_empty() {
+        return Err("quiz must have at least 1 question".to_string());
+    }
+    if !config.questions.iter().any(|question| question.enabled) {
+        return Err("quiz must have at least 1 enabled question".to_string());
+    }
+    if config.passing_score_percent == 0 || config.passing_score_percent > 100 {
+        return Err("passing_score_percent must be between 1 and 100".to_string());
+    }
+    if config.max_attempts == 0 {
+        return Err("max_attempts must be at least 1".to_string());
+    }
+
+    let mut seen_ids = std::collections::HashSet::new();
+    for question in &config.questions {
+        if question.id.trim().is_empty() {
+            return Err("question id must not be empty".to_string());
+        }
+        if !seen_ids.insert(question.id.as_str()) {
+            return Err(format!("duplicate question id: '{}'", question.id));
+        }
+        if question.text.trim().is_empty() {
+            return Err(format!("question '{}' text must not be empty", question.id));
+        }
+        if question.options.len() < 2 {
+            return Err(format!(
+                "question '{}' must have at least 2 options",
+                question.id
+            ));
+        }
+        if question
+            .options
+            .iter()
+            .any(|option| option.trim().is_empty())
+        {
+            return Err(format!(
+                "question '{}' options must not be empty",
+                question.id
+            ));
+        }
+        if (question.correct_index as usize) >= question.options.len() {
+            return Err(format!(
+                "question '{}' correct_index {} out of range (0-{})",
+                question.id,
+                question.correct_index,
+                question.options.len() - 1
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+/// Load and validate the quiz used by an event before enabling its claim gate.
+pub async fn ensure_event_quiz_ready(
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
+    event_id: &str,
+) -> Result<(), String> {
+    let config = get_quiz_config(d1, kv, event_id)
+        .await?
+        .ok_or_else(|| "quiz is enabled but no quiz configuration exists".to_string())?;
+    validate_ready_config(&config)
+}
+
 // ---------------------------------------------------------------------------
 // Quiz config (questions)
 // ---------------------------------------------------------------------------
@@ -487,5 +557,51 @@ pub async fn get_quiz_status(
                 Some(_) => Ok(QuizStatus::InProgress),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod readiness_tests {
+    use super::*;
+
+    fn question(id: &str, enabled: bool) -> QuizQuestion {
+        QuizQuestion {
+            id: id.to_string(),
+            text: "What is the answer?".to_string(),
+            options: vec!["A".to_string(), "B".to_string()],
+            correct_index: 0,
+            explanation: None,
+            session_id: None,
+            session_title: None,
+            enabled,
+        }
+    }
+
+    fn config(questions: Vec<QuizQuestion>) -> QuizConfig {
+        QuizConfig {
+            questions,
+            passing_score_percent: 60,
+            max_attempts: 3,
+            time_limit_seconds: None,
+        }
+    }
+
+    #[test]
+    fn ready_config_requires_an_enabled_question() {
+        let err = validate_ready_config(&config(vec![question("q1", false)])).unwrap_err();
+        assert_eq!(err, "quiz must have at least 1 enabled question");
+    }
+
+    #[test]
+    fn ready_config_rejects_structurally_invalid_question() {
+        let mut invalid = question("q1", true);
+        invalid.correct_index = 2;
+        let err = validate_ready_config(&config(vec![invalid])).unwrap_err();
+        assert!(err.contains("correct_index 2 out of range"));
+    }
+
+    #[test]
+    fn ready_config_accepts_valid_enabled_question() {
+        assert!(validate_ready_config(&config(vec![question("q1", true)])).is_ok());
     }
 }
