@@ -5,7 +5,8 @@ on:
     paths:
       - '.design/DESIGN.md'
       - '.design/brief.md'
-      - 'frontend-leptos/style.css'
+      - 'frontend-leptos/styles/**.css'
+      - '.github/workflows/design-lint.yml'
 
 jobs:
   lint-design:
@@ -30,13 +31,14 @@ jobs:
 
       - name: Check brief ↔ CSS drift
         run: |
+          token_file=frontend-leptos/styles/style-01-core.css
           # Extract bg tokens from CSS :root.
           # Uses \K (not a lookbehind) because the gap is variable-length
           # (see NOTE below). Leading '--' on the pattern requires the '--'
           # option terminator so grep doesn't parse the token as a flag.
-          css_bg_primary=$(grep -oP -- '--bg-primary:\s*\K#[0-9a-fA-F]+' frontend-leptos/style.css)
-          css_bg_secondary=$(grep -oP -- '--bg-secondary:\s*\K#[0-9a-fA-F]+' frontend-leptos/style.css)
-          css_bg_card=$(grep -oP -- '--bg-card:\s*\K#[0-9a-fA-F]+' frontend-leptos/style.css)
+          css_bg_primary=$(grep -oP -- '--bg-primary:\s*\K#[0-9a-fA-F]+' "$token_file")
+          css_bg_secondary=$(grep -oP -- '--bg-secondary:\s*\K#[0-9a-fA-F]+' "$token_file")
+          css_bg_card=$(grep -oP -- '--bg-card:\s*\K#[0-9a-fA-F]+' "$token_file")
 
           # Extract bg tokens from brief.
           # NOTE: cannot use a lookbehind for EITHER extraction because the gap
@@ -52,6 +54,11 @@ jobs:
           drift=0
           check() {
             local label="$1" css_val="$2" brief_val="$3"
+            if [ -z "$css_val" ] || [ -z "$brief_val" ]; then
+              echo "::error::Missing $label in $token_file or .design/brief.md"
+              drift=1
+              return
+            fi
             if [ -n "$css_val" ] && [ -n "$brief_val" ] && [ "$css_val" != "$brief_val" ]; then
               echo "::warning file=.design/brief.md::Drift detected: $label CSS=$css_val brief=$brief_val"
               drift=1
@@ -63,7 +70,7 @@ jobs:
           check "bg-card" "$css_bg_card" "$brief_bg_card"
 
           if [ "$drift" -eq 1 ]; then
-            echo "::error::Brief ↔ CSS drift detected. Update .design/brief.md to match style.css :root values."
+            echo "::error::Brief ↔ CSS drift detected. Update .design/brief.md to match $token_file :root values."
             exit 1
           fi
           echo "No drift detected ✓"
