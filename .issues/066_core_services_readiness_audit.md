@@ -60,11 +60,15 @@ No attendee PII was queried for this audit.
 - [ ] Validate Crossmint host, collection, and collection network at startup or
       event activation. Production currently uses `www.crossmint.com` while the
       config comment identifies the collection as devnet.
-- [ ] Report separate NFT/RPC and escrow clusters in health/readiness. The current
+- [x] Report separate NFT/RPC and escrow clusters in health/readiness. The current
       health cluster inferred from the Helius URL can say mainnet-beta while
       `SOLANA_CLUSTER` for escrow is devnet.
-- [ ] Add a read-only NFT readiness check. Do not use a real mint as a health
+- [x] Add a read-only NFT readiness check. Do not use a real mint as a health
       check because it has external side effects and may cost money.
+  `/api/health` now reports each network role, whether RPC/NFT credentials are
+  present, and stable mismatch warning codes. The legacy `cluster` field follows
+  the escrow network used for wallet signing. The check performs no provider
+  request and has no external side effect.
 
 ### Live release gate
 
