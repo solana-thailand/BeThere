@@ -217,3 +217,34 @@
     font-weight: 600;
     min-width: 7rem;
 }
+
+/* Organizer notification delivery history */
+.notification-panel { margin-top: 1rem; }
+.notification-panel-body { margin-top: .75rem; padding: 1rem; border: 1px solid var(--border-color, #334155); border-radius: .75rem; }
+.notification-panel-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+.notification-table-scroll { overflow-x: auto; }
+.notification-table { width: 100%; min-width: 42rem; border-collapse: collapse; text-align: left; }
+.notification-table th, .notification-table td { padding: .65rem; border-bottom: 1px solid var(--border-color, #334155); vertical-align: top; overflow-wrap: anywhere; }
+
+.notification-table th { white-space: nowrap; }
+.notification-table td:first-child { min-width: 12rem; }
+.notification-scroll-hint { display: none; font-size: .875rem; }
+@media (max-width: 640px) {
+  .notification-scroll-hint { display: block; }
+}
+
+/* Verified-attendee D1 inbox */
+.attendee-inbox { margin-top: 1.5rem; }
+.attendee-inbox-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .75rem; }
+.attendee-inbox-summary { margin: .25rem 0 0; color: var(--text-secondary); font-size: .875rem; }
+.attendee-inbox-list { display: grid; gap: .65rem; }
+.attendee-inbox-item { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid var(--border-color, #334155); border-radius: .75rem; background: var(--surface, rgba(15,23,42,.6)); }
+.attendee-inbox-item--unread { border-left: 3px solid var(--accent, #14f195); }
+.attendee-inbox-copy h3 { margin: .15rem 0; font-size: 1rem; }
+.attendee-inbox-copy p { margin: 0; color: var(--text-secondary); font-size: .875rem; }
+.attendee-inbox-event { color: var(--text-muted); font-size: .75rem; }
+.attendee-inbox-actions { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
+@media (max-width: 640px) {
+  .attendee-inbox-item { align-items: stretch; flex-direction: column; }
+  .attendee-inbox-actions { justify-content: flex-end; }
+}
