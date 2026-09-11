@@ -36,7 +36,7 @@
 
 use std::time::{Duration, Instant};
 
-use domain::models::deposit::DepositStatus;
+use domain::models::deposit::{DepositStatus, DepositStatusResponse};
 
 use crate::assertions::{now_ms, DepositStatusAsserter};
 use crate::client::{DepositUsdcRequest, WorkerClient};
@@ -176,74 +176,26 @@ impl Flow for DepositFlow {
 
         let wallet = self.wallet_address(ctx);
 
-        // ── Step 1: Request the deposit transaction ─────────────────────────
-        //
-        // Issues a live HTTP request to the worker; against an un-provisioned
-        // target it fails with `HarnessError::Transport` (recorded as a flow
-        // failure). Point the harness at a live staging worker to exercise it.
-        let deposit_req = DepositUsdcRequest {
-            attendee_id: self.config.attendee_id.clone(),
-            event_id: self.config.event_id.clone(),
-            wallet_address: wallet.clone(),
-        };
-        let deposit_resp = client.request_deposit_usdc(ctx, &deposit_req).await?;
-
-        // This endpoint intentionally returns a Solana Pay callback, rather
-        // than embedding a transaction. Mirror a real wallet: validate the
-        // callback URL, then fetch the transaction from it.
-        assert_solana_pay_url(&deposit_resp.solana_pay_url)?;
-        let tx_resp = client
-            .fetch_deposit_transaction(ctx, &self.config.attendee_id, &wallet)
-            .await?;
-        assert_transaction_present(&tx_resp.transaction)?;
-
-        // ── Step 2: Sign + submit the transaction ───────────────────────────
-        //
-        // Decodes the base64 tx, signs with `ctx.payer`, submits via the
-        // `FLOW_HARNESS_RPC_URL` cluster, and awaits confirmation (see
-        // `crate::chain::submit_tx`).
-        let _signature = submit_deposit_transaction(ctx, &tx_resp.transaction).await?;
-
-        // ── Step 3: Poll for verification ───────────────────────────────────
-        //
-        // A signed transaction alone cannot update D1. The confirmation route
-        // discovers the on-chain PDA, verifies its signer and fields, then
-        // flips the attendee's record to `verified=true`. We poll that route
-        // until it reports confirmation or the bounded timeout expires.
-        let started_at = Instant::now();
-        let deadline = self.poll_deadline(started_at);
-
-        let status = loop {
-            if Self::reached_timeout(Instant::now(), deadline) {
-                return Err(HarnessError::AssertionFailed {
-                    flow: FLOW_NAME,
-                    reason: format!(
-                        "verification timeout after {}ms (attendee={})",
-                        self.config.poll_timeout.as_millis(),
-                        self.config.attendee_id
-                    ),
-                });
-            }
-
-            let confirmation = client.confirm_deposit(ctx, &self.config.attendee_id).await?;
-            if confirmation.confirmed {
-                let current = client
-                    .fetch_deposit_status(ctx, &self.config.attendee_id)
-                    .await?;
-                if is_verified(current.status.as_ref()) {
-                    break current;
-                }
-                return Err(HarnessError::AssertionFailed {
-                    flow: FLOW_NAME,
-                    reason: "confirmation endpoint reported confirmed but attendee status is not verified"
-                        .to_string(),
-                });
-            }
-
-            // Sleep before the next poll. `tokio::time::sleep` is cancel-safe;
-            // the runner does not cancel mid-flow today, but the property is
-            // preserved for future short-circuit semantics.
-            tokio::time::sleep(self.config.poll_interval).await;
+        // Recover first: an interrupted prior run may already have sent its
+        // transaction. Retrying must never create a duplicate attendee PDA.
+        let status = if let Some(status) =
+            confirmed_status(client, ctx, &self.config.attendee_id).await?
+        {
+            status
+        } else {
+            let deposit_req = DepositUsdcRequest {
+                attendee_id: self.config.attendee_id.clone(),
+                event_id: self.config.event_id.clone(),
+                wallet_address: wallet.clone(),
+            };
+            let deposit_resp = client.request_deposit_usdc(ctx, &deposit_req).await?;
+            assert_solana_pay_url(&deposit_resp.solana_pay_url)?;
+            let tx_resp = client
+                .fetch_deposit_transaction(ctx, &self.config.attendee_id, &wallet)
+                .await?;
+            assert_transaction_present(&tx_resp.transaction)?;
+            let _signature = submit_deposit_transaction(ctx, &tx_resp.transaction).await?;
+            wait_for_confirmed_status(client, ctx, &self.config).await?
         };
 
         // ── Step 4: Assert the deposit-status response is internally
@@ -265,6 +217,52 @@ impl Flow for DepositFlow {
         assert_on_chain_pda_exists(ctx).await?;
 
         Ok(())
+    }
+}
+
+async fn confirmed_status(
+    client: &WorkerClient,
+    ctx: &StagingContext,
+    attendee_id: &str,
+) -> HarnessResult<Option<DepositStatusResponse>> {
+    let confirmation = client.confirm_deposit(ctx, attendee_id).await?;
+    if !confirmation.confirmed {
+        return Ok(None);
+    }
+
+    let status = client.fetch_deposit_status(ctx, attendee_id).await?;
+    if is_verified(status.status.as_ref()) {
+        Ok(Some(status))
+    } else {
+        Err(HarnessError::AssertionFailed {
+            flow: FLOW_NAME,
+            reason: "confirmation endpoint reported confirmed but attendee status is not verified"
+                .to_string(),
+        })
+    }
+}
+
+async fn wait_for_confirmed_status(
+    client: &WorkerClient,
+    ctx: &StagingContext,
+    config: &DepositFlowConfig,
+) -> HarnessResult<DepositStatusResponse> {
+    let deadline = Instant::now() + config.poll_timeout;
+    loop {
+        if Instant::now() >= deadline {
+            return Err(HarnessError::AssertionFailed {
+                flow: FLOW_NAME,
+                reason: format!(
+                    "verification timeout after {}ms (attendee={})",
+                    config.poll_timeout.as_millis(),
+                    config.attendee_id
+                ),
+            });
+        }
+        if let Some(status) = confirmed_status(client, ctx, &config.attendee_id).await? {
+            return Ok(status);
+        }
+        tokio::time::sleep(config.poll_interval).await;
     }
 }
 
