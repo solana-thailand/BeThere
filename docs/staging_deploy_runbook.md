@@ -44,8 +44,8 @@ The staging Worker URL is `https://bethere-staging.solana-thailand.workers.dev`
   fallback (`worker/deploy.sh#L200` — staging intentionally has no fallback).
   If the Cloudflare `/versions` API is degraded (error 10013), staging deploy
   fails fast; retry once it recovers.
-- **Preflight gate:** staging deploys **skip** the §3.5 gate (it is
-  production-only; `worker/deploy.sh#L125`). No `BETHERE_PREFLIGHT_GATE` needed.
+- **Preflight gate:** staging deploys **skip** the §3.5 gate. Production deploys
+  require a green harness run by default; bypass requires `--force --reason`.
 - **DEV_MODE = "1"** (staging-only) permits test shortcuts; production stays `0`.
 - **Bindings are non-inheritable** — `[env.staging]` redeclares the full `vars`
   set + D1/KV/R2 with staging IDs. Adding a new prod var requires mirroring it
@@ -211,10 +211,9 @@ With staging live, the rest of Plan 005 unblocks:
    with real HTTP calls against the staging URL (Plan 005 §3.4).
 2. **Run the harness** — `cargo run -p flow-harness` against staging; expect all
    deposit/refund/claim flows green.
-3. **Activate the preflight gate** (opt-in) — set `BETHERE_PREFLIGHT_GATE=1` so
-   future *production* deploys require a green harness run within the last hour
-   (`worker/deploy.sh#L121`). Until staging is live, the gate stays OFF (it
-   would otherwise block all prod deploys with no way to get a green run).
+3. **Verify the production preflight gate** — it is default-on and requires a
+   green harness run within the last hour. An emergency bypass must use
+   `--force --reason "<why>"` and writes an audit entry.
 
 ---
 

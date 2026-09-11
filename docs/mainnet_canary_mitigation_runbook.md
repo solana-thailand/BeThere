@@ -137,8 +137,8 @@ Assumes §3 resolved (Option A1 chosen, OR Option A2 code change merged).
   confirm it matches an on-chain account).
 - Frontend built: `cd frontend-leptos && bash build.sh`.
 - Production secrets inventoried: `npx wrangler secret list` matches expectations.
-- **If PR #19 is merged**: `BETHERE_PREFLIGHT_GATE=1 bash deploy.sh` runs the blocking preflight
-  gate. Until PR #19 merges, the gate is absent on `develop` — run the checks manually.
+- `bash worker/deploy.sh` runs the blocking production preflight by default;
+  emergency bypass requires `--force --reason "<why>"` and is audit-logged.
 
 ### 4.2 Deploy code with cluster still on devnet
 ```bash

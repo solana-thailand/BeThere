@@ -5,7 +5,9 @@
 > - §3.2 Divergence fix #19 (`RefundDeadlinePassed` not pre-gated) — **SHIPPED & MERGED**: `DepositStatusResponse` gained `checked_in` + `refund_deadline_ms` (`domain/src/models/deposit.rs`), worker populates them (`worker/src/handlers/deposit/usdc/handlers.rs` "divergence fix #19" block), frontend gate rewritten to the two-path predicate (`frontend-leptos/src/pages/deposit/types.rs` L209-226) with both call sites updated.
 > - §3.3 LiteSVM tests — **SUPERSEDED**: equivalent two-path coverage already exists via `quasar-svm` tests in `bethere-escrow/src/tests/refund.rs` (`test_refund`, `test_refund_not_checked_in`, `test_refund_already_refunded`, `test_refund_checked_in_after_deadline`). No marginal value in duplicating under LiteSVM.
 > - §3.1 Staging env scaffold — **MERGED to `develop` via PR #19** (`[env.staging]` block in `wrangler.toml`, `deploy.sh staging` arg, `scripts/seed-staging.sh`, `worker/.env.staging.example`). Cloudflare D1/KV/R2 resources **PROVISIONED** (real IDs in `wrangler.toml` dated 2026-07-10: D1 `951fce4e…`, KV `dd1d541c…`, R2 `bethere-assets-staging`). **Still pending**: staging secrets (`wrangler secret put --env staging`), Google OAuth staging redirect URI registration, optional D1 migration apply, first deploy + isolation verification. See `docs/staging_deploy_runbook.md` for the operational checklist.
-> - §3.4 E2E harness (`flow-harness/` crate) — **scaffold MERGED to `develop` via PR #19** (offline-tested, 114 unit tests green); staging-live wiring pending §3.1 provisioning + Helius devnet RPC.
+> - §3.4 E2E harness (`flow-harness/` crate) — HTTP/on-chain seam wired and
+>   126 offline tests green; dedicated capped devnet fixture/session and first
+>   full live green run remain.
 > - §3.5 Preflight gate — **scaffold MERGED to `develop` via PR #19** (`worker/scripts/preflight.sh`, opt-in and OFF by default); activation pending §3.1 staging going live (otherwise the gate would block all production deploys with no way to get a green run).
 > **Remaining critical path**: staging env → E2E harness → preflight gate (pure infra; unblocks plans 006/007).
 > **Type**: ops (staging isolation) + testing (E2E harness + contract audit)
@@ -155,11 +157,16 @@ The harness is the safety mechanism for 006/007.
 - [x] Add `worker/scripts/preflight.sh`: runs `flow-harness` against staging after every staging deploy. Non-zero exit blocks production deploy.
       (Implemented: `worker/scripts/preflight.sh` with `check` / `run` / `run-only` / `status` subcommands. Reads `.last-green` mtime portably (macOS + Linux). 8/8 smoke tests pass — missing/stale sentinel → exit 1, fresh → exit 0, misconfig → exit 2.)
 - [x] Update `worker/deploy.sh` header rule: **production deploys require a green preflight run against staging within the last hour.** Enforce via timestamp check on `flow-harness/results/.last-green`.
-      (Implemented: opt-in via `BETHERE_PREFLIGHT_GATE=1`; production-only; default `PREFLIGHT_MAX_AGE_SECONDS=3600`. Gate is OFF by default — zero impact on existing deploys. `run_preflight_gate` runs before `move_pnp` so it fails fast.)
+      (Implemented and default-on for production; default
+      `PREFLIGHT_MAX_AGE_SECONDS=3600`. `run_preflight_gate` runs before
+      `move_pnp` so it fails fast. Bypass requires `--force --reason` and is
+      audit-logged.)
 - [x] Add a `--force` escape hatch to `deploy.sh` for emergencies, with an audit-log entry (gate is bypassable but never silently).
       (Implemented: `--force [--reason "..."]` appends a tab-separated audit row to `worker/scripts/.preflight-bypass.log` — `{ts, user, commit, env, reason}`. Audit format verified: 5 fields. `*.log` already gitignored so the trail stays local.)
 
-> **Status:** scaffold complete + verified (bash -n clean, 8/8 preflight smoke tests pass, 114/114 flow-harness tests still green). The gate is **opt-in and OFF by default** — existing `./deploy.sh` invocations are unchanged until `BETHERE_PREFLIGHT_GATE=1` is set. Activation is intentionally deferred until §3.1 staging is live (otherwise the gate would block all production deploys with no way to get a green run).
+> **Status (2026-09-11):** gate is default-on for production and the standalone
+> harness has 126 passing offline tests. Staging is live; a dedicated capped
+> devnet fixture/session and first full live green run remain required.
 
 ---
 
@@ -173,15 +180,16 @@ The harness is the safety mechanism for 006/007.
 
 ## 5. Rollout
 
-- [ ] Create staging Cloudflare resources (D1, KV, R2) — free tier, zero cost.
-- [ ] Add `[env.staging]` to `wrangler.toml`; deploy staging; verify isolation (staging D1 contains only seeded test data, not production attendees).
+- [x] Create staging Cloudflare resources (D1, KV, R2) — free tier, zero cost.
+- [x] Add `[env.staging]` to `wrangler.toml`; deploy staging; verify isolation (staging D1 contains only seeded test data, not production attendees).
 - [x] Write contract surface doc (§3.2); fix any divergences found as separate commits within this plan.
       (Doc written; the one divergence (#19) fixed & merged.)
 - [x] Implement LiteSVM tests (§3.3) — ship first, fastest payoff.
       (Superseded by `quasar-svm` coverage in `bethere-escrow/src/tests/refund.rs` — see §3.3.)
 - [ ] Implement E2E harness (§3.4) — ship second.
 - [x] Wire preflight gate (§3.5) — ship last; this is what blocks 006/007 from proceeding.
-      (Shipped — `worker/scripts/preflight.sh` (8734 B, +x) + `worker/deploy.sh#L165` `run_preflight_gate || { echo "Aborting production deploy."; exit 1; }`; opt-in via `BETHERE_PREFLIGHT_GATE=1` (L129), `--force` escape hatch appends to `.preflight-bypass.log` (L118).)
+      (Shipped and default-on for production. `--force` requires a non-empty
+      `--reason` and appends to `.preflight-bypass.log`.)
 - [ ] One-time baseline: run harness read-only flows against production to confirm current behavior matches expectations (no writes).
 
 ---
