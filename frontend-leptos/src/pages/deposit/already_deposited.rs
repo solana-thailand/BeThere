@@ -2,7 +2,7 @@
 
 use leptos::prelude::*;
 
-use crate::api::{DepositMethod, DepositStatusResponse};
+use crate::api::{self, DepositMethod, DepositStatusResponse};
 use crate::utils::format_timestamp;
 
 use super::types::*;
@@ -145,6 +145,17 @@ pub fn already_deposited_view(
     let refund_info_clone = refund_info.clone();
     let data_clone_for_event_link = data.clone();
     let info_clone = data.status.clone();
+    let pending_usdc = !info.verified
+        && info.method == DepositMethod::Usdc
+        && info
+            .tx_signature
+            .as_deref()
+            .is_some_and(|signature| !signature.is_empty());
+    let pending_event_id = info.event_id.clone();
+    let pending_attendee_id = info.attendee_id.clone();
+    let pending_data = data.clone();
+    let (checking_confirmation, set_checking_confirmation) = signal(false);
+    let (confirmation_message, set_confirmation_message) = signal(None::<String>);
 
     // Non-USDC (THB / rolling credit) refund guidance — computed here (not inside
     // the view) to avoid borrowing `info`. THB refund/credit actions live on the
@@ -291,8 +302,64 @@ pub fn already_deposited_view(
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            "Refund will be available after verification."
+                            {if pending_usdc {
+                                "Your payment signature is recorded. It is safe to close this page and use the same deposit link later; do not send another payment."
+                            } else {
+                                "Refund will be available after verification."
+                            }}
                         </p>
+                        {if pending_usdc {
+                            let event_id = pending_event_id.clone();
+                            let attendee_id = pending_attendee_id.clone();
+                            let data = pending_data.clone();
+                            view! {
+                                <button
+                                    class="btn btn-outline btn-block"
+                                    disabled=move || checking_confirmation.get()
+                                    on:click=move |_| {
+                                        let event_id = event_id.clone();
+                                        let attendee_id = attendee_id.clone();
+                                        let data = data.clone();
+                                        set_checking_confirmation.set(true);
+                                        set_confirmation_message.set(None);
+                                        leptos::task::spawn_local(async move {
+                                            match api::confirm_deposit(&event_id, &attendee_id).await {
+                                                Ok(result) if result.confirmed => {
+                                                    if let Some(signature) = result.tx_signature {
+                                                        set_state.set(DepositPageState::DepositConfirmed(data, signature));
+                                                    } else {
+                                                        set_confirmation_message.set(Some(
+                                                            "Confirmed, but the receipt is still syncing. Check again shortly."
+                                                                .to_string(),
+                                                        ));
+                                                    }
+                                                }
+                                                Ok(_) => set_confirmation_message.set(Some(
+                                                    "Still pending on Solana. No action is required; check again shortly."
+                                                        .to_string(),
+                                                )),
+                                                Err(_) => set_confirmation_message.set(Some(
+                                                    "The status check is temporarily unavailable. Your recorded payment is unchanged."
+                                                        .to_string(),
+                                                )),
+                                            }
+                                            set_checking_confirmation.set(false);
+                                        });
+                                    }
+                                >
+                                    {move || if checking_confirmation.get() {
+                                        "Checking recorded payment..."
+                                    } else {
+                                        "Check confirmation again"
+                                    }}
+                                </button>
+                                {move || confirmation_message.get().map(|message| view! {
+                                    <p class="hint-note" role="status">{message}</p>
+                                })}
+                            }.into_any()
+                        } else {
+                            ().into_any()
+                        }}
                     </div>
                 }.into_any()
             } else if is_credit {

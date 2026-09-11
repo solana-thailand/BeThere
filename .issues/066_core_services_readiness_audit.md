@@ -103,8 +103,10 @@ No attendee PII was queried for this audit.
       and QR readiness cannot partially succeed without a reconciliation job.
 - [ ] Add a reconciliation view/job for ledger, THB deposit, deposit status,
       attendee deposit fields, refund/credit settlement, and Sheets mirrors.
-- [ ] Show the exact currency and network before wallet signing; remove every
-      remaining `SOL` reference where the product actually takes USDC.
+- [x] Show the exact currency and network before attendee transaction signing.
+      Deposit, refund, rent reclaim, and rollover use a shared transaction
+      review; valid SOL references are retained for network fees and account
+      rent while deposits remain labeled USDC.
 - [ ] Keep escrow on devnet until program deployment/audit and live rollover E2E
       items in Issues 001, 013, and 040 are completed.
 

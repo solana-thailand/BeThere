@@ -34,6 +34,10 @@ neumorphism, and novelty interactions in transactional flows.
       labeled explicitly.
 - [ ] Give pending external operations an idempotent retry action and explain
       whether the attendee can safely close the page.
+      USDC confirmation can now be rechecked from the recorded payment without
+      sending another transaction, and deposit/NFT mint screens explain safe
+      close and stable retry behavior. Remaining external operations still need
+      the same audit before this item is complete.
 - [ ] Add reduced-motion support for progress and success transitions.
 - [ ] Validate 320 px mobile layouts, keyboard order, focus visibility, screen
       reader labels, and WCAG AA contrast.
