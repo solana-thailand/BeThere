@@ -393,6 +393,10 @@ pub async fn get_public_recap(
     // a form that `post_event::register` then answers 410 Gone. The server
     // clock decides — the same clock that endpoint checks against.
     let accepting = config.post_event_registration_accepting(chrono::Utc::now().timestamp_millis());
+    // Public recaps only expose an encrypted Web URL. Event data can also be
+    // imported from Sheets or older API clients, so the HTML input type alone
+    // is not a sufficient trust boundary.
+    let public_video_url = https_public_url(&config.video_url);
 
     Ok(ApiOk::new(json!({
         "event": {
@@ -406,6 +410,7 @@ pub async fn get_public_recap(
             "event_format": config.event_format.as_str(),
             "poster_url": config.poster_url,
             "nft_image_url": config.nft_image_url,
+            "video_url": public_video_url,
             "post_event_registration_open": accepting,
         },
         "recap_markdown": recap.recap_markdown,
@@ -414,6 +419,15 @@ pub async fn get_public_recap(
         "frozen_at": recap.frozen_at,
         "funnel": funnel,
     })))
+}
+
+/// Return an organizer URL only when it is safe to place in a public link or
+/// embed. This intentionally rejects HTTP, relative, and active-content URLs.
+fn https_public_url(url: &str) -> String {
+    url.strip_prefix("https://")
+        .filter(|rest| !rest.trim().is_empty())
+        .map(|rest| format!("https://{rest}"))
+        .unwrap_or_default()
 }
 
 /// Count attendees by track from sheet data.
@@ -476,5 +490,21 @@ fn is_online_registration_open(
         OnlineOpenMode::Always => true,
         OnlineOpenMode::AutoOnFull => !in_person_available,
         OnlineOpenMode::Manual => config.online_registration_open,
+    }
+}
+
+#[cfg(test)]
+mod public_url_tests {
+    use super::https_public_url;
+
+    #[test]
+    fn only_nonempty_https_urls_are_public() {
+        assert_eq!(
+            https_public_url("https://youtube.com/watch?v=abc"),
+            "https://youtube.com/watch?v=abc"
+        );
+        assert!(https_public_url("http://example.com/video").is_empty());
+        assert!(https_public_url("javascript:alert(1)").is_empty());
+        assert!(https_public_url("https://   ").is_empty());
     }
 }

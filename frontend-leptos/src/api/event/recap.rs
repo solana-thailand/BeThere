@@ -206,6 +206,9 @@ pub struct PublicRecapEvent {
     pub poster_url: String,
     #[serde(default)]
     pub nft_image_url: String,
+    /// Organizer-configured HTTPS recording URL.
+    #[serde(default)]
+    pub video_url: String,
     /// Whether post-event registration (lead capture) is open (Plan 008 — Phase 3).
     /// Drives the "join the community" CTA on the recap page.
     #[serde(default)]

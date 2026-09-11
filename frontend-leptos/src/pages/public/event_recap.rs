@@ -159,6 +159,7 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
     let date_str = format_event_date_range(event.event_start_ms, event.event_end_ms);
     let funnel = payload.funnel.clone();
     let markdown = payload.recap_markdown.clone();
+    let video_url = event.video_url.clone();
     let published_str = payload
         .recap_published_at
         .as_deref()
@@ -275,6 +276,21 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
                 }
             }}
         </div>
+
+        // Reuse the ticket recording component so current attendees and people
+        // catching up later receive identical URL handling and presentation.
+        {if video_url.is_empty() {
+            ().into_any()
+        } else {
+            view! {
+                <div style="width:100%;margin-bottom:1.5rem;">
+                    <crate::pages::ticket::video_section::VideoSection
+                        video_url=video_url
+                        variant="card".to_string()
+                    />
+                </div>
+            }.into_any()
+        }}
 
         // ── Recap body (rendered as preformatted text in v1) ──
         {move || {
