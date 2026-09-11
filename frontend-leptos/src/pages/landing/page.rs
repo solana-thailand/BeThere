@@ -6,7 +6,7 @@ use leptos_router::components::A;
 use crate::components::is_admin_role;
 use crate::icons::{Icon, IconName};
 
-use super::auth::{AuthState, trigger_landing_oauth, trigger_landing_signout};
+use super::auth::{trigger_landing_oauth, trigger_landing_signout, AuthState};
 use super::registrations::MyRegistrations;
 use super::upcoming::UpcomingEvents;
 use super::waitlist::WaitlistForm;
@@ -433,7 +433,7 @@ pub fn Landing() -> impl IntoView {
                                 </div>
                                 <div class="landing-timeline-body">
                                     <div class="landing-timeline-title">"Reserve your spot"</div>
-                                    <div class="landing-timeline-desc">"Browse events and pay a deposit to secure your registration. Deposits start from 500 THB or 0.01 SOL."</div>
+                                    <div class="landing-timeline-desc">"Browse events and reserve your place with the event’s configured THB or USDC deposit. You’ll see the exact amount and payment method before confirming."</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -473,7 +473,7 @@ pub fn Landing() -> impl IntoView {
                                 </div>
                                 <div class="landing-timeline-body">
                                     <div class="landing-timeline-title">"Set up event & deposit amount"</div>
-                                    <div class="landing-timeline-desc">"Create your event, set the deposit stake, and define the staking parameters. Supports THB via PromptPay or SOL/USDC."</div>
+                                    <div class="landing-timeline-desc">"Create your event, choose the deposit and refund rules, and show attendees the exact THB or USDC amount before they confirm."</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">

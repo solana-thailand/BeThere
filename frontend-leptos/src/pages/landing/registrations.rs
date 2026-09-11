@@ -170,12 +170,10 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                             "TBA".to_string()
                                         };
                                         let next_url = reg.next_step.url.clone();
-                                        let status_color = match reg.status.as_str() {
-                                            "nft claimed" => "#4ade80",
-                                            "checked in" => "#4ade80",
-                                            "deposit confirmed" => "#22c55e",
-                                            "deposit pending" => "#facc15",
-                                            _ => "var(--text-secondary)",
+                                        let status_class = match reg.status.as_str() {
+                                            "nft claimed" | "checked in" | "deposit confirmed" => "landing-reg-status-badge landing-reg-status-badge--confirmed",
+                                            "deposit pending" => "landing-reg-status-badge landing-reg-status-badge--action",
+                                            _ => "landing-reg-status-badge landing-reg-status-badge--neutral",
                                         };
                                         view! {
                                             <div class="landing-reg-card">
@@ -188,11 +186,8 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                                 <div class="landing-reg-identity">
                                                     <span class="landing-reg-identity-label">{user.clone()}</span>
                                                 </div>
-                                                <div class="landing-reg-status-badge" style=format!(
-                                                    "background:{}; color:#000;",
-                                                    if status_color == "var(--text-secondary)" { "rgba(148,163,184,0.15)".to_string() } else { format!("{status_color}22") }
-                                                )>
-                                                    <span class="landing-reg-status-dot" style=format!("background:{status_color};")></span>
+                                                <div class=status_class>
+                                                    <span class="landing-reg-status-dot" aria-hidden="true"></span>
                                                     {reg.status.clone()}
                                                 </div>
                                                 <a href=next_url class="btn btn-primary btn-sm landing-reg-action">
