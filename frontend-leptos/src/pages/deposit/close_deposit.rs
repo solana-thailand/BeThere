@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
 use crate::icons::{Icon, wallet_icon_name};
+use crate::utils::get_cluster;
 
 use super::components;
 use super::types::*;
@@ -82,6 +83,8 @@ pub fn close_deposit_wallet_connected_view(
 
     let _wallet_icon = wallet_icon_name(wallet_name);
     let pk_display = truncate_pk(public_key);
+    let cluster = get_cluster();
+    let network = format!("Solana {}", components::cluster_display_label(&cluster));
 
     let handle_close = handle_close_deposit.clone();
 
@@ -98,8 +101,14 @@ pub fn close_deposit_wallet_connected_view(
                 </div>
                 <span class="dep2-wallet-bar-badge">"Connected"</span>
             </div>
+            {components::transaction_review(vec![
+                ("You authorize", "Close your deposit account".to_string()),
+                ("Network", network),
+                ("You receive", "Remaining account rent (about 0.002 SOL)".to_string()),
+                ("Network fee", "Paid in SOL by this connected wallet".to_string()),
+            ])}
             <p class="hint-desc">
-                "Your deposit account is ready to be closed."
+                "The returned balance is an estimate and can differ from 0.002 SOL. Review, then approve in your wallet."
             </p>
             <button
                 class="btn btn-success btn-block"

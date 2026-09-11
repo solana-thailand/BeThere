@@ -27,8 +27,11 @@ neumorphism, and novelty interactions in transactional flows.
       the primary signal; landing, deposit, ticket, and claim use it.
 - [ ] Add one attendee journey indicator shared by registration, deposit,
       ticket, quiz, and claim, driven by server state.
-- [ ] Show exact currency, network, amount, refund condition, and fee ownership
-      immediately before every wallet signature.
+- [x] Show exact currency, network, amount, refund condition, and fee ownership
+      immediately before every attendee transaction signature. Deposit,
+      refund, rent-reclaim, and rollover screens share one transaction-review
+      component; estimates and post-transaction refundable-tier assignment are
+      labeled explicitly.
 - [ ] Give pending external operations an idempotent retry action and explain
       whether the attendee can safely close the page.
 - [ ] Add reduced-motion support for progress and success transitions.

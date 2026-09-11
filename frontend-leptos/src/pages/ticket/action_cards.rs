@@ -272,6 +272,8 @@ enum RolloverState {
 /// and a new event from the same organizer is available.
 #[component]
 pub fn RolloverActionCard(
+    /// Source deposit amount in USDC smallest units.
+    deposit_amount_usdc: u64,
     /// Name of the target event to roll deposit into.
     #[prop(into)]
     target_event_name: String,
@@ -397,6 +399,12 @@ pub fn RolloverActionCard(
 
                     RolloverState::WalletConnected(wn, _pk) => {
                         let wn_display = wn.clone();
+                        let amount = crate::pages::deposit::types::format_usdc(deposit_amount_usdc);
+                        let cluster = utils::get_cluster();
+                        let network = format!(
+                            "Solana {}",
+                            crate::pages::deposit::components::cluster_display_label(&cluster)
+                        );
                         let sv_source = source_eid;
                         let sv_target = target_eid;
                         let sv_aid = aid_stored;
@@ -405,8 +413,14 @@ pub fn RolloverActionCard(
                             <div class="ticket-action-title">
                                 {format!("Connected via {}", wn_display)}
                             </div>
+                            {crate::pages::deposit::components::transaction_review(vec![
+                                ("You authorize", format!("Move {amount} USDC to {target_event_name}")),
+                                ("Network", network),
+                                ("Extra payment", "None".to_string()),
+                                ("Network fee", "Paid in SOL by this connected wallet".to_string()),
+                            ])}
                             <div class="ticket-action-desc">
-                                "Click below to sign and send the rollover transaction."
+                                "Review these details, then approve in your wallet."
                             </div>
                             <button
                                 class="btn btn-success btn-sm ticket-action-btn"

@@ -298,6 +298,7 @@ pub fn InPersonView(
                             let aid = api_id.clone();
                             view! {
                                 <RolloverActionCard
+                                    deposit_amount_usdc=deposit_amount_usdc
                                     target_event_name=target_name
                                     target_event_id=target_eid
                                     source_event_id=source_eid
