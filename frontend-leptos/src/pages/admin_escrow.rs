@@ -457,8 +457,9 @@ pub fn AdminEscrow(
     // the Event Form's inline init.
     let handle_init_escrow = move |_| {
         let wn = wallet_name.get();
+        let organizer_wallet = wallet_pk.get();
         let eid = active_event_id.get().unwrap_or_default();
-        if eid.is_empty() || wn.is_empty() {
+        if eid.is_empty() || wn.is_empty() || organizer_wallet.is_empty() {
             return;
         }
         let set_init = set_initializing;
@@ -470,7 +471,29 @@ pub fn AdminEscrow(
         let set_t = set_toast;
         set_init.set(true);
         leptos::task::spawn_local(async move {
-            // 1. Build the init TX (vault ATA + create_event in one TX).
+            // 1. Persist the connected organizer before building the escrow
+            // transaction. The on-chain instruction requires that wallet to
+            // be the signer and the server uses it to derive the escrow PDA.
+            if let Err(e) = api::update_event(
+                &eid,
+                &api::UpdateEventBody {
+                    organizer_wallet: Some(organizer_wallet),
+                    ..Default::default()
+                },
+            )
+            .await
+            {
+                log::error!("[admin-escrow] organizer wallet save failed: {e}");
+                components::show_toast(
+                    &set_t,
+                    &format!("Failed to save organizer wallet: {e}"),
+                    ToastType::Error,
+                );
+                set_init.set(false);
+                return;
+            }
+
+            // 2. Build the init TX (vault ATA + create_event in one TX).
             let init_resp = match api::init_escrow(&api::InitEscrowRequest {
                 event_id: eid.clone(),
             })
@@ -489,7 +512,7 @@ pub fn AdminEscrow(
                 }
             };
 
-            // 2. SEC-014: verify wallet cluster matches expected network.
+            // 3. SEC-014: verify wallet cluster matches expected network.
             let expected_cluster = crate::utils::get_cluster();
             if let Err(cluster_err) =
                 crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await
@@ -500,7 +523,7 @@ pub fn AdminEscrow(
                 return;
             }
 
-            // 3. Pre-sign simulation (Solana Foundation Security Checklist).
+            // 4. Pre-sign simulation (Solana Foundation Security Checklist).
             match crate::pages::escrow_init::simulate_transaction_js(&wn, &init_resp.transaction)
                 .await
             {
@@ -521,7 +544,7 @@ pub fn AdminEscrow(
                 }
             }
 
-            // 4. Sign + send via wallet.
+            // 5. Sign + send via wallet.
             match sign_and_send_tx_js(&wn, &init_resp.transaction).await {
                 crate::wallet_error::WalletResult::Success(signature) => {
                     log::info!("[admin-escrow] init TX confirmed: {}", signature);
@@ -529,7 +552,7 @@ pub fn AdminEscrow(
                     set_ar.update(|v| {
                         v.push((EscrowAction::InitEscrow, Ok(signature.clone())));
                     });
-                    // 5. Sync on-chain state to server (idempotent).
+                    // 6. Sync on-chain state to server (idempotent).
                     match api::confirm_escrow_init(&api::ConfirmEscrowInitRequest {
                         event_id: eid.clone(),
                     })
