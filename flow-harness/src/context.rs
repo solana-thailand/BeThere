@@ -36,8 +36,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signer::keypair::Keypair;
 use solana_sdk::signer::Signer;
+use solana_sdk::signer::keypair::Keypair;
 use url::Url;
 
 use crate::error::{HarnessError, HarnessResult};
@@ -123,6 +123,19 @@ impl StagingContext {
             worker_url_override,
             std::env::var("FLOW_HARNESS_WORKER_URL").ok().as_deref(),
         )?;
+
+        let missing = missing_required_env(&[
+            "FLOW_HARNESS_ORGANIZER",
+            "FLOW_HARNESS_ATTENDEE_WALLET",
+            "FLOW_HARNESS_PAYER_KEYPAIR",
+            "FLOW_HARNESS_DEPOSIT_MINT",
+        ]);
+        if !missing.is_empty() {
+            return Err(HarnessError::Config(format!(
+                "missing required live fixture input(s): {}. See flow-harness/README.md for the staging setup.",
+                missing.join(", ")
+            )));
+        }
 
         let event_id_str = std::env::var("FLOW_HARNESS_EVENT_ID")
             .unwrap_or_else(|_| DEFAULT_EVENT_ID_STR.to_string());
@@ -375,6 +388,25 @@ fn read_pubkey_env(name: &str) -> HarnessResult<Pubkey> {
     pubkey_from_str_result(&raw, name)
 }
 
+fn missing_required_env(names: &[&str]) -> Vec<String> {
+    missing_required_env_with(names, |name| {
+        std::env::var(name)
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false)
+    })
+}
+
+fn missing_required_env_with<F>(names: &[&str], is_set: F) -> Vec<String>
+where
+    F: Fn(&str) -> bool,
+{
+    names
+        .iter()
+        .filter(|name| !is_set(name))
+        .map(|name| (*name).to_string())
+        .collect()
+}
+
 fn pubkey_from_str(s: &str) -> Pubkey {
     Pubkey::from_str(s).expect("hardcoded program id is valid base58")
 }
@@ -504,6 +536,13 @@ mod tests {
     fn worker_url_must_not_have_trailing_slash() {
         assert!(parse_worker_url(Some("https://x.dev/"), None).is_err());
         assert!(parse_worker_url(Some("https://x.dev"), None).is_ok());
+    }
+
+    #[test]
+    fn missing_required_env_preserves_order_and_ignores_present_values() {
+        let missing =
+            missing_required_env_with(&["first", "second", "third"], |name| name == "first");
+        assert_eq!(missing, vec!["second".to_string(), "third".to_string()]);
     }
 
     #[test]
