@@ -1,6 +1,7 @@
 # Rust
 /target/
 /target-harness/
+/target-frontend-check/
 debug/
 *.pdb
 

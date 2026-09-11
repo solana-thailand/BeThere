@@ -224,8 +224,27 @@ pub fn event_refund_window_open(
     refund_deadline_ms: i64,
     checked_in: bool,
 ) -> bool {
+    refund_window_open_at(
+        event_end_ms,
+        refund_deadline_ms,
+        checked_in,
+        now_ms(),
+    )
+}
+
+/// Pure refund-window predicate shared by the UI wrapper and boundary tests.
+///
+/// A single captured timestamp mirrors the on-chain instruction's one clock
+/// read. It avoids a boundary race where one `now_ms()` call is before the
+/// deadline and a second call is after it during the same render.
+pub fn refund_window_open_at(
+    event_end_ms: i64,
+    refund_deadline_ms: i64,
+    checked_in: bool,
+    now: i64,
+) -> bool {
     // Event must have ended (on-chain: clock >= event_end).
-    if event_end_ms <= 0 || now_ms() < event_end_ms {
+    if event_end_ms <= 0 || now < event_end_ms {
         return false;
     }
     // Checked-in attendees: window is [event_end, ∞).
@@ -234,7 +253,7 @@ pub fn event_refund_window_open(
     }
     // No-show attendees: window is [event_end, refund_deadline).
     // Missing deadline → fail safe (treat as closed).
-    refund_deadline_ms > 0 && now_ms() < refund_deadline_ms
+    refund_deadline_ms > 0 && now < refund_deadline_ms
 }
 
 /// Format epoch ms to a short readable date for the refund deadline.
@@ -263,6 +282,29 @@ pub fn format_duration_label(hours: u32) -> String {
         }
     } else {
         format!("{hours}h")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::refund_window_open_at;
+
+    const EVENT_END: i64 = 1_000;
+    const DEADLINE: i64 = 2_000;
+
+    #[test]
+    fn refund_window_matches_on_chain_boundaries() {
+        assert!(!refund_window_open_at(EVENT_END, DEADLINE, false, EVENT_END - 1));
+        assert!(refund_window_open_at(EVENT_END, DEADLINE, false, EVENT_END));
+        assert!(refund_window_open_at(EVENT_END, DEADLINE, false, DEADLINE - 1));
+        assert!(!refund_window_open_at(EVENT_END, DEADLINE, false, DEADLINE));
+        assert!(refund_window_open_at(EVENT_END, DEADLINE, true, DEADLINE));
+    }
+
+    #[test]
+    fn missing_deadline_fails_safe_for_no_show_only() {
+        assert!(!refund_window_open_at(EVENT_END, 0, false, EVENT_END));
+        assert!(refund_window_open_at(EVENT_END, 0, true, EVENT_END));
     }
 }
 
