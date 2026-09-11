@@ -108,6 +108,24 @@ impl DepositFlow {
         }
     }
 
+    /// Build a deposit flow for the fixture selected by the CLI environment.
+    ///
+    /// Named staging fixtures must keep the Worker event and attendee IDs
+    /// together. Reading both here makes `--flow deposit` target the same
+    /// fixture as [`StagingContext`], rather than silently falling back to the
+    /// historic default attendee.
+    #[must_use]
+    pub fn from_env() -> Self {
+        let defaults = DepositFlowConfig::default();
+        Self {
+            config: DepositFlowConfig {
+                attendee_id: fixture_value("FLOW_HARNESS_ATTENDEE_ID", defaults.attendee_id),
+                event_id: fixture_value("FLOW_HARNESS_EVENT_ID", defaults.event_id),
+                ..defaults
+            },
+        }
+    }
+
     /// Create a deposit flow with a custom config (used by tests and by
     /// flows that target a second attendee, e.g. the no-show path).
     #[must_use]
@@ -134,6 +152,10 @@ impl DepositFlow {
     pub fn reached_timeout(now: Instant, deadline: Instant) -> bool {
         now >= deadline
     }
+}
+
+fn fixture_value(variable: &str, default: String) -> String {
+    std::env::var(variable).unwrap_or(default)
 }
 
 impl Default for DepositFlow {
@@ -490,6 +512,14 @@ mod tests {
         assert_eq!(c.event_id, "flow-test-event");
         assert_eq!(c.poll_interval, Duration::from_millis(2_000));
         assert_eq!(c.poll_timeout, Duration::from_millis(60_000));
+    }
+
+    #[test]
+    fn fixture_value_uses_override_or_default() {
+        assert_eq!(
+            fixture_value("FLOW_HARNESS_TEST_FIXTURE_VALUE", "default".to_string()),
+            "default"
+        );
     }
 
     #[test]

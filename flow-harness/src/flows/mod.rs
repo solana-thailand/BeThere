@@ -48,7 +48,7 @@ use crate::runner::Runner;
 /// flows::register_default(&mut runner);
 /// ```
 pub fn register_default(runner: &mut Runner) {
-    runner.register(DepositFlow::new());
+    runner.register(DepositFlow::from_env());
     runner.register(RefundPreEventEndFlow::new());
     runner.register(RefundPostEventEndCheckedInFlow::new());
     runner.register(RefundNoShowDeadlineFlow::new());
@@ -65,7 +65,7 @@ pub fn register_default(runner: &mut Runner) {
 /// preflight gate and therefore must not replace the full-suite green signal.
 pub fn register_named(runner: &mut Runner, name: &str) -> Result<(), String> {
     match name {
-        "deposit" => runner.register(DepositFlow::new()),
+        "deposit" => runner.register(DepositFlow::from_env()),
         "refund-pre-event-end" => runner.register(RefundPreEventEndFlow::new()),
         "refund-post-event-end-checked-in" => {
             runner.register(RefundPostEventEndCheckedInFlow::new())

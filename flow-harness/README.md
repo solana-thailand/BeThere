@@ -156,6 +156,7 @@ Accepted names are `deposit`, `refund-pre-event-end`,
 | `FLOW_HARNESS_RPC_URL` | yes (live) | Helius devnet RPC for TX submission |
 | `FLOW_HARNESS_WORKER_URL` | no | Staging URL (default: `https://bethere-staging.solana-thailand.workers.dev`) |
 | `FLOW_HARNESS_EVENT_ID` | no | Worker-side event id (default: `flow-test-event`) |
+| `FLOW_HARNESS_ATTENDEE_ID` | no | Attendee record for the selected fixture (default: `flow-test-attendee-1`) |
 | `FLOW_HARNESS_EVENT_ID_ON_CHAIN` | no | On-chain `u64` event id; defaults to the Worker's deterministic mapping of `FLOW_HARNESS_EVENT_ID` |
 | `FLOW_HARNESS_ESCROW_PROGRAM_ID` | no | Override the deployed program id |
 | `FLOW_HARNESS_ATTENDEE_EMAIL` | no | Override the seeded attendee email |
