@@ -344,7 +344,10 @@ pub fn thb_uploaded_view(attendee_id: &str, event_id: &str) -> AnyView {
                 "Your payment slip has been submitted for verification."
             </p>
             <div style="text-align:center">
-                <span class="badge badge-warning">"Pending Verification"</span>
+                <crate::components::StatusBadge
+                    tone=crate::components::StatusTone::Pending
+                    label="Pending verification"
+                />
             </div>
             <p class="thb-success-redirect">"Redirecting to your ticket..."</p>
         </div>

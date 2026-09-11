@@ -444,6 +444,10 @@ pub fn Claim() -> impl IntoView {
 
                                     // Status card — quiz pending or NFT coming soon
                                     <div class="claim-nft-soon-card">
+                                        <crate::components::StatusBadge
+                                            tone=crate::components::StatusTone::Pending
+                                            label="Pending"
+                                        />
                                         <h3>{card_title}</h3>
                                         <p>{card_msg}</p>
                                         <div class="nft-description">
@@ -1027,6 +1031,10 @@ pub fn Claim() -> impl IntoView {
                         ClaimState::MintError(data, error) => {
                             view! {
                                 <div class="claim-error">
+                                    <crate::components::StatusBadge
+                                        tone=crate::components::StatusTone::Failed
+                                        label="Action failed"
+                                    />
                                     <h2>"Minting Failed"</h2>
                                     <div class="result-details">
                                         <p>{escape_html(&error)}</p>

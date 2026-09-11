@@ -44,6 +44,41 @@ pub enum ToastType {
     Info,
 }
 
+/// Semantic status vocabulary shared by attendee-facing flows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StatusTone {
+    Confirmed,
+    ActionRequired,
+    Pending,
+    Blocked,
+    Failed,
+    Refundable,
+    Neutral,
+}
+
+impl StatusTone {
+    fn css_class(self) -> &'static str {
+        match self {
+            Self::Confirmed | Self::Refundable => "badge badge-success status-badge",
+            Self::ActionRequired | Self::Pending => "badge badge-warning status-badge",
+            Self::Blocked | Self::Failed => "badge badge-danger status-badge",
+            Self::Neutral => "badge badge-info status-badge",
+        }
+    }
+}
+
+/// Accessible status badge. Text always carries the state; the dot is
+/// decorative so color is never the only signal.
+#[component]
+pub fn StatusBadge(tone: StatusTone, #[prop(into)] label: String) -> impl IntoView {
+    view! {
+        <span class=tone.css_class() role="status">
+            <span class="status-badge-dot" aria-hidden="true"></span>
+            {label}
+        </span>
+    }
+}
+
 /// Toast notification message payload.
 #[derive(Clone, Debug)]
 pub struct ToastMessage {
@@ -421,5 +456,27 @@ pub fn LightboxImage(
             hint=hint_str
             sizing=sizing
         />
+    }
+}
+
+#[cfg(test)]
+mod status_badge_tests {
+    use super::StatusTone;
+
+    #[test]
+    fn every_status_tone_maps_to_a_semantic_badge_class() {
+        let cases = [
+            (StatusTone::Confirmed, "badge-success"),
+            (StatusTone::ActionRequired, "badge-warning"),
+            (StatusTone::Pending, "badge-warning"),
+            (StatusTone::Blocked, "badge-danger"),
+            (StatusTone::Failed, "badge-danger"),
+            (StatusTone::Refundable, "badge-success"),
+            (StatusTone::Neutral, "badge-info"),
+        ];
+
+        for (tone, expected) in cases {
+            assert!(tone.css_class().contains(expected), "tone={tone:?}");
+        }
     }
 }
