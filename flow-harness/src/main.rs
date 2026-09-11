@@ -56,6 +56,11 @@ struct Cli {
     /// `FLOW_HARNESS_WORKER_URL` and the built-in default.
     #[arg(long, value_name = "URL")]
     worker: Option<String>,
+
+    /// Run exactly one named flow for staging diagnosis. This always writes a
+    /// summary, but can never refresh the full-suite production green marker.
+    #[arg(long, value_name = "NAME")]
+    flow: Option<String>,
 }
 
 /// Entry point. Returns [`ExitCode`] so the §3.5 gate can read it directly.
@@ -105,6 +110,24 @@ fn main() -> ExitCode {
         if !cookie.trim().is_empty() {
             client = client.with_auth_cookie(cookie);
         }
+    } else {
+        // Live attendee endpoints require a JWT. Use the dedicated staging
+        // keypair to perform SIWS rather than requiring an operator to copy a
+        // browser cookie into the shell.
+        let auth_rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => {
+                eprintln!("❌ flow-harness: failed to build SIWS runtime: {e}");
+                return ExitCode::from(2);
+            }
+        };
+        match auth_rt.block_on(client.authenticate_wallet(&ctx)) {
+            Ok(cookie) => client = client.with_auth_cookie(cookie),
+            Err(e) => {
+                eprintln!("❌ flow-harness: failed to create SIWS attendee session: {e}");
+                return ExitCode::from(2);
+            }
+        }
     }
 
     // ── Register the default flow set ────────────────────────────────────────
@@ -116,7 +139,15 @@ fn main() -> ExitCode {
     // at registration time — do NOT register AuthFlow a second time here.
     let results_root = default_results_root();
     let mut runner = Runner::new(ctx.clone(), client, results_root.clone());
-    flows::register_default(&mut runner);
+    if let Some(flow) = cli.flow.as_deref() {
+        if let Err(e) = flows::register_named(&mut runner, flow) {
+            eprintln!("❌ flow-harness: configuration error: {e}");
+            return ExitCode::from(2);
+        }
+        runner = runner.without_green_sentinel();
+    } else {
+        flows::register_default(&mut runner);
+    }
 
     // ── Drive every flow sequentially ────────────────────────────────────────
     let rt = match tokio::runtime::Builder::new_multi_thread()

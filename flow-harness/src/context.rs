@@ -280,6 +280,22 @@ impl StagingContext {
         join_path(&self.worker_url, "/api/deposit/usdc")
     }
 
+    /// Worker-side Solana Pay callback URL. `POST /api/deposit/usdc` creates a
+    /// pending deposit and returns this URL in `solana_pay_url`; the wallet then
+    /// fetches this endpoint to obtain the unsigned transaction.
+    pub fn deposit_usdc_tx_url(
+        &self,
+        attendee_id: &str,
+        wallet: &str,
+    ) -> HarnessResult<Url> {
+        let mut url = join_path(&self.worker_url, "/api/deposit/usdc/tx")?;
+        url.query_pairs_mut()
+            .append_pair("event_id", &self.event_id_str)
+            .append_pair("attendee_id", attendee_id)
+            .append_pair("wallet", wallet);
+        Ok(url)
+    }
+
     /// Worker-side URL for the paired refund + close endpoint.
     pub fn refund_url(&self) -> HarnessResult<Url> {
         join_path(&self.worker_url, "/api/escrow/refund")
@@ -292,7 +308,18 @@ impl StagingContext {
 
     /// Worker-side URL for the auth session probe (plan 006 baseline).
     pub fn auth_session_url(&self) -> HarnessResult<Url> {
-        join_path(&self.worker_url, "/api/auth/session")
+        join_path(&self.worker_url, "/api/auth/me")
+    }
+
+    /// SIWS challenge endpoint used by the harness to create its own staging
+    /// session from the funded attendee keypair.
+    pub fn auth_wallet_nonce_url(&self) -> HarnessResult<Url> {
+        join_path(&self.worker_url, "/api/auth/wallet/nonce")
+    }
+
+    /// SIWS verification endpoint used after signing the server challenge.
+    pub fn auth_wallet_verify_url(&self) -> HarnessResult<Url> {
+        join_path(&self.worker_url, "/api/auth/wallet/verify")
     }
 
     /// Sanity check: the two event-id fields must refer to the same event.

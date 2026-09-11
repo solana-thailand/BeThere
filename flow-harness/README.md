@@ -15,7 +15,7 @@ The harness is the safety mechanism for plans **006 (SIWS)** and **007 (Dioxus m
 | **Typed HTTP client + error parsing** (`client.rs`) | ✅ Done; error-envelope parsing unit-tested |
 | **Runner + `summary.json` + `.last-green`** (`runner.rs`) | ✅ Done + unit-tested with no-op flows |
 | **CLI entry** (`main.rs`) | ✅ Done |
-| **Flow `run` bodies — HTTP execution** | ✅ Wired; requires staging fixture/session configuration |
+| **Flow `run` bodies — HTTP execution** | ✅ Wired; auto-authenticates with SIWS from the dedicated staging keypair |
 | **Transaction signing/submission** | ✅ Wired and offline-tested; live run requires a capped devnet payer |
 | **On-chain PDA existence assertion** (deposit) | ✅ Wired |
 | **Refund attempt + revert assertion** | ✅ Wired |
@@ -24,8 +24,11 @@ The harness is the safety mechanism for plans **006 (SIWS)** and **007 (Dioxus m
 
 **What remains:** staging is deployed and the HTTP/on-chain seams are wired.
 The operator must provision a dedicated funded devnet payer, attendee wallet,
-mint, organizer/event fixture, and authenticated attendee session. Without
-those inputs the CLI fails closed and cannot create a green sentinel.
+mint, and an **active, initialized** organizer/event fixture. The harness
+creates its own short-lived SIWS attendee session; a browser cookie is not
+required. See `docs/flow_harness_fixture_strategy.md` before re-seeding: an
+initialized escrow is immutable and must never be overwritten by a fixture
+refresh.
 
 ---
 
@@ -121,10 +124,18 @@ export FLOW_HARNESS_ORGANIZER=<base58>
 export FLOW_HARNESS_ATTENDEE_WALLET=<base58>
 export FLOW_HARNESS_DEPOSIT_MINT=<base8 devnet USDC>
 export FLOW_HARNESS_RPC_URL=https://devnet.helius-rpc.com/?api-key=<key>
-# Optional: enables the auth flow's logged-in sub-path
-export FLOW_HARNESS_ATTENDEE_SESSION="session=eyJ..."
 cargo run --release -- --worker https://bethere-staging.solana-thailand.workers.dev
 ```
+
+For a focused diagnosis without refreshing the full-suite production gate:
+
+```sh
+cargo run -- --flow deposit
+```
+
+Accepted names are `deposit`, `refund-pre-event-end`,
+`refund-post-event-end-checked-in`, `refund-no-show-deadline`, `claim`, and
+`auth`. A focused run writes its `summary.json` but never touches `.last-green`.
 
 ---
 
@@ -142,7 +153,7 @@ cargo run --release -- --worker https://bethere-staging.solana-thailand.workers.
 | `FLOW_HARNESS_EVENT_ID_ON_CHAIN` | no | On-chain `u64` event id (default: `1`) |
 | `FLOW_HARNESS_ESCROW_PROGRAM_ID` | no | Override the deployed program id |
 | `FLOW_HARNESS_ATTENDEE_EMAIL` | no | Override the seeded attendee email |
-| `FLOW_HARNESS_ATTENDEE_SESSION` | no | Session cookie; enables the auth flow's logged-in sub-path |
+| `FLOW_HARNESS_ATTENDEE_SESSION` | no | Explicit session-cookie override; otherwise the harness creates a SIWS session |
 
 ---
 

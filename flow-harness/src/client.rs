@@ -35,6 +35,8 @@ use serde_json::Value;
 use url::Url;
 
 use domain::models::deposit::{DepositStatusResponse, UsdcDepositResponse};
+use domain::models::auth::{WalletNonceRequest, WalletNonceResponse, WalletVerifyRequest, WalletVerifyResponse};
+use solana_sdk::signer::Signer;
 
 use crate::context::StagingContext;
 use crate::error::{EscrowCode, HarnessError, HarnessResult, WorkerError};
@@ -166,6 +168,13 @@ impl WorkerClient {
         &self.base_url
     }
 
+    /// Whether this client carries an attendee session. The auth flow uses
+    /// this to ensure the authenticated branch is exercised on every live run.
+    #[must_use]
+    pub fn has_auth_cookie(&self) -> bool {
+        self.auth_cookie.is_some()
+    }
+
     // ── Typed endpoint methods (mirror contract surface §6) ─────────────────
 
     /// `GET /api/deposit/status/{attendee_id}` — the primary read path.
@@ -190,6 +199,18 @@ impl WorkerClient {
         self.post_json(url, req).await
     }
 
+    /// `GET /api/deposit/usdc/tx` — fetch the unsigned transaction referenced
+    /// by the Solana Pay callback returned from `request_deposit_usdc`.
+    pub async fn fetch_deposit_transaction(
+        &self,
+        ctx: &StagingContext,
+        attendee_id: &str,
+        wallet: &str,
+    ) -> HarnessResult<TxResponse> {
+        let url = ctx.deposit_usdc_tx_url(attendee_id, wallet)?;
+        self.get_json(url).await
+    }
+
     /// `POST /api/escrow/refund` — request the paired `refund + close_deposit`
     /// TX. Negative-test flows expect this to return a non-2xx with the
     /// relevant [`EscrowCode`]; positive flows sign+submit the returned TX.
@@ -212,10 +233,44 @@ impl WorkerClient {
         self.get_json(url).await
     }
 
-    /// `GET /api/auth/session` — plan 006 SIWS regression baseline.
+    /// `GET /api/auth/me` — plan 006 SIWS regression baseline.
     pub async fn probe_auth_session(&self, ctx: &StagingContext) -> HarnessResult<AuthSessionResponse> {
         let url = ctx.auth_session_url()?;
-        self.get_json(url).await
+        let resp = self.send_request(Method::GET, url, None).await?;
+        if resp.status() == StatusCode::UNAUTHORIZED {
+            return Ok(AuthSessionResponse { authenticated: false, email: None });
+        }
+        let value = self.decode_json_value(resp).await?;
+        let mut session: AuthSessionResponse = serde_json::from_value(value)?;
+        session.authenticated = true;
+        Ok(session)
+    }
+
+    /// Create an attendee session through SIWS. This keeps live staging runs
+    /// self-contained: no browser cookie or Google account token is required.
+    pub async fn authenticate_wallet(&self, ctx: &StagingContext) -> HarnessResult<String> {
+        let wallet_address = ctx.payer_pubkey().to_string();
+        let nonce: WalletNonceResponse = self
+            .post_json(ctx.auth_wallet_nonce_url()?, &WalletNonceRequest {
+                wallet_address: wallet_address.clone(),
+            })
+            .await?;
+        let signature = ctx.payer.as_ref().sign_message(nonce.message.as_bytes()).to_string();
+        let verified: WalletVerifyResponse = self
+            .post_json(ctx.auth_wallet_verify_url()?, &WalletVerifyRequest {
+                wallet_address,
+                signature,
+                message: nonce.message,
+                nonce: nonce.nonce,
+            })
+            .await?;
+        if !verified.authenticated || verified.token.is_empty() {
+            return Err(HarnessError::AssertionFailed {
+                flow: "auth",
+                reason: "SIWS verification returned no authenticated session".to_string(),
+            });
+        }
+        Ok(format!("event_checkin_token={}", verified.token))
     }
 
     // ── Low-level helpers ────────────────────────────────────────────────────
@@ -272,12 +327,25 @@ impl WorkerClient {
 
     /// Deserialise a 2xx response, or turn a non-2xx into a [`WorkerError`].
     async fn decode_or_error<T: DeserializeOwned>(&self, resp: Response) -> HarnessResult<T> {
-        let status = resp.status();
-        if status.is_success() {
-            return resp.json::<T>().await.map_err(HarnessError::from);
+        if resp.status().is_success() {
+            return serde_json::from_value(self.decode_json_value(resp).await?).map_err(HarnessError::from);
         }
+        let status = resp.status();
         let body_text = resp.text().await.unwrap_or_default();
         Err(HarnessError::Worker(parse_worker_error(status, &body_text)))
+    }
+
+    /// Decode either a direct response or the Worker standard
+    /// `{ success, data }` envelope into the payload value.
+    async fn decode_json_value(&self, resp: Response) -> HarnessResult<Value> {
+        let value: Value = resp.json().await.map_err(HarnessError::from)?;
+        if value.get("success").is_some() {
+            if value.get("success").and_then(Value::as_bool) == Some(true) {
+                return value.get("data").cloned().ok_or_else(|| HarnessError::Decode("successful API response missing data".to_string()));
+            }
+            return Err(HarnessError::Decode("API response reported success=false".to_string()));
+        }
+        Ok(value)
     }
 }
 

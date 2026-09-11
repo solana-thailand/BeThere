@@ -166,17 +166,21 @@ impl Flow for DepositFlow {
         };
         let deposit_resp = client.request_deposit_usdc(ctx, &deposit_req).await?;
 
-        // The response carries a base64 transaction and a Solana Pay URL.
-        // The harness signs + submits the transaction directly (it has the
-        // funded payer); the Solana Pay URL is a fallback for manual flows.
-        assert_deposit_response_present(&deposit_resp.transaction, &deposit_resp.solana_pay_url)?;
+        // This endpoint intentionally returns a Solana Pay callback, rather
+        // than embedding a transaction. Mirror a real wallet: validate the
+        // callback URL, then fetch the transaction from it.
+        assert_solana_pay_url(&deposit_resp.solana_pay_url)?;
+        let tx_resp = client
+            .fetch_deposit_transaction(ctx, &self.config.attendee_id, &wallet)
+            .await?;
+        assert_transaction_present(&tx_resp.transaction)?;
 
         // ── Step 2: Sign + submit the transaction ───────────────────────────
         //
         // Decodes the base64 tx, signs with `ctx.payer`, submits via the
         // `FLOW_HARNESS_RPC_URL` cluster, and awaits confirmation (see
         // `crate::chain::submit_tx`).
-        let _signature = submit_deposit_transaction(ctx, &deposit_resp.transaction).await?;
+        let _signature = submit_deposit_transaction(ctx, &tx_resp.transaction).await?;
 
         // ── Step 3: Poll for verification ───────────────────────────────────
         //
@@ -235,10 +239,8 @@ impl Flow for DepositFlow {
 
 // ── Pure helpers (staging-independent, unit-tested) ──────────────────────────
 
-/// A deposit response must carry a non-empty transaction and (optionally) a
-/// non-empty Solana Pay URL. The URL may be empty for the `/deposit/usdc/tx`
-/// variant; the harness only requires it for the Solana Pay path.
-fn assert_deposit_response_present(transaction: &str, solana_pay_url: &str) -> HarnessResult<()> {
+/// A callback transaction must be non-empty and plausibly serialized.
+fn assert_transaction_present(transaction: &str) -> HarnessResult<()> {
     if transaction.is_empty() {
         return Err(HarnessError::AssertionFailed {
             flow: FLOW_NAME,
@@ -256,15 +258,24 @@ fn assert_deposit_response_present(transaction: &str, solana_pay_url: &str) -> H
             ),
         });
     }
-    // Solana Pay URLs are optional for the tx-submission path but, when
-    // present, must be well-formed (start with `solana:`).
-    if !solana_pay_url.is_empty() && !solana_pay_url.starts_with("solana:") {
+    Ok(())
+}
+
+/// A deposit initiation response must provide a valid Solana Pay callback.
+fn assert_solana_pay_url(solana_pay_url: &str) -> HarnessResult<()> {
+    if !solana_pay_url.starts_with("solana:") {
         return Err(HarnessError::AssertionFailed {
             flow: FLOW_NAME,
             reason: format!(
                 "deposit response `solana_pay_url` malformed (expected `solana:` prefix): {}",
                 solana_pay_url
             ),
+        });
+    }
+    if solana_pay_url.len() <= "solana:".len() {
+        return Err(HarnessError::AssertionFailed {
+            flow: FLOW_NAME,
+            reason: "deposit response `solana_pay_url` is empty".to_string(),
         });
     }
     Ok(())
@@ -417,7 +428,7 @@ mod tests {
 
     #[test]
     fn assert_deposit_response_rejects_empty_transaction() {
-        let err = assert_deposit_response_present("", "").unwrap_err();
+        let err = assert_transaction_present("").unwrap_err();
         assert!(matches!(err, HarnessError::AssertionFailed { .. }));
         assert!(err.to_string().contains("missing `transaction`"));
     }
@@ -426,28 +437,26 @@ mod tests {
     fn assert_deposit_response_rejects_short_transaction() {
         // 50 bytes — below the 100-byte sanity floor.
         let tx = "0".repeat(50);
-        let err = assert_deposit_response_present(&tx, "").unwrap_err();
+        let err = assert_transaction_present(&tx).unwrap_err();
         assert!(err.to_string().contains("suspiciously short"));
     }
 
     #[test]
-    fn assert_deposit_response_accepts_valid_tx_without_pay_url() {
+    fn assert_transaction_accepts_valid_payload() {
         let tx = "0".repeat(200);
-        assert!(assert_deposit_response_present(&tx, "").is_ok());
+        assert!(assert_transaction_present(&tx).is_ok());
     }
 
     #[test]
-    fn assert_deposit_response_accepts_valid_solana_pay_url() {
-        let tx = "0".repeat(200);
+    fn assert_solana_pay_url_accepts_valid_callback() {
         let url = "solana:https://example.com/pay";
-        assert!(assert_deposit_response_present(&tx, url).is_ok());
+        assert!(assert_solana_pay_url(url).is_ok());
     }
 
     #[test]
-    fn assert_deposit_response_rejects_malformed_pay_url() {
-        let tx = "0".repeat(200);
+    fn assert_solana_pay_url_rejects_malformed_callback() {
         let url = "https://example.com/pay";
-        let err = assert_deposit_response_present(&tx, url).unwrap_err();
+        let err = assert_solana_pay_url(url).unwrap_err();
         assert!(err.to_string().contains("solana_pay_url` malformed"));
     }
 

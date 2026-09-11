@@ -62,7 +62,24 @@ run_sql () {
     npx wrangler d1 execute "$DB_NAME" --env staging $REMOTE_FLAG --command "$1" >/dev/null
 }
 
+read_sql_json () {
+    # $1 = SELECT statement. Never suppress output: the caller uses the JSON
+    # to refuse destructive reseeding of an initialized escrow fixture.
+    npx wrangler d1 execute "$DB_NAME" --env staging $REMOTE_FLAG --json --command "$1"
+}
+
 echo "🌱 Seeding staging D1 ($DB_NAME, $REMOTE_FLAG)..."
+
+# An EventEscrow records immutable on-chain event timing and PDA data. Replacing
+# its D1 event row would silently detach the Worker from that account and make
+# future deposits/refunds unsafe to diagnose. This check runs before --clean so
+# an accidental fixture refresh cannot delete a live staging escrow lifecycle.
+EXISTING_EVENT=$(read_sql_json "SELECT escrow_status FROM events WHERE id = '${EVENT_ID}' LIMIT 1;")
+if printf '%s' "$EXISTING_EVENT" | grep -Eq '"escrow_status"[[:space:]]*:[[:space:]]*"(initialized|deactivated|closed)"'; then
+    echo "❌ Refusing to reseed ${EVENT_ID}: its escrow is already initialized/deactivated/closed." >&2
+    echo "   Create a new fixture event instead; never replace an on-chain escrow row." >&2
+    exit 1
+fi
 
 if [[ "$CLEAN" -eq 1 ]]; then
     echo "🧹 Removing existing flow-test rows..."
