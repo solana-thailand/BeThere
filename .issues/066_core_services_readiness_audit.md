@@ -87,9 +87,12 @@ No attendee PII was queried for this audit.
 
 ### Deposit and credit flow
 
-- [ ] Make credit spend + verified deposit creation one recoverable workflow.
-      Today a successful ledger spend followed by deposit-record failure is only
-      logged and can leave the ticket showing “waiting”.
+- [x] Make credit spend + verified deposit creation one recoverable workflow.
+      Registration and admin recovery now share one idempotent D1 transaction
+      covering the ledger spend, credit projection, and verified ticket status.
+      Retries repair legacy credit projections without spending twice; cash
+      deposits are never overwritten. Daily reconciliation safely repairs the
+      known legacy THB status mismatch and reports anything still incomplete.
 - [ ] Consolidate THB verification writes so deposit status, attendee projection,
       and QR readiness cannot partially succeed without a reconciliation job.
 - [ ] Add a reconciliation view/job for ledger, THB deposit, deposit status,

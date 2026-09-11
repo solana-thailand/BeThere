@@ -306,6 +306,8 @@ pub async fn remove_return(db: &D1Database, event_id: &str, email: &str) -> Resu
 /// all-zero report is healthy; any nonzero count is a money-integrity alarm.
 #[derive(Debug, Default, Clone)]
 pub struct ReconcileReport {
+    /// Legacy THB statuses safely reclassified to `credit_thb` during this run.
+    pub applies_repaired: usize,
     /// Held deposits (`held_as_credit=1, refunded=0`) with NO matching ledger
     /// `hold` entry — credit that was converted but never recorded. This is the
     /// exact 2026-08-14 loss signature.
@@ -323,6 +325,9 @@ pub struct ReconcileReport {
     /// standing against nothing. `orphan_holds` catches the loss direction
     /// (deposit held, credit missing); this catches the creation direction.
     pub phantom_holds: i64,
+    /// Applied credit whose verified attendee-facing deposit projection is
+    /// missing or inconsistent.
+    pub incomplete_applies: i64,
 }
 
 impl ReconcileReport {
@@ -331,6 +336,7 @@ impl ReconcileReport {
             && self.negative_balances == 0
             && self.double_settled == 0
             && self.phantom_holds == 0
+            && self.incomplete_applies == 0
     }
 }
 
@@ -353,6 +359,32 @@ async fn count_query(db: &D1Database, sql: &str) -> Result<i64, String> {
 /// (`phantom_holds`, `double_settled`, `negative_balances`). Only the first was
 /// checked originally, which left every over-payment path silent.
 pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
+    // Before the atomic coverage workflow, credit-backed THB registrations were
+    // written with method='thb'. Repair only an exact ledger + marker + amount
+    // match, and refuse any attendee/event that also has a cash deposit row.
+    let repaired = db
+        .prepare(
+            "UPDATE deposit_statuses AS s SET method='credit_thb',currency='THB',verified=1,refundable=0,rejected=0 \
+             WHERE s.method='thb' AND EXISTS( \
+               SELECT 1 FROM attendees a JOIN credit_ledger l \
+                 ON l.event_id=a.event_id AND l.email=LOWER(a.email) AND l.reason='apply' \
+               JOIN thb_deposits d ON d.event_id=a.event_id AND d.attendee_id=a.id \
+                 AND d.slip_url='ROLLING_CREDIT_AUTO_APPLIED' AND d.verified=1 \
+               WHERE a.id=s.attendee_id AND a.event_id=s.event_id AND l.currency='thb' \
+                 AND l.delta=-s.amount AND d.amount_thb=s.amount) \
+             AND NOT EXISTS(SELECT 1 FROM thb_deposits cash WHERE cash.event_id=s.event_id \
+               AND cash.attendee_id=s.attendee_id \
+               AND COALESCE(cash.slip_url,'')<>'ROLLING_CREDIT_AUTO_APPLIED')",
+        )
+        .run()
+        .await
+        .map_err(|e| format!("D1 credit apply projection repair: {e:?}"))?;
+    let applies_repaired = repaired
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|meta| meta.changes)
+        .unwrap_or(0);
     let orphan_holds = count_query(
         db,
         "SELECT COUNT(*) AS n FROM thb_deposits d \
@@ -386,10 +418,27 @@ pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
                              AND d.event_id || ':' || d.attendee_id = l.deposit_id)",
     )
     .await?;
+    let incomplete_applies = count_query(
+        db,
+        "SELECT COUNT(*) AS n FROM credit_ledger l \
+         JOIN attendees a ON a.event_id=l.event_id AND LOWER(a.email)=l.email \
+         WHERE l.reason='apply' AND ( \
+           NOT EXISTS(SELECT 1 FROM deposit_statuses s \
+             WHERE s.event_id=l.event_id AND s.attendee_id=a.id \
+               AND s.method='credit_'||l.currency AND s.amount=-l.delta \
+               AND s.verified=1 AND s.refundable=0) \
+           OR (l.currency='thb' AND NOT EXISTS(SELECT 1 FROM thb_deposits d \
+             WHERE d.event_id=l.event_id AND d.attendee_id=a.id \
+               AND d.slip_url='ROLLING_CREDIT_AUTO_APPLIED' \
+               AND d.amount_thb=-l.delta AND d.verified=1)))",
+    )
+    .await?;
     Ok(ReconcileReport {
+        applies_repaired,
         orphan_holds,
         negative_balances,
         double_settled,
         phantom_holds,
+        incomplete_applies,
     })
 }

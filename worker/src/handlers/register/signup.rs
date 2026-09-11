@@ -418,40 +418,48 @@ pub async fn register_attendee(
 
     // Auto-apply rolling credit — fail-closed and correctly ordered.
     //
-    // Consume the credit FIRST; only mark the deposit covered if that succeeded.
-    // If we can't decrement (e.g. Sheets write error / no contacts sheet), we do
-    // NOT grant a free deposit — `credit_covered_method` is cleared so the
-    // attendee falls back to the normal payment path and keeps their credit.
-    // The reverse order (mark covered, then decrement) risks double-spending
-    // credit whenever the decrement fails — real money leaking on every retry.
+    // D1 commits the conditional spend and verified deposit projections in one
+    // transaction. If it cannot complete the batch, the attendee falls back to
+    // the normal payment path without consuming credit.
     if let Some(method) = credit_covered_method.clone() {
         let currency = if method == "credit_thb" {
             "thb"
         } else {
             "usdc"
         };
-        // Atomic spend against the org-scoped credit ledger: one conditional
-        // INSERT (balance >= amount) — no advisory lock or Sheets re-read needed,
-        // and two concurrent registrations for the same email can't double-spend
-        // (guard + insert are a single statement). Idempotent per (event, email).
         let apply_key = format!("apply:{}:{}", event_id, email.to_lowercase());
-        let decremented = match state.d1.as_deref() {
-            Some(db) => crate::db::credit_ledger::try_spend(
-                db,
-                &email,
-                &config.organization_id,
-                currency,
-                credit_amount_applied as i64,
-                &event_id,
-                &apply_key,
-            )
-            .await
-            .unwrap_or(false),
-            // No D1 → can't spend safely → charge normally and keep the credit.
-            None => false,
+        let coverage = match state.d1.as_deref() {
+            Some(db) => {
+                crate::db::credit_coverage::apply(
+                    db,
+                    &crate::db::credit_coverage::ApplyCredit {
+                        email: &email,
+                        organization_id: &config.organization_id,
+                        event_id: &event_id,
+                        attendee_id: &api_id,
+                        attendee_name: name,
+                        currency,
+                        amount: credit_amount_applied,
+                        apply_key: &apply_key,
+                        recorded_at: &now,
+                    },
+                )
+                .await
+            }
+            None => Ok(crate::db::credit_coverage::ApplyCreditOutcome::Insufficient),
         };
-        // Best-effort Sheets mirror of the spend (display only; ledger is truth).
-        if decremented && let Some(db) = state.d1.as_deref() {
+        let newly_spent = matches!(
+            coverage,
+            Ok(crate::db::credit_coverage::ApplyCreditOutcome::Covered { newly_spent: true })
+        );
+        let covered = matches!(
+            coverage,
+            Ok(crate::db::credit_coverage::ApplyCreditOutcome::Covered { .. })
+        );
+
+        // Best-effort Sheets mirror only for the transaction that created the
+        // ledger spend. A retry must never decrement the display balance twice.
+        if newly_spent && let Some(db) = state.d1.as_deref() {
             let resolved =
                 crate::org_store::resolve_contacts_sheet(db, &config, &state.config.sheets).await;
             if !resolved.sheet_id.is_empty() {
@@ -468,61 +476,16 @@ pub async fn register_attendee(
             }
         }
 
-        if decremented {
-            // Credit consumed — record the covered, verified deposit.
-            let thb_dep = event_checkin_domain::models::deposit::ThbDeposit {
-                event_id: event_id.clone(),
-                attendee_id: api_id.clone(),
-                amount_thb: credit_amount_applied,
-                slip_url: Some("ROLLING_CREDIT_AUTO_APPLIED".to_string()),
-                verified: true,
-                verified_at: Some(now.clone()),
-                verified_by: Some("SYSTEM_ROLLING_CREDIT".to_string()),
-                uploaded_at: now.clone(),
-                refunded: false,
-                refunded_at: None,
-                held_as_credit: false,
-                held_as_credit_at: None,
-                attendee_name: Some(name.to_string()),
-                bank_account: None,
-                bank_name: None,
-                account_name: None,
-                refund_proof_url: None,
-            };
-            if let Some(kv_store) = kv
-                && let Err(e) =
-                    crate::event_store::save_thb_deposit(kv_store, &thb_dep, state.d1.as_deref())
-                        .await
-            {
-                // Credit already consumed but the deposit record didn't persist.
-                // Non-fatal to the reservation; log loudly for reconciliation.
-                tracing::error!(%api_id, %email, error = %e, "credit consumed but deposit record save failed — needs reconciliation");
-            }
-            // Also write the VERIFIED deposit_status — the ticket page gates the
-            // check-in QR on this record; thb_deposits alone leaves it "waiting".
-            if let Some(kv_store) = kv {
-                let status = event_checkin_domain::models::deposit::DepositStatus {
-                    attendee_id: api_id.clone(),
-                    event_id: event_id.clone(),
-                    method: event_checkin_domain::models::deposit::DepositMethod::Thb,
-                    amount: credit_amount_applied,
-                    currency: "THB".to_string(),
-                    tx_signature: None,
-                    verified: true,
-                    deposited_at: now.clone(),
-                    wallet_address: None,
-                    deposit_order: 0,
-                    refundable: false,
-                    rejected: false,
-                };
-                if let Err(e) =
-                    crate::event_store::save_deposit_status(kv_store, &status, state.d1.as_deref())
-                        .await
-                {
-                    tracing::error!(%api_id, %email, error = %e, "credit deposit_status save failed — ticket may show 'waiting'");
+        if !covered {
+            match coverage {
+                Ok(crate::db::credit_coverage::ApplyCreditOutcome::ConflictingDeposit) => {
+                    tracing::error!(%api_id, %email, "credit application refused because another deposit owns the registration");
                 }
+                Err(ref e) => {
+                    tracing::error!(%api_id, %email, error = %e, "atomic credit application failed");
+                }
+                _ => {}
             }
-        } else {
             // Fail closed: revert to the normal payment path (credit untouched).
             credit_covered_method = None;
         }
