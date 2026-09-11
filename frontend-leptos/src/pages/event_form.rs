@@ -14,9 +14,8 @@ use crate::api;
 use crate::components;
 use crate::icons::{Icon, IconName};
 
-/// Maximum number of community links per event. Covers both social links
-/// (Telegram, Discord, X, etc.) and guide links (platform "guide" — rendered
-/// as the Access & Logistics card). 10 = ~5 social + ~5 guide.
+/// Maximum number of shared event links, covering community, logistics, and
+/// learning resources without separate storage or editing workflows.
 const MAX_COMMUNITY_LINKS: usize = 10;
 
 // ===== Form State =====
@@ -2336,13 +2335,13 @@ pub fn EventFormComponent(
                 <div class="form-section">
                     <div class="form-section-header" on:click=move |_| set_sec_community_open.update(|v| *v = !*v)>
                         <span class="form-section-icon form-section-icon-community"></span>
-                        <span class="form-section-title">"Community Links"</span>
+                        <span class="form-section-title">"Community & Resources"</span>
                         <span class="form-section-badge form-section-badge-optional">"Optional"</span>
                         <span class="form-section-toggle" class:form-section-toggle-open=move || sec_community_open.get()>"▼"</span>
                     </div>
                     <div class="form-section-body" class:form-section-body-hidden=move || !sec_community_open.get()>
                         <p class="quiz-setting-hint">
-                            "Add links to your community channels (Discord, Telegram, X, Facebook, LINE). These appear on the event registration and ticket pages. Use the ‘Guide (logistics)’ type for building access, ID exchange, or transportation docs — these show as an ‘Access & Logistics’ card on in-person tickets."
+                            "Add community channels, logistics guides, or post-event learning resources. Resource types appear on a published recap; use clear labels such as ‘Workshop slides’ or ‘Example repository’."
                         </p>
                         {move || {
                             let links = cl_links.get();
@@ -2371,6 +2370,10 @@ pub fn EventFormComponent(
                                             <option value="line" selected=platform == "line">"LINE"</option>
                                             <option value="website" selected=platform == "website">"Website"</option>
                                             <option value="guide" selected=platform == "guide">"Guide (logistics)"</option>
+                                            <option value="resource" selected=platform == "resource">"Learning resource"</option>
+                                            <option value="slides" selected=platform == "slides">"Slides"</option>
+                                            <option value="source" selected=platform == "source">"Source code"</option>
+                                            <option value="download" selected=platform == "download">"Download"</option>
                                         </select>
                                         <input
                                             type="url"

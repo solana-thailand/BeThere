@@ -5,6 +5,14 @@ use leptos::prelude::*;
 use crate::api::CommunityLink;
 use crate::pages::ticket::access_logistics::GUIDE_PLATFORM;
 
+const LEARNING_RESOURCE_PLATFORMS: &[&str] = &["resource", "slides", "source", "download"];
+
+fn is_community_link(link: &CommunityLink) -> bool {
+    !link.url.is_empty()
+        && link.platform != GUIDE_PLATFORM
+        && !LEARNING_RESOURCE_PLATFORMS.contains(&link.platform.as_str())
+}
+
 /// Render a platform icon SVG.
 fn platform_icon(platform: &str) -> &'static str {
     match platform {
@@ -74,10 +82,8 @@ pub fn community_links_section(
 
     let filtered: Vec<_> = links
         .into_iter()
-        // Exclude guide links — they are logistics docs (building access,
-        // ID exchange, transportation) rendered by `access_logistics_section`,
-        // not social/community links.
-        .filter(|l| !l.url.is_empty() && l.platform != GUIDE_PLATFORM)
+        // Guides and learning resources have dedicated sections.
+        .filter(is_community_link)
         .collect();
 
     if filtered.is_empty() {
@@ -87,6 +93,30 @@ pub fn community_links_section(
     match variant {
         CommunityLinksVariant::Ticket => render_ticket_variant(filtered).into_any(),
         CommunityLinksVariant::PublicEvent => render_public_event_variant(filtered).into_any(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_community_link;
+    use crate::api::CommunityLink;
+
+    fn link(platform: &str) -> CommunityLink {
+        CommunityLink {
+            platform: platform.into(),
+            url: "https://example.com".into(),
+            label: String::new(),
+        }
+    }
+
+    #[test]
+    fn excludes_links_rendered_in_dedicated_sections() {
+        assert!(!is_community_link(&link("guide")));
+        assert!(!is_community_link(&link("slides")));
+        assert!(!is_community_link(&link("source")));
+        assert!(!is_community_link(&link("download")));
+        assert!(!is_community_link(&link("resource")));
+        assert!(is_community_link(&link("discord")));
     }
 }
 

@@ -20,6 +20,10 @@ The satisfaction email can include two independent calls to action:
 Never mark retrospective registration as check-in, attendance, deposit
 completion, quiz completion, or proof-of-attendance NFT eligibility.
 
+Campaigns are not an MVP dependency. Production has no configured campaigns;
+campaign creation and administration need a separate usability phase before
+series-based learning navigation becomes a default organizer workflow.
+
 ## Priority rationale
 
 This is P1 because it can extend the value of every event and create a clear
@@ -50,8 +54,10 @@ block existing attendees or create ambiguous asset and money state.
 - [ ] Extend the existing recap surface from recording + recap text into an
       ordered module list for slides, links, source code, and downloads; do not
       create a parallel learning route.
-- [ ] Start with URL-backed video and resources. Do not introduce paid video
-      hosting or transcoding until usage and cost justify it.
+- [x] Start with URL-backed video and resources. Existing event `video_url` and
+      typed `community_links` records power the published recap without a new
+      table or admin CRUD flow. Do not introduce paid video hosting or
+      transcoding until usage and cost justify it.
 - [ ] Give signed-in learners a resumable “My learning” entry point.
 - [ ] Record consent, enrollment timestamp, content version, and campaign
       attribution separately from live registration analytics.
