@@ -106,7 +106,7 @@ run_sql "INSERT OR REPLACE INTO deposit_statuses (
     verified, deposited_at, wallet_address, deposit_order, refundable
 ) VALUES (
     '${ATTENDEE_ID}', '${EVENT_ID}', 'usdc', 10, 'USDC',
-    0, NULL, '', 1, 1
+    0, datetime('now'), '', 1, 1
 );"
 
 # ── Isolation sanity check ───────────────────────────────────────────────────
