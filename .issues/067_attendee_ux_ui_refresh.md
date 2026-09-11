@@ -23,6 +23,8 @@ neumorphism, and novelty interactions in transactional flows.
 - [x] Remove fixed `0.01 SOL` and ambiguous `SOL/USDC` landing claims.
 - [ ] Define shared semantic states for pending, action required, confirmed,
       blocked, failed, and refundable; do not encode meaning by color alone.
+      The landing registration cards now use semantic confirmed/action/neutral
+      classes without inline hex colors; extend the vocabulary across flows.
 - [ ] Add one attendee journey indicator shared by registration, deposit,
       ticket, quiz, and claim, driven by server state.
 - [ ] Show exact currency, network, amount, refund condition, and fee ownership
