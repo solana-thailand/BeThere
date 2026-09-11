@@ -211,6 +211,17 @@ impl WorkerClient {
         self.get_json(url).await
     }
 
+    /// `GET /api/deposit/usdc/confirm` — ask the Worker to discover and
+    /// verify the already-confirmed on-chain attendee deposit.
+    pub async fn confirm_deposit(
+        &self,
+        ctx: &StagingContext,
+        attendee_id: &str,
+    ) -> HarnessResult<ConfirmDepositResponse> {
+        let url = ctx.confirm_deposit_url(attendee_id)?;
+        self.get_json(url).await
+    }
+
     /// `POST /api/escrow/refund` — request the paired `refund + close_deposit`
     /// TX. Negative-test flows expect this to return a non-2xx with the
     /// relevant [`EscrowCode`]; positive flows sign+submit the returned TX.
@@ -347,6 +358,14 @@ impl WorkerClient {
         }
         Ok(value)
     }
+}
+
+/// Result returned by the Worker after it attempts on-chain deposit recovery.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ConfirmDepositResponse {
+    pub confirmed: bool,
+    #[serde(default)]
+    pub tx_signature: Option<String>,
 }
 
 // ── Error parsing ────────────────────────────────────────────────────────────

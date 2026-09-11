@@ -61,6 +61,9 @@ NOW_MS=$(( $(date +%s) * 1000 ))
 EVENT_START_MS=$(( NOW_MS - 1 * 3600 * 1000 ))
 EVENT_END_MS=$(( NOW_MS + 4 * 3600 * 1000 ))
 REFUND_DEADLINE_HOURS=6
+# Domain and escrow values use USDC's six-decimal smallest unit. A human-facing
+# 10 USDC deposit must therefore be stored and passed on-chain as 10_000_000.
+DEPOSIT_AMOUNT_USDC=10000000
 
 EVENT_SLUG="$EVENT_ID"
 EVENT_NAME="Flow Harness Fixture (${EVENT_ID})"
@@ -114,7 +117,7 @@ run_sql "INSERT OR REPLACE INTO events (
 ) VALUES (
     '${EVENT_ID}', '${EVENT_NAME}', '${EVENT_SLUG}', 'active', 'in_person',
     ${EVENT_START_MS}, ${EVENT_END_MS},
-    1, 10, 0,
+    1, ${DEPOSIT_AMOUNT_USDC}, 0,
     'none', ${REFUND_DEADLINE_HOURS}, 5,
     'public', 'Staging test event for flow harness', 'Bangkok (staging)',
     datetime('now'), datetime('now')
@@ -128,7 +131,7 @@ run_sql "INSERT OR REPLACE INTO attendees (
 ) VALUES (
     '${ATTENDEE_ID}', '${EVENT_ID}', '${ATTENDEE_EMAIL}', '${ATTENDEE_NAME}',
     'approved', 'in_person',
-    datetime('now'), 'pending', 10
+    datetime('now'), 'pending', ${DEPOSIT_AMOUNT_USDC}
 );"
 
 # ── Deposit status row (mirrors deposit_statuses table) ───────────────────────
@@ -137,7 +140,7 @@ run_sql "INSERT OR REPLACE INTO deposit_statuses (
     attendee_id, event_id, method, amount, currency,
     verified, deposited_at, wallet_address, deposit_order, refundable
 ) VALUES (
-    '${ATTENDEE_ID}', '${EVENT_ID}', 'usdc', 10, 'USDC',
+    '${ATTENDEE_ID}', '${EVENT_ID}', 'usdc', ${DEPOSIT_AMOUNT_USDC}, 'USDC',
     0, datetime('now'), '', 1, 1
 );"
 

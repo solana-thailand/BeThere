@@ -296,6 +296,19 @@ impl StagingContext {
         Ok(url)
     }
 
+    /// Worker-side URL that discovers and verifies a submitted USDC deposit.
+    ///
+    /// A signed transaction alone does not mutate the Worker-side record: the
+    /// confirmation route binds the on-chain attendee-deposit PDA back to the
+    /// staging attendee after its transaction has landed.
+    pub fn confirm_deposit_url(&self, attendee_id: &str) -> HarnessResult<Url> {
+        let mut url = join_path(&self.worker_url, "/api/deposit/usdc/confirm")?;
+        url.query_pairs_mut()
+            .append_pair("event_id", &self.event_id_str)
+            .append_pair("attendee_id", attendee_id);
+        Ok(url)
+    }
+
     /// Worker-side URL for the paired refund + close endpoint.
     pub fn refund_url(&self) -> HarnessResult<Url> {
         join_path(&self.worker_url, "/api/escrow/refund")

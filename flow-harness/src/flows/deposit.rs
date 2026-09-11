@@ -206,8 +206,10 @@ impl Flow for DepositFlow {
 
         // ── Step 3: Poll for verification ───────────────────────────────────
         //
-        // The worker observes the transaction and flips `verified=true` on the
-        // attendee's `DepositStatus` row. We poll until verified or timeout.
+        // A signed transaction alone cannot update D1. The confirmation route
+        // discovers the on-chain PDA, verifies its signer and fields, then
+        // flips the attendee's record to `verified=true`. We poll that route
+        // until it reports confirmation or the bounded timeout expires.
         let started_at = Instant::now();
         let deadline = self.poll_deadline(started_at);
 
@@ -223,12 +225,19 @@ impl Flow for DepositFlow {
                 });
             }
 
-            let current = client
-                .fetch_deposit_status(ctx, &self.config.attendee_id)
-                .await?;
-
-            if is_verified(current.status.as_ref()) {
-                break current;
+            let confirmation = client.confirm_deposit(ctx, &self.config.attendee_id).await?;
+            if confirmation.confirmed {
+                let current = client
+                    .fetch_deposit_status(ctx, &self.config.attendee_id)
+                    .await?;
+                if is_verified(current.status.as_ref()) {
+                    break current;
+                }
+                return Err(HarnessError::AssertionFailed {
+                    flow: FLOW_NAME,
+                    reason: "confirmation endpoint reported confirmed but attendee status is not verified"
+                        .to_string(),
+                });
             }
 
             // Sleep before the next poll. `tokio::time::sleep` is cancel-safe;
@@ -520,6 +529,19 @@ mod tests {
             fixture_value("FLOW_HARNESS_TEST_FIXTURE_VALUE", "default".to_string()),
             "default"
         );
+    }
+
+    #[test]
+    fn confirmation_response_requires_explicit_boolean() {
+        let confirmed: crate::client::ConfirmDepositResponse =
+            serde_json::from_str(r#"{"confirmed":true,"tx_signature":"sig"}"#)
+                .expect("valid confirmation response");
+        assert!(confirmed.confirmed);
+        assert_eq!(confirmed.tx_signature.as_deref(), Some("sig"));
+        let pending: crate::client::ConfirmDepositResponse =
+            serde_json::from_str(r#"{"confirmed":false}"#).expect("pending response");
+        assert!(!pending.confirmed);
+        assert!(pending.tx_signature.is_none());
     }
 
     #[test]
