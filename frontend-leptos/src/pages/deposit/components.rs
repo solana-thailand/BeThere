@@ -152,14 +152,7 @@ pub fn back_to_event_link(event_slug: &str) -> AnyView {
 /// banner. Returns the view unconditionally; caller is responsible for gating
 /// on `cluster != "mainnet-beta"` and non-THB-only states.
 pub fn cluster_warning_banner(cluster: &str) -> AnyView {
-    // Display label: "devnet" → "Devnet", "mainnet-beta" → "Mainnet Beta".
-    let label = match cluster {
-        "mainnet-beta" => "Mainnet Beta",
-        "devnet" => "Devnet",
-        "testnet" => "Testnet",
-        "localnet" => "Localnet",
-        other => other,
-    };
+    let label = cluster_display_label(cluster);
     view! {
         <div class="dep2-deadline dep2-deadline--warning">
             <Icon icon=IconName::Warning class="icon-sm" />
@@ -171,6 +164,35 @@ pub fn cluster_warning_banner(cluster: &str) -> AnyView {
         </div>
     }
         .into_any()
+}
+
+/// Human-readable Solana cluster name used in transaction review surfaces.
+pub fn cluster_display_label(cluster: &str) -> &str {
+    match cluster {
+        "mainnet-beta" => "Mainnet Beta",
+        "devnet" => "Devnet",
+        "testnet" => "Testnet",
+        "localnet" => "Localnet",
+        other => other,
+    }
+}
+
+/// Review facts shown immediately before a wallet signature.
+///
+/// Accepts owned values so callers can derive product truth from the current
+/// event and cluster without this presentational component knowing API rules.
+pub fn transaction_review(rows: Vec<(&'static str, String)>) -> AnyView {
+    view! {
+        <div class="dep2-receipt" aria-label="Transaction review">
+            {rows.into_iter().map(|(label, value)| view! {
+                <div class="dep2-receipt-row">
+                    <span class="dep2-receipt-label">{label}</span>
+                    <span class="dep2-receipt-value">{value}</span>
+                </div>
+            }).collect::<Vec<_>>()}
+        </div>
+    }
+    .into_any()
 }
 
 /// Show a toast error.
@@ -241,4 +263,16 @@ pub fn deposit_stepper(flow: DepositFlow, current: usize, _total: usize) -> AnyV
         </div>
     }
         .into_any()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cluster_display_label;
+
+    #[test]
+    fn cluster_labels_are_clear_and_preserve_unknown_values() {
+        assert_eq!(cluster_display_label("mainnet-beta"), "Mainnet Beta");
+        assert_eq!(cluster_display_label("devnet"), "Devnet");
+        assert_eq!(cluster_display_label("customnet"), "customnet");
+    }
 }

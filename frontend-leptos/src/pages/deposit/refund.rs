@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
 use crate::icons::{Icon, wallet_icon_name};
+use crate::utils::get_cluster;
 
 use super::components;
 use super::types::*;
@@ -97,6 +98,9 @@ pub fn refund_wallet_connected_view(
 
     let _wallet_icon = wallet_icon_name(wallet_name);
     let pk_display = truncate_pk(public_key);
+    let recipient = format!("Connected wallet {pk_display}");
+    let cluster = get_cluster();
+    let network = format!("Solana {}", components::cluster_display_label(&cluster));
 
     view! {
         <div class="dep2-card">
@@ -113,14 +117,18 @@ pub fn refund_wallet_connected_view(
                 </div>
                 <span class="dep2-wallet-bar-badge">"Connected"</span>
             </div>
-            <p class="hint-desc">
-                "Your deposit is ready to be returned."
-            </p>
+            {components::transaction_review(vec![
+                ("You authorize", format!("Refund {usdc_fmt} USDC")),
+                ("Network", network),
+                ("Recipient", recipient),
+                ("Network fee", "Paid in SOL by this connected wallet".to_string()),
+            ])}
+            <p class="hint-desc">"Review these details, then approve in your wallet."</p>
             <button
                 class="btn btn-success btn-block"
                 on:click=move |_| handle_claim_refund(wallet_name_send.clone(), pk_send.clone())
             >
-                "Claim "{format!("{usdc_fmt} USDC")}" USDC"
+                {format!("Claim {usdc_fmt} USDC")}
             </button>
             <button
                 class="btn btn-outline btn-sm"
