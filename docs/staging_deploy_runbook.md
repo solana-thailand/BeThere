@@ -12,7 +12,7 @@
 
 ---
 
-## 1. Provisioning state (verified on `develop` @ `c7a6e5d`)
+## 1. Provisioning state (verified 2026-09-11 on `develop` @ `ca9ff28`)
 
 The Cloudflare resources are **already provisioned** (real IDs committed in
 `worker/wrangler.toml`, dated 2026-07-10). Plan 005's status note saying
@@ -26,11 +26,11 @@ The Cloudflare resources are **already provisioned** (real IDs committed in
 | `[env.staging]` block | — | `worker/wrangler.toml` | ✅ merged (PR #19) |
 | `deploy.sh staging` path | — | resolves to `wrangler deploy --env staging` | ✅ merged |
 | `seed-staging.sh` | — | `worker/scripts/seed-staging.sh` | ✅ merged |
-| Staging secrets | — | not yet set | ❌ **pending (§3)** |
-| Google OAuth staging redirect URI | — | not yet registered | ❌ **pending (§4)** |
-| D1 migrations applied to staging | — | unverified | ⚠️ **check (§5)** |
-| Staging Worker deployed | — | not yet deployed | ❌ **pending (§6)** |
-| Isolation verified | — | not yet verified | ❌ **pending (§8)** |
+| Staging secret names | — | required auth/Sheets/Helius names present; values are intentionally unreadable | ✅ verified (§3) |
+| Google OAuth staging redirect URI | — | secret exists; interactive login remains a manual verification step | ⚠️ verify (§4) |
+| D1 migrations applied to staging | — | health connects and current tables including `nft_mint_jobs` exist | ✅ verified (§5) |
+| Staging Worker deployed | — | version `963012dc-55ef-4654-ae41-74315dff43ff` | ✅ deployed (§6) |
+| Isolation verified | — | health reports one staging attendee; repeat aggregate check before each R1/R2 run | ✅ verified (§8) |
 
 The staging Worker URL is `https://bethere-staging.solana-thailand.workers.dev`
 (declared in `[env.staging.vars].SERVER_URL`).
@@ -53,7 +53,7 @@ The staging Worker URL is `https://bethere-staging.solana-thailand.workers.dev`
 
 ---
 
-## 3. Secrets checklist (the main missing piece)
+## 3. Secrets checklist
 
 Secrets are **non-inheritable** — staging needs its own copies, set with
 `--env staging`. Verify what's already set first:
@@ -125,7 +125,7 @@ Reusing the prod client with an additional redirect URI is also fine.
 
 ---
 
-## 5. D1 migrations (verify before first deploy)
+## 5. D1 migrations (verify before each deploy)
 
 The staging D1 was created but migrations may not have been applied. Check the
 schema version, then apply if missing:
