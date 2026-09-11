@@ -79,8 +79,10 @@ No attendee PII was queried for this audit.
       deposit/refund/claim paths still contain `TODO(staging-live)` stubs.
 - [ ] Cover registration -> deposit -> verification -> ticket -> check-in ->
       quiz -> NFT claim, including retry/idempotency and refund/forfeit branches.
-- [ ] Make the live staging preflight gate default-on for production deploys,
-      with an explicit audited emergency bypass.
+- [x] Make the live staging preflight gate default-on for production deploys,
+      with an explicit audited emergency bypass. `worker/deploy.sh` now always
+      requires a fresh green sentinel for production; `--force` is accepted
+      only with a non-empty `--reason` and appends the existing audit record.
 - [ ] Use dedicated staging fixtures and wallets with strict balance limits.
 
 ## P1 — core correctness and attendee experience

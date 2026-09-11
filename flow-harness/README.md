@@ -15,14 +15,17 @@ The harness is the safety mechanism for plans **006 (SIWS)** and **007 (Dioxus m
 | **Typed HTTP client + error parsing** (`client.rs`) | ✅ Done; error-envelope parsing unit-tested |
 | **Runner + `summary.json` + `.last-green`** (`runner.rs`) | ✅ Done + unit-tested with no-op flows |
 | **CLI entry** (`main.rs`) | ✅ Done |
-| **Flow `run` bodies — HTTP execution** | ⏳ Staging-gated (`// TODO(staging-live):`) |
-| **Transaction signing/submission** | ⏳ Staging-gated (stubs return `HarnessError::Config`) |
-| **On-chain PDA existence assertion** (deposit) | ⏳ Staging-gated |
-| **Refund attempt + revert assertion** | ⏳ Staging-gated |
-| **Claim mint path** | ⏳ Staging-gated (`attempt_mint=false` default) |
-| **§3.5 preflight gate** (`worker/scripts/preflight.sh`) | ❌ Not started (blocked on staging live) |
+| **Flow `run` bodies — HTTP execution** | ✅ Wired; requires staging fixture/session configuration |
+| **Transaction signing/submission** | ✅ Wired and offline-tested; live run requires a capped devnet payer |
+| **On-chain PDA existence assertion** (deposit) | ✅ Wired |
+| **Refund attempt + revert assertion** | ✅ Wired |
+| **Claim mint path** | Deliberately off by default (`attempt_mint=false`); enable only with configured staging NFT provider |
+| **§3.5 preflight gate** (`worker/scripts/preflight.sh`) | ✅ Implemented and default-on for production; fresh live green sentinel still required |
 
-**What "staging-gated" means:** the flow scaffolding, configuration, preconditions, and the regression assertions are all real and `cargo test`-able offline. Only the HTTP/TX *execution* inside `run` bodies requires staging-live. Each such call-site is marked `// TODO(staging-live):` and fails fast with `HarnessError::Config` until §3.1 is provisioned.
+**What remains:** staging is deployed and the HTTP/on-chain seams are wired.
+The operator must provision a dedicated funded devnet payer, attendee wallet,
+mint, organizer/event fixture, and authenticated attendee session. Without
+those inputs the CLI fails closed and cannot create a green sentinel.
 
 ---
 
@@ -171,11 +174,11 @@ flow-harness/results/
 
 | Plan 005 section | Status |
 | --- | --- |
-| §3.1 Staging worker env | Scaffolded (wrangler.toml `[env.staging]`, deploy.sh, seed-staging.sh) — pending your provisioning |
+| §3.1 Staging worker env | ✅ Deployed and isolated; fixture wallet/session provisioning remains |
 | §3.2 Contract surface audit | ✅ Done (`docs/escrow_contract_surface.md`) |
 | §3.3 LiteSVM / quasar-svm tests | ✅ Superseded by `bethere-escrow/src/tests/refund.rs` |
-| §3.4 E2E harness | **This crate** — skeleton done; staging-live wiring pending |
-| §3.5 Preflight gate | Not started (blocked on staging live) |
+| §3.4 E2E harness | **This crate** — wired; 126 offline tests pass; first full live green pending fixture inputs |
+| §3.5 Preflight gate | ✅ Default-on for production; bypass requires audited `--force --reason` |
 
 ---
 
@@ -184,6 +187,7 @@ flow-harness/results/
 1. Create `src/flows/<name>.rs` implementing the `Flow` trait.
 2. Add a config struct with defaults aligned to `seed-staging.sh`.
 3. Put pure logic (preconditions, outcome prediction, gate verdict) in standalone functions with `#[cfg(test)]` truth-table tests.
-4. Mark every HTTP/TX call-site with `// TODO(staging-live):` and fail fast with `HarnessError::Config` until staging is live.
+4. Put external calls behind explicit fixture/config validation and keep pure
+   response/invariant logic unit-testable.
 5. Register the flow in `src/flows/mod.rs::register_default` (respect dependency order — the summary records flows in registration order).
 6. Add the flow to the table in this README.

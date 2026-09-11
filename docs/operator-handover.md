@@ -135,9 +135,8 @@ If health, assets, auth, registration, or deposit state regresses:
 1. Rebase or selectively integrate `feat/flow_harness_onchain_seam`, removing
    every live-flow stub only when staging fixtures and capped devnet wallets are
    available.
-2. Make the live staging preflight gate default-on for production deploys, with
-   the documented audited emergency bypass.
+2. Provision the dedicated capped devnet harness fixture and record a real green
+   live run; the production deploy gate is default-on.
 3. Consolidate THB verification projections and reconciliation.
 4. Add browser E2E coverage for registration recovery and attendee deposit,
    quiz, ticket, and claim states.
-

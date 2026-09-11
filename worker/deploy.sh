@@ -8,10 +8,9 @@
 #   ./deploy.sh dev          # Start dev server with remote KV (production data)
 #   ./deploy.sh dev --local  # Start dev server with local SQLite KV (empty)
 #
-# §3.5 preflight gate (OPT-IN, production-only):
-#   Set BETHERE_PREFLIGHT_GATE=1 to require a green flow-harness run within the
-#   last hour before a production deploy. The gate reads the .last-green sentinel
-#   mtime (see worker/scripts/preflight.sh).
+# §3.5 preflight gate (DEFAULT-ON, production-only):
+#   Production requires a green flow-harness run within the last hour. The gate
+#   reads the .last-green sentinel mtime (see worker/scripts/preflight.sh).
 #   ./deploy.sh --force --reason "hotfix X"   # Bypass the gate (logs an audit entry)
 #
 # Staging note: the PUT API fallback below is PRODUCTION-ONLY (its bindings/vars
@@ -48,8 +47,8 @@ MOVED=false
 # ── Argument parsing ─────────────────────────────────────────────────────────
 # Backward-compatible positional env (production | staging | dev) plus §3.5
 # flags: --force (bypass the preflight gate, logs an audit entry) and
-# --reason "..." (recorded in the audit entry). The preflight gate is OPT-IN:
-# it only runs when BETHERE_PREFLIGHT_GATE=1 and the deploy targets production.
+# --reason "..." (required for every bypass). The preflight gate always runs
+# when deploy targets production.
 DEPLOY_ENV="production"
 DEPLOY_DEV_LOCAL=false
 DEPLOY_FORCE=false
@@ -192,10 +191,10 @@ verify_content_types() {
 }
 
 # ── §3.5 Preflight gate (opt-in, production-only) ────────────────────────────
-# When BETHERE_PREFLIGHT_GATE=1, production deploys require a green flow-harness
-# run within the last hour (PREFLIGHT_MAX_AGE_SECONDS). --force bypasses the
-# gate but appends a mandatory audit entry to worker/scripts/.preflight-bypass.log
-# (gate is bypassable but never silently). Staging/dev deploys skip the gate.
+# Production deploys require a green flow-harness run within the last hour
+# (PREFLIGHT_MAX_AGE_SECONDS). --force --reason bypasses the gate and appends a
+# mandatory audit entry to worker/scripts/.preflight-bypass.log. Staging/dev
+# deploys skip the gate.
 SCRIPTS_DIR="$SCRIPT_DIR/scripts"
 PREFLIGHT_SCRIPT="$SCRIPTS_DIR/preflight.sh"
 PREFLIGHT_AUDIT_LOG="$SCRIPTS_DIR/.preflight-bypass.log"
@@ -218,13 +217,13 @@ run_preflight_gate() {
     return 0
   fi
 
-  # Opt-in: the gate is inert unless explicitly enabled.
-  if [ "${BETHERE_PREFLIGHT_GATE:-0}" != "1" ]; then
-    return 0
-  fi
-
   # --force bypasses the gate but logs an audit entry (never silent).
   if [ "$DEPLOY_FORCE" = true ]; then
+    if [ -z "$DEPLOY_FORCE_REASON" ]; then
+      echo "❌ --force requires --reason \"<incident/change reason>\"." >&2
+      echo "   Production preflight bypasses must be attributable and reviewable." >&2
+      return 2
+    fi
     log_preflight_bypass
     echo "⚠️  Preflight gate BYPASSED via --force (audit entry logged to .preflight-bypass.log)."
     if [ -n "$DEPLOY_FORCE_REASON" ]; then
@@ -234,12 +233,12 @@ run_preflight_gate() {
   fi
 
   if [ ! -f "$PREFLIGHT_SCRIPT" ]; then
-    echo "❌ Preflight gate enabled (BETHERE_PREFLIGHT_GATE=1) but preflight.sh not found:" >&2
+    echo "❌ Production preflight gate is required but preflight.sh was not found:" >&2
     echo "   $PREFLIGHT_SCRIPT" >&2
     return 1
   fi
 
-  echo "🔍 Running preflight gate (BETHERE_PREFLIGHT_GATE=1, env=production)..."
+  echo "🔍 Running required preflight gate (env=production)..."
   if bash "$PREFLIGHT_SCRIPT"; then
     echo "✅ Preflight gate passed — proceeding with production deploy."
     return 0
