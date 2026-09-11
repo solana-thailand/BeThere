@@ -144,14 +144,25 @@ impl StagingContext {
             .unwrap_or_else(|_| DEFAULT_ATTENDEE_EMAIL.to_string());
 
         let payer = load_payer_keypair()?;
+        if payer.pubkey() != attendee_wallet {
+            return Err(HarnessError::Config(format!(
+                "FLOW_HARNESS_PAYER_KEYPAIR pubkey ({}) must equal \
+                 FLOW_HARNESS_ATTENDEE_WALLET ({attendee_wallet}); worker deposit/refund \
+                 transactions require the attendee as fee payer and signer",
+                payer.pubkey()
+            )));
+        }
         let escrow_program_id = read_pubkey_env("FLOW_HARNESS_ESCROW_PROGRAM_ID")
             .unwrap_or_else(|_| pubkey_from_str(ESCROW_PROGRAM_ID));
         let deposit_mint = read_pubkey_env("FLOW_HARNESS_DEPOSIT_MINT")?;
         let rpc_url = {
             let raw = std::env::var("FLOW_HARNESS_RPC_URL")
                 .unwrap_or_else(|_| DEFAULT_RPC_URL.to_string());
-            Url::parse(&raw).map_err(|e| HarnessError::Config(format!("FLOW_HARNESS_RPC_URL: {e}")))?
+            Url::parse(&raw)
+                .map_err(|e| HarnessError::Config(format!("FLOW_HARNESS_RPC_URL: {e}")))?
         };
+
+        validate_live_target(&worker_url, &rpc_url)?;
 
         Ok(Self {
             worker_url,
@@ -295,6 +306,30 @@ impl StagingContext {
         // on the SDK version, so deref to be safe across versions.
         self.payer.as_ref().pubkey()
     }
+}
+
+/// Fail closed before loading or submitting any live transaction against a
+/// production-looking Worker or a non-devnet RPC endpoint.
+fn validate_live_target(worker_url: &Url, rpc_url: &Url) -> HarnessResult<()> {
+    let worker_host = worker_url.host_str().unwrap_or_default();
+    if !worker_host.contains("staging") && !is_loopback_host(worker_host) {
+        return Err(HarnessError::Config(format!(
+            "refusing non-staging worker host '{worker_host}'; the flow harness mutates test state"
+        )));
+    }
+
+    let rpc = rpc_url.as_str().to_ascii_lowercase();
+    if !rpc.contains("devnet") && !is_loopback_host(rpc_url.host_str().unwrap_or_default()) {
+        return Err(HarnessError::Config(format!(
+            "refusing RPC without an explicit devnet marker: {rpc_url}"
+        )));
+    }
+
+    Ok(())
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
 }
 
 // Hand-rolled Debug to avoid leaking the payer secret key in log output.
@@ -469,6 +504,29 @@ mod tests {
     fn worker_url_must_not_have_trailing_slash() {
         assert!(parse_worker_url(Some("https://x.dev/"), None).is_err());
         assert!(parse_worker_url(Some("https://x.dev"), None).is_ok());
+    }
+
+    #[test]
+    fn live_target_accepts_staging_and_devnet() {
+        let worker = Url::parse("https://bethere-staging.example.workers.dev").unwrap();
+        let rpc = Url::parse("https://devnet.helius-rpc.com/?api-key=test").unwrap();
+        assert!(validate_live_target(&worker, &rpc).is_ok());
+    }
+
+    #[test]
+    fn live_target_rejects_production_worker() {
+        let worker = Url::parse("https://bethere.example.workers.dev").unwrap();
+        let rpc = Url::parse(DEFAULT_RPC_URL).unwrap();
+        let err = validate_live_target(&worker, &rpc).unwrap_err();
+        assert!(err.to_string().contains("non-staging worker"));
+    }
+
+    #[test]
+    fn live_target_rejects_non_devnet_rpc() {
+        let worker = Url::parse("https://bethere-staging.example.workers.dev").unwrap();
+        let rpc = Url::parse("https://api.mainnet-beta.solana.com").unwrap();
+        let err = validate_live_target(&worker, &rpc).unwrap_err();
+        assert!(err.to_string().contains("explicit devnet marker"));
     }
 
     #[test]

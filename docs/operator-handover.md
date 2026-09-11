@@ -132,11 +132,9 @@ If health, assets, auth, registration, or deposit state regresses:
 
 ## Next implementation order
 
-1. Rebase or selectively integrate `feat/flow_harness_onchain_seam`, removing
-   every live-flow stub only when staging fixtures and capped devnet wallets are
-   available.
-2. Provision the dedicated capped devnet harness fixture and record a real green
+1. Provision the dedicated capped devnet harness fixture and record a real green
    live run; the production deploy gate is default-on.
+2. Run the full staging lifecycle twice consecutively and retain both summaries.
 3. Consolidate THB verification projections and reconciliation.
 4. Add browser E2E coverage for registration recovery and attendee deposit,
    quiz, ticket, and claim states.

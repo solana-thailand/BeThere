@@ -35,11 +35,12 @@ done
 # ── Deterministic test data ──────────────────────────────────────────────────
 # The harness needs an event whose refund window is exercisable without waiting
 # hours. We anchor on the seed run time:
-#   event_start = now - 4h        (clearly in the past)
-#   event_end   = now - 2h        (ended → checked-in refunds allowed)
-#   refund_deadline_hours = 6     → refund_deadline = event_end + 6h = now + 4h
-# So at seed time: a no-show can refund (now < deadline), a checked-in user can
-# always refund, and waiting >4h flips the no-show path closed for re-testing.
+#   event_start = now - 1h        (registration/deposit is already open)
+#   event_end   = now + 4h        (deposit flow can assert the pre-end state)
+#   refund_deadline_hours = 6     → refund_deadline = event_end + 6h = now + 10h
+# The live harness advances through lifecycle-specific fixtures; this base seed
+# deliberately starts before event_end so a fresh deposit has a deterministic
+# `PreEventEnd` outcome.
 NOW_MS=$(( $(date +%s) * 1000 ))
 EVENT_START_MS=$(( NOW_MS - 1 * 3600 * 1000 ))
 EVENT_END_MS=$(( NOW_MS + 4 * 3600 * 1000 ))
@@ -49,9 +50,9 @@ EVENT_ID="flow-test-event"
 EVENT_SLUG="flow-test-event"
 EVENT_NAME="Flow Harness Test Event (staging)"
 
-# Test attendee — deterministically checked-in so the checked-in refund path is
-# immediately exercisable. The harness can insert a SECOND no-show attendee via
-# the API to exercise the deadline path.
+# Test attendee — checked in for the post-event refund scenario, while its
+# deposit starts pending so the first harness flow can create and verify the
+# on-chain deposit. The harness can use a second attendee for the no-show path.
 ATTENDEE_ID="flow-test-attendee-1"
 ATTENDEE_EMAIL="flow-test-attendee-1@staging.local"
 ATTENDEE_NAME="Flow Test Attendee (checked-in)"
@@ -95,7 +96,7 @@ run_sql "INSERT OR REPLACE INTO attendees (
 ) VALUES (
     '${ATTENDEE_ID}', '${EVENT_ID}', '${ATTENDEE_EMAIL}', '${ATTENDEE_NAME}',
     'approved', 'in_person',
-    datetime('now'), 'verified', 10
+    datetime('now'), 'pending', 10
 );"
 
 # ── Deposit status row (mirrors deposit_statuses table) ───────────────────────
@@ -105,7 +106,7 @@ run_sql "INSERT OR REPLACE INTO deposit_statuses (
     verified, deposited_at, wallet_address, deposit_order, refundable
 ) VALUES (
     '${ATTENDEE_ID}', '${EVENT_ID}', 'usdc', 10, 'USDC',
-    1, datetime('now'), '', 1, 1
+    0, NULL, '', 1, 1
 );"
 
 # ── Isolation sanity check ───────────────────────────────────────────────────
@@ -118,7 +119,7 @@ npx wrangler d1 execute "$DB_NAME" --env staging $REMOTE_FLAG \
 echo ""
 echo "✅ Staging seed complete."
 echo "   Event:        ${EVENT_ID}  (ends ${EVENT_END_MS}, refund deadline +${REFUND_DEADLINE_HOURS}h)"
-echo "   Attendee:     ${ATTENDEE_ID} (checked-in, usdc deposit verified)"
+echo "   Attendee:     ${ATTENDEE_ID} (checked-in, usdc deposit pending)"
 echo "   Refund window: checked-in → anytime after event_end; no-show → before refund_deadline."
 echo ""
 echo "Next: bash worker/deploy.sh staging   # then point flow-harness at the staging URL."
