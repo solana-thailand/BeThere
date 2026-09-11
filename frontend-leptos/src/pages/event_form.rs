@@ -2341,12 +2341,15 @@ pub fn EventFormComponent(
                     </div>
                     <div class="form-section-body" class:form-section-body-hidden=move || !sec_community_open.get()>
                         <p class="quiz-setting-hint">
-                            "Add community channels, logistics guides, or post-event learning resources. Resource types appear on a published recap; use clear labels such as ‘Workshop slides’ or ‘Example repository’."
+                            "Add community channels, logistics guides, or post-event learning resources. Resource types appear on a published recap in the order shown here; use clear labels such as ‘Workshop slides’ or ‘Example repository’."
                         </p>
                         {move || {
                             let links = cl_links.get();
+                            let links_len = links.len();
                             links.into_iter().enumerate().map(|(i, link)| {
                                 let idx = i;
+                                let is_first = idx == 0;
+                                let is_last = idx + 1 == links_len;
                                 let platform = link.platform.clone();
                                 let url = link.url.clone();
                                 let label = link.label.clone();
@@ -2403,8 +2406,41 @@ pub fn EventFormComponent(
                                                 });
                                             }
                                         />
+                                        <div class="community-link-order-controls">
+                                            <button
+                                                type="button"
+                                                class="btn btn-ghost btn-xs"
+                                                disabled=is_first
+                                                title="Move link up"
+                                                aria-label=format!("Move link {} up", idx + 1)
+                                                on:click=move |_| {
+                                                    set_cl_links.update(|links| {
+                                                        if idx > 0 && idx < links.len() {
+                                                            links.swap(idx, idx - 1);
+                                                        }
+                                                    });
+                                                }
+                                            >"↑"</button>
+                                            <button
+                                                type="button"
+                                                class="btn btn-ghost btn-xs"
+                                                disabled=is_last
+                                                title="Move link down"
+                                                aria-label=format!("Move link {} down", idx + 1)
+                                                on:click=move |_| {
+                                                    set_cl_links.update(|links| {
+                                                        if idx + 1 < links.len() {
+                                                            links.swap(idx, idx + 1);
+                                                        }
+                                                    });
+                                                }
+                                            >"↓"</button>
+                                        </div>
                                         <button
+                                            type="button"
                                             class="btn btn-outline btn-xs community-link-remove"
+                                            title="Remove link"
+                                            aria-label=format!("Remove link {}", idx + 1)
                                             on:click=move |_| {
                                                 set_cl_links.update(|links| {
                                                     if idx < links.len() {
@@ -2424,6 +2460,7 @@ pub fn EventFormComponent(
                             if count < MAX_COMMUNITY_LINKS {
                                 view! {
                                     <button
+                                        type="button"
                                         class="btn btn-outline btn-sm community-link-add"
                                         on:click=move |_| add_community_link()
                                     >

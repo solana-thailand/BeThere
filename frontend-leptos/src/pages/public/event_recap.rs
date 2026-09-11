@@ -355,7 +355,8 @@ fn render_learning_resources(links: Vec<crate::api::CommunityLink>) -> AnyView {
 
     let items = links
         .into_iter()
-        .map(|link| {
+        .enumerate()
+        .map(|(index, link)| {
             let kind = match link.platform.as_str() {
                 "slides" => "Slides",
                 "source" => "Source code",
@@ -374,9 +375,7 @@ fn render_learning_resources(links: Vec<crate::api::CommunityLink>) -> AnyView {
                     rel="noopener noreferrer"
                     class="pe-community-link-item"
                 >
-                    <span class="pe-community-link-icon pe-cl-website">
-                        <Icon icon=IconName::Link class="icon-sm" />
-                    </span>
+                    <span class="recap-resource-order" aria-hidden="true">{index + 1}</span>
                     <span class="pe-community-link-label">{display_label}</span>
                     <span aria-hidden="true">"↗"</span>
                 </a>

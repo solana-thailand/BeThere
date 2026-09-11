@@ -360,6 +360,25 @@
     line-height: 1;
 }
 
+.community-link-order-controls {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.25rem;
+}
+
+.recap-resource-order {
+    align-items: center;
+    background: var(--accent-bg);
+    border-radius: 999px;
+    color: var(--accent);
+    display: inline-flex;
+    flex: 0 0 1.75rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    height: 1.75rem;
+    justify-content: center;
+}
+
 .community-link-add {
     margin-top: 0.25rem;
 }
@@ -480,4 +499,3 @@
         font-size: 16px !important;
     }
 }
-

@@ -51,9 +51,10 @@ block existing attendees or create ambiguous asset and money state.
       `online`, walk-in, or checked-in state.
 - [ ] Let organizers enable retrospective enrollment per event and set content
       visibility to `public`, `registered`, or `attended`.
-- [ ] Extend the existing recap surface from recording + recap text into an
-      ordered module list for slides, links, source code, and downloads; do not
-      create a parallel learning route.
+- [x] Extend the existing recap surface from recording + recap text into an
+      ordered resource list for slides, links, source code, and downloads. The
+      existing event-link vector is the order source, with organizer reorder
+      controls; no parallel learning route or persistence model is introduced.
 - [x] Start with URL-backed video and resources. Existing event `video_url` and
       typed `community_links` records power the published recap without a new
       table or admin CRUD flow. Do not introduce paid video hosting or
