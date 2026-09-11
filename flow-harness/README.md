@@ -11,7 +11,7 @@ The harness is the safety mechanism for plans **006 (SIWS)** and **007 (Dioxus m
 | Layer | State |
 | --- | --- |
 | **Two-path refund predicate** (`assertions.rs`) | ✅ Done + fully unit-tested (offline) |
-| **PDA derivation** (`context.rs`) | ✅ Done + unit-tested against real program id + seeds |
+| **PDA derivation + live target guards** (`context.rs`) | ✅ Done + unit-tested; rejects production/non-devnet targets and mismatched attendee signer |
 | **Typed HTTP client + error parsing** (`client.rs`) | ✅ Done; error-envelope parsing unit-tested |
 | **Runner + `summary.json` + `.last-green`** (`runner.rs`) | ✅ Done + unit-tested with no-op flows |
 | **CLI entry** (`main.rs`) | ✅ Done |
@@ -108,6 +108,10 @@ Prerequisites (from Plan 005 §3.1):
 1. Staging worker deployed: `bash worker/deploy.sh staging`
 2. Staging D1 seeded: `bash worker/scripts/seed-staging.sh`
 
+The CLI fails closed unless the Worker hostname contains `staging` (or is
+loopback), the RPC URL explicitly contains `devnet` (or is loopback), and the
+payer keypair pubkey equals `FLOW_HARNESS_ATTENDEE_WALLET`.
+
 Then:
 
 ```sh
@@ -177,7 +181,7 @@ flow-harness/results/
 | §3.1 Staging worker env | ✅ Deployed and isolated; fixture wallet/session provisioning remains |
 | §3.2 Contract surface audit | ✅ Done (`docs/escrow_contract_surface.md`) |
 | §3.3 LiteSVM / quasar-svm tests | ✅ Superseded by `bethere-escrow/src/tests/refund.rs` |
-| §3.4 E2E harness | **This crate** — wired; 126 offline tests pass; first full live green pending fixture inputs |
+| §3.4 E2E harness | **This crate** — wired; 129 offline tests pass; first full live green pending fixture inputs |
 | §3.5 Preflight gate | ✅ Default-on for production; bypass requires audited `--force --reason` |
 
 ---

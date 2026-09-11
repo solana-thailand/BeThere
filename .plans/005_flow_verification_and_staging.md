@@ -79,7 +79,7 @@ Goal: mobile/SIWS dev cannot reach production data even by accident.
       (Shipped — `worker/deploy.sh#L59` `staging) DEPLOY_ENV="staging"; shift` + usage doc L7; resolves to `wrangler deploy --env staging`.)
 - [ ] Document staging secrets setup: `wrangler secret put JWT_SECRET --env staging`, plus Google OAuth secrets with a separate redirect URI (`https://bethere-staging.solana-thailand.workers.dev/api/auth/callback`). Register this URI in the Google Cloud OAuth app.
 - [x] Add `worker/scripts/seed-staging.sh`: idempotent seeding of a test event (`flow-test-event`) with known `event_start_ms`/`event_end_ms`/`refund_deadline` plus a test attendee + deposit row.
-      (Shipped — `worker/scripts/seed-staging.sh` (5891 B, +x); `EVENT_ID="flow-test-event"` L48; seeds `event_start=now-4h`, `event_end=now-2h`, `refund_deadline_hours=6`; scoped to staging only.)
+      (Shipped — `EVENT_ID="flow-test-event"`; seeds `event_start=now-1h`, `event_end=now+4h`, `refund_deadline_hours=6`, and a pending deposit so the first harness flow can verify it; scoped to staging only.)
 - [x] Add `worker/.env.staging.example` documenting the staging URL for plan 007 to consume: `STAGING_WORKER_URL=https://bethere-staging.solana-thailand.workers.dev`.
       (Shipped — `worker/.env.staging.example` (2086 B).)
 - [ ] Verify isolation: after staging deploy, confirm `wrangler d1 execute bethere-db-staging --remote --command "SELECT count(*) FROM attendees"` returns the seeded count (not production count).

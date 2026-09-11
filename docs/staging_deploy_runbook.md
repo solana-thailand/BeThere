@@ -170,8 +170,9 @@ Once deployed and healthy, seed the deterministic test event + attendee that the
 bash worker/scripts/seed-staging.sh
 ```
 
-This inserts `flow-test-event` with `event_start=now-4h`, `event_end=now-2h`,
-`refund_deadline_hours=6`, plus a checked-in test attendee. It touches **only**
+This inserts `flow-test-event` with `event_start=now-1h`, `event_end=now+4h`,
+`refund_deadline_hours=6`, plus a checked-in attendee whose deposit starts
+pending for the harness's deposit flow. It touches **only**
 staging data and never production. Re-run is idempotent (`INSERT OR REPLACE`);
 pass `--clean` to wipe the test rows first.
 

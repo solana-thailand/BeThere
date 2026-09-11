@@ -75,8 +75,9 @@ No attendee PII was queried for this audit.
 
 ### Live release gate
 
-- [ ] Finish the staging flow harness HTTP/TX implementations; current
-      deposit/refund/claim paths still contain `TODO(staging-live)` stubs.
+- [x] Finish the staging flow harness HTTP/TX implementations. Deposit,
+      refund, claim, and auth seams are wired; stale `TODO(staging-live)` prose
+      no longer represents executable stubs.
 - [ ] Cover registration -> deposit -> verification -> ticket -> check-in ->
       quiz -> NFT claim, including retry/idempotency and refund/forfeit branches.
 - [x] Make the live staging preflight gate default-on for production deploys,
@@ -84,6 +85,9 @@ No attendee PII was queried for this audit.
       requires a fresh green sentinel for production; `--force` is accepted
       only with a non-empty `--reason` and appends the existing audit record.
 - [ ] Use dedicated staging fixtures and wallets with strict balance limits.
+      The harness now rejects production-looking Worker hosts, non-devnet RPC
+      URLs, and payer/attendee signer mismatches before any transaction; wallet
+      provisioning and the first live green run remain.
 
 ## P1 — core correctness and attendee experience
 
