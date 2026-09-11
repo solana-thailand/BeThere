@@ -35,6 +35,9 @@ block existing attendees or create ambiguous asset and money state.
       template; keep unsubscribe and consent rules intact.
 - [ ] Use campaign attribution parameters without putting email, attendee IDs,
       or claim tokens in URLs.
+- [x] Reuse the event's existing HTTPS recording URL on published public recap
+      pages through the shared ticket video component; recap text remains the
+      initial free resource surface.
 - [ ] Ensure the past-event page has a useful public recap when registration is
       unavailable or content is private.
 
@@ -44,8 +47,9 @@ block existing attendees or create ambiguous asset and money state.
       `online`, walk-in, or checked-in state.
 - [ ] Let organizers enable retrospective enrollment per event and set content
       visibility to `public`, `registered`, or `attended`.
-- [ ] Show recording, slides, links, source code, and downloadable resources in
-      one ordered module list on the existing slug/detail route.
+- [ ] Extend the existing recap surface from recording + recap text into an
+      ordered module list for slides, links, source code, and downloads; do not
+      create a parallel learning route.
 - [ ] Start with URL-backed video and resources. Do not introduce paid video
       hosting or transcoding until usage and cost justify it.
 - [ ] Give signed-in learners a resumable “My learning” entry point.
