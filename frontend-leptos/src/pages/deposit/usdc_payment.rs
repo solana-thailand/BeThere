@@ -128,7 +128,9 @@ pub fn awaiting_confirmation_view(
                     <span class="dep2-confirming-dot"></span>
                 </div>
                 <p>"Waiting for on-chain confirmation..."</p>
-                <p class="hint-xs">"Usually 5-15 seconds. Don't close this page."</p>
+                <p class="hint-xs">
+                    "Your payment signature is recorded. You may safely close this page and reopen the same deposit link; do not send another payment."
+                </p>
             </div>
             <div class="tx-hash-box-top">
                 {format!("TX: {}", sig_display)}

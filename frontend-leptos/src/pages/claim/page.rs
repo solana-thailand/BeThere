@@ -804,7 +804,7 @@ pub fn Claim() -> impl IntoView {
                                         "Minting for "{escape_html(&data.name)}
                                     </p>
                                     <p class="claim-minting-hint">
-                                        "This usually takes 3-5 seconds."
+                                        "This can take longer during provider delays. You may safely close this page and reopen the same claim link; the same claim cannot mint twice."
                                     </p>
                                 </div>
                             }
@@ -1038,6 +1038,9 @@ pub fn Claim() -> impl IntoView {
                                     <h2>"Minting Failed"</h2>
                                     <div class="result-details">
                                         <p>{escape_html(&error)}</p>
+                                        <p>
+                                            "Retrying uses the same protected claim request. If the provider already accepted it, BeThere resumes that result instead of minting another NFT."
+                                        </p>
                                     </div>
                                     <button
                                         class="btn btn-primary claim-retry-btn"
@@ -1045,7 +1048,7 @@ pub fn Claim() -> impl IntoView {
                                             set_state.set(ClaimState::Ready(data.clone()));
                                         }
                                     >
-                                        "Try Again"
+                                        "Check Status or Retry"
                                     </button>
                                 </div>
                             }
