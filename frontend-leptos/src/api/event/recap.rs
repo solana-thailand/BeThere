@@ -209,6 +209,9 @@ pub struct PublicRecapEvent {
     /// Organizer-configured HTTPS recording URL.
     #[serde(default)]
     pub video_url: String,
+    /// Sanitized event links tagged as learning resources by the organizer.
+    #[serde(default)]
+    pub learning_resources: Vec<crate::api::CommunityLink>,
     /// Whether post-event registration (lead capture) is open (Plan 008 — Phase 3).
     /// Drives the "join the community" CTA on the recap page.
     #[serde(default)]

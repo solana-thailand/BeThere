@@ -397,6 +397,7 @@ pub async fn get_public_recap(
     // imported from Sheets or older API clients, so the HTML input type alone
     // is not a sufficient trust boundary.
     let public_video_url = https_public_url(&config.video_url);
+    let learning_resources = public_learning_resources(&config.community_links);
 
     Ok(ApiOk::new(json!({
         "event": {
@@ -411,6 +412,7 @@ pub async fn get_public_recap(
             "poster_url": config.poster_url,
             "nft_image_url": config.nft_image_url,
             "video_url": public_video_url,
+            "learning_resources": learning_resources,
             "post_event_registration_open": accepting,
         },
         "recap_markdown": recap.recap_markdown,
@@ -428,6 +430,28 @@ fn https_public_url(url: &str) -> String {
         .filter(|rest| !rest.trim().is_empty())
         .map(|rest| format!("https://{rest}"))
         .unwrap_or_default()
+}
+
+fn public_learning_resources(
+    links: &[event_checkin_domain::models::event::CommunityLink],
+) -> Vec<event_checkin_domain::models::event::CommunityLink> {
+    links
+        .iter()
+        .filter(|link| {
+            matches!(
+                link.platform.as_str(),
+                "resource" | "slides" | "source" | "download"
+            )
+        })
+        .filter_map(|link| {
+            let url = https_public_url(&link.url);
+            (!url.is_empty()).then(|| event_checkin_domain::models::event::CommunityLink {
+                platform: link.platform.clone(),
+                url,
+                label: link.label.clone(),
+            })
+        })
+        .collect()
 }
 
 /// Count attendees by track from sheet data.
@@ -495,7 +519,9 @@ fn is_online_registration_open(
 
 #[cfg(test)]
 mod public_url_tests {
-    use super::https_public_url;
+    use event_checkin_domain::models::event::CommunityLink;
+
+    use super::{https_public_url, public_learning_resources};
 
     #[test]
     fn only_nonempty_https_urls_are_public() {
@@ -506,5 +532,31 @@ mod public_url_tests {
         assert!(https_public_url("http://example.com/video").is_empty());
         assert!(https_public_url("javascript:alert(1)").is_empty());
         assert!(https_public_url("https://   ").is_empty());
+    }
+
+    #[test]
+    fn public_learning_resources_filter_type_and_url() {
+        let links = vec![
+            CommunityLink {
+                platform: "slides".into(),
+                url: "https://example.com/slides".into(),
+                label: "Workshop slides".into(),
+            },
+            CommunityLink {
+                platform: "source".into(),
+                url: "javascript:alert(1)".into(),
+                label: "Unsafe".into(),
+            },
+            CommunityLink {
+                platform: "discord".into(),
+                url: "https://discord.gg/example".into(),
+                label: String::new(),
+            },
+        ];
+
+        let public = public_learning_resources(&links);
+        assert_eq!(public.len(), 1);
+        assert_eq!(public[0].platform, "slides");
+        assert_eq!(public[0].label, "Workshop slides");
     }
 }

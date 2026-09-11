@@ -160,6 +160,7 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
     let funnel = payload.funnel.clone();
     let markdown = payload.recap_markdown.clone();
     let video_url = event.video_url.clone();
+    let learning_resources = event.learning_resources.clone();
     let published_str = payload
         .recap_published_at
         .as_deref()
@@ -292,6 +293,8 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
             }.into_any()
         }}
 
+        {render_learning_resources(learning_resources)}
+
         // ── Recap body (rendered as preformatted text in v1) ──
         {move || {
             let md = markdown.clone();
@@ -343,6 +346,54 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
             }
         }}
     }
+}
+
+fn render_learning_resources(links: Vec<crate::api::CommunityLink>) -> AnyView {
+    if links.is_empty() {
+        return ().into_any();
+    }
+
+    let items = links
+        .into_iter()
+        .map(|link| {
+            let kind = match link.platform.as_str() {
+                "slides" => "Slides",
+                "source" => "Source code",
+                "download" => "Download",
+                _ => "Resource",
+            };
+            let display_label = if link.label.trim().is_empty() {
+                kind.to_string()
+            } else {
+                format!("{} · {kind}", link.label)
+            };
+            view! {
+                <a
+                    href=link.url
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="pe-community-link-item"
+                >
+                    <span class="pe-community-link-icon pe-cl-website">
+                        <Icon icon=IconName::Link class="icon-sm" />
+                    </span>
+                    <span class="pe-community-link-label">{display_label}</span>
+                    <span aria-hidden="true">"↗"</span>
+                </a>
+            }
+        })
+        .collect::<Vec<_>>();
+
+    view! {
+        <div class="card" style="width:100%;margin-bottom:1.5rem;">
+            <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">"Learning resources"</h2>
+            <p class="subtitle" style="margin:0 0 1rem;">
+                "Continue with the organizer's slides, code, and supporting materials."
+            </p>
+            <div class="pe-community-links-list">{items}</div>
+        </div>
+    }
+    .into_any()
 }
 
 // ---------------------------------------------------------------------------
