@@ -140,8 +140,8 @@ npx wrangler d1 migrations apply bethere-db-staging --remote --env staging
 ```
 
 Expected tables after migration: `events`, `attendees`, `deposit_statuses`,
-`contacts`, `staff`, `developer_profiles`, `claim_locks`, and any audit trail
-tables per `worker/migrations/`.
+`contacts`, `staff`, `developer_profiles`, `claim_locks`, `nft_mint_jobs`, and
+the audit/reconciliation tables defined by `worker/migrations/`.
 
 ---
 

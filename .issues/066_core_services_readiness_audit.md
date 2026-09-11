@@ -56,7 +56,10 @@ No attendee PII was queried for this audit.
   D1 records that ID before external I/O, while KV retains confirmed results as
   a seven-day recovery copy until the attendee projection succeeds. The broader
   state-machine item remains open for explicit terminal failure/reconciliation
-  states and an automated sweeper.
+  states and provider-side pending reconciliation. A daily idempotent sweeper
+  now repairs missing attendee projections from confirmed journal rows, marks
+  exact matches persisted, and alerts on inconsistent confirmed jobs or pending
+  jobs older than one hour.
 - [ ] Validate Crossmint host, collection, and collection network at startup or
       event activation. Production currently uses `www.crossmint.com` while the
       config comment identifies the collection as devnet.
