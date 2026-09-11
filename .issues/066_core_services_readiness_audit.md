@@ -134,8 +134,9 @@ No attendee PII was queried for this audit.
 
 ## P2 — product truth, performance, and maintenance
 
-- [ ] Correct landing copy that says `0.01 SOL` / `SOL/USDC`; event payment is
-      configured in THB and USDC and refunds are not universally on-chain.
+- [x] Correct landing copy that said `0.01 SOL` / `SOL/USDC`. The landing flow
+      now describes per-event THB or USDC configuration and promises the exact
+      amount and method before confirmation.
 - [ ] Ensure public slug/detail pages derive deposit/refund/NFT wording from the
       actual event configuration and network.
 - [ ] Run a Chrome DevTools Core Web Vitals trace for landing and a representative
