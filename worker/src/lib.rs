@@ -204,26 +204,32 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
         match db::credit_ledger::reconcile(db).await {
             Ok(report) if !report.is_clean() => {
                 tracing::error!(
+                    applies_repaired = report.applies_repaired,
                     orphan_holds = report.orphan_holds,
                     negative_balances = report.negative_balances,
                     double_settled = report.double_settled,
                     phantom_holds = report.phantom_holds,
+                    incomplete_applies = report.incomplete_applies,
                     "credit ledger reconcile FAILED"
                 );
                 if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
                     && !webhook.is_empty()
                 {
                     let msg = format!(
-                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s), {} double-settled deposit(s) (cash refunded AND held as credit), {} phantom hold(s) (ledger credit with no held deposit). Check credit_ledger vs thb_deposits.",
+                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s), {} double-settled deposit(s) (cash refunded AND held as credit), {} phantom hold(s) (ledger credit with no held deposit), {} incomplete credit application(s). Check credit_ledger vs deposit projections.",
                         report.orphan_holds,
                         report.negative_balances,
                         report.double_settled,
-                        report.phantom_holds
+                        report.phantom_holds,
+                        report.incomplete_applies
                     );
                     let _ = middleware::alert::post_slack(&webhook, &msg).await;
                 }
             }
-            Ok(_) => tracing::info!("credit ledger reconcile clean"),
+            Ok(report) => tracing::info!(
+                applies_repaired = report.applies_repaired,
+                "credit ledger reconcile clean"
+            ),
             Err(e) => tracing::warn!(error = %e, "credit ledger reconcile query failed"),
         }
 

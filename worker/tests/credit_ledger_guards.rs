@@ -34,6 +34,59 @@ fn ledger_src() -> String {
     fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()))
 }
 
+fn coverage_src() -> String {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/db/credit_coverage.rs");
+    fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()))
+}
+
+#[test]
+fn credit_spend_and_ticket_projection_share_one_d1_batch() {
+    let src = coverage_src();
+    assert!(
+        src.contains(".batch(statements)"),
+        "credit spend and deposit projection must commit in one D1 batch"
+    );
+    assert!(
+        src.contains(") >= ?4")
+            && src.contains("ROLLING_CREDIT_AUTO_APPLIED")
+            && src.contains("INSERT INTO deposit_statuses"),
+        "the atomic batch must retain the balance guard and both deposit projections"
+    );
+}
+
+#[test]
+fn credit_projection_cannot_overwrite_another_payment() {
+    let src = coverage_src();
+    assert!(
+        src.contains("COALESCE(slip_url, '') <> 'ROLLING_CREDIT_AUTO_APPLIED'")
+            && src.contains("WHERE deposit_statuses.method=excluded.method"),
+        "credit coverage must refuse cash/other-method deposit ownership"
+    );
+}
+
+#[test]
+fn credit_currency_is_preserved_in_ticket_status() {
+    let src = coverage_src();
+    assert!(
+        src.contains("DepositMethod::CreditThb")
+            && src.contains("DepositMethod::CreditUsdc")
+            && src.contains("(DepositMethod::CreditUsdc, \"USDC\")"),
+        "credit THB and credit USDC must not collapse into a THB payment status"
+    );
+}
+
+#[test]
+fn legacy_credit_repair_requires_exact_marker_and_refuses_cash() {
+    let src = ledger_src();
+    assert!(
+        src.contains("SET method='credit_thb'")
+            && src.contains("d.slip_url='ROLLING_CREDIT_AUTO_APPLIED'")
+            && src.contains("l.delta=-s.amount")
+            && src.contains("COALESCE(cash.slip_url,'')<>'ROLLING_CREDIT_AUTO_APPLIED'"),
+        "legacy status repair must require exact ledger/marker/amount truth and refuse cash rows"
+    );
+}
+
 #[test]
 fn on_conflict_repeats_partial_index_predicate() {
     let src = ledger_src();
