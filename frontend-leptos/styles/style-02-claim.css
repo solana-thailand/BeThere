@@ -123,6 +123,20 @@
     border: 1px solid var(--info-border);
 }
 
+.badge-danger {
+    background: var(--danger-bg);
+    color: var(--danger-bright);
+    border: 1px solid var(--danger-border);
+}
+
+.status-badge-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: currentColor;
+}
+
 /* Small badge variants for event list indicators */
 .badge-warning-xs {
     background: var(--warning-bg);
@@ -989,4 +1003,3 @@
 .claim-bookmark-hint a:hover {
     color: var(--accent-hover);
 }
-

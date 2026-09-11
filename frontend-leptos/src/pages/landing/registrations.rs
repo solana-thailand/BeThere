@@ -6,6 +6,7 @@ use serde::Deserialize;
 
 use super::notifications::NotificationInbox;
 use crate::api::ApiResponse;
+use crate::components::{StatusBadge, StatusTone};
 use crate::icons::{Icon, IconName};
 
 /// Response item from GET /api/my-registrations.
@@ -170,10 +171,10 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                             "TBA".to_string()
                                         };
                                         let next_url = reg.next_step.url.clone();
-                                        let status_class = match reg.status.as_str() {
-                                            "nft claimed" | "checked in" | "deposit confirmed" => "badge badge-success landing-reg-status-badge",
-                                            "deposit pending" => "badge badge-warning landing-reg-status-badge",
-                                            _ => "badge badge-info landing-reg-status-badge",
+                                        let status_tone = match reg.status.as_str() {
+                                            "nft claimed" | "checked in" | "deposit confirmed" => StatusTone::Confirmed,
+                                            "deposit pending" => StatusTone::Pending,
+                                            _ => StatusTone::Neutral,
                                         };
                                         view! {
                                             <div class="landing-reg-card">
@@ -186,10 +187,7 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                                 <div class="landing-reg-identity">
                                                     <span class="landing-reg-identity-label">{user.clone()}</span>
                                                 </div>
-                                                <div class=status_class>
-                                                    <span class="landing-reg-status-dot" aria-hidden="true"></span>
-                                                    {reg.status.clone()}
-                                                </div>
+                                                <StatusBadge tone=status_tone label=reg.status.clone() />
                                                 <a href=next_url class="btn btn-primary btn-sm landing-reg-action">
                                                     {step_label}" →"
                                                 </a>

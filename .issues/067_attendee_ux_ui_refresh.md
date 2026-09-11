@@ -21,11 +21,10 @@ neumorphism, and novelty interactions in transactional flows.
 ## Delivery order
 
 - [x] Remove fixed `0.01 SOL` and ambiguous `SOL/USDC` landing claims.
-- [ ] Define shared semantic states for pending, action required, confirmed,
+- [x] Define shared semantic states for pending, action required, confirmed,
       blocked, failed, and refundable; do not encode meaning by color alone.
-      The landing registration cards now reuse the shared semantic badge
-      primitives without inline hex colors; extend their vocabulary across
-      flows.
+      `StatusTone` and `StatusBadge` provide the shared vocabulary with text as
+      the primary signal; landing, deposit, ticket, and claim use it.
 - [ ] Add one attendee journey indicator shared by registration, deposit,
       ticket, quiz, and claim, driven by server state.
 - [ ] Show exact currency, network, amount, refund condition, and fee ownership

@@ -97,7 +97,10 @@ pub fn DepositVerifiedCard() -> impl IntoView {
                 <Icon icon=IconName::Check class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">"Deposit: Verified ✓"</div>
+                <crate::components::StatusBadge
+                    tone=crate::components::StatusTone::Confirmed
+                    label="Deposit verified"
+                />
             </div>
         </div>
     }
@@ -130,6 +133,10 @@ pub fn DepositPendingCard(
                 <Icon icon=IconName::Hourglass class="icon-sm" />
             </div>
             <div>
+                <crate::components::StatusBadge
+                    tone=crate::components::StatusTone::Pending
+                    label="Pending"
+                />
                 <div class="ticket-action-title">{label}</div>
                 <div class="ticket-action-desc">{desc}</div>
             </div>

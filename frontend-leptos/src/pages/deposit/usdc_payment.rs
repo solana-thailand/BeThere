@@ -166,9 +166,10 @@ pub fn deposit_confirmed_view(
                             <div class="dep2-receipt-row">
                                 <span class="dep2-receipt-label">"Status"</span>
                                 <span class="dep2-receipt-value">
-                                    <span class="badge badge-warning">
-                                        "Non-refundable (#" {s.deposit_order} ")"
-                                    </span>
+                                    <crate::components::StatusBadge
+                                        tone=crate::components::StatusTone::Blocked
+                                        label=format!("Non-refundable (#{})", s.deposit_order)
+                                    />
                                 </span>
                             </div>
                         }.into_any(),
@@ -176,9 +177,10 @@ pub fn deposit_confirmed_view(
                             <div class="dep2-receipt-row">
                                 <span class="dep2-receipt-label">"Status"</span>
                                 <span class="dep2-receipt-value">
-                                    <span class="badge badge-success">
-                                        "Refundable (#" {s.deposit_order} ")"
-                                    </span>
+                                    <crate::components::StatusBadge
+                                        tone=crate::components::StatusTone::Refundable
+                                        label=format!("Refundable (#{})", s.deposit_order)
+                                    />
                                 </span>
                             </div>
                         }.into_any(),

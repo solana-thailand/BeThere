@@ -418,18 +418,6 @@
     white-space: nowrap;
 }
 
-.landing-reg-status-badge {
-    text-transform: capitalize;
-}
-
-.landing-reg-status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    background: currentColor;
-}
-
 .landing-reg-empty {
     background: var(--bg-card);
     border-radius: var(--radius);
