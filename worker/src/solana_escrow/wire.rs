@@ -233,6 +233,13 @@ pub async fn verify_escrow_account_exists(
     let json: serde_json::Value = serde_json::from_str(&text)
         .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
 
+    // JSON-RPC failures still use HTTP 200. Treating a missing `result` as an
+    // absent account hides configuration errors such as a missing RPC API key
+    // and can send an organizer down an unsafe retry path.
+    if let Some(error) = json.get("error") {
+        return Err(EscrowError::RpcFailed(format!("RPC error: {error}")));
+    }
+
     let account_info = json.get("result").and_then(|v| v.get("value"));
 
     match account_info {

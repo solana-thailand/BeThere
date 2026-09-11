@@ -493,7 +493,44 @@ pub fn AdminEscrow(
                 return;
             }
 
-            // 2. Build the init TX (vault ATA + create_event in one TX).
+            // 2. A previous wallet submission can succeed while the browser
+            // loses the subsequent state-sync request. Recover that case
+            // before building another transaction; a successful sync means
+            // there is nothing new for the organizer to sign.
+            match api::confirm_escrow_init(&api::ConfirmEscrowInitRequest {
+                event_id: eid.clone(),
+            })
+            .await
+            {
+                Ok(confirmed) => {
+                    set_es.set(confirmed.escrow_status);
+                    set_esl.set(true);
+                    set_s1.set(false);
+                    set_ca.update(|v| v.retain(|a| *a == EscrowAction::InitEscrow));
+                    components::show_toast(
+                        &set_t,
+                        "Existing escrow synchronized.",
+                        ToastType::Success,
+                    );
+                    set_init.set(false);
+                    return;
+                }
+                Err(e) if e.message.contains("escrow not found on-chain") => {
+                    // Expected for a new escrow: continue to build its init TX.
+                }
+                Err(e) => {
+                    log::error!("[admin-escrow] escrow pre-sync failed: {e}");
+                    components::show_toast(
+                        &set_t,
+                        &format!("Failed to verify existing escrow: {e}"),
+                        ToastType::Error,
+                    );
+                    set_init.set(false);
+                    return;
+                }
+            }
+
+            // 3. Build the init TX (vault ATA + create_event in one TX).
             let init_resp = match api::init_escrow(&api::InitEscrowRequest {
                 event_id: eid.clone(),
             })
@@ -512,7 +549,7 @@ pub fn AdminEscrow(
                 }
             };
 
-            // 3. SEC-014: verify wallet cluster matches expected network.
+            // 4. SEC-014: verify wallet cluster matches expected network.
             let expected_cluster = crate::utils::get_cluster();
             if let Err(cluster_err) =
                 crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await
@@ -523,7 +560,7 @@ pub fn AdminEscrow(
                 return;
             }
 
-            // 4. Pre-sign simulation (Solana Foundation Security Checklist).
+            // 5. Pre-sign simulation (Solana Foundation Security Checklist).
             match crate::pages::escrow_init::simulate_transaction_js(&wn, &init_resp.transaction)
                 .await
             {
@@ -544,7 +581,7 @@ pub fn AdminEscrow(
                 }
             }
 
-            // 5. Sign + send via wallet.
+            // 6. Sign + send via wallet.
             match sign_and_send_tx_js(&wn, &init_resp.transaction).await {
                 crate::wallet_error::WalletResult::Success(signature) => {
                     log::info!("[admin-escrow] init TX confirmed: {}", signature);
@@ -552,7 +589,7 @@ pub fn AdminEscrow(
                     set_ar.update(|v| {
                         v.push((EscrowAction::InitEscrow, Ok(signature.clone())));
                     });
-                    // 6. Sync on-chain state to server (idempotent).
+                    // 7. Sync on-chain state to server (idempotent).
                     match api::confirm_escrow_init(&api::ConfirmEscrowInitRequest {
                         event_id: eid.clone(),
                     })

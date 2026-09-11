@@ -257,7 +257,10 @@ CLAIM_BASE_URL = "https://bethere-staging.solana-thailand.workers.dev/claim"
 NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""
 TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
-HELIUS_RPC_URL = "https://devnet.helius-rpc.com"
+# Public Devnet RPC keeps staging self-contained and free. Helius requires an
+# API key; without one it returns a JSON-RPC error that cannot serve escrow
+# confirmation reads.
+HELIUS_RPC_URL = "https://api.devnet.solana.com"
 CROSSMINT_HOST = "staging.crossmint.com"
 CROSSMINT_COLLECTION_ID = ""
 # Staging targets devnet (vars are non-inheritable, so it must be redeclared here).
