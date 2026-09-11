@@ -36,7 +36,7 @@
 
 use std::time::{Duration, Instant};
 
-use domain::models::deposit::DepositStatusResponse;
+use domain::models::deposit::DepositStatus;
 
 use crate::assertions::{now_ms, DepositStatusAsserter};
 use crate::client::{DepositUsdcRequest, WorkerClient};
@@ -205,7 +205,7 @@ impl Flow for DepositFlow {
                 .fetch_deposit_status(ctx, &self.config.attendee_id)
                 .await?;
 
-            if is_verified(&current) {
+            if is_verified(current.status.as_ref()) {
                 break current;
             }
 
@@ -281,21 +281,13 @@ fn assert_solana_pay_url(solana_pay_url: &str) -> HarnessResult<()> {
     Ok(())
 }
 
-/// Determine whether a [`DepositStatusResponse`] reports a verified deposit.
+/// Determine whether the attendee's deposit record is verified.
 ///
-/// The `DepositStatusResponse` shape surfaces verification via the underlying
-/// `DepositStatus.verified` field. The exact accessor depends on which fields
-/// the response carries; this helper centralises the truth so a future
-/// refactor of `domain` updates one call-site.
-///
-/// TODO(staging-independent): once `DepositStatusResponse` is confirmed to
-/// surface `verified` directly, replace this with a field read. For now, we
-/// infer verification from `deposit_amount_usdc > 0` (the worker populates
-/// the amount only after verifying on-chain). This is the conservative read:
-/// a verified-but-zero-amount deposit (not currently possible) would poll
-/// until timeout, which is the correct fail-safe.
-fn is_verified(status: &DepositStatusResponse) -> bool {
-    status.deposit_amount_usdc > 0
+/// Event-level `deposit_amount_usdc` is configuration, not evidence of an
+/// attendee payment. Only the nested deposit record records on-chain
+/// verification; absent or pending records must continue polling.
+fn is_verified(status: Option<&DepositStatus>) -> bool {
+    status.is_some_and(|deposit| deposit.verified)
 }
 
 /// Classify a worker error from the deposit endpoint.
@@ -498,6 +490,32 @@ mod tests {
         assert_eq!(c.event_id, "flow-test-event");
         assert_eq!(c.poll_interval, Duration::from_millis(2_000));
         assert_eq!(c.poll_timeout, Duration::from_millis(60_000));
+    }
+
+    #[test]
+    fn verification_requires_the_attendee_record() {
+        let pending = DepositStatus {
+            attendee_id: "attendee".to_string(),
+            event_id: "event".to_string(),
+            method: domain::models::deposit::DepositMethod::Usdc,
+            amount: 10_000_000,
+            currency: "USDC".to_string(),
+            tx_signature: Some("signature".to_string()),
+            verified: false,
+            deposited_at: "2026-01-01T00:00:00Z".to_string(),
+            wallet_address: Some("wallet".to_string()),
+            deposit_order: 1,
+            refundable: true,
+            rejected: false,
+        };
+        assert!(!is_verified(None));
+        assert!(!is_verified(Some(&pending)));
+
+        let verified = DepositStatus {
+            verified: true,
+            ..pending
+        };
+        assert!(is_verified(Some(&verified)));
     }
 
     #[tokio::test]

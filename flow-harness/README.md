@@ -37,14 +37,18 @@ refresh.
 This is documented in `docs/escrow_contract_surface.md` §3–§4. Summary:
 
 - **On-chain truth** (`bethere-escrow/src/instructions/refund.rs#L72-85`): a refund succeeds iff `clock >= event_end` AND (`checked_in` OR `clock < refund_deadline`).
-- **Legacy frontend gate** (`event_refund_window_open`): checks only `now >= event_end` — ignores `refund_deadline` and `checked_in`.
-- **Result:** a no-show past `refund_deadline` sees an enabled "Request Refund" CTA, clicks it, signs, and the TX reverts with `RefundDeadlinePassed` (code 19).
+- **Former frontend gate:** only checked `now >= event_end`, so a no-show past
+  `refund_deadline` could see an enabled CTA and submit a transaction that
+  reverts with `RefundDeadlinePassed` (code 19).
 
-Fix #19 has two parts:
-1. **Expose the data** — `DepositStatusResponse.refund_deadline_ms` + `.checked_in`. ✅ Landed in `domain`.
-2. **Replace the gate predicate.** ⏳ Pending.
+Fix #19 is complete:
+1. **Expose the data** — `DepositStatusResponse.refund_deadline_ms` + `.checked_in`. ✅
+2. **Use the two-path predicate** in the frontend, including a single captured
+   clock value at the boundary. ✅
 
-The harness's `refund_no_show_deadline` flow is the regression test for this. It pins the corrected predicate (`refund_cta_enabled`), encodes the legacy predicate (`legacy_gate_verdict_at`), and asserts the two **disagree** at the post-deadline point — i.e. the divergence is detectable. Once part 2 ships, the divergence assertion is relaxed to check the corrected gate alone (the test `divergence_assertion_transitions_when_part_2_ships` documents the transition).
+The harness's `refund_no_show_deadline` flow preserves the historic regression
+case and asserts the corrected predicate (`refund_cta_enabled`) is disabled
+after the no-show deadline.
 
 ---
 
@@ -108,8 +112,10 @@ Runs the staging-independent suites: the refund-window truth table, PDA derivati
 
 Prerequisites (from Plan 005 §3.1):
 
-1. Staging worker deployed: `bash worker/deploy.sh staging`
-2. Staging D1 seeded: `bash worker/scripts/seed-staging.sh`
+1. Staging worker deployed (only when Worker code has changed): `bash worker/deploy.sh staging`
+2. Staging D1 seeded with a fresh active fixture: `bash worker/scripts/seed-staging.sh --event-id flow-deposit-YYYYMMDD`
+3. The fixture's escrow initialized from Manage Events → Edit → Escrow Management
+   using the Devnet organizer wallet.
 
 The CLI fails closed unless the Worker hostname contains `staging` (or is
 loopback), the RPC URL explicitly contains `devnet` (or is loopback), and the
@@ -150,7 +156,7 @@ Accepted names are `deposit`, `refund-pre-event-end`,
 | `FLOW_HARNESS_RPC_URL` | yes (live) | Helius devnet RPC for TX submission |
 | `FLOW_HARNESS_WORKER_URL` | no | Staging URL (default: `https://bethere-staging.solana-thailand.workers.dev`) |
 | `FLOW_HARNESS_EVENT_ID` | no | Worker-side event id (default: `flow-test-event`) |
-| `FLOW_HARNESS_EVENT_ID_ON_CHAIN` | no | On-chain `u64` event id (default: `1`) |
+| `FLOW_HARNESS_EVENT_ID_ON_CHAIN` | no | On-chain `u64` event id; defaults to the Worker's deterministic mapping of `FLOW_HARNESS_EVENT_ID` |
 | `FLOW_HARNESS_ESCROW_PROGRAM_ID` | no | Override the deployed program id |
 | `FLOW_HARNESS_ATTENDEE_EMAIL` | no | Override the seeded attendee email |
 | `FLOW_HARNESS_ATTENDEE_SESSION` | no | Explicit session-cookie override; otherwise the harness creates a SIWS session |
@@ -192,7 +198,7 @@ flow-harness/results/
 | §3.1 Staging worker env | ✅ Deployed and isolated; fixture wallet/session provisioning remains |
 | §3.2 Contract surface audit | ✅ Done (`docs/escrow_contract_surface.md`) |
 | §3.3 LiteSVM / quasar-svm tests | ✅ Superseded by `bethere-escrow/src/tests/refund.rs` |
-| §3.4 E2E harness | **This crate** — wired; 129 offline tests pass; first full live green pending fixture inputs |
+| §3.4 E2E harness | **This crate** — wired; 132 offline tests pass; first full live green pending fixture inputs |
 | §3.5 Preflight gate | ✅ Default-on for production; bypass requires audited `--force --reason` |
 
 ---

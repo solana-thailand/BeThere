@@ -4,7 +4,9 @@
 # to drive the deposit/refund/claim flows.
 #
 # Usage:
-#   bash worker/scripts/seed-staging.sh           # Seed (INSERT OR REPLACE)
+#   bash worker/scripts/seed-staging.sh           # Seed default fixture (INSERT OR REPLACE)
+#   bash worker/scripts/seed-staging.sh --event-id flow-deposit-20260912
+#                                                   # Seed a fresh named fixture
 #   bash worker/scripts/seed-staging.sh --clean   # Wipe the test event rows first
 #   bash worker/scripts/seed-staging.sh --local   # Target local D1 (--local) instead of --remote
 #
@@ -13,7 +15,7 @@
 #   2. Migrations applied: npx wrangler d1 migrations apply bethere-db-staging --remote
 #   3. The database_name below matches the [env.staging] D1 binding in wrangler.toml.
 #
-# This script ONLY touches staging data (event id `flow-test-event`). It never
+# This script ONLY touches staging data for the selected fixture event. It never
 # reads or writes production. Verify isolation with the count check at the end.
 
 set -euo pipefail
@@ -23,14 +25,28 @@ cd "$(dirname "$0")/.."
 DB_NAME="bethere-db-staging"
 REMOTE_FLAG="--remote"
 CLEAN=0
+EVENT_ID="flow-test-event"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean) CLEAN=1; shift ;;
         --local) REMOTE_FLAG="--local"; shift ;;
+        --event-id)
+            [[ $# -ge 2 ]] || { echo "--event-id requires a value" >&2; exit 2; }
+            EVENT_ID="$2"
+            shift 2
+            ;;
         *) echo "Unknown arg: $1" >&2; exit 2 ;;
     esac
 done
+
+# Event IDs are interpolated into D1 statements below. Restrict them to the
+# same slug-safe alphabet used by the event form so the operator cannot turn a
+# fixture helper into a SQL injection tool.
+if [[ ! "$EVENT_ID" =~ ^[a-z0-9][a-z0-9-]{2,80}$ ]]; then
+    echo "Invalid --event-id '${EVENT_ID}': use 3-81 lowercase letters, digits, or hyphens." >&2
+    exit 2
+fi
 
 # ── Deterministic test data ──────────────────────────────────────────────────
 # The harness needs an event whose refund window is exercisable without waiting
@@ -46,15 +62,14 @@ EVENT_START_MS=$(( NOW_MS - 1 * 3600 * 1000 ))
 EVENT_END_MS=$(( NOW_MS + 4 * 3600 * 1000 ))
 REFUND_DEADLINE_HOURS=6
 
-EVENT_ID="flow-test-event"
-EVENT_SLUG="flow-test-event"
-EVENT_NAME="Flow Harness Test Event (staging)"
+EVENT_SLUG="$EVENT_ID"
+EVENT_NAME="Flow Harness Fixture (${EVENT_ID})"
 
 # Test attendee — checked in for the post-event refund scenario, while its
 # deposit starts pending so the first harness flow can create and verify the
 # on-chain deposit. The harness can use a second attendee for the no-show path.
-ATTENDEE_ID="flow-test-attendee-1"
-ATTENDEE_EMAIL="flow-test-attendee-1@staging.local"
+ATTENDEE_ID="${EVENT_ID}-attendee-1"
+ATTENDEE_EMAIL="${EVENT_ID}-attendee-1@staging.local"
 ATTENDEE_NAME="Flow Test Attendee (checked-in)"
 
 run_sql () {
@@ -139,4 +154,5 @@ echo "   Event:        ${EVENT_ID}  (ends ${EVENT_END_MS}, refund deadline +${RE
 echo "   Attendee:     ${ATTENDEE_ID} (checked-in, usdc deposit pending)"
 echo "   Refund window: checked-in → anytime after event_end; no-show → before refund_deadline."
 echo ""
-echo "Next: bash worker/deploy.sh staging   # then point flow-harness at the staging URL."
+echo "Next: open the staging event in Manage Events → Edit → Escrow Management."
+echo "      Initialize its Devnet escrow with the organizer wallet, then run the focused deposit harness."

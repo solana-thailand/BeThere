@@ -38,9 +38,11 @@ These are mutually exclusive states for a repeatable Devnet fixture.
 
 1. Never run `seed-staging.sh` against an event whose `escrow_status` is
    `initialized`, `deactivated`, or `closed`.
-2. Create a new active deposit fixture when the current one expires; assign a
-   new worker event ID and on-chain event ID, then initialize it from the
-   organizer wallet in the Admin Escrow screen.
+2. Create a new active deposit fixture when the current one expires:
+   `bash worker/scripts/seed-staging.sh --event-id flow-deposit-YYYYMMDD`.
+   The harness derives the matching on-chain event ID from the event ID; then
+   initialize the event from the organizer wallet in Manage Events → Edit →
+   Escrow Management.
 3. Use `cargo run -- --flow deposit` or `--flow auth` for diagnosis. Focused
    runs write `summary.json` but cannot update `.last-green`.
 4. Only the full suite may refresh `.last-green`. It remains blocked until the

@@ -145,11 +145,11 @@ impl StagingContext {
             .map(|s| s.parse::<u64>())
             .transpose()
             .map_err(|e| HarnessError::Config(format!("FLOW_HARNESS_EVENT_ID_ON_CHAIN: {e}")))?
-            // Default mirrors the worker's string→u64 mapping for the seeded
-            // test event. The worker is the SSOT; this default exists so a
-            // freshly-seeded staging env works with zero env setup. Override
-            // via env when the worker's mapping differs.
-            .unwrap_or(1);
+            // Mirrors the Worker's stable FNV-1a mapping. Keeping this pure
+            // helper in the harness lets a fresh named fixture run without a
+            // manually copied on-chain ID, while an explicit env override
+            // remains available for a deliberately custom ID.
+            .unwrap_or_else(|| derive_on_chain_event_id(&event_id_str));
 
         let organizer = read_pubkey_env("FLOW_HARNESS_ORGANIZER")?;
         let attendee_wallet = read_pubkey_env("FLOW_HARNESS_ATTENDEE_WALLET")?;
@@ -497,6 +497,20 @@ fn join_path(base: &Url, path: &str) -> HarnessResult<Url> {
         .map_err(|e| HarnessError::Config(format!("join '{path}' to {}: {e}", base)))
 }
 
+/// Mirror `worker::handlers::deposit::derive_on_chain_event_id` exactly.
+///
+/// This mapping is part of the public on-chain PDA identity, so it must remain
+/// stable. A fixture can explicitly supply a non-zero `on_chain_event_id`, but
+/// new standard events use this deterministic fallback in both components.
+fn derive_on_chain_event_id(event_id: &str) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in event_id.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    if hash == 0 { 1 } else { hash }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -522,6 +536,14 @@ mod tests {
         let (b, bump_b) = c.event_escrow_pda();
         assert_eq!(a, b);
         assert_eq!(bump_a, bump_b);
+    }
+
+    #[test]
+    fn default_on_chain_id_matches_worker_fixture_mapping() {
+        assert_eq!(
+            derive_on_chain_event_id("flow-test-event"),
+            5_055_890_856_068_877_793
+        );
     }
 
     #[test]
