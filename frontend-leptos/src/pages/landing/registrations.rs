@@ -171,9 +171,9 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                         };
                                         let next_url = reg.next_step.url.clone();
                                         let status_class = match reg.status.as_str() {
-                                            "nft claimed" | "checked in" | "deposit confirmed" => "landing-reg-status-badge landing-reg-status-badge--confirmed",
-                                            "deposit pending" => "landing-reg-status-badge landing-reg-status-badge--action",
-                                            _ => "landing-reg-status-badge landing-reg-status-badge--neutral",
+                                            "nft claimed" | "checked in" | "deposit confirmed" => "badge badge-success landing-reg-status-badge",
+                                            "deposit pending" => "badge badge-warning landing-reg-status-badge",
+                                            _ => "badge badge-info landing-reg-status-badge",
                                         };
                                         view! {
                                             <div class="landing-reg-card">
