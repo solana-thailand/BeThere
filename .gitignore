@@ -2,6 +2,7 @@
 /target/
 /target-harness/
 /target-frontend-check/
+/target-escrow/
 debug/
 *.pdb
 
