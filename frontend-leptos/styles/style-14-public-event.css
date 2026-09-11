@@ -419,34 +419,7 @@
 }
 
 .landing-reg-status-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.3rem 0.7rem;
-    border-radius: 9999px;
-    font-size: 0.72rem;
-    font-weight: 600;
     text-transform: capitalize;
-    white-space: nowrap;
-    border: 1px solid transparent;
-}
-
-.landing-reg-status-badge--confirmed {
-    color: var(--success-bright);
-    background: var(--success-bg);
-    border-color: var(--success-border);
-}
-
-.landing-reg-status-badge--action {
-    color: var(--warning-bright);
-    background: var(--warning-bg);
-    border-color: var(--warning-border);
-}
-
-.landing-reg-status-badge--neutral {
-    color: var(--text-secondary);
-    background: var(--bg-tertiary);
-    border-color: var(--border);
 }
 
 .landing-reg-status-dot {
