@@ -123,6 +123,17 @@ backslash) rather than a host allowlist, so an upstream added tomorrow is
 covered the day it is added — the same reasoning as
 `middleware::correlation::redact_path`.
 
+### The "Scope to check" sweep is complete
+
+Every field that can be serialized into a response as an error message:
+
+| field | verdict |
+|---|---|
+| `ApiResponse.error` (`domain/src/models/api.rs:31`) | the leak; now fed by `public_message` |
+| `BackfillDetail.error` (`escrow/types.rs:136`) | second envelope, staff-only, **not covered** — see "Still open" |
+| `DoResponse.error` (`durable_objects/event_do/types.rs:70`) | Worker→Durable Object RPC, never reaches a client |
+| `CallbackQuery.error`, `GithubCallbackQuery.error` | `Deserialize`-only — inbound OAuth query params, not responses |
+
 ### Second body path, removed
 
 `worker/src/auth.rs` hand-rolled three `ApiResponse` envelopes (two 401s and the
