@@ -75,6 +75,11 @@ pub struct DepositFlowConfig {
     pub poll_interval: Duration,
     /// Total timeout before the flow fails with "verification timeout".
     pub poll_timeout: Duration,
+    /// On a previously verified fixture, also call the authenticated
+    /// confirmation endpoint. Off by default because the status record plus
+    /// PDA are sufficient for ordinary idempotent reruns; opt in when
+    /// diagnosing the confirmation route itself.
+    pub verify_existing_confirmation: bool,
 }
 
 impl Default for DepositFlowConfig {
@@ -85,6 +90,7 @@ impl Default for DepositFlowConfig {
             wallet_address: None,
             poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
             poll_timeout: Duration::from_millis(DEFAULT_POLL_TIMEOUT_MS),
+            verify_existing_confirmation: false,
         }
     }
 }
@@ -121,6 +127,7 @@ impl DepositFlow {
             config: DepositFlowConfig {
                 attendee_id: fixture_value("FLOW_HARNESS_ATTENDEE_ID", defaults.attendee_id),
                 event_id: fixture_value("FLOW_HARNESS_EVENT_ID", defaults.event_id),
+                verify_existing_confirmation: env_flag("FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT"),
                 ..defaults
             },
         }
@@ -185,6 +192,19 @@ impl Flow for DepositFlow {
             .await?;
         let status = if is_verified(initial_status.status.as_ref()) {
             eprintln!("   deposit: reusing verified staging record");
+            if self.config.verify_existing_confirmation {
+                eprintln!("   deposit: probing authenticated confirmation route");
+                let confirmation = client
+                    .confirm_deposit(ctx, &self.config.attendee_id)
+                    .await?;
+                if !confirmation.confirmed {
+                    return Err(HarnessError::AssertionFailed {
+                        flow: FLOW_NAME,
+                        reason: "verified deposit was not confirmed by the authenticated confirmation route"
+                            .to_string(),
+                    });
+                }
+            }
             initial_status
         } else {
             eprintln!("   deposit: checking for an interrupted prior submission");
@@ -379,6 +399,10 @@ fn assert_solana_pay_url(solana_pay_url: &str) -> HarnessResult<()> {
 /// verification; absent or pending records must continue polling.
 fn is_verified(status: Option<&DepositStatus>) -> bool {
     status.is_some_and(|deposit| deposit.verified)
+}
+
+fn env_flag(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
 }
 
 /// Classify a worker error from the deposit endpoint.

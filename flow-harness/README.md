@@ -143,6 +143,11 @@ Accepted names are `deposit`, `refund-pre-event-end`,
 `refund-post-event-end-checked-in`, `refund-no-show-deadline`, `claim`, and
 `auth`. A focused run writes its `summary.json` but never touches `.last-green`.
 
+To exercise the authenticated confirmation route for an already verified
+fixture without sending another transfer, add
+`FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT=1`. This is useful after changing SIWS,
+identity middleware, or deposit recovery.
+
 ---
 
 ## Environment variables
@@ -161,6 +166,7 @@ Accepted names are `deposit`, `refund-pre-event-end`,
 | `FLOW_HARNESS_ESCROW_PROGRAM_ID` | no | Override the deployed program id |
 | `FLOW_HARNESS_ATTENDEE_EMAIL` | no | Override the seeded attendee email |
 | `FLOW_HARNESS_ATTENDEE_SESSION` | no | Explicit session-cookie override; otherwise the harness creates a SIWS session |
+| `FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT` | no | `1` additionally probes authenticated confirmation for an already verified deposit |
 
 ---
 
