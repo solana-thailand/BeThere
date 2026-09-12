@@ -116,6 +116,8 @@ No attendee PII was queried for this audit.
 
 ### Registration and attendee UX
 
+- [ ] Redact email, wallet, and transaction identifiers from Worker logs while
+      retaining access-controlled D1 audit history (Issue 070).
 - [ ] Add browser E2E for new registration, duplicate registration, capacity
       race, online/in-person choice, credit-covered registration, and expired
       deposit recovery.
