@@ -1,20 +1,33 @@
 # Plan 005 — Flow Verification Harness + Staging Worker
 
-> **Status**: PARTIALLY DONE (code scaffold merged to `develop` 2026-07-16 via PR #19; real Cloudflare provisioning + deploy verification still pending).
+> **Status**: PARTIALLY DONE — staging is deployed and isolated; the harness has
+> real SIWS and Devnet deposit coverage. The remaining work is the
+> lifecycle-compatible fixture matrix and one full green suite for the
+> production preflight gate.
 > - §3.2 Contract surface audit — **DONE** (`docs/escrow_contract_surface.md`, 23 variants mapped).
 > - §3.2 Divergence fix #19 (`RefundDeadlinePassed` not pre-gated) — **SHIPPED & MERGED**: `DepositStatusResponse` gained `checked_in` + `refund_deadline_ms` (`domain/src/models/deposit.rs`), worker populates them (`worker/src/handlers/deposit/usdc/handlers.rs` "divergence fix #19" block), frontend gate rewritten to the two-path predicate (`frontend-leptos/src/pages/deposit/types.rs` L209-226) with both call sites updated.
 > - §3.3 LiteSVM tests — **SUPERSEDED**: equivalent two-path coverage already exists via `quasar-svm` tests in `bethere-escrow/src/tests/refund.rs` (`test_refund`, `test_refund_not_checked_in`, `test_refund_already_refunded`, `test_refund_checked_in_after_deadline`). No marginal value in duplicating under LiteSVM.
-> - §3.1 Staging env scaffold — **MERGED to `develop` via PR #19** (`[env.staging]` block in `wrangler.toml`, `deploy.sh staging` arg, `scripts/seed-staging.sh`, `worker/.env.staging.example`). Cloudflare D1/KV/R2 resources **PROVISIONED** (real IDs in `wrangler.toml` dated 2026-07-10: D1 `951fce4e…`, KV `dd1d541c…`, R2 `bethere-assets-staging`). **Still pending**: staging secrets (`wrangler secret put --env staging`), Google OAuth staging redirect URI registration, optional D1 migration apply, first deploy + isolation verification. See `docs/staging_deploy_runbook.md` for the operational checklist.
-> - §3.4 E2E harness (`flow-harness/` crate) — HTTP/on-chain seam wired and
->   126 offline tests green; dedicated capped devnet fixture/session and first
->   full live green run remain.
-> - §3.5 Preflight gate — **scaffold MERGED to `develop` via PR #19** (`worker/scripts/preflight.sh`, opt-in and OFF by default); activation pending §3.1 staging going live (otherwise the gate would block all production deploys with no way to get a green run).
-> **Remaining critical path**: staging env → E2E harness → preflight gate (pure infra; unblocks plans 006/007).
+> - §3.1 Staging env — **DEPLOYED + VERIFIED**: isolated D1/KV/R2 and Devnet
+>   escrow are live. See `docs/staging_deploy_runbook.md` for current commands.
+> - §3.4 E2E harness (`flow-harness/` crate) — **LIVE FOCUSED PROOFS PASS**:
+>   134 offline tests and Clippy pass; a dedicated Devnet attendee completed a
+>   verified USDC deposit, and a fresh SIWS session passed authenticated
+>   confirmation plus matching-PDA validation on 2026-09-12.
+> - §3.5 Preflight gate — **ENFORCED FOR PRODUCTION**: the deploy script requires
+>   a fresh full-suite `.last-green`. Focused proofs cannot write it.
+> **Remaining critical path**: provision refund and NFT claim fixtures → run the
+> complete suite green → retain the preflight sentinel. Plan 006 SIWS is shipped;
+> this plan no longer blocks it.
 > **Type**: ops (staging isolation) + testing (E2E harness + contract audit)
-> **Priority**: P1 — prerequisite for plans 006 (SIWS) and 007 (Dioxus mobile). This plan is the safety net that lets us change the worker without endangering production.
+> **Priority**: P1 — escrow release-safety work. This plan is the safety net
+> for changes to the Worker and on-chain deposit lifecycle.
 > **Created**: 2026-06-17
-> **Blocks**: 006, 007
+> **Current consumers**: plan 007 (Dioxus mobile) and every escrow production
+> release. Plan 006 is shipped.
 > **Decisions locked**: 3b (automated E2E harness)
+
+> The sections below preserve the original implementation plan and its evidence.
+> The status above and the linked runbooks are authoritative for current work.
 
 ---
 
@@ -25,15 +38,18 @@ The refund-gate bug (plan 004) survived for months because nothing automatically
 - **Two refund paths exist on-chain** (`bethere-escrow/src/instructions/refund.rs#L20-26`): checked-in attendees may refund anytime after `event_end` (no deadline); no-shows are gated to `[event_end, refund_deadline)`. The current frontend gate (plan 004) only checks `event_end` — it does not surface `refund_deadline` to no-shows, nor distinguish checked-in vs no-show. Likely divergence.
 - **`refund_deadline`** is a first-class on-chain field but is not exposed as an absolute timestamp in `DepositStatusResponse` (only `refund_deadline_hours` relative). Needs verification.
 
-Plans 006 (SIWS auth) and 007 (Dioxus mobile) will both change the worker. Without a regression harness and an isolated staging environment, every worker deploy risks production. This plan builds both **before** 006/007 start.
+At creation, plans 006 (SIWS auth) and 007 (Dioxus mobile) were both expected
+to change the worker. Without a regression harness and an isolated staging
+environment, every worker deploy risked production. SIWS has since shipped;
+the same safety requirement remains for mobile and escrow changes.
 
 ### Evidence (contract surface discovered during investigation)
 
 - **Escrow errors** (`bethere-escrow/src/errors.rs`): 23 variants — `IncorrectDepositAmount(0)`, `RefundNotYetAllowed(1)`, `NotCheckedIn(2)`, `RefundDeadlineNotPassed(3)`, `AlreadyRefunded(4)`, `AttendeeCheckedIn(5)`, `NoForfeitedFunds(6)`, `EventNotActive(7)`, `EventStillActive(8)`, `Unauthorized(9)`, `VaultMismatch(10)`, `MintMismatch(11)`, `InvalidDepositAmount(12)`, `EventEndInPast(13)`, `Overflow(14)`, `VaultNotEmpty(15)`, `EventEnded(16)`, `DepositNotRefunded(17)`, `EventEscrowStillActive(18)`, `RefundDeadlinePassed(19)`, `EscrowVersionMismatch(20)`, `DepositVersionMismatch(21)`, `RefundRequiresClose(22)`.
 - **Escrow instructions** (`bethere-escrow/src/instructions/`): `create_event`, `deposit`, `refund`, `close_deposit`, `close_event`, `claim_forfeited`, `rollover_deposit`, `mark_checked_in`, `deactivate_event`, `introspection`.
 - **Worker escrow-touching routes** (`worker/src/handlers/mod.rs`): `/deposit/usdc`, `/deposit/usdc/tx`, `/deposit/hold`, `/deposit/status/{id}`, `/escrow/init`, `/escrow/refund`, `/escrow/close-event`, `/escrow/cancel-status`, `/escrow/health`, `/escrow/sync`, `/refund/queue`, `/refund/refunded`, `/refund/batch-thb`, `/claim/{token}`.
-- **Auth is JWT-based** (`worker/src/auth.rs#L286`): `create_session_jwt(email, sub, secret)` / `verify_session_jwt(token, secret)`. SIWS (plan 006) will add a second issuance path — this plan's harness must cover the existing flow as a baseline before 006 ships.
-- **Identity is email-keyed** (`worker/migrations/0002_attendees_contacts_events_developers.sql`): `contacts.email PRIMARY KEY`, `attendees.email`, `staff.email`, `developer_profiles.email`. Plan 006 will add wallet linking on top; this plan documents the current model so 006 has a clear baseline.
+- **Auth is JWT-based** (`worker/src/auth.rs#L286`): `create_session_jwt(email, sub, secret)` / `verify_session_jwt(token, secret)`. SIWS is now a second issuance path, so this plan's harness covers it as a regression surface alongside the original flow.
+- **Identity is email-keyed** (`worker/migrations/0002_attendees_contacts_events_developers.sql`): `contacts.email PRIMARY KEY`, `attendees.email`, `staff.email`, `developer_profiles.email`. SIWS adds wallet-linked issuance on top; this plan documents the model and exercises it as a regression surface.
 
 ### Why now
 
@@ -45,7 +61,7 @@ Plan 004 fixed a UX symptom. This plan fixes the **structural absence of a safet
 
 ### In scope
 
-- **Staging worker environment**: a second Cloudflare Worker env (`bethere-staging`) with its own D1/KV/R2 bindings and secrets, fully isolated from production. Mobile dev (plan 007) and SIWS dev (plan 006) point here, never at production.
+- **Staging worker environment**: a second Cloudflare Worker env (`bethere-staging`) with its own D1/KV/R2 bindings and secrets, fully isolated from production. Mobile development and all escrow harness work point here, never at production.
 - **Contract surface inventory**: a single doc mapping every on-chain error variant → which worker endpoint can trigger it → how the frontend currently handles it → gap status.
 - **Escrow unit tests via LiteSVM**: fast, validator-free unit tests for the escrow program's instruction constraints (the 23 error variants), per the Solana testing-pyramid skill.
 - **Automated E2E harness**: a new Rust crate (`flow-harness/`) that drives the staging worker over HTTP and asserts behavior on deposit/refund/claim/auth flows. Uses real escrow transactions on devnet (or a local validator) — no mocks of the contract.
@@ -53,7 +69,8 @@ Plan 004 fixed a UX symptom. This plan fixes the **structural absence of a safet
 
 ### Out of scope
 
-- **Wallet auth (SIWS)** — plan 006. This plan's harness covers the existing auth flow; 006 extends it.
+- **Wallet auth (SIWS)** — shipped by plan 006. This plan retains it as a
+  regression surface, rather than extending the SIWS product feature.
 - **Mobile app** — plan 007. This plan provides the staging URL + harness it consumes.
 - **On-chain program changes** — divergences are fixed on the frontend/worker side to match the program; `bethere-escrow` is not modified here. If a divergence reveals a genuine program bug, it escalates to a separate plan.
 - **Load / perf testing** — correctness only.
@@ -77,12 +94,18 @@ Goal: mobile/SIWS dev cannot reach production data even by accident.
       (Shipped — `worker/wrangler.toml#L169` `[env.staging]`: `name="bethere-staging"` (L170), D1 `bethere-db-staging` (L198), KV `[[env.staging.kv_namespaces]]` (L203), R2 `bethere-assets-staging` (L211), `DEV_MODE="1"` staging-only (L183), test `EVENT_START_MS`/`EVENT_END_MS` (L192-193).)
 - [x] Update `worker/deploy.sh` to accept an env arg: `bash deploy.sh staging` → deploys to `bethere-staging`; `bash deploy.sh` → production (default, unchanged).
       (Shipped — `worker/deploy.sh#L59` `staging) DEPLOY_ENV="staging"; shift` + usage doc L7; resolves to `wrangler deploy --env staging`.)
-- [ ] Document staging secrets setup: `wrangler secret put JWT_SECRET --env staging`, plus Google OAuth secrets with a separate redirect URI (`https://bethere-staging.solana-thailand.workers.dev/api/auth/callback`). Register this URI in the Google Cloud OAuth app.
-- [x] Add `worker/scripts/seed-staging.sh`: idempotent seeding of a test event (`flow-test-event`) with known `event_start_ms`/`event_end_ms`/`refund_deadline` plus a test attendee + deposit row.
-      (Shipped — `EVENT_ID="flow-test-event"`; seeds `event_start=now-1h`, `event_end=now+4h`, `refund_deadline_hours=6`, and a pending deposit so the first harness flow can verify it; scoped to staging only.)
+- [x] Configure the staging secrets required for Devnet escrow and SIWS. Confirm
+      Google OAuth redirect configuration separately before testing Google login;
+      never print secret values.
+- [x] Add `worker/scripts/seed-staging.sh`: named, non-overlapping fixture seed
+      records with known `event_start_ms`/`event_end_ms`/`refund_deadline` plus a
+      test attendee + deposit row. It refuses initialized, deactivated, and
+      closed escrow rows instead of overwriting immutable on-chain state.
 - [x] Add `worker/.env.staging.example` documenting the staging URL for plan 007 to consume: `STAGING_WORKER_URL=https://bethere-staging.solana-thailand.workers.dev`.
       (Shipped — `worker/.env.staging.example` (2086 B).)
-- [ ] Verify isolation: after staging deploy, confirm `wrangler d1 execute bethere-db-staging --remote --command "SELECT count(*) FROM attendees"` returns the seeded count (not production count).
+- [x] Verify isolation: staging health, D1 fixture state, SIWS auth, and Devnet
+      deposit proof were checked on 2026-09-12. Repeat the scoped D1 checks in
+      `docs/staging_deploy_runbook.md` for every new fixture.
 
 ### 3.2 Contract surface inventory
 
@@ -148,7 +171,12 @@ New Rust crate at repo root. Drives the staging worker over HTTP. No contract mo
 - [x] `flow-harness/src/runner.rs`: orchestrates flows, collects results, exits non-zero on any failure, writes `flow-harness/results/<ISO-timestamp>/summary.json`.
 - [x] Runnable both as `cargo run -- --worker <url>` and `cargo test`.
 
-> **Status (handover 126):** scaffold + offline-tested (114 tests, clippy clean). Staging-live wiring (`// TODO(staging-live):` stubs in each flow) pending §3.1 provisioning; the assertion/gate logic the gate relies on is real and proven.
+> **Status (2026-09-12):** live HTTP/on-chain wiring is complete for focused
+> auth and deposit verification. A verified named fixture can additionally
+> probe authenticated confirmation without another transfer via
+> `FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT=1`. Refund and claim flows remain
+> intentionally blocked from the full gate until dedicated lifecycle fixtures
+> are provisioned.
 
 ### 3.5 Wire harness into pre-deploy gate
 
@@ -164,9 +192,11 @@ The harness is the safety mechanism for 006/007.
 - [x] Add a `--force` escape hatch to `deploy.sh` for emergencies, with an audit-log entry (gate is bypassable but never silently).
       (Implemented: `--force [--reason "..."]` appends a tab-separated audit row to `worker/scripts/.preflight-bypass.log` — `{ts, user, commit, env, reason}`. Audit format verified: 5 fields. `*.log` already gitignored so the trail stays local.)
 
-> **Status (2026-09-11):** gate is default-on for production and the standalone
-> harness has 126 passing offline tests. Staging is live; a dedicated capped
-> devnet fixture/session and first full live green run remain required.
+> **Status (2026-09-12):** the gate is default-on for production; the standalone
+> harness has 134 passing offline tests. Staging SIWS, deposit status,
+> authenticated confirmation, and Devnet PDA proofs are green. A full live
+> green run remains required because the refund and NFT fixture matrix is not
+> yet provisioned.
 
 ---
 
@@ -186,7 +216,8 @@ The harness is the safety mechanism for 006/007.
       (Doc written; the one divergence (#19) fixed & merged.)
 - [x] Implement LiteSVM tests (§3.3) — ship first, fastest payoff.
       (Superseded by `quasar-svm` coverage in `bethere-escrow/src/tests/refund.rs` — see §3.3.)
-- [ ] Implement E2E harness (§3.4) — ship second.
+- [x] Implement focused E2E harness (§3.4) — staging SIWS and verified deposit
+      proofs are live. Complete it with the remaining refund/NFT fixture matrix.
 - [x] Wire preflight gate (§3.5) — ship last; this is what blocks 006/007 from proceeding.
       (Shipped and default-on for production. `--force` requires a non-empty
       `--reason` and appends to `.preflight-bypass.log`.)
@@ -241,9 +272,16 @@ Plus any divergence fixes the §3.2 audit surfaces (e.g. surfacing `refund_deadl
 
 ---
 
-## 9. Unblocks
+## 9. Current consumers
 
-- **Plan 006 (SIWS auth)**: uses the staging env for SIWS endpoint development; uses the preflight gate to prove the existing Google-auth flow is not regressed.
-- **Plan 007 (Dioxus mobile)**: points at the staging URL; relies on the contract surface doc as the API contract; uses the harness as the regression safety net during MWA bridge development.
+- **Plan 006 (SIWS auth)**: shipped. The staging SIWS proof now guards against
+  regression rather than serving as a prerequisite.
+- **Plan 007 (Dioxus mobile)**: points at the staging URL, relies on the
+  contract surface doc as the API contract, and uses the harness as its
+  regression safety net during MWA bridge development.
+- **Escrow production releases**: require the full fixture matrix and its fresh
+  `.last-green` sentinel. The focused proofs are diagnostic evidence only.
 
-005 must land before 006/007. Within 005, the recommended order is: staging env → LiteSVM tests → E2E harness → preflight gate. The contract surface doc (§3.2) runs in parallel with staging setup and informs the LiteSVM test list.
+The original implementation order was staging env → SVM coverage → E2E harness
+→ preflight gate. Those foundations are shipped. The remaining order is refund
+fixture → NFT claim fixture → full suite green → retain the preflight sentinel.

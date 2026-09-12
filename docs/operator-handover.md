@@ -4,19 +4,22 @@ This is the starting point for operating or continuing BeThere without the
 original developer or coding assistant. It records current deployed state,
 safe commands, release gates, and where to find deeper system documentation.
 
-Last verified: **2026-09-11 (Asia/Bangkok)** on `develop` commit `ca9ff28`.
+Last verified: **2026-09-12 (Asia/Bangkok)**. Check `git status --short --branch`
+and the current deployment status at the start of every release; do not rely on
+a copied commit or Worker version in this document.
 
 ## Current state
 
 | Area | State |
 |---|---|
-| Git | `develop` is clean and matches `origin/develop` at `ca9ff28` |
-| Staging | Version `963012dc-55ef-4654-ae41-74315dff43ff`, 100% traffic, healthy |
-| Production | Version `8c2813cc-e2f8-498e-96a3-e56693eaa509`, 100% traffic; it does not yet contain PRs #64–#68 |
+| Git | `develop` is the integration branch. The separate Wrangler 4.131.1 lockfile update is intentionally uncommitted pending dependency-review approval. |
+| Staging | Healthy and isolated. Read the current version through Wrangler before a release. |
+| Production | Read the current version through Wrangler before a release; do not infer it from staging or Git history. |
 | Networks | Escrow stays on devnet. Staging RPC/NFT/escrow roles report devnet |
 | Staging NFT | Disabled because no staging Crossmint collection is configured; health reports `nft_not_configured` |
 | Credit integrity | PR #68 is merged and staged. Production has six aggregate-only legacy THB credit statuses eligible for the guarded reconciliation repair after release |
-| Unfinished branch | `feat/flow_harness_onchain_seam` contains useful older harness/on-chain commits and must be rebased or selectively integrated with current `develop` |
+| Escrow staging proof | Focused SIWS auth, authenticated deposit confirmation, D1 verified status, and matching Devnet attendee PDA passed on 2026-09-12. See [Fixture Strategy](flow_harness_fixture_strategy.md). |
+| Escrow release gate | Still blocked: refund and NFT fixtures are not yet provisioned, so there is no full-suite green sentinel for production preflight. |
 
 No production rows were changed during the 2026-09-11 audit. The count of six
 contains no attendee PII. Do not put emails, claim tokens, wallet signatures,
@@ -81,8 +84,9 @@ Do not deploy production merely because `develop` is green. Before release:
 
 1. Complete the staging web checklist in
    [Web Verification Runbook](web-verification-runbook.md).
-2. Complete the live flow harness or record why its remaining P0 stubs block the
-   release. Never manufacture a `.last-green` sentinel.
+2. Complete the full live flow-harness fixture matrix. The focused SIWS/deposit
+   proof is green, but it cannot refresh `.last-green`; never manufacture a
+   sentinel.
 3. Review pending D1 migrations and environment/secret names. Do not print
    secret values.
 4. Record the current production version ID for rollback.
@@ -123,6 +127,7 @@ If health, assets, auth, registration, or deposit state regresses:
 |---|---|
 | Verify the real website safely | [Web Verification Runbook](web-verification-runbook.md) |
 | Deploy and isolate staging | [Staging Deploy Runbook](staging_deploy_runbook.md) |
+| Operate named Devnet harness fixtures | [Fixture Strategy](flow_harness_fixture_strategy.md) |
 | Release or roll back production | [Gradual Deploy Runbook](gradual_deploy_runbook.md) |
 | Understand THB/USDC/refund/credit behavior | [Deposit & Refund Flows](deposit-refund-flows.md) |
 | Understand NFT idempotency and cost boundaries | [Crossmint Minting](crossmint-minting.md) |
@@ -132,9 +137,12 @@ If health, assets, auth, registration, or deposit state regresses:
 
 ## Next implementation order
 
-1. Provision the dedicated capped devnet harness fixture and record a real green
-   live run; the production deploy gate is default-on.
-2. Run the full staging lifecycle twice consecutively and retain both summaries.
+1. Reassess and prioritize customer-facing work before expanding infrastructure:
+   post-event learning/recap, registration recovery, attendee ticket/deposit
+   UX, and event-detail pages are the highest-value candidates.
+2. Keep the full staging fixture matrix as a release requirement: provision
+   refund and NFT fixtures, run the complete suite twice, and retain both
+   summaries before any escrow production release.
 3. Consolidate THB verification projections and reconciliation.
 4. Add browser E2E coverage for registration recovery and attendee deposit,
    quiz, ticket, and claim states.
