@@ -74,6 +74,20 @@ EVENT_NAME="Flow Harness Fixture (${EVENT_ID})"
 ATTENDEE_ID="${EVENT_ID}-attendee-1"
 ATTENDEE_EMAIL="${EVENT_ID}-attendee-1@staging.local"
 ATTENDEE_NAME="Flow Test Attendee (checked-in)"
+# Deterministic per fixture so re-seeding does not invalidate a token an
+# operator already pasted into a browser. Any string works as a lookup key.
+CLAIM_TOKEN="${CLAIM_TOKEN:-${EVENT_ID}-claim-token-1}"
+# The Worker parses `checked_in_at` with `chrono::DateTime::parse_from_rfc3339`
+# (worker/src/claim/ttl.rs) and the real check-in handlers write
+# `chrono::Utc::now().to_rfc3339()`, e.g. `2026-05-24T08:08:11.774+00:00`.
+#
+# SQLite's `datetime('now')` renders `2026-05-24 08:08:11` — a SPACE separator
+# and no UTC offset. That is not RFC 3339, so the parser rejects it and the
+# Issue 071 claim-token replay window FAILS OPEN for every seeded row. The
+# seeded data then silently disagrees with production, and a staging run of
+# scripts/verify/claim_token_window_staging.sh cannot tell a working window
+# from a disabled one. Emit the production format instead.
+CHECKED_IN_AT_SQL="strftime('%Y-%m-%dT%H:%M:%f+00:00','now')"
 
 run_sql () {
     # $1 = SQL string. Executes against staging D1.
@@ -124,14 +138,14 @@ run_sql "INSERT OR REPLACE INTO events (
 );"
 
 # ── Test attendee (checked-in) ────────────────────────────────────────────────
-echo "📝 Upserting attendee ${ATTENDEE_ID} (checked_in)..."
+echo "📝 Upserting attendee ${ATTENDEE_ID} (checked_in, claim_token=${CLAIM_TOKEN})..."
 run_sql "INSERT OR REPLACE INTO attendees (
     id, event_id, email, name, approval_status, participation_type,
-    checked_in_at, deposit_status, deposit_amount_usdc
+    checked_in_at, claim_token, deposit_status, deposit_amount_usdc
 ) VALUES (
     '${ATTENDEE_ID}', '${EVENT_ID}', '${ATTENDEE_EMAIL}', '${ATTENDEE_NAME}',
     'approved', 'in_person',
-    datetime('now'), 'pending', ${DEPOSIT_AMOUNT_USDC}
+    ${CHECKED_IN_AT_SQL}, '${CLAIM_TOKEN}', 'pending', ${DEPOSIT_AMOUNT_USDC}
 );"
 
 # ── Deposit status row (mirrors deposit_statuses table) ───────────────────────
