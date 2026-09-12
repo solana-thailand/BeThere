@@ -462,6 +462,10 @@ fn render_loaded_event(
     wallet_addr: ReadSignal<Option<String>>,
     credit_thb: ReadSignal<u64>,
 ) -> AnyView {
+    if data.status.eq_ignore_ascii_case("completed") {
+        return completed_event_gateway(data, countdown, event_completed);
+    }
+
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
     let has_link = !data.link.is_empty();
@@ -896,4 +900,88 @@ fn render_loaded_event(
         // Bottom spacer so the sticky mobile CTA never hides the last section.
         <div class="pe-sticky-spacer"></div>
     }.into_any()
+}
+
+/// Completed events deliberately use a different action surface from live
+/// events. Retrospective enrollment is a learning/community lead: it must not
+/// expose reservation, deposit, check-in, quiz, or NFT-claim controls.
+fn completed_event_gateway(
+    data: PublicEventData,
+    countdown: ReadSignal<String>,
+    event_completed: ReadSignal<bool>,
+) -> AnyView {
+    let name = data.name.clone();
+    let tagline = data.tagline.clone();
+    let description = data.description.clone();
+    let slug = data.slug.clone();
+    let archive_url = data.archive_url.clone();
+    let enrollment_open = data.post_event_registration_accepting;
+    let poster_url = data.poster_url.clone();
+    let nft_image_url = data.nft_image_url.clone();
+    let community_links = data.community_links.clone();
+
+    view! {
+        {event_hero(&poster_url, &nft_image_url)}
+
+        <div class="pe-name-block">
+            <h1 class="pe-name">{name}</h1>
+            {if !tagline.is_empty() {
+                view! { <p class="pe-tagline">{tagline}</p> }.into_any()
+            } else {
+                ().into_any()
+            }}
+        </div>
+
+        {details_card(&data, countdown, event_completed)}
+
+        <div class="pe-card">
+            <h2 class="pe-section-title">
+                <Icon icon=IconName::Party class="icon-md" />" This event has ended"
+            </h2>
+            <p class="pe-detail-secondary pe-mb-075">
+                "Explore the event archive and join the community to hear about future events."
+            </p>
+
+            <div class="pe-btn-row-center">
+                {if !archive_url.is_empty() {
+                    let href = archive_url.clone();
+                    view! {
+                        <a href=href target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
+                            <Icon icon=IconName::Link class="icon-sm" />" View the archive"
+                        </a>
+                    }.into_any()
+                } else {
+                    view! {
+                        <span class="pe-detail-secondary">"The event archive will be available soon."</span>
+                    }.into_any()
+                }}
+
+                {if enrollment_open {
+                    let href = format!("/events/{slug}/post-event-register");
+                    view! {
+                        <a href=href class="btn btn-primary btn-sm">" Join the community"</a>
+                    }.into_any()
+                } else {
+                    ().into_any()
+                }}
+            </div>
+        </div>
+
+        {if !description.is_empty() {
+            view! {
+                <div class="pe-card">
+                    <h2 class="pe-section-title">"About this Event"</h2>
+                    <p class="pe-description">{description}</p>
+                </div>
+            }.into_any()
+        } else {
+            ().into_any()
+        }}
+
+        {crate::pages::ticket::community_links::community_links_section(
+            community_links,
+            crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent,
+        )}
+    }
+    .into_any()
 }

@@ -52,7 +52,8 @@ impl std::fmt::Display for CheckInStatus {
 /// `in person`, `Online`, `online`, `""`, `test`, ...). Use [`Self::parse`] to
 /// canonicalize; [`Attendee::is_in_person`] delegates to this enum.
 ///
-/// Canonical wire form is snake_case (`in_person` / `online` / `other`),
+/// Canonical wire form is snake_case (`in_person` / `online` / `retrospective`
+/// / `other`),
 /// matching `EventFormat`'s convention.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
@@ -60,6 +61,9 @@ pub enum ParticipationType {
     #[default]
     InPerson,
     Online,
+    /// Post-event learning lead. It is deliberately distinct from `Online` so
+    /// retrospective enrollment cannot alter live-attendance reporting.
+    Retrospective,
     /// Unrecognized value (e.g. "test", "TBD"). Treated as NOT in-person.
     Other,
 }
@@ -70,6 +74,7 @@ impl ParticipationType {
         match self {
             Self::InPerson => "in_person",
             Self::Online => "online",
+            Self::Retrospective => "retrospective",
             Self::Other => "other",
         }
     }
@@ -81,6 +86,7 @@ impl ParticipationType {
         match self {
             Self::InPerson => "In-Person",
             Self::Online => "Online",
+            Self::Retrospective => "Retrospective",
             Self::Other => "Other",
         }
     }
@@ -108,6 +114,9 @@ impl ParticipationType {
         }
         if lower.contains("online") || lower.contains("virtual") {
             return Self::Online;
+        }
+        if lower == "retrospective" {
+            return Self::Retrospective;
         }
         Self::Other
     }

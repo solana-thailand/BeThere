@@ -1,6 +1,7 @@
 //! D1 persistence for notification history and lifecycle transitions.
 use super::{InboxNotification, Notification};
 use crate::db::d1_safe::safe_all_rows;
+use event_checkin_domain::models::attendee::ParticipationType;
 use worker::{D1Database, d1::D1Type};
 
 pub async fn list(
@@ -99,7 +100,10 @@ fn needs_deposit(
     legacy_status: &str,
 ) -> bool {
     deposit_enabled
-        && participation_type != "online"
+        && matches!(
+            ParticipationType::parse(participation_type),
+            ParticipationType::InPerson
+        )
         && !deposit_verified
         && !matches!(
             legacy_status,
@@ -180,6 +184,7 @@ mod tests {
     fn deposit_action_uses_current_state_and_skips_online_attendees() {
         assert!(needs_deposit(true, "in_person", false, "none"));
         assert!(!needs_deposit(true, "online", false, "none"));
+        assert!(!needs_deposit(true, "retrospective", false, "none"));
         assert!(!needs_deposit(true, "in_person", true, "none"));
         assert!(!needs_deposit(true, "in_person", false, "held_as_credit"));
         assert!(!needs_deposit(false, "in_person", false, "none"));

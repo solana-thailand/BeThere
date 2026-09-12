@@ -186,10 +186,9 @@ pub async fn audience_aggregate(
     // `ParticipationType::parse("") == InPerson` so the SQL and the Rust
     // classifier can never disagree on classification.
     //
-    // `online_count` is derived as NOT(in-person), preserving the pre-simplification
-    // behavior (it counts `online` + `test` + `walkin` + any future unrecognized
-    // value). It is NOT a strict `participation_type = 'online'` match — that
-    // would be a behavioral change beyond the scope of #059 Step 3.4.
+    // Keep the established non-in-person count so existing reporting does not
+    // drift for legacy values. The one explicit exception is retrospective
+    // enrollment: it is a post-event learning lead, not an online registration.
     let in_person_case = "(a.participation_type = 'in_person' OR TRIM(a.participation_type) = '')";
     let sql = format!(
         "SELECT \
@@ -199,7 +198,7 @@ pub async fn audience_aggregate(
          SUM(CASE WHEN a.checked_in_at IS NOT NULL THEN 1 ELSE 0 END) AS checked_in_count, \
          SUM(CASE WHEN LOWER(a.approval_status) = 'approved' THEN 1 ELSE 0 END) AS approved_count, \
          SUM(CASE WHEN {in_person_case} THEN 1 ELSE 0 END) AS in_person_count, \
-         SUM(CASE WHEN {in_person_case} THEN 0 ELSE 1 END) AS online_count, \
+         SUM(CASE WHEN {in_person_case} OR LOWER(TRIM(a.participation_type)) = 'retrospective' THEN 0 ELSE 1 END) AS online_count, \
          MIN(a.created_at) AS first_registered, \
          MAX(a.created_at) AS last_registered, \
          GROUP_CONCAT(DISTINCT a.event_id) AS event_ids, \

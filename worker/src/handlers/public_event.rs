@@ -178,9 +178,11 @@ pub async fn get_public_event(
     let online_available = config.event_format.has_online()
         && online_remaining.is_none_or(|r| r > 0)
         && is_online_registration_open(&config, in_person_available);
+    let post_event_registration_accepting =
+        config.post_event_registration_accepting(chrono::Utc::now().timestamp_millis());
 
     // Return sanitized response — exclude all sensitive/internal fields
-    Ok(ApiOk::new(json!({
+    let mut response = json!({
         "id": config.id,
         "name": config.name,
         "slug": config.slug,
@@ -230,7 +232,25 @@ pub async fn get_public_event(
         } else {
             serde_json::Value::Null
         },
-    })))
+    });
+    let response_fields = response.as_object_mut().ok_or_else(|| {
+        AppError::Internal("public event response serialization produced a non-object".to_string())
+    })?;
+    // A completed-event gateway links only to the canonical Genesis archive.
+    // `link` remains the organizer-configured external URL for ordinary event
+    // pages; it is never trusted as an archive by default.
+    response_fields.insert(
+        "archive_url".to_string(),
+        serde_json::Value::String(genesis_archive_url(&config.link)),
+    );
+    // Server-calculated so a client cannot keep a stale CTA visible after the
+    // organizer's post-event enrollment deadline has elapsed.
+    response_fields.insert(
+        "post_event_registration_accepting".to_string(),
+        serde_json::Value::Bool(post_event_registration_accepting),
+    );
+
+    Ok(ApiOk::new(response))
 }
 
 /// `GET /api/public/events/past`
@@ -432,6 +452,18 @@ fn https_public_url(url: &str) -> String {
         .unwrap_or_default()
 }
 
+/// Return the canonical Genesis archive URL only for a trusted event-page path.
+/// The DevRel archive owns its event narrative and mapping; BeThere stores only
+/// the per-event link selected by an organizer and never copies that map.
+fn genesis_archive_url(url: &str) -> String {
+    const GENESIS_EVENT_PREFIX: &str = "https://solana-thailand.github.io/genesis/events/";
+
+    url.strip_prefix(GENESIS_EVENT_PREFIX)
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| format!("{GENESIS_EVENT_PREFIX}{path}"))
+        .unwrap_or_default()
+}
+
 fn public_learning_resources(
     links: &[event_checkin_domain::models::event::CommunityLink],
 ) -> Vec<event_checkin_domain::models::event::CommunityLink> {
@@ -521,7 +553,7 @@ fn is_online_registration_open(
 mod public_url_tests {
     use event_checkin_domain::models::event::CommunityLink;
 
-    use super::{https_public_url, public_learning_resources};
+    use super::{genesis_archive_url, https_public_url, public_learning_resources};
 
     #[test]
     fn only_nonempty_https_urls_are_public() {
@@ -532,6 +564,16 @@ mod public_url_tests {
         assert!(https_public_url("http://example.com/video").is_empty());
         assert!(https_public_url("javascript:alert(1)").is_empty());
         assert!(https_public_url("https://   ").is_empty());
+    }
+
+    #[test]
+    fn only_trusted_genesis_event_paths_are_archive_urls() {
+        assert_eq!(
+            genesis_archive_url("https://solana-thailand.github.io/genesis/events/example/"),
+            "https://solana-thailand.github.io/genesis/events/example/"
+        );
+        assert!(genesis_archive_url("https://example.com/events/example/").is_empty());
+        assert!(genesis_archive_url("https://solana-thailand.github.io/genesis/").is_empty());
     }
 
     #[test]

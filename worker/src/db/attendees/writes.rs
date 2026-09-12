@@ -93,7 +93,7 @@ struct AttendeeIdRow {
 /// `participation_type` and `registration_phase`. The conflicting row may be a
 /// real pre-event registration (an in-person attendee filling in the lead form
 /// afterwards); refreshing their consent and contact details is right, demoting
-/// them to an `online` `post_event_registered` lead is not.
+/// them to a `retrospective` `post_event_registered` lead is not.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn upsert_post_event_attendee(
     db: &D1Database,

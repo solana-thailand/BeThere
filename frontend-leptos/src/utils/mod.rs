@@ -136,6 +136,13 @@ pub fn get_participation_badge(participation_type: &str) -> ParticipationBadge {
         };
     }
 
+    if lower == "retrospective" {
+        return ParticipationBadge {
+            label: "Retrospective".to_string(),
+            css_class: "badge-neutral",
+        };
+    }
+
     // Fallback: take text before colon or slash
     let label = participation_type
         .split(':')
@@ -270,6 +277,13 @@ pub fn is_in_person(participation_type: &str) -> bool {
     lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person")
 }
 
+/// Retrospective enrollment is a post-event learning lead, never a live
+/// online registration. Keep this separate from `is_in_person` so callers do
+/// not accidentally classify it as online by negation.
+pub fn is_retrospective(participation_type: &str) -> bool {
+    participation_type.trim().eq_ignore_ascii_case("retrospective")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -307,6 +321,15 @@ mod tests {
         let badge = get_participation_badge("Virtual");
         assert_eq!(badge.label, "Online");
         assert_eq!(badge.css_class, "badge-warning");
+    }
+
+    #[test]
+    fn retrospective_is_not_a_live_online_registration() {
+        let badge = get_participation_badge("retrospective");
+        assert_eq!(badge.label, "Retrospective");
+        assert!(!is_in_person("retrospective"));
+        assert!(is_retrospective("retrospective"));
+        assert!(!is_retrospective("online"));
     }
 
     #[test]

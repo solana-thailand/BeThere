@@ -12,6 +12,7 @@ use axum::{
 };
 use uuid::Uuid;
 
+use event_checkin_domain::models::attendee::ParticipationType;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::EventStatus;
@@ -105,8 +106,9 @@ pub async fn register_post_event(
         .filter(|v| !v.is_empty());
 
     // 6. Write to D1 (source of truth). Post-event registrants are leads, not
-    //    attendees: `post_event_registered` status + `online` placeholder keeps
-    //    them out of capacity / check-in / claim queries without a separate table.
+    //    live attendees: the dedicated `retrospective` participation type and
+    //    `post_event_registered` status keep them out of capacity, check-in,
+    //    claim, and live-online reporting.
     if let Some(ref d1) = state.d1 {
         let api_id = Uuid::now_v7().to_string();
 
@@ -116,7 +118,7 @@ pub async fn register_post_event(
             &event_id,
             &email,
             name,
-            "online", // placeholder — not used for capacity
+            ParticipationType::Retrospective.as_str(),
             contact_channel.unwrap_or(""),
             contact_handle.unwrap_or(""),
             body.consent_marketing,
@@ -175,7 +177,7 @@ pub async fn register_post_event(
             event_id: &event_id,
             contact_channel: contact_channel.unwrap_or(""),
             contact_handle: contact_handle.unwrap_or(""),
-            participation_type: "online",
+            participation_type: ParticipationType::Retrospective.as_str(),
             consent_given: body.consent_given.unwrap_or(false),
             photo_consent_given: false,
             consent_marketing: body.consent_marketing.unwrap_or(false),

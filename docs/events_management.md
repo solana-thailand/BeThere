@@ -134,7 +134,7 @@ Full configuration with 40+ fields organized in sections:
 |-------|-------------|
 | `deposit_enabled` | Toggle for deposit feature |
 | `deposit_amount_usdc` | USDC amount in lamports (6 decimals) |
-| `deposit_amount_thb` | Thai Baht equivalent (display only) |
+| `deposit_amount_thb` | Configured THB deposit requirement. It is not evidence that money was collected; aggregate collection and refunds from `thb_deposits`. |
 | `promptpay_id` | PromptPay ID for fiat deposits |
 | `escrow_address` | On-chain escrow PDA |
 | `organizer_wallet` | Organizer's Solana wallet |

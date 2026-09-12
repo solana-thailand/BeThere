@@ -193,6 +193,10 @@ pub struct PublicEventData {
     pub slug: String,
     pub tagline: String,
     pub link: String,
+    /// Canonical Genesis archive URL, supplied only for trusted archive links
+    /// by the Worker. It is empty when the event has no verified archive.
+    #[serde(default)]
+    pub archive_url: String,
     pub status: String,
     pub event_start_ms: i64,
     pub event_end_ms: i64,
@@ -230,6 +234,11 @@ pub struct PublicEventData {
     pub in_person_available: bool,
     pub online_available: bool,
     pub online_open_mode: Option<String>,
+
+    /// Server-calculated from the organizer flag and its deadline. This is the
+    /// only value the completed-event gateway uses for its enrollment CTA.
+    #[serde(default)]
+    pub post_event_registration_accepting: bool,
 
     // Escrow
     pub escrow_status: Option<String>,

@@ -89,6 +89,22 @@ Deposits must never be required for retrospective enrollment. Past-event
 enrollment must not consume historical capacity or change attendance and
 no-show metrics.
 
+### Implementation guard (2026-09-12)
+
+`participation_type = 'retrospective'` is the required persisted value for a
+post-event learner. It is distinct from `online`, `in_person`, and `walkin`.
+The post-event writer must never reuse `online`: the DevRel report's published
+online-registration figure is derived from that value. A retrospective row also
+uses `registration_phase = 'post_event'` and
+`approval_status = 'post_event_registered'`; it has no deposit, check-in,
+claim token, or attendance-NFT eligibility.
+
+Completed public event pages use the existing organizer-managed `events.link`
+only when it is a trusted Genesis event URL. The DevRel repository owns the
+slug-to-archive mapping; BeThere must not duplicate it. Opening enrollment goes
+through the authenticated organizer endpoint so D1, KV, and audit history stay
+consistent—never through a raw D1 update.
+
 ## Security, privacy, and sustainability
 
 - Authorize registered or attended content server-side; hiding a URL in the UI

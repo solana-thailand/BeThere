@@ -224,7 +224,9 @@ pub struct EventConfig {
     /// Deposit amount in USDC smallest unit (6 decimals). e.g., 15_000_000 = $15.
     #[serde(default)]
     pub deposit_amount_usdc: u64,
-    /// Deposit amount in Thai Baht (for PromptPay track). e.g., 500.
+    /// Configured deposit amount in Thai Baht (for PromptPay track). e.g., 500.
+    /// This is event configuration, not evidence of collected funds; reporting
+    /// totals must read verified `thb_deposits` rows instead.
     #[serde(default)]
     pub deposit_amount_thb: u64,
     /// PromptPay ID for THB payments (Thai phone number or national ID).

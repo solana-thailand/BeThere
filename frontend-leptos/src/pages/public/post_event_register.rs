@@ -76,7 +76,9 @@ pub fn PostEventRegister() -> impl IntoView {
             match crate::api::get_me().await {
                 Ok(_) => set_state.set(RegState::Form),
                 Err(_) => {
-                    let _ = web_sys::window().map(|w| w.location().set_href("/login"));
+                    let next = format!("/events/{slug}/post-event-register");
+                    let login_url = format!("/login?next={}", urlencoding::encode(&next));
+                    let _ = web_sys::window().map(|w| w.location().set_href(&login_url));
                 }
             }
         });
@@ -87,7 +89,10 @@ pub fn PostEventRegister() -> impl IntoView {
     let (slug_sig, set_slug_sig) = signal(slug_val.clone());
     set_slug_sig.set(slug_val.clone());
 
-    let back_href = format!("/events/{slug}/recap", slug = slug_val);
+    // The completed-event gateway is always available for a public completed
+    // event. A recap may intentionally be unpublished, so it cannot be this
+    // form's recovery destination.
+    let back_href = format!("/e/{slug}", slug = slug_val);
 
     let is_submitting = move || matches!(state.get(), RegState::Submitting);
 
@@ -98,7 +103,7 @@ pub fn PostEventRegister() -> impl IntoView {
                 // ---------- Back link ----------
                 <div class="flex-row-gap" style="margin-bottom:1rem;width:100%;justify-content:flex-start;">
                     <A href=back_href.clone() attr:class="btn btn-outline btn-sm">
-                        "← Back to recap"
+                        "← Back to event"
                     </A>
                 </div>
 
@@ -118,7 +123,7 @@ pub fn PostEventRegister() -> impl IntoView {
                             <h2 style="margin:0 0 0.5rem;">"Couldn't register"</h2>
                             <p class="subtitle" style="margin:0 0 1rem;text-align:center;">{msg}</p>
                             <A href=back_href.clone() attr:class="btn btn-outline btn-sm">
-                                "← Back to recap"
+                                "← Back to event"
                             </A>
                         </div>
                     }.into_any(),

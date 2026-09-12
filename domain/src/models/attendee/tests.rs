@@ -268,6 +268,10 @@ fn test_participation_type_parse_prod_variants() {
         ParticipationType::parse("Virtual"),
         ParticipationType::Online
     );
+    assert_eq!(
+        ParticipationType::parse("retrospective"),
+        ParticipationType::Retrospective
+    );
     // Empty defaults to in-person (legacy)
     assert_eq!(ParticipationType::parse(""), ParticipationType::InPerson);
     assert_eq!(ParticipationType::parse("   "), ParticipationType::InPerson);
@@ -280,6 +284,7 @@ fn test_participation_type_parse_prod_variants() {
 fn test_participation_type_as_str_and_default() {
     assert_eq!(ParticipationType::InPerson.as_str(), "in_person");
     assert_eq!(ParticipationType::Online.as_str(), "online");
+    assert_eq!(ParticipationType::Retrospective.as_str(), "retrospective");
     assert_eq!(ParticipationType::Other.as_str(), "other");
     assert_eq!(ParticipationType::default(), ParticipationType::InPerson);
     // is_in_person now delegates to the typed enum (behavior preserved)
@@ -295,6 +300,7 @@ fn test_participation_type_display() {
     // and is what gets written to the Google Sheet (organizer-facing).
     assert_eq!(ParticipationType::InPerson.display(), "In-Person");
     assert_eq!(ParticipationType::Online.display(), "Online");
+    assert_eq!(ParticipationType::Retrospective.display(), "Retrospective");
     assert_eq!(ParticipationType::Other.display(), "Other");
     // round-trip: canonical → display → parse → same variant
     for v in ["In-Person", "in_person", "in person", "physical", ""] {
