@@ -169,6 +169,10 @@ pub struct AttendeeDepositView {
 const ATTENDEE_DEPOSIT_DISCRIMINATOR: u8 = 2;
 /// Minimum serialized length of an `AttendeeDeposit` account (disc + struct).
 const ATTENDEE_DEPOSIT_MIN_LEN: usize = 96;
+/// Only schema version these offsets are valid for (`state.rs: DEPOSIT_VERSION`).
+/// The program rejects anything else with `DepositVersionMismatch`; a future v2
+/// may move fields, so decoding one with v1 offsets would yield plausible junk.
+const ATTENDEE_DEPOSIT_VERSION: u8 = 1;
 
 /// Decode the fixed-offset fields of an `AttendeeDeposit` account.
 pub fn decode_attendee_deposit(data: &[u8]) -> HarnessResult<AttendeeDepositView> {
@@ -182,6 +186,12 @@ pub fn decode_attendee_deposit(data: &[u8]) -> HarnessResult<AttendeeDepositView
         return Err(HarnessError::Solana(format!(
             "AttendeeDeposit discriminator = {}, expected {ATTENDEE_DEPOSIT_DISCRIMINATOR}",
             data[0]
+        )));
+    }
+    if data[1] != ATTENDEE_DEPOSIT_VERSION {
+        return Err(HarnessError::Solana(format!(
+            "AttendeeDeposit version = {}, expected {ATTENDEE_DEPOSIT_VERSION}",
+            data[1]
         )));
     }
     let amount = u64::from_le_bytes(data[66..74].try_into().expect("8 bytes"));
@@ -466,6 +476,17 @@ mod tests {
     fn decode_attendee_deposit_rejects_wrong_discriminator() {
         let mut data = vec![0u8; ATTENDEE_DEPOSIT_MIN_LEN];
         data[0] = 1; // EventEscrow's discriminator, not AttendeeDeposit's
+        assert!(matches!(
+            decode_attendee_deposit(&data),
+            Err(HarnessError::Solana(_))
+        ));
+    }
+
+    #[test]
+    fn decode_attendee_deposit_rejects_unknown_version() {
+        let mut data = vec![0u8; ATTENDEE_DEPOSIT_MIN_LEN];
+        data[0] = ATTENDEE_DEPOSIT_DISCRIMINATOR;
+        data[1] = 2; // a v2 account may not share these offsets
         assert!(matches!(
             decode_attendee_deposit(&data),
             Err(HarnessError::Solana(_))

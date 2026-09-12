@@ -337,14 +337,33 @@ pub(crate) struct AttendeeDepositView {
     pub refunded: bool,
 }
 
+/// `AttendeeDeposit` account discriminator (`#[account(discriminator = 2)]`).
+const ATTENDEE_DEPOSIT_DISCRIMINATOR: u8 = 2;
+/// Only schema version this decoder understands (`state.rs: DEPOSIT_VERSION`).
+/// The program itself rejects anything else with `DepositVersionMismatch`, so
+/// mirroring the check here keeps the worker and the program in lockstep.
+const ATTENDEE_DEPOSIT_VERSION: u8 = 1;
+/// Serialized length of a v1 `AttendeeDeposit` account (disc + struct + padding).
+const ATTENDEE_DEPOSIT_LEN: usize = 96;
+
 /// Decode `AttendeeDeposit` account data. `None` if the bytes are not a
-/// well-formed v1 record (wrong discriminator or too short). Pure — unit-tested.
+/// well-formed v1 record (too short, wrong discriminator, or an unknown schema
+/// version). Pure — unit-tested.
 ///
 /// Layout: disc(1) ver(1) attendee(32) event(32) amount(8) deposited_at(8)
 ///         checked_in(1) refunded(1) bump(1) padding(11) = 96 bytes.
 ///         → amount at [66..74] (u64 LE), refunded at [83].
+///
+/// The length and version gates matter: the pre-`version` layout was exactly
+/// 84 bytes, so a `< 84` gate silently accepted a stale-layout account and read
+/// every field one byte off (`refunded` landed on `bump`, which is non-zero —
+/// i.e. it decoded as "already settled"). Rejecting anything that is not a v1
+/// 96-byte record makes layout drift fail loudly instead of plausibly.
 pub(crate) fn decode_attendee_deposit(data: &[u8]) -> Option<AttendeeDepositView> {
-    if data.len() < 84 || data[0] != 2 {
+    if data.len() < ATTENDEE_DEPOSIT_LEN
+        || data[0] != ATTENDEE_DEPOSIT_DISCRIMINATOR
+        || data[1] != ATTENDEE_DEPOSIT_VERSION
+    {
         return None;
     }
     let amount = u64::from_le_bytes(data[66..74].try_into().ok()?);
@@ -452,7 +471,19 @@ pub async fn verify_attendee_deposit_onchain(
     }
     Ok(match decode_attendee_deposit(&data) {
         Some(v) => v.amount == expected_amount && !v.refunded,
-        None => false,
+        None => {
+            // Fail closed, but say so: an account owned by the escrow program
+            // that will not decode means a layout/version drift, and without a
+            // signal every deposit verification would quietly return false.
+            // Shape only — no addresses, no identifiers (see issue 070).
+            tracing::warn!(
+                len = data.len(),
+                discriminator = data.first().copied().unwrap_or_default(),
+                version = data.get(1).copied().unwrap_or_default(),
+                "AttendeeDeposit did not decode as a v1 record — treating as unverified"
+            );
+            false
+        }
     })
 }
 
@@ -921,5 +952,41 @@ mod tests {
     fn rejects_short_data() {
         assert!(decode_attendee_deposit(&[2u8; 40]).is_none());
         assert!(decode_attendee_deposit(&[]).is_none());
+    }
+
+    /// Build the *pre-`version`* AttendeeDeposit body (84 bytes) that the
+    /// program wrote before `f246e8e`: disc(1) attendee(32) event(32) amount(8)
+    /// deposited_at(8) checked_in(1) refunded(1) bump(1).
+    fn make_legacy_deposit(amount: u64, refunded: bool) -> Vec<u8> {
+        let mut d = vec![0u8; 84];
+        d[0] = 2;
+        d[65..73].copy_from_slice(&amount.to_le_bytes());
+        d[82] = u8::from(refunded);
+        d[83] = 254; // bump — realistically non-zero
+        d
+    }
+
+    /// A stale-layout account must be rejected outright. The previous `< 84`
+    /// gate let it through and read every field one byte off: `amount` came out
+    /// as garbage and `refunded` landed on `bump` (non-zero => "settled").
+    #[test]
+    fn rejects_legacy_84_byte_layout() {
+        let legacy = make_legacy_deposit(15_000_000, false);
+        assert!(decode_attendee_deposit(&legacy).is_none());
+
+        // Both-directions check: confirm the old gate really did mis-decode it,
+        // so this test is guarding a real failure and not a hypothetical one.
+        let amount_at_66 = u64::from_le_bytes(legacy[66..74].try_into().unwrap());
+        assert_ne!(amount_at_66, 15_000_000, "old offsets should read garbage");
+        assert_ne!(legacy[83], 0, "old offsets would have read refunded = true");
+    }
+
+    #[test]
+    fn rejects_unknown_version() {
+        let mut d = make_deposit(15_000_000, false);
+        d[1] = 2; // a v2 account: the program rejects it, so we must too
+        assert!(decode_attendee_deposit(&d).is_none());
+        d[1] = 0;
+        assert!(decode_attendee_deposit(&d).is_none());
     }
 }
