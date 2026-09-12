@@ -10,7 +10,7 @@
 //! These tests pin the split: `Display` keeps the detail for the log,
 //! `public_message` is what may leave the Worker.
 
-use event_checkin_domain::models::error::{redact_urls, AppError, REDACTED_URL};
+use event_checkin_domain::models::error::{AppError, REDACTED_URL, redact_urls};
 
 /// The exact production shape that Issue 078 was filed from, with a real
 /// spreadsheet ID standing in for staging's empty path segment.
@@ -166,8 +166,5 @@ fn redaction_covers_non_https_schemes() {
 #[test]
 fn redaction_is_utf8_safe() {
     let redacted = redact_urls("ไม่พบข้อมูล: https://sheets.googleapis.com/v4 — ลองใหม่");
-    assert_eq!(
-        redacted,
-        format!("ไม่พบข้อมูล: {REDACTED_URL} — ลองใหม่")
-    );
+    assert_eq!(redacted, format!("ไม่พบข้อมูล: {REDACTED_URL} — ลองใหม่"));
 }

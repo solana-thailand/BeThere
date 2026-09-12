@@ -117,8 +117,9 @@ fn no_source_interpolates_a_sheets_url_into_a_caller_facing_error() {
     for path in &sources {
         let source = fs::read_to_string(path).expect("source file is readable");
         for (index, line) in source.lines().enumerate() {
-            let interpolates_a_url =
-                line.contains("AppError::") && line.contains("https://") && line.contains("format!");
+            let interpolates_a_url = line.contains("AppError::")
+                && line.contains("https://")
+                && line.contains("format!");
             assert!(
                 !interpolates_a_url,
                 "{}:{} builds an AppError from a literal URL; the caller-facing \
