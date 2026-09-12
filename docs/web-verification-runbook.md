@@ -125,6 +125,20 @@ credit spending, and message delivery are R2. Run them only through the staging
 flow harness with dedicated fixtures. Confirm transaction signatures on devnet
 and return test rows to a documented terminal state.
 
+For a verified fixture, the focused harness can prove SIWS authentication,
+authenticated confirmation, D1 status, and the Devnet attendee PDA without
+creating another transfer:
+
+```sh
+cd flow-harness
+# Set the required FLOW_HARNESS_* fixture variables from the operator handover.
+FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT=1 cargo run -- --flow deposit
+```
+
+This is R1 for an already verified record because SIWS creates a short-lived
+staging nonce/session. An unverified fixture may build and submit a Devnet
+transaction, which is R2.
+
 ## 7. NFT verification (R0/R2)
 
 R0 checks never call Crossmint:
@@ -177,4 +191,3 @@ For rollback commands and traffic rollout, follow
 isolation, follow [`staging_deploy_runbook.md`](staging_deploy_runbook.md).
 Crossmint configuration and cost boundaries are documented in
 [`crossmint-minting.md`](crossmint-minting.md).
-

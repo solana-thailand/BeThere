@@ -10,11 +10,13 @@ states in one event or by overwriting initialized escrow metadata.
 
 - `auth`: automatic SIWS challenge, signature verification, authenticated
   `/api/auth/me`, and an unauthenticated probe pass on staging.
-- `deposit`: the harness follows the same two requests as a wallet:
-  `POST /api/deposit/usdc` returns a Solana Pay callback, then
-  `GET /api/deposit/usdc/tx` returns the unsigned transaction. A real Devnet
-  run reached transaction confirmation; its final assertion correctly rejected
-  the expired fixture instead of reporting a false pass.
+- `deposit`: a dedicated staging attendee completed a real Devnet USDC deposit.
+  The Worker persisted the verified D1 record, and the harness confirms the
+  matching `AttendeeDeposit` PDA. The named-fixture status request always sends
+  `event_id`, so it cannot silently read another active staging event.
+- `confirmation`: an opt-in focused probe creates a fresh SIWS session, calls
+  the authenticated `/api/deposit/usdc/confirm` route for an already verified
+  fixture, and verifies the same Devnet PDA. It passed on 2026-09-12.
 
 ## Why one event cannot cover every case
 
@@ -43,15 +45,20 @@ These are mutually exclusive states for a repeatable Devnet fixture.
    The harness derives the matching on-chain event ID from the event ID; then
    initialize the event from the organizer wallet in Manage Events → Edit →
    Escrow Management.
+   The seed script refuses initialized, deactivated, or closed escrow rows.
+   Create a new event ID instead of attempting to reuse them.
 3. Use `cargo run -- --flow deposit` or `--flow auth` for diagnosis. Focused
    runs write `summary.json` but cannot update `.last-green`.
+   To include the authenticated confirmation route for a verified fixture, set
+   `FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT=1`. This remains read-only and must
+   not be used as evidence for an unverified or newly sent transfer.
 4. Only the full suite may refresh `.last-green`. It remains blocked until the
    fixture matrix is fully provisioned; no bypass converts partial coverage
    into a production approval.
 
-## Next implementation
+## Remaining coverage
 
-Replace the single mutable seed with named, non-overlapping fixture records and
-an explicit freshness check. The fixture bootstrap must report the new event ID
-and required organizer initialization transaction, while preserving all
-existing initialized rows.
+Named, non-overlapping seed records and an explicit freshness boundary are now
+implemented. Before a production escrow release, provision separate fixtures
+for the refund and NFT-claim matrix, run the complete suite green, and retain
+the resulting full-suite sentinel for the production preflight gate.

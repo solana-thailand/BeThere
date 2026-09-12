@@ -293,10 +293,10 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/deposit/status/{attendee_id}` | No | Check deposit status for attendee |
-| POST | `/api/deposit/usdc` | No | Build Solana Pay deposit TX (USDC) |
+| POST | `/api/deposit/usdc` | Cookie | Build Solana Pay deposit TX (USDC) |
 | GET | `/api/deposit/usdc/tx` | No | Solana Pay TX callback (wallet fetches serialized TX) |
-| GET | `/api/deposit/usdc/confirm` | No | Poll deposit TX confirmation via Solana RPC |
-| POST | `/api/deposit/usdc/webhook` | No | Record TX signature, verify on-chain |
+| GET | `/api/deposit/usdc/confirm` | Cookie | Poll deposit TX confirmation via Solana RPC |
+| POST | `/api/deposit/usdc/webhook` | Bearer | Record TX signature, verify on-chain |
 | POST | `/api/deposit/thb/upload` | Cookie | Upload PromptPay slip image (THB, attendee's own slip) |
 | GET | `/api/deposit/thb/pending` | Cookie + Staff | List pending THB slips |
 | POST | `/api/deposit/thb/verify` | Cookie + Staff | Verify/reject THB slip |

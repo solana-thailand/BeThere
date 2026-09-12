@@ -163,33 +163,39 @@ no fallback by design; `worker/deploy.sh#L200`).
 
 ## 7. Seed staging data
 
-Once deployed and healthy, seed the deterministic test event + attendee that the
-`flow-harness` exercises:
+Once deployed and healthy, seed a new deterministic test event + attendee for
+the `flow-harness`:
 
 ```/dev/null/sh#L1
-bash worker/scripts/seed-staging.sh
+bash worker/scripts/seed-staging.sh --event-id flow-deposit-YYYYMMDD
 ```
 
-This inserts `flow-test-event` with `event_start=now-1h`, `event_end=now+4h`,
-`refund_deadline_hours=6`, plus a checked-in attendee whose deposit starts
-pending for the harness's deposit flow. It touches **only**
-staging data and never production. Re-run is idempotent (`INSERT OR REPLACE`);
-pass `--clean` to wipe the test rows first.
+This creates a fresh active event with `event_start=now-1h`, `event_end=now+4h`,
+`refund_deadline_hours=6`, and a checked-in attendee whose USDC deposit starts
+pending. It touches **only** staging data and never production. Initialize its
+escrow from **Manage Events → Edit → Escrow Management** with the dedicated
+Devnet organizer wallet. Do not re-seed an initialized, deactivated, or closed
+event: the script rejects those rows so their immutable on-chain state cannot
+be overwritten.
 
 ---
 
 ## 8. Isolation verification (Plan 005 §3.1 acceptance criterion)
 
-Confirm staging D1 contains only the seeded test data, not production attendees:
+Confirm the named fixture exists in staging D1 and that no production data was
+copied into the isolated database:
 
 ```/dev/null/sh#L1
-# Should show n=1 (the seeded flow-test attendee), NOT the production count
-npx wrangler d1 execute bethere-db-staging --remote \
-  --command "SELECT count(*) AS n FROM attendees WHERE event_id = 'flow-test-event';"
+FIXTURE_EVENT_ID=flow-deposit-YYYYMMDD
 
-# Sanity: total attendee count should be small (just the seed), not prod-scale
+# Should show the fixture attendee count (normally 1), never a production row.
 npx wrangler d1 execute bethere-db-staging --remote \
-  --command "SELECT count(*) AS total FROM attendees;"
+  --command "SELECT count(*) AS n FROM attendees WHERE event_id = '$FIXTURE_EVENT_ID';"
+
+# Inspect the small, staging-only event inventory rather than assuming a
+# single mutable test event exists.
+npx wrangler d1 execute bethere-db-staging --remote \
+  --command "SELECT id, escrow_status FROM events ORDER BY created_at DESC LIMIT 20;"
 ```
 
 Then verify the Worker is live and serving:
@@ -208,10 +214,12 @@ curl -s -o /dev/null -w "/staff → %{http_code}\n" https://bethere-staging.sola
 
 With staging live, the rest of Plan 005 unblocks:
 
-1. **Wire `flow-harness` to staging** — replace the `// TODO(staging-live):` stubs
-   with real HTTP calls against the staging URL (Plan 005 §3.4).
-2. **Run the harness** — `cargo run -p flow-harness` against staging; expect all
-   deposit/refund/claim flows green.
+1. **Run a focused live proof** — `cargo run --manifest-path flow-harness/Cargo.toml -- --flow auth`,
+   then run `--flow deposit` against the named fixture. Set
+   `FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT=1` to probe authenticated confirmation
+   without a second transfer.
+2. **Provision the remaining fixture matrix** — refund and NFT-claim flows need
+   their own lifecycle-compatible fixtures before a full suite can pass.
 3. **Verify the production preflight gate** — it is default-on and requires a
    green harness run within the last hour. An emergency bypass must use
    `--force --reason "<why>"` and writes an audit entry.
