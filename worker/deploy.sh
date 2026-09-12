@@ -149,7 +149,9 @@ PYTHON_BIN=""
 resolve_python() {
   local candidate
   for candidate in "${DEPLOY_PYTHON:-}" /opt/homebrew/bin/python3 "$(command -v python3 || true)"; do
-    [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+    if [ -z "$candidate" ] || [ ! -x "$candidate" ]; then
+      continue
+    fi
     if "$candidate" -c 'import sys, tomllib, blake3; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
       PYTHON_BIN="$candidate"
       return 0

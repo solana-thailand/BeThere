@@ -299,9 +299,16 @@ jobs:
         # (Issue #065). The gate is fail-closed: it checks every .sh in the
         # repo minus an explicit deferral list, so a new script is covered
         # automatically. See scripts/verify/shellcheck_gate.sh.
+        env:
+          # Pinned. Ubuntu's packaged ShellCheck lags, and the versions disagree:
+          # < 0.11 reports trap/indirect-call findings as SC2317 where 0.11
+          # reports SC2329, so an unpinned CI can red a gate that is green on a
+          # developer's machine (and vice versa). The gate prints the version it
+          # ran, so a future mismatch is visible in the log rather than puzzling.
+          SHELLCHECK_VERSION: v0.11.0
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq shellcheck
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJ --strip-components=1 -C /usr/local/bin "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
           bash scripts/verify/shellcheck_gate.sh
 
       - name: Setup Python (3.11+ for tomllib)

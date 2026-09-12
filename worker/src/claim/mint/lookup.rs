@@ -31,7 +31,9 @@ pub async fn lookup_claim(
     let mut walkin: Option<WalkinAttendee> = None;
 
     if let Some(ref d1) = state.d1
-        && let Ok(Some(a)) = crate::db::attendees::get_attendee_by_claim_token(d1, token, state.claim_token_policy()).await
+        && let Ok(Some(a)) =
+            crate::db::attendees::get_attendee_by_claim_token(d1, token, state.claim_token_policy())
+                .await
         && a.participation_type == "walkin"
     {
         walkin = Some(WalkinAttendee {
@@ -111,7 +113,13 @@ pub async fn lookup_claim(
                 // so this fallback uses the attendee's real event.
                 tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: Sheets miss, trying D1 fallback");
                 if let Some(ref d1) = state.d1 {
-                    match crate::db::attendees::get_attendee_by_claim_token(d1, token, state.claim_token_policy()).await {
+                    match crate::db::attendees::get_attendee_by_claim_token(
+                        d1,
+                        token,
+                        state.claim_token_policy(),
+                    )
+                    .await
+                    {
                         Ok(Some(a)) => {
                             tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: found in D1 fallback");
                             // Counts unavailable without event_id; claim page shows them as informational only

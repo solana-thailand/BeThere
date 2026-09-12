@@ -40,6 +40,10 @@ if [ "${#targets[@]}" -eq 0 ]; then
   exit 1
 fi
 
-echo "🔍 ShellCheck over ${#targets[@]} script(s); ${#DEFERRED[@]} deferred."
+# Print the version. ShellCheck codes move between releases (a trap-invoked
+# function is SC2317 before 0.11 and SC2329 from 0.11), so a gate that is green
+# locally can be red in CI for no reason visible in the diff. CI pins the
+# version; this line makes any mismatch obvious in the log.
+echo "🔍 ShellCheck $(shellcheck --version | awk '/^version:/ {print $2}') over ${#targets[@]} script(s); ${#DEFERRED[@]} deferred."
 shellcheck "${targets[@]}"
 echo "✅ ShellCheck clean."

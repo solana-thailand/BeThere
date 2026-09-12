@@ -55,7 +55,7 @@ move_pnp() {
     fi
 }
 
-# shellcheck disable=SC2329  # invoked indirectly via cleanup() in the EXIT trap
+# shellcheck disable=SC2329,SC2317  # invoked indirectly via cleanup() in the EXIT trap (SC2317 is the same finding on ShellCheck < 0.11)
 restore_pnp() {
     if [ "$MOVED" = true ] && [ -f "$PNP_BACKUP" ]; then
         mv "$PNP_BACKUP" "$PNP_FILE"
@@ -70,7 +70,7 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 
 # ── Prepare temp dir + cleanup trap ─────────────────────────────────────────
 DRY_DIR="$(mktemp -d)"
-# shellcheck disable=SC2329  # invoked indirectly by `trap cleanup EXIT INT TERM`
+# shellcheck disable=SC2329,SC2317  # invoked indirectly by `trap cleanup EXIT INT TERM` (SC2317 is the same finding on ShellCheck < 0.11)
 cleanup() {
     restore_pnp
     rm -rf "$DRY_DIR" 2>/dev/null || true
