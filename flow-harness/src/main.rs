@@ -122,7 +122,11 @@ fn main() -> ExitCode {
             }
         };
         match auth_rt.block_on(client.authenticate_wallet(&ctx)) {
-            Ok(cookie) => client = client.with_auth_cookie(cookie),
+            Ok(session) => {
+                client = client
+                    .with_auth_cookie(session.cookie)
+                    .with_auth_bearer(session.bearer_token);
+            }
             Err(e) => {
                 eprintln!("❌ flow-harness: failed to create SIWS attendee session: {e}");
                 return ExitCode::from(2);

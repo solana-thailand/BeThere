@@ -28,7 +28,7 @@
 //!
 //! Unknown shapes fall back to the raw body as the message with no code.
 
-use reqwest::header::{COOKIE, HeaderMap, HeaderValue};
+use reqwest::header::{AUTHORIZATION, COOKIE, HeaderMap, HeaderValue};
 use reqwest::{Client, Method, Response, StatusCode};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
@@ -55,6 +55,22 @@ pub struct DepositUsdcRequest {
     pub attendee_id: String,
     pub event_id: String,
     pub wallet_address: String,
+}
+
+/// `POST /api/deposit/usdc/webhook` body after an attendee signs and sends a
+/// deposit transaction.
+#[derive(Debug, Clone, Serialize)]
+pub struct DepositSignatureRequest {
+    pub attendee_id: String,
+    pub event_id: String,
+    pub tx_signature: String,
+}
+
+/// SIWS credentials required by the attendee API and signature-recording path.
+#[derive(Debug, Clone)]
+pub struct WalletSession {
+    pub cookie: String,
+    pub bearer_token: String,
 }
 
 /// `POST /api/escrow/refund` body.
@@ -123,6 +139,7 @@ pub struct WorkerClient {
     http: Client,
     base_url: Url,
     auth_cookie: Option<String>,
+    auth_bearer: Option<String>,
 }
 
 impl std::fmt::Debug for WorkerClient {
@@ -130,6 +147,7 @@ impl std::fmt::Debug for WorkerClient {
         f.debug_struct("WorkerClient")
             .field("base_url", &self.base_url)
             .field("has_auth_cookie", &self.auth_cookie.is_some())
+            .field("has_auth_bearer", &self.auth_bearer.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -148,6 +166,7 @@ impl WorkerClient {
             http,
             base_url,
             auth_cookie: None,
+            auth_bearer: None,
         })
     }
 
@@ -156,6 +175,13 @@ impl WorkerClient {
     #[must_use]
     pub fn with_auth_cookie(mut self, cookie: String) -> Self {
         self.auth_cookie = Some(cookie);
+        self
+    }
+
+    /// Attach the SIWS JWT used by the signature-recording endpoint.
+    #[must_use]
+    pub fn with_auth_bearer(mut self, bearer_token: String) -> Self {
+        self.auth_bearer = Some(bearer_token);
         self
     }
 
@@ -222,6 +248,20 @@ impl WorkerClient {
         self.get_json(url).await
     }
 
+    /// Record the exact signature produced by the attendee wallet. This is
+    /// the normal frontend path and avoids relying on eventual RPC history
+    /// discovery after a transaction has already landed.
+    pub async fn record_deposit_signature(
+        &self,
+        ctx: &StagingContext,
+        request: &DepositSignatureRequest,
+    ) -> HarnessResult<()> {
+        let _: Value = self
+            .post_json_with_bearer(ctx.deposit_webhook_url()?, request)
+            .await?;
+        Ok(())
+    }
+
     /// `POST /api/escrow/refund` — request the paired `refund + close_deposit`
     /// TX. Negative-test flows expect this to return a non-2xx with the
     /// relevant [`EscrowCode`]; positive flows sign+submit the returned TX.
@@ -259,7 +299,7 @@ impl WorkerClient {
 
     /// Create an attendee session through SIWS. This keeps live staging runs
     /// self-contained: no browser cookie or Google account token is required.
-    pub async fn authenticate_wallet(&self, ctx: &StagingContext) -> HarnessResult<String> {
+    pub async fn authenticate_wallet(&self, ctx: &StagingContext) -> HarnessResult<WalletSession> {
         let wallet_address = ctx.payer_pubkey().to_string();
         let nonce: WalletNonceResponse = self
             .post_json(ctx.auth_wallet_nonce_url()?, &WalletNonceRequest {
@@ -281,7 +321,10 @@ impl WorkerClient {
                 reason: "SIWS verification returned no authenticated session".to_string(),
             });
         }
-        Ok(format!("event_checkin_token={}", verified.token))
+        Ok(WalletSession {
+            cookie: format!("event_checkin_token={}", verified.token),
+            bearer_token: verified.token,
+        })
     }
 
     // ── Low-level helpers ────────────────────────────────────────────────────
@@ -305,6 +348,32 @@ impl WorkerClient {
         let resp = self
             .send_request(Method::POST, url, Some(serialized))
             .await?;
+        self.decode_or_error(resp).await
+    }
+
+    async fn post_json_with_bearer<T: DeserializeOwned, B: Serialize>(
+        &self,
+        url: Url,
+        body: &B,
+    ) -> HarnessResult<T> {
+        let bearer = self.auth_bearer.as_deref().ok_or_else(|| HarnessError::Config(
+            "deposit signature recording requires an auto-created SIWS session".to_string(),
+        ))?;
+        let serialized = serde_json::to_string(body)?;
+        let resp = self
+            .http
+            .post(url)
+            .header(reqwest::header::ACCEPT, "application/json")
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {bearer}"))
+                    .map_err(|e| HarnessError::Config(format!("invalid bearer token: {e}")))?,
+            )
+            .body(serialized)
+            .send()
+            .await
+            .map_err(HarnessError::from)?;
         self.decode_or_error(resp).await
     }
 

@@ -309,6 +309,12 @@ impl StagingContext {
         Ok(url)
     }
 
+    /// Worker-side authenticated endpoint that records a wallet-submitted
+    /// deposit signature before the Worker verifies it asynchronously.
+    pub fn deposit_webhook_url(&self) -> HarnessResult<Url> {
+        join_path(&self.worker_url, "/api/deposit/usdc/webhook")
+    }
+
     /// Worker-side URL for the paired refund + close endpoint.
     pub fn refund_url(&self) -> HarnessResult<Url> {
         join_path(&self.worker_url, "/api/escrow/refund")

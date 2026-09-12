@@ -230,6 +230,36 @@ pub async fn fetch_account(
     parse_account_value(&resp["result"]["value"])
 }
 
+/// Return the newest successful transaction touching `address` on the
+/// configured Devnet RPC. Used only to recover a harness run interrupted after
+/// submission but before its signature was recorded by the Worker.
+pub async fn latest_signature_for_address(
+    ctx: &StagingContext,
+    address: &Pubkey,
+) -> HarnessResult<Option<String>> {
+    let http = reqwest::Client::new();
+    let resp = rpc_call(
+        &http,
+        ctx.rpc_url.as_str(),
+        "getSignaturesForAddress",
+        json!([address.to_string(), { "limit": 5 }]),
+    )
+    .await?;
+    if let Some(err) = resp.get("error") {
+        return Err(parse_rpc_error(err));
+    }
+    Ok(resp["result"].as_array().and_then(|entries| {
+        entries.iter().find_map(|entry| {
+            entry
+                .get("err")
+                .filter(|err| err.is_null())
+                .and_then(|_| entry.get("signature"))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
+    }))
+}
+
 /// Poll `getSignatureStatuses` until the signature is confirmed/finalized, the
 /// transaction errored (→ mapped revert), or the poll budget is exhausted.
 async fn confirm_signature(

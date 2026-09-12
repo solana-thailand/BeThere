@@ -39,7 +39,7 @@ use std::time::{Duration, Instant};
 use domain::models::deposit::{DepositStatus, DepositStatusResponse};
 
 use crate::assertions::{now_ms, DepositStatusAsserter};
-use crate::client::{DepositUsdcRequest, WorkerClient};
+use crate::client::{DepositSignatureRequest, DepositUsdcRequest, WorkerClient};
 use crate::context::StagingContext;
 use crate::error::{EscrowCode, HarnessError, HarnessResult, WorkerError};
 use crate::runner::Flow;
@@ -176,6 +176,8 @@ impl Flow for DepositFlow {
 
         let wallet = self.wallet_address(ctx);
 
+        record_discovered_signature(client, ctx, &self.config).await?;
+
         // Recover first: an interrupted prior run may already have sent its
         // transaction. Retrying must never create a duplicate attendee PDA.
         let status = if let Some(status) =
@@ -194,7 +196,17 @@ impl Flow for DepositFlow {
                 .fetch_deposit_transaction(ctx, &self.config.attendee_id, &wallet)
                 .await?;
             assert_transaction_present(&tx_resp.transaction)?;
-            let _signature = submit_deposit_transaction(ctx, &tx_resp.transaction).await?;
+            let signature = submit_deposit_transaction(ctx, &tx_resp.transaction).await?;
+            client
+                .record_deposit_signature(
+                    ctx,
+                    &DepositSignatureRequest {
+                        attendee_id: self.config.attendee_id.clone(),
+                        event_id: self.config.event_id.clone(),
+                        tx_signature: signature,
+                    },
+                )
+                .await?;
             wait_for_confirmed_status(client, ctx, &self.config).await?
         };
 
@@ -218,6 +230,36 @@ impl Flow for DepositFlow {
 
         Ok(())
     }
+}
+
+async fn record_discovered_signature(
+    client: &WorkerClient,
+    ctx: &StagingContext,
+    config: &DepositFlowConfig,
+) -> HarnessResult<()> {
+    let status = client.fetch_deposit_status(ctx, &config.attendee_id).await?;
+    let needs_signature = status
+        .status
+        .as_ref()
+        .is_some_and(|deposit| !deposit.verified && deposit.tx_signature.as_deref().is_none_or(str::is_empty));
+    if !needs_signature {
+        return Ok(());
+    }
+
+    let (pda, _) = ctx.attendee_deposit_pda();
+    if let Some(signature) = crate::chain::latest_signature_for_address(ctx, &pda).await? {
+        client
+            .record_deposit_signature(
+                ctx,
+                &DepositSignatureRequest {
+                    attendee_id: config.attendee_id.clone(),
+                    event_id: config.event_id.clone(),
+                    tx_signature: signature,
+                },
+            )
+            .await?;
+    }
+    Ok(())
 }
 
 async fn confirmed_status(
