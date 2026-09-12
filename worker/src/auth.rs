@@ -7,11 +7,11 @@
 use axum::{
     extract::{Request, State},
     middleware::Next,
-    response::{IntoResponse, Json},
+    response::IntoResponse,
 };
 
-use event_checkin_domain::models::api::ApiResponse;
 use event_checkin_domain::models::auth::{Claims, GoogleUserInfo, TokenRequest};
+use event_checkin_domain::models::error::AppError;
 
 use crate::crypto;
 use crate::http;
@@ -333,16 +333,10 @@ pub async fn require_auth(
         Ok(claims) => claims,
         Err(e) => {
             tracing::debug!(path = %path, error = %e, "auth middleware rejected request");
-            return (
-                axum::http::StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::<()> {
-                    success: false,
-                    data: None,
-                    error: Some(e),
-                    correlation_id: None,
-                }),
-            )
-                .into_response();
+            // Issue 078: go through `WorkerError` rather than hand-rolling the
+            // body, so this rejection gets the same caller-facing redaction as
+            // every other error path instead of drifting from it.
+            return crate::error::WorkerError(AppError::Unauthorized(e)).into_response();
         }
     };
 
@@ -354,16 +348,10 @@ pub async fn require_auth(
             identity_fingerprint = %state.log_fingerprint(&claims.email),
             "non-staff user attempted access"
         );
-        return (
-            axum::http::StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                error: Some("user is not in staff allowlist".to_string()),
-                correlation_id: None,
-            }),
-        )
-            .into_response();
+        return crate::error::WorkerError(AppError::Forbidden(
+            "user is not in staff allowlist".to_string(),
+        ))
+        .into_response();
     }
 
     // Inject claims into request extensions for downstream handlers
@@ -398,16 +386,7 @@ pub async fn require_identity(
         Ok(claims) => claims,
         Err(e) => {
             tracing::debug!(path = %path, error = %e, "identity middleware rejected request");
-            return (
-                axum::http::StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::<()> {
-                    success: false,
-                    data: None,
-                    error: Some(e),
-                    correlation_id: None,
-                }),
-            )
-                .into_response();
+            return crate::error::WorkerError(AppError::Unauthorized(e)).into_response();
         }
     };
 
