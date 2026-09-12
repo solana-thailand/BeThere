@@ -173,6 +173,27 @@ all — they were already non-capability reads and are unchanged.
 - [ ] Staging validation: confirm a within-window claim still succeeds end to end.
       Not possible locally — no staging deploy in this session.
 
+### Deploy-day consequence — read before releasing
+
+This is **retroactive**. The window is measured from `checked_in_at`, which is
+already on every row, so on the first deploy any attendee who checked in more
+than `CLAIM_TOKEN_TTL_SECS` ago loses the ability to claim immediately. There is
+no grace period and no backfill that could give one, because the anchor is
+historical data, not something the release stamps.
+
+Before releasing, decide which of these applies:
+
+1. **Check the exposure first.** Count rows with `claimed_at IS NULL` and
+   `checked_in_at` older than 30 days. If it is zero, ship the default.
+2. **Ship wide, tighten later.** Deploy with `CLAIM_TOKEN_TTL_SECS` set past the
+   oldest unclaimed check-in, then lower it once those rows are claimed or
+   written off. Costs one var change per step, no code change.
+3. **Ship disabled.** Deploy with `0`, confirm nothing else regressed, then turn
+   it on. Slowest, and leaves the window unbounded in the meantime.
+
+Recommendation: **1**, falling back to **2** if the count is non-zero. The kill
+switch (`0`) stays the rollback for either.
+
 ### Remaining
 
 - **Option 3 stays open** as the real fix, for the next claim-flow change. This
