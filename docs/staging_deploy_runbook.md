@@ -29,7 +29,7 @@ The Cloudflare resources are **already provisioned** (real IDs committed in
 | Staging secret names | — | required auth/Sheets/Helius names present; values are intentionally unreadable | ✅ verified (§3) |
 | Google OAuth staging redirect URI | — | secret exists; interactive login remains a manual verification step | ⚠️ verify (§4) |
 | D1 migrations applied to staging | — | health connects and current tables including `nft_mint_jobs` exist | ✅ verified (§5) |
-| Staging Worker deployed | — | version `2cf965f1-84d1-4864-b899-10d0011d3554` | ✅ deployed (§6) |
+| Staging Worker deployed | — | version `0292d07d-c1b4-4174-a8e2-09ecae26a1ec` | ✅ deployed (§6) |
 | Isolation verified | — | health is connected; the disposable completed-event fixture has one retrospective lead and no money/NFT state | ✅ verified (§8) |
 
 The staging Worker URL is `https://bethere-staging.solana-thailand.workers.dev`
@@ -98,9 +98,11 @@ npx wrangler secret put SOLANA_CLUSTER --env staging
 
 ```/dev/null/sh#L1
 npx wrangler secret put HELIUS_RPC_URL --env staging          # defaults to https://devnet.helius-rpc.com
-npx wrangler secret put NFT_COLLECTION_MINT --env staging     # omit → Helius mints to its own tree
-npx wrangler secret put NFT_METADATA_URI --env staging        # omit → no NFT badge metadata
-npx wrangler secret put NFT_IMAGE_URL --env staging           # omit → no NFT badge image
+# Crossmint is the NFT minter. Keep these unset unless a disposable devnet
+# collection and staging-only server key have been provisioned.
+npx wrangler secret put CROSSMINT_API_KEY --env staging
+# Set CROSSMINT_COLLECTION_ID as an [env.staging] var or secret; it must belong
+# to staging.crossmint.com (devnet). Do not reuse a production collection/key.
 ```
 
 > **Cluster guardrail:** `SOLANA_CLUSTER=devnet` is the only safe value for

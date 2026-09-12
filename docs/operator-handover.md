@@ -13,11 +13,11 @@ a copied commit or Worker version in this document.
 | Area | State |
 |---|---|
 | Git | `develop` is the integration branch. The separate Wrangler 4.131.1 lockfile update is intentionally uncommitted pending dependency-review approval. |
-| Staging | Healthy and isolated. The last verified deploy is version `2cf965f1-84d1-4864-b899-10d0011d3554` (2026-09-12); read the current version through Wrangler before a later release. |
+| Staging | Healthy and isolated. The last verified deploy is version `0292d07d-c1b4-4174-a8e2-09ecae26a1ec` (2026-09-12); read the current version through Wrangler before a later release. |
 | Completed-event learning gateway | Merged to `develop` at `8e8673b`, with retrospective-isolation hardening at `9954731`, and deployed to staging. The protected staging API proof passed: the disposable completed fixture's retrospective lead produces `online_count = 0`, has no live actions, and remains closed to new enrollment. Browser UI journey proof through organizer controls remains pending. |
 | Production | Read the current version through Wrangler before a release; do not infer it from staging or Git history. |
 | Networks | Escrow stays on devnet. Staging RPC/NFT/escrow roles report devnet |
-| Staging NFT | Disabled because no staging Crossmint collection is configured; health reports `nft_not_configured` |
+| Staging NFT | Disabled because no staging Crossmint collection is configured; health reports `nft_not_configured`. Claim lookup now uses these actual Crossmint prerequisites, not Helius read credentials. |
 | Credit integrity | PR #68 is merged and staged. Production has six aggregate-only legacy THB credit statuses eligible for the guarded reconciliation repair after release |
 | Escrow staging proof | Focused SIWS auth, authenticated deposit confirmation, D1 verified status, and matching Devnet attendee PDA passed on 2026-09-12. See [Fixture Strategy](flow_harness_fixture_strategy.md). |
 | Escrow release gate | Still blocked: refund and NFT fixtures are not yet provisioned, so there is no full-suite green sentinel for production preflight. |
@@ -84,8 +84,9 @@ bindings, then verifies HTML and JavaScript content types. Record the printed
 version ID and health result. Staging data must remain disposable and isolated
 from production.
 
-The completed-event gateway and retrospective-isolation hardening were deployed
-as staging version `2cf965f1-84d1-4864-b899-10d0011d3554`; health returned
+The completed-event gateway, retrospective-isolation hardening, and NFT claim
+readiness correction were deployed as staging version
+`0292d07d-c1b4-4174-a8e2-09ecae26a1ec`; health returned
 `status: ok`, D1 connected, and the root response served `text/html`. The
 isolated `test` fixture is completed, points to the canonical Genesis archive,
 and has one disposable retrospective lead. Its public payload was verified with
