@@ -173,6 +173,13 @@ all — they were already non-capability reads and are unchanged.
 - [ ] Staging validation: confirm a within-window claim still succeeds end to end.
       Not possible locally — no staging deploy in this session.
 
+      **Done 2026-09-13** against staging version `15ba6ac7`, via
+      `scripts/verify/claim_token_window_staging.sh`. All three assertions pass:
+      a fresh check-in resolves (200), the same token backdated 400 days becomes
+      byte-identical to a token that never existed, and restoring the timestamp
+      brings it back. See "Staging validation" below for the controlled run that
+      proves the test is not vacuous.
+
 ### Deploy-day consequence — read before releasing
 
 This is **retroactive**. The window is measured from `checked_in_at`, which is
@@ -267,3 +274,66 @@ attendee's fate. `julianday()` does parse the `T` and the offset correctly.
   measured backlog above, not the intended steady state. Tightening it to
   `2592000` once the backlog drains is an outstanding task, with the query to
   gate it on recorded above.
+
+
+## Staging validation — 2026-09-13
+
+Deployed to staging (`bethere-staging`, version `15ba6ac7`) from `develop` at the
+merge of PR #82, then validated with
+`scripts/verify/claim_token_window_staging.sh`.
+
+### The assertion changed: indistinguishability, not a status code
+
+The script first asserted that an expired token returns **404**. On staging it
+returned **500**, and that turned out to be correct behaviour, not a bug: a D1
+miss falls through to the Google Sheets fallback, and staging's
+`PLATFORM_SHEET_ID` is empty, so the fallback itself errors. A request for a
+token that *never existed* returns exactly the same 500.
+
+So the status code is environment-dependent (production, with a real sheet ID,
+resolves the miss and 404s) while the property Issue 071 actually claims is that
+an expired token is **not distinguishable** from a typo. The script now compares
+the full status **and body** of the expired token against a live control request
+for a random unknown token, and requires them to be identical. That assertion is
+environment-independent and also catches an oracle hiding in a response body
+rather than a status line.
+
+### Controlled proof that the window really applies
+
+Same attendee, same token, same 400-day age — only the stored *format* differs:
+
+| stored `checked_in_at` | HTTP | meaning |
+| --- | --- | --- |
+| `2025-08-08 18:55:31` | **200** | not RFC 3339 → parser fails **open** → token still usable |
+| `2025-08-08T18:55:31.000+00:00` | **500** | parsed → window applied → identical to an unknown token |
+| `2026-09-12T18:53:52.574+00:00` (restored) | **200** | back to normal |
+
+The middle row is the window working on a real deployed Worker. The first row is
+the fail-open path, reached on demand. Because a non-applied window shows up as
+`200`, the script's step 2 genuinely discriminates — it is not vacuously green.
+
+### A seed script was silently disabling the window
+
+`worker/scripts/seed-staging.sh` wrote `checked_in_at` with SQLite's
+`datetime('now')`, which renders `2026-09-11 19:15:19` — space separator, no UTC
+offset. The real check-in handlers (`handlers/checkin.rs:144`,
+`virtual_checkin.rs:67`) write `chrono::Utc::now().to_rfc3339()`. The seeded
+format is therefore rejected by `parse_from_rfc3339`, and **every seeded
+attendee had the replay window disabled** while looking checked in.
+
+This is the fail-open branch behaving as designed, but it meant staging data
+disagreed with production, and any future validation run against seeded rows
+would have been quietly meaningless. The seed also never set `claim_token`, so
+the claim path could not be exercised at all.
+
+Fixed: the seed now emits
+`strftime('%Y-%m-%dT%H:%M:%f+00:00','now')` and seeds a deterministic
+`claim_token`. Production data was never affected — all 91 checked-in production
+rows already store RFC 3339 with an offset, which is why the window will
+genuinely enforce there.
+
+### Not yet validated
+
+- The **production** 180-day value has not been deployed; staging runs 30 days.
+- The POST claim path was not exercised (the GET lookup shares the same resolver
+  and policy argument, and POST would mint).

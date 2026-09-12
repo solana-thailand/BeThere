@@ -37,94 +37,17 @@ TIMESTAMP=$(date +%s)
 SOURCE_EVENT_ID="${SOURCE_EVENT_ID:-rollover-full-src-$TIMESTAMP}"
 TARGET_EVENT_ID="${TARGET_EVENT_ID:-rollover-full-tgt-$TIMESTAMP}"
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-PASS=0
-FAIL=0
-SKIP=0
-
-# --- Helpers ---
-pass() { PASS=$((PASS + 1)); echo -e "  ${GREEN}✅ PASS${NC} $1"; }
-fail() { FAIL=$((FAIL + 1)); echo -e "  ${RED}❌ FAIL${NC} $1"; }
-skip() { SKIP=$((SKIP + 1)); echo -e "  ${YELLOW}⏭️  SKIP${NC} $1"; }
-info() { echo -e "  ${CYAN}ℹ️  INFO${NC} $1"; }
-warn() { echo -e "  ${YELLOW}⚠️  WARN${NC} $1"; }
-section() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
-
-check_json() {
-    local response="$1"
-    local key="$2"
-    local expected="$3"
-    local actual
-    actual=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin)$key)" 2>/dev/null || echo "PARSE_ERROR")
-    if [ "$actual" = "$expected" ]; then
-        return 0
-    else
-        echo "     expected: $expected"
-        echo "     actual:   $actual"
-        return 1
-    fi
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Shared helpers — see .issues/076.
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/solana.sh
+source "$SCRIPT_DIR/lib/solana.sh"
 
 # Escrow program ID. Source of truth is `bethere-escrow/src/lib.rs`
 # (`declare_id!`); overridable so the script can run against a locally
 # redeployed program.
 ESCROW_PROGRAM="${ESCROW_PROGRAM:-C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T}"
-
-# Assert that an escrow address handed to us by the Worker is a real account
-# owned by the escrow program.
-#
-# The address arrives in an API response, so nothing downstream proves it is a
-# genuine EventEscrow PDA. Every later check reads it indirectly — vault
-# balances go through `spl-token balance --owner "$ADDR"`, which reports "0" for
-# a wrong address rather than an error, so a bad address would surface as a
-# plausible-looking balance instead of a failure. `test_escrow_devnet.sh` has
-# this check; the rollover scripts did not (.issues/072).
-assert_escrow_owned_by_program() {
-    local label="$1" addr="$2" account_info owner
-    case "$addr" in
-        "")
-            case "${SKIP_SETUP:-false}" in
-                true) skip "$label escrow ownership — address not captured in --skip-setup mode" ;;
-                *) fail "$label escrow address is empty — nothing to verify" ;;
-            esac
-            return
-            ;;
-    esac
-    account_info=$(solana account "$addr" --url "$RPC_URL" 2>&1 || echo "NOT_FOUND")
-    # `solana account` prints capitalized, line-anchored field names
-    # (`Owner:`, `Length:` — verified against solana-cli 3.1.10). Matched
-    # case-insensitively and anchored: unanchored would also hit the hexdump,
-    # and a case-sensitive lowercase pattern never matches at all, which is how
-    # the equivalent check in `test_escrow_devnet.sh` silently never passed.
-    if ! echo "$account_info" | grep -qi "^length:"; then
-        fail "$label escrow PDA not found on-chain: $addr"
-        return
-    fi
-    owner=$(echo "$account_info" | grep -i "^owner:" | awk '{print $2}' || echo "?")
-    case "$owner" in
-        "$ESCROW_PROGRAM") pass "$label escrow owned by the escrow program ($addr)" ;;
-        *) fail "$label escrow $addr owned by $owner, expected $ESCROW_PROGRAM" ;;
-    esac
-}
-
-sign_and_submit_tx() {
-    local tx_b64="$1"
-    local keypair_path="$2"
-    local rpc_url="${3:-$RPC_URL}"
-    # The signer travels as a path and the RPC URL via the environment, so
-    # neither lands in argv, where `ps` exposes it to any local user
-    # (.issues/073). sign_and_submit.py reads the file itself.
-    SIGNER_KEYPAIR_PATH="$keypair_path" \
-    SOLANA_RPC_URL="$rpc_url" \
-        python3 "$(dirname "$0")/sign_and_submit.py" "$tx_b64"
-}
 
 # --- Parse args ---
 SKIP_SETUP=false
