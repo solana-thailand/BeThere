@@ -74,9 +74,25 @@ CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 # claim for as long as the token is accepted. This bounds that window to N
 # seconds after the attendee's CHECK-IN (not token issuance: the token is minted
 # at registration and reused, so an issuance anchor would expire attendees
-# mid-event). 2592000 = 30 days. "0" disables the check - the kill switch if it
-# ever denies a real attendee.
-CLAIM_TOKEN_TTL_SECS = "2592000"
+# mid-event). "0" disables the check - the kill switch if it ever denies a real
+# attendee.
+#
+# PRODUCTION RUNS A WIDER MIGRATION WINDOW THAN STAGING, ON PURPOSE.
+# The window is measured from `checked_in_at`, a column that already has values
+# on every row, so switching it on is RETROACTIVE - it takes effect for past
+# check-ins the instant it deploys, and no grace period is possible. Measured
+# against production D1 on 2026-09-13: 85 attendees were checked in but had not
+# claimed, and 71 of them had checked in more than 30 days earlier. Deploying
+# 30 days would therefore have revoked a real entitlement for 71 people. The
+# oldest unclaimed check-in was 139 days old (oldest check-in of any kind was
+# under 150 days), and all 91 checked-in rows store RFC 3339 with an offset, so
+# the window genuinely applies to all of them rather than failing open.
+# 15552000 = 180 days covers every outstanding claim with >= 41 days of
+# headroom while still replacing an unbounded window with a bounded one.
+# TIGHTEN THIS TO 2592000 (30 days) once the backlog has drained - tracked in
+# .issues/071_capability_token_in_url_platform_logs.md. Re-run the backlog
+# query there before tightening; do not lower it on a hunch.
+CLAIM_TOKEN_TTL_SECS = "15552000"
 # Telegram Login Widget bot username (public). The widget stays OFF until the
 # TELEGRAM_BOT_TOKEN secret is also set — see /api/auth/telegram/config.
 TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
@@ -260,6 +276,10 @@ name = "bethere-staging"
 # environment"). Below mirrors production and overrides the env-specific ones.
 SERVER_URL = "https://bethere-staging.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere-staging.solana-thailand.workers.dev/claim"
+# Deliberately TIGHTER than production (which runs a 180-day migration window
+# for its real unclaimed backlog - see the [vars] comment). Staging data is
+# disposable, so it keeps the 30-day target value and stays the environment
+# where the deny path is actually exercised before prod ever tightens.
 CLAIM_TOKEN_TTL_SECS = "2592000"
 # Keep outbound notifications and NFT minting fail-closed in staging until their
 # staging-only credentials and resources are deliberately configured.

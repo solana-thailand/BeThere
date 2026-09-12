@@ -194,6 +194,67 @@ Before releasing, decide which of these applies:
 Recommendation: **1**, falling back to **2** if the count is non-zero. The kill
 switch (`0`) stays the rollback for either.
 
+### Measured against production D1 — 2026-09-13 → option 2 taken
+
+Option 1 was checked and **did not apply**: the count was not zero, it was most
+of the backlog.
+
+| metric | value |
+| --- | --- |
+| attendee rows | 477 |
+| checked in | 91 |
+| checked in, `claimed_at IS NULL` | 85 |
+| of those, checked in > 30 days ago | **71** |
+| of those, checked in > 90 days ago | 43 |
+| of those, checked in > 120 days ago | 22 |
+| of those, checked in > 150 days ago | 0 |
+| oldest unclaimed check-in | **139 days** |
+| oldest check-in of any kind | < 150 days |
+
+Shipping the 30-day default would have revoked a real, unclaimed entitlement for
+**71 people** on the deploy that enabled it.
+
+The window also genuinely applies to all of them — it does not quietly fail
+open. All 91 checked-in rows store an RFC 3339 timestamp with an explicit offset
+(`2026-05-24T08:08:11.774+00:00`), which is what `parse_from_rfc3339` accepts;
+zero rows use the space-separated `YYYY-MM-DD HH:MM:SS` form that other columns
+in this table (`created_at`, `updated_at`) use and that the parser would reject
+into a fail-open `None`. This was worth confirming: had the stored format been
+the space-separated one, the feature would have been inert in production while
+looking enabled.
+
+**Decision: option 2.** Production ships `CLAIM_TOKEN_TTL_SECS = "15552000"`
+(180 days) — past the 139-day oldest outstanding claim with >= 41 days of
+headroom. Staging deliberately stays at `2592000` (30 days) so the deny path is
+exercised somewhere before production ever tightens. Both values are commented
+in `worker/wrangler.toml` with this rationale.
+
+Note the population is **all checked-in rows, not just unclaimed ones**: the same
+token also authorises the quiz and adventure paths, so an attendee who already
+claimed their NFT can still be locked out of those. That is why the 180-day
+figure is chosen against the oldest check-in of any kind, not just the oldest
+unclaimed one.
+
+#### To tighten later (the actual follow-up)
+
+Re-run the backlog query and only tighten when the > 30 day bucket is zero or
+deliberately written off. Do not lower it on a hunch.
+
+```sh
+cd worker && npx wrangler d1 execute bethere-db --remote --json --command \
+  "SELECT COUNT(*) AS checked_in_unclaimed,
+          SUM(CASE WHEN checked_in_at <= datetime('now','-30 days') THEN 1 ELSE 0 END) AS older_than_30d,
+          CAST(julianday('now') - julianday(MIN(checked_in_at)) AS INTEGER) AS oldest_age_days
+     FROM attendees
+    WHERE checked_in_at IS NOT NULL AND TRIM(checked_in_at) <> '' AND claimed_at IS NULL;"
+```
+
+Caveat on that query: `datetime('now', ...)` renders `YYYY-MM-DD HH:MM:SS` while
+the column is `YYYY-MM-DDTHH:MM:SS...`, so the string comparison is exact only
+because the date portions differ — it can misbucket a row checked in on the
+boundary day itself. It is sound for sizing a backlog, not for deciding a single
+attendee's fate. `julianday()` does parse the `T` and the offset correctly.
+
 ### Remaining
 
 - **Option 3 stays open** as the real fix, for the next claim-flow change. This
@@ -202,3 +263,7 @@ switch (`0`) stays the rollback for either.
 - The 30-day default is a judgement call, not a measured one. If claim telemetry
   shows attendees reliably claim within hours, shorten it — the knob is per
   environment and needs no code change.
+- **Production is at 180 days, not 30.** That is a migration window for the
+  measured backlog above, not the intended steady state. Tightening it to
+  `2592000` once the backlog drains is an outstanding task, with the query to
+  gate it on recorded above.
