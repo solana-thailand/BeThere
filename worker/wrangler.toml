@@ -92,6 +92,11 @@ CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 # TIGHTEN THIS TO 2592000 (30 days) once the backlog has drained - tracked in
 # .issues/071_capability_token_in_url_platform_logs.md. Re-run the backlog
 # query there before tightening; do not lower it on a hunch.
+#
+# DO NOT DELETE THIS LINE TO "unset" THE WINDOW. An absent or non-numeric value
+# falls back to DEFAULT_CLAIM_TOKEN_TTL_SECS in worker/src/claim/ttl.rs, which
+# is 30 days - the value measured above as revoking 71 real entitlements. The
+# way to disable the check is an explicit "0", not removal.
 CLAIM_TOKEN_TTL_SECS = "15552000"
 # Telegram Login Widget bot username (public). The widget stays OFF until the
 # TELEGRAM_BOT_TOKEN secret is also set — see /api/auth/telegram/config.
