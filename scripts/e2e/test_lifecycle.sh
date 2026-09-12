@@ -22,27 +22,16 @@ ORGANIZER_WALLET=$(solana address --url devnet 2>/dev/null)
 EVENT_ID="${EVENT_ID:-lifecycle-$(date +%s)}"
 RPC_URL="https://api.devnet.solana.com"
 
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Shared helpers — see .issues/076.
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=lib/solana.sh
+source "$SCRIPT_DIR/lib/solana.sh"
 
-pass() { echo -e "  ${GREEN}✅ PASS${NC} $1"; }
-fail() { echo -e "  ${RED}❌ FAIL${NC} $1"; }
-info() { echo -e "  ${CYAN}ℹ️  INFO${NC} $1"; }
-warn() { echo -e "  ${YELLOW}⚠️  WARN${NC} $1"; }
-section() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
-
-sign_and_submit() {
-    local tx_b64="$1"
-    # Path + environment, never argv: `cat`-ing the keypair onto the command
-    # line exposed the secret key via `ps` (.issues/073).
-    SIGNER_KEYPAIR_PATH="$HOME/.config/solana/id.json" \
-    SOLANA_RPC_URL="$RPC_URL" \
-        python3 "$(dirname "$0")/sign_and_submit.py" "$tx_b64"
-}
+# This script always signs with the default Solana CLI keypair; the shared
+# helper takes the path explicitly.
+sign_and_submit() { sign_and_submit_tx "$1" "$HOME/.config/solana/id.json"; }
 
 REUSE=false
 for arg in "$@"; do
