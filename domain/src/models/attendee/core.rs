@@ -91,6 +91,14 @@ impl Attendee {
         ParticipationType::parse(&self.participation_type)
     }
 
+    /// Whether this attendee belongs in the legacy online-capacity bucket.
+    ///
+    /// This intentionally differs from `!is_in_person()`: retrospective
+    /// learners are neither live in-person nor live online attendees.
+    pub fn counts_toward_online_track(&self) -> bool {
+        self.participation_type_enum().counts_toward_online_track()
+    }
+
     pub fn display_name(&self) -> &str {
         if self.name.is_empty() {
             &self.email

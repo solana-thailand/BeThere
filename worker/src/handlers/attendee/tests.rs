@@ -68,4 +68,8 @@ fn normalize_override_rejects_junk_and_empty() {
         normalize_override("TBD"),
         Err(AppError::Validation(_))
     ));
+    assert!(matches!(
+        normalize_override("retrospective"),
+        Err(AppError::Validation(_))
+    ));
 }

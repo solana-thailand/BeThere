@@ -48,6 +48,8 @@ fn resolve_participation_type_defaults_by_format() {
         resolve_participation_type(&EventFormat::Hybrid, None).unwrap(),
         "in_person"
     );
+    assert!(resolve_participation_type(&EventFormat::Hybrid, Some("retrospective")).is_err());
+    assert!(resolve_participation_type(&EventFormat::Hybrid, Some("walkin")).is_err());
 }
 
 /// enforce_capacity judges the registering attendee via ParticipationType::parse

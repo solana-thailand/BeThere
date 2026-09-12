@@ -91,6 +91,18 @@ impl ParticipationType {
         }
     }
 
+    /// Whether this value belongs in the legacy online-capacity bucket.
+    ///
+    /// Older sheets used a catch-all rule: every value that was not
+    /// in-person consumed an online spot. Keep that behavior for `Other` so
+    /// historical capacity data does not change, but make the deliberate
+    /// exception explicit: a retrospective learner was not registered for a
+    /// live event and must never consume a live online spot or appear in an
+    /// online-registration total.
+    pub fn counts_toward_online_track(self) -> bool {
+        matches!(self, Self::Online | Self::Other)
+    }
+
     /// Canonicalize a raw participation_type string into a typed value.
     ///
     /// Handles all known production variants via case-insensitive substring

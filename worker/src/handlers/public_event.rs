@@ -515,7 +515,7 @@ async fn count_attendees_by_track(
     for attendee in &attendees {
         if attendee.is_in_person() {
             in_person_count += 1;
-        } else {
+        } else if attendee.counts_toward_online_track() {
             online_count += 1;
         }
     }

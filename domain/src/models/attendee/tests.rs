@@ -295,6 +295,21 @@ fn test_participation_type_as_str_and_default() {
 }
 
 #[test]
+fn retrospective_is_excluded_from_the_live_online_bucket() {
+    // Preserve the pre-existing catch-all behavior for old unknown values,
+    // while ensuring post-event learning leads can never mutate live metrics.
+    assert!(ParticipationType::Online.counts_toward_online_track());
+    assert!(ParticipationType::Other.counts_toward_online_track());
+    assert!(!ParticipationType::InPerson.counts_toward_online_track());
+    assert!(!ParticipationType::Retrospective.counts_toward_online_track());
+
+    assert!(make_attendee("online").counts_toward_online_track());
+    assert!(make_attendee("test").counts_toward_online_track());
+    assert!(!make_attendee("in_person").counts_toward_online_track());
+    assert!(!make_attendee("retrospective").counts_toward_online_track());
+}
+
+#[test]
 fn test_participation_type_display() {
     // display() is the inverse of parse() for the two participation modes
     // and is what gets written to the Google Sheet (organizer-facing).

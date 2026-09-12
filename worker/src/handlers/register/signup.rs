@@ -786,6 +786,8 @@ pub async fn register_attendee(
 /// `ParticipationType::as_str()`. The Google Sheet append path must convert
 /// this to display-case via `ParticipationType::display()` for organizer-facing
 /// cells; everything else (D1, capacity checks, logging) consumes canonical.
+/// `retrospective` is intentionally rejected here: it is reserved for the
+/// completed-event learning flow and cannot be chosen for a live registration.
 pub(super) fn resolve_participation_type(
     format: &EventFormat,
     user_choice: Option<&str>,
@@ -798,7 +800,14 @@ pub(super) fn resolve_participation_type(
             None => ParticipationType::InPerson,
         },
     };
-    Ok(resolved.as_str().to_string())
+    match resolved {
+        ParticipationType::InPerson | ParticipationType::Online => {
+            Ok(resolved.as_str().to_string())
+        }
+        ParticipationType::Retrospective | ParticipationType::Other => Err(AppError::Validation(
+            "participation_type must be in-person or online".to_string(),
+        )),
+    }
 }
 
 /// Split a full name into (first_name, last_name).

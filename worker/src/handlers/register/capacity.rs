@@ -40,7 +40,7 @@ pub(super) async fn enforce_capacity(
     for a in &attendees {
         if a.is_in_person() {
             in_person_count += 1;
-        } else {
+        } else if a.counts_toward_online_track() {
             online_count += 1;
         }
     }
