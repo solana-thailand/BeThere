@@ -45,7 +45,7 @@ pub async fn get_pr_pack(
 
     tracing::info!(
         event_id = %event.id,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "pr pack generated"
     );
 

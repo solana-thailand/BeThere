@@ -612,7 +612,13 @@ pub async fn get_attendee_by_claim_token(
 ) -> Result<Option<Attendee>, String> {
     // D1-first: try by claim_token index
     if let Some(ref d1) = state.d1 {
-        match crate::db::attendees::get_attendee_by_claim_token(d1, claim_token).await {
+        match crate::db::attendees::get_attendee_by_claim_token(
+            d1,
+            claim_token,
+            state.claim_token_policy(),
+        )
+        .await
+        {
             Ok(Some(attendee)) => {
                 tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 hit: attendee by claim_token");
                 return Ok(Some(attendee));
@@ -626,11 +632,15 @@ pub async fn get_attendee_by_claim_token(
         }
     }
 
-    // Sheets fallback (no KV cache — Phase 2d)
+    // Sheets fallback (no KV cache — Phase 2d). The replay window applies here
+    // too: D1 is primary, but a D1 outage must not quietly restore an unbounded
+    // token lifetime (Issue 071).
     let attendees = get_attendees(state, sheet_id, sheet_name, kv).await?;
+    let policy = state.claim_token_policy();
     let attendee = attendees
         .into_iter()
-        .find(|a| a.claim_token.as_deref() == Some(claim_token));
+        .find(|a| a.claim_token.as_deref() == Some(claim_token))
+        .filter(|a| !policy.is_expired(a.checked_in_at.as_deref()));
     Ok(attendee)
 }
 
@@ -648,7 +658,14 @@ pub async fn get_attendee_with_claim_counts(
 ) -> Result<(Option<Attendee>, usize, usize), String> {
     // D1-first: single query by event_id
     if let (Some(d1), Some(eid)) = (&state.d1, event_id) {
-        match crate::db::attendees::get_attendee_with_claim_counts(d1, claim_token, eid).await {
+        match crate::db::attendees::get_attendee_with_claim_counts(
+            d1,
+            claim_token,
+            eid,
+            state.claim_token_policy(),
+        )
+        .await
+        {
             Ok((Some(attendee), checked_in, claimed)) => {
                 tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 hit: attendee with claim counts");
                 return Ok((Some(attendee), checked_in, claimed));
@@ -679,7 +696,15 @@ pub async fn get_attendee_with_claim_counts(
             Some((token, a))
         })
         .collect();
-    let attendee = claim_map.get(claim_token).cloned();
+    // The replay window applies to the Sheets fallback too. An expired token
+    // makes the D1 branch above return `None`, which falls through to here — so
+    // without this filter the fallback would hand back the very attendee the
+    // window just withheld (Issue 071).
+    let policy = state.claim_token_policy();
+    let attendee = claim_map
+        .get(claim_token)
+        .cloned()
+        .filter(|a| !policy.is_expired(a.checked_in_at.as_deref()));
 
     Ok((attendee, total_checked_in, total_claimed))
 }

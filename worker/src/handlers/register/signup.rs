@@ -59,7 +59,18 @@ pub async fn register_attendee(
     } else {
         None
     };
-    tracing::info!(%email, is_wallet_session, "registration identity resolved");
+    // Issue 070: the log stream gets keyed fingerprints, never the raw email or
+    // wallet. Bound once here so the downstream sites below reuse the value
+    // rather than re-hashing on every line.
+    let attendee_fingerprint = state.log_fingerprint(&email);
+    let session_wallet_fingerprint = session_wallet
+        .as_deref()
+        .map(|wallet| state.log_fingerprint(wallet));
+    tracing::info!(
+        attendee_fingerprint = %attendee_fingerprint,
+        is_wallet_session,
+        "registration identity resolved"
+    );
 
     // For wallet sessions, decide up-front whether this email is brand-new.
     // Must be evaluated BEFORE we upsert the contact/attendee below (which would
@@ -217,7 +228,7 @@ pub async fn register_attendee(
         // mint their badge. Block the read and direct them to authenticate.
         if is_wallet_session && !credit_identity_ok {
             tracing::warn!(
-                %email, %slug, wallet = ?session_wallet,
+                attendee_fingerprint = %attendee_fingerprint, %slug, wallet_fingerprint = ?session_wallet_fingerprint,
                 "blocked wallet-session duplicate-return for unproven email (IDOR guard)"
             );
             return Err(AppError::Validation(
@@ -225,7 +236,7 @@ pub async fn register_attendee(
             )
             .into());
         }
-        tracing::info!(%email, %slug, "registration duplicate — returning existing attendee");
+        tracing::info!(attendee_fingerprint = %attendee_fingerprint, %slug, "registration duplicate — returning existing attendee");
         let claim_token = existing.claim_token.clone().unwrap_or_default();
         // Fetch deposit status (D1-first, KV fallback)
         let deposit = crate::event_store::get_deposit_status_with_fallback(
@@ -313,7 +324,7 @@ pub async fn register_attendee(
     // Brand-new emails (Plan 017 wallet→email bind) and proven owners are allowed.
     if is_wallet_session && !credit_identity_ok && !email_is_new {
         tracing::warn!(
-            %email, %slug, wallet = ?session_wallet,
+            attendee_fingerprint = %attendee_fingerprint, %slug, wallet_fingerprint = ?session_wallet_fingerprint,
             "blocked wallet-session reservation under an existing unowned email (spoofing guard)"
         );
         return Err(AppError::Validation(
@@ -358,7 +369,7 @@ pub async fn register_attendee(
                 credit_amount_applied = required_usdc;
             }
             if let Some(ref method) = credit_covered_method {
-                tracing::info!(%email, %slug, %method, amount = credit_amount_applied, "deposit covered by rolling credit (ledger)");
+                tracing::info!(attendee_fingerprint = %attendee_fingerprint, %slug, %method, amount = credit_amount_applied, "deposit covered by rolling credit (ledger)");
             }
         }
     }
@@ -402,14 +413,14 @@ pub async fn register_attendee(
         // rather than a hard failure — and importantly, no credit is spent (that
         // happens below, only if we get past this).
         if e.to_ascii_uppercase().contains("UNIQUE") {
-            tracing::info!(%email, %event_id, "duplicate registration blocked by unique index");
+            tracing::info!(attendee_fingerprint = %attendee_fingerprint, %event_id, "duplicate registration blocked by unique index");
             return Err(AppError::Validation(
                 "You're already registered for this event — check your email or 'My Registrations'."
                     .to_string(),
             )
             .into());
         }
-        tracing::error!(%api_id, %email, %event_id, error = %e, "D1 attendee write failed — failing registration (source of truth)");
+        tracing::error!(%api_id, attendee_fingerprint = %attendee_fingerprint, %event_id, error = %e, "D1 attendee write failed — failing registration (source of truth)");
         return Err(AppError::Internal(
             "could not save your registration — please try again".to_string(),
         )
@@ -479,10 +490,10 @@ pub async fn register_attendee(
         if !covered {
             match coverage {
                 Ok(crate::db::credit_coverage::ApplyCreditOutcome::ConflictingDeposit) => {
-                    tracing::error!(%api_id, %email, "credit application refused because another deposit owns the registration");
+                    tracing::error!(%api_id, attendee_fingerprint = %attendee_fingerprint, "credit application refused because another deposit owns the registration");
                 }
                 Err(ref e) => {
-                    tracing::error!(%api_id, %email, error = %e, "atomic credit application failed");
+                    tracing::error!(%api_id, attendee_fingerprint = %attendee_fingerprint, error = %e, "atomic credit application failed");
                 }
                 _ => {}
             }
@@ -519,7 +530,7 @@ pub async fn register_attendee(
             && let Err(e) =
                 crate::event_store::save_thb_deposit(kv_store, &comp, state.d1.as_deref()).await
         {
-            tracing::warn!(%api_id, %email, error = %e, "staff comp deposit record save failed");
+            tracing::warn!(%api_id, attendee_fingerprint = %attendee_fingerprint, error = %e, "staff comp deposit record save failed");
         }
     }
 
@@ -553,7 +564,7 @@ pub async fn register_attendee(
         .await
         {
             tracing::warn!(
-                %email,
+                attendee_fingerprint = %attendee_fingerprint,
                 error = %e,
                 "D1 contact upsert failed (non-fatal)"
             );
@@ -594,6 +605,7 @@ pub async fn register_attendee(
             photo_consent_given: body.photo_consent_given.unwrap_or(false),
             consent_marketing: body.consent_marketing.unwrap_or(false),
             profile_fields,
+            redactor: state.log_redactor(),
         })
         .await;
     }
@@ -607,6 +619,7 @@ pub async fn register_attendee(
         let bg_first_name = first_name.to_string();
         let bg_last_name = last_name.to_string();
         let bg_email = email.clone();
+        let bg_fingerprint = attendee_fingerprint.clone();
         let bg_claim_token = claim_token.clone();
         let bg_participation_type = participation_type_display.clone();
         let bg_now = now.clone();
@@ -676,7 +689,7 @@ pub async fn register_attendee(
                 )
                 .await
                 {
-                    tracing::warn!(%bg_email, error = %e, "bg_sync: contacts upsert failed");
+                    tracing::warn!(attendee_fingerprint = %bg_fingerprint, error = %e, "bg_sync: contacts upsert failed");
                 }
             }
 
@@ -720,7 +733,7 @@ pub async fn register_attendee(
         )
         .await
         {
-            tracing::warn!(%email, error = %e, "Sheets append row failed (non-fatal)");
+            tracing::warn!(attendee_fingerprint = %attendee_fingerprint, error = %e, "Sheets append row failed (non-fatal)");
         }
 
         upsert_contact_after_registration(
@@ -760,7 +773,7 @@ pub async fn register_attendee(
 
     tracing::info!(
         %api_id,
-        %email,
+        attendee_fingerprint = %attendee_fingerprint,
         %slug,
         %participation_type,
         "attendee self-registered"

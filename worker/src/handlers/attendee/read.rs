@@ -28,7 +28,11 @@ pub async fn get_attendee(
     Path(id): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("fetching attendee {id} (requested by: {})", claims.email);
+    tracing::info!(
+        attendee_id = %id,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
+        "fetching attendee",
+    );
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 

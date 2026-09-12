@@ -18,7 +18,7 @@ pub async fn seed_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(staff_email = %claims.email, "seed event requested");
+    tracing::info!(staff_fingerprint = %state.log_fingerprint(&claims.email), "seed event requested");
 
     // Role check: SuperAdmin only
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
@@ -45,7 +45,7 @@ pub async fn seed_event(
     tracing::info!(
         event_id = %config.id,
         event_name = %config.name,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "event seeded",
     );
 
@@ -65,7 +65,7 @@ pub async fn reseed_kv_from_d1(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(staff_email = %claims.email, "reseed KV from D1 requested");
+    tracing::info!(staff_fingerprint = %state.log_fingerprint(&claims.email), "reseed KV from D1 requested");
 
     // Role check: SuperAdmin only
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
@@ -89,7 +89,7 @@ pub async fn reseed_kv_from_d1(
             AppError::Internal(e.to_string())
         })?;
 
-    tracing::info!(count, staff_email = %claims.email, "KV reseeded from D1");
+    tracing::info!(count, staff_fingerprint = %state.log_fingerprint(&claims.email), "KV reseeded from D1");
 
     Ok(ApiOk::new(json!({
         "synced": count,
@@ -108,7 +108,7 @@ pub async fn migrate_quiz(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(staff_email = %claims.email, "quiz migration requested");
+    tracing::info!(staff_fingerprint = %state.log_fingerprint(&claims.email), "quiz migration requested");
 
     // Role check: SuperAdmin only
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
@@ -138,7 +138,7 @@ pub async fn migrate_quiz(
     tracing::info!(
         event_id = %result.event_id,
         migrated = %result.migrated,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "quiz migration completed",
     );
 

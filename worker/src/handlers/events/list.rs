@@ -80,7 +80,7 @@ pub async fn list_events(
     Extension(claims): Extension<Claims>,
     Query(query): Query<ListEventsQuery>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(staff_email = %claims.email, "list events requested");
+    tracing::info!(staff_fingerprint = %state.log_fingerprint(&claims.email), "list events requested");
 
     let limit = query.limit.unwrap_or(DEFAULT_PAGE_SIZE);
     if !(1..=MAX_PAGE_SIZE).contains(&limit) {

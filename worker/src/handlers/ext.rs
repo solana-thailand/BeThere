@@ -49,10 +49,10 @@ pub async fn resolve_event_with_access(
 
     if let Err(e) = crate::auth::check_event_access(&claims.email, state, &event).await {
         tracing::warn!(
-            "access denied: {} has no access to event '{}' ({})",
-            claims.email,
-            event.name,
-            event.id,
+            staff_fingerprint = %state.log_fingerprint(&claims.email),
+            event_id = %event.id,
+            event_name = %event.name,
+            "access denied: actor has no access to event",
         );
         return Err(AppError::Forbidden(e));
     }

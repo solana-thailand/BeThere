@@ -429,7 +429,8 @@ pub async fn backfill_wallets_handler(
         }
     };
 
-    let result = workflows::run_backfill_workflow(&kv, &rpc_url, &event_ids).await;
+    let result =
+        workflows::run_backfill_workflow(&kv, &rpc_url, &event_ids, state.log_redactor()).await;
 
     Ok(ApiOk::new(BackfillWalletsResponse {
         scanned: result.scanned,

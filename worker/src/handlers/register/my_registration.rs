@@ -59,9 +59,10 @@ pub async fn my_registration(
         .iter()
         .find(|a| a.email.eq_ignore_ascii_case(&claims.email))
         .ok_or_else(|| {
+            // No email in the message: `WorkerError` logs error strings verbatim
+            // on any 5xx, and the requester already knows their own address.
             AppError::NotFound(format!(
-                "no registration found for {} at event '{slug}'",
-                claims.email
+                "no registration found for your account at event '{slug}'"
             ))
         })?;
 
@@ -96,7 +97,7 @@ pub async fn my_registration(
     );
 
     tracing::info!(
-        email = %claims.email,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         slug = %slug,
         attendee_id = %attendee.api_id,
         "my-registration lookup successful"
@@ -132,7 +133,12 @@ pub async fn my_registrations(
         let results = my_registrations_from_d1(db, &claims.email, &state)
             .await
             .map_err(AppError::Internal)?;
-        tracing::info!(email = %claims.email, count = results.len(), source = "d1", "my-registrations lookup complete");
+        tracing::info!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            count = results.len(),
+            source = "d1",
+            "my-registrations lookup complete"
+        );
         return Ok(ApiOk::new(results));
     }
 
@@ -282,7 +288,7 @@ pub async fn my_registrations(
         .collect();
 
     tracing::info!(
-        email = %claims.email,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         count = results.len(),
         "my-registrations lookup complete"
     );

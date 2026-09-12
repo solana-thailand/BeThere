@@ -32,7 +32,7 @@ pub async fn delete_attendee(
     Path(id): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(attendee_id = %id, staff_email = %claims.email, "delete attendee request");
+    tracing::info!(attendee_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "delete attendee request");
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     let kv = resolve_kv(&state);
@@ -46,7 +46,14 @@ pub async fn delete_attendee(
     let mut walkin: Option<event_checkin_domain::models::attendee::WalkinAttendee> = None;
     if let Some(db) = state.d1.as_deref() {
         // Try claim_token lookup first
-        if let Ok(Some(a)) = crate::db::attendees::get_attendee_by_claim_token(db, &id).await
+        if let Ok(Some(a)) = crate::db::attendees::get_attendee_by_claim_token(
+            db,
+            &id,
+            // Admin deletion must find the row whatever its age — the
+            // replay window guards claiming, not administration.
+            crate::claim::ClaimTokenPolicy::unrestricted(),
+        )
+        .await
             && a.participation_type == "walkin"
         {
             walkin = Some(event_checkin_domain::models::attendee::WalkinAttendee {
@@ -74,7 +81,7 @@ pub async fn delete_attendee(
         {
             tracing::warn!(
                 event_id = %event.id,
-                email = %email_lower,
+                attendee_fingerprint = %state.log_fingerprint(&email_lower),
                 error = %e,
                 "D1 walk-in delete failed"
             );
@@ -89,8 +96,8 @@ pub async fn delete_attendee(
 
         tracing::info!(
             event_id = %event.id,
-            email = %email_lower,
-            name = %walkin_attendee.name,
+            attendee_fingerprint = %state.log_fingerprint(&email_lower),
+            name_fingerprint = %state.log_fingerprint(&walkin_attendee.name),
             "walk-in attendee deleted"
         );
     } else {
@@ -238,7 +245,7 @@ pub async fn delete_attendee(
             {
                 tracing::warn!(
                     event_id = %event.id,
-                    email = %email_lower,
+                    attendee_fingerprint = %state.log_fingerprint(&email_lower),
                     error = %e,
                     "D1 attendee delete (by email) failed"
                 );
@@ -310,7 +317,7 @@ pub async fn delete_attendee(
         tracing::info!(
             event_id = %event.id,
             attendee_id = %attendee.api_id,
-            name = %attendee.display_name(),
+            name_fingerprint = %state.log_fingerprint(attendee.display_name()),
             row_index = ?sheet_row_to_delete,
             source = %source,
             "attendee deleted"

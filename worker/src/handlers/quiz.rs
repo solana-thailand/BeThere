@@ -285,7 +285,7 @@ pub async fn get_admin_quiz(
     Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
-    tracing::info!(staff_email = %claims.email, "admin quiz read");
+    tracing::info!(staff_fingerprint = %state.log_fingerprint(&claims.email), "admin quiz read");
 
     // Resolve event WITH per-event access (S2: was resolve_event — any staff
     // could read another organizer's quiz incl. the answer key).
@@ -331,7 +331,7 @@ pub async fn put_quiz(
     Json(body): Json<QuizConfig>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_count = body.questions.len(),
         "admin quiz update"
     );
@@ -376,7 +376,7 @@ pub async fn add_quiz_question(
     Json(body): Json<QuizQuestion>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_id = %body.id,
         "admin quiz add question"
     );
@@ -424,7 +424,7 @@ pub async fn update_quiz_question(
     Json(body): Json<QuizQuestion>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_id = %question_id,
         "admin quiz update question"
     );
@@ -468,7 +468,7 @@ pub async fn delete_quiz_question(
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_id = %question_id,
         "admin quiz delete question"
     );
@@ -498,7 +498,7 @@ pub async fn toggle_quiz_question(
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_id = %question_id,
         "admin quiz toggle question"
     );

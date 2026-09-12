@@ -164,9 +164,16 @@ pub(crate) async fn get_attendee_by_id(
 }
 
 /// Fetch a single attendee by claim token from D1.
+///
+/// `policy` is the capability-token replay window (Issue 071). It is a required
+/// parameter rather than an internal default so that every site exchanging a
+/// token for an attendee has to state its intent, and the compiler — not a lint
+/// and not review — catches a new resolution path that skips the window. Admin
+/// and maintenance paths pass [`ClaimTokenPolicy::unrestricted`].
 pub(crate) async fn get_attendee_by_claim_token(
     db: &D1Database,
     claim_token: &str,
+    policy: crate::claim::ClaimTokenPolicy,
 ) -> Result<Option<Attendee>, String> {
     let stmt = db.prepare(
         "SELECT id, event_id, email, name, approval_status, participation_type, \
@@ -214,7 +221,20 @@ pub(crate) async fn get_attendee_by_claim_token(
         format!("D1 get_attendee_by_claim_token deserialize: {e}")
     })?;
 
-    Ok(Some(row.to_attendee()))
+    let attendee = row.to_attendee();
+    match policy.is_expired(attendee.checked_in_at.as_deref()) {
+        // Outside the replay window: behave exactly as an unknown token, so a
+        // replayed URL from the platform request log is indistinguishable from
+        // a typo and leaks nothing about whether the token ever existed.
+        true => {
+            tracing::info!(
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token),
+                "claim token outside its replay window — treating as not found"
+            );
+            Ok(None)
+        }
+        false => Ok(Some(attendee)),
+    }
 }
 
 /// Fetch only the `event_id` for an attendee by claim token.
@@ -443,6 +463,7 @@ pub(crate) async fn get_attendee_with_claim_counts(
     db: &D1Database,
     claim_token: &str,
     event_id: &str,
+    policy: crate::claim::ClaimTokenPolicy,
 ) -> Result<(Option<Attendee>, usize, usize), String> {
     // Targeted query: find attendee by claim_token + count aggregates in one D1 call.
     // Previous version fetched ALL attendees for the event (O(n) data transfer).
@@ -508,11 +529,20 @@ pub(crate) async fn get_attendee_with_claim_counts(
     })?;
 
     let attendee = row.to_attendee();
-    Ok((
-        Some(attendee),
-        row.total_checked_in.unwrap_or(0) as usize,
-        row.total_claimed.unwrap_or(0) as usize,
-    ))
+    let checked_in = row.total_checked_in.unwrap_or(0) as usize;
+    let claimed = row.total_claimed.unwrap_or(0) as usize;
+    // The event-wide counts are not capability-bearing, so they survive an
+    // expired token; only the attendee identity is withheld (Issue 071).
+    match policy.is_expired(attendee.checked_in_at.as_deref()) {
+        true => {
+            tracing::info!(
+                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token),
+                "claim token outside its replay window — treating as not found"
+            );
+            Ok((None, checked_in, claimed))
+        }
+        false => Ok((Some(attendee), checked_in, claimed)),
+    }
 }
 
 /// Count in-person attendees for an event from D1.

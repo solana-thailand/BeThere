@@ -93,6 +93,14 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// The capability-token replay window for this request (Issue 071).
+    ///
+    /// One place turns configuration into a policy, so the window cannot drift
+    /// between the claim, quiz and adventure paths.
+    pub(crate) fn claim_token_policy(&self) -> crate::claim::ClaimTokenPolicy {
+        crate::claim::ClaimTokenPolicy::enforced(self.config.claim_token_ttl_secs)
+    }
+
     /// Build `AppConfig` from Workers environment (called once, cached globally).
     ///
     /// Reads 22+ env vars, creates 2 `HashSet`s, and performs string
@@ -260,8 +268,15 @@ impl AppState {
                         .to_string(),
                 );
             }
+            // The impersonated account is a fingerprint like every other
+            // identifier in the log stream (Issue 070). `build_config` runs
+            // before `AppConfig` exists, so the secret is read directly here;
+            // the fallback matches the one `jwt_secret` itself uses below, so
+            // the value still correlates with the rest of the stream.
+            let log_secret = get_secret(env, "JWT_SECRET")
+                .unwrap_or_else(|_| "bethere_dev_jwt_secret_2026".to_string());
             tracing::warn!(
-                email = %dev_email,
+                identity_fingerprint = %crate::crypto::identity_fingerprint(&dev_email, &log_secret),
                 "⚠️  DEV_MODE enabled — JWT verification bypassed, accepting \"dev-token\" as valid"
             );
         }
@@ -290,6 +305,14 @@ impl AppState {
                 .or_else(|_| get_var(env, "TELEGRAM_BOT_USERNAME"))
                 .unwrap_or_default(),
             slack_webhook_url: get_secret(env, "SLACK_WEBHOOK_URL").unwrap_or_default(),
+            // Issue 071: bounds the replay window opened by carrying capability
+            // tokens in the URL path, where Cloudflare's request log records
+            // them. A non-numeric or absent value falls back to the default;
+            // an explicit `0` disables the check (operational kill switch).
+            claim_token_ttl_secs: get_var(env, "CLAIM_TOKEN_TTL_SECS")
+                .ok()
+                .and_then(|raw| raw.trim().parse::<i64>().ok())
+                .unwrap_or(crate::claim::DEFAULT_CLAIM_TOKEN_TTL_SECS),
         })
     }
 
@@ -405,6 +428,25 @@ impl AppState {
     /// Check if a given email is in the staff emails allowlist.
     pub fn is_staff(&self, email: &str) -> bool {
         self.config.staff_emails.contains(&email.to_lowercase())
+    }
+
+    /// Mint a keyed, one-way correlation value for one identifier (Issue 070).
+    ///
+    /// Use this for every email, wallet address, or transaction signature that
+    /// would otherwise be written into the Worker log stream. Handlers hold
+    /// `AppState`, so this keeps the deployment secret at a single call site
+    /// instead of spelling out `config.jwt_secret` at each `tracing!` field.
+    pub(crate) fn log_fingerprint(&self, identifier: &str) -> String {
+        crate::crypto::identity_fingerprint(identifier, &self.config.jwt_secret)
+    }
+
+    /// Borrow a [`LogRedactor`] to hand down into stateless helpers.
+    ///
+    /// Prefer [`Self::log_fingerprint`] inside a handler. This exists for the
+    /// pure parsers and background tasks that must emit correlatable log fields
+    /// but have no reason to hold `AppState` — or the raw secret — themselves.
+    pub(crate) fn log_redactor(&self) -> crate::crypto::LogRedactor<'_> {
+        crate::crypto::LogRedactor::new(&self.config.jwt_secret)
     }
 }
 

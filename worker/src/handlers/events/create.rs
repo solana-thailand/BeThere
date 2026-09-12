@@ -17,7 +17,7 @@ pub async fn create_event(
     Json(body): Json<CreateEventRequest>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         event_name = %body.name,
         "create event requested",
     );
@@ -63,7 +63,7 @@ pub async fn create_event(
     tracing::info!(
         event_id = %config.id,
         event_name = %config.name,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "event created",
     );
 

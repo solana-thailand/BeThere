@@ -37,7 +37,7 @@ pub async fn hold_deposit_handler(
     tracing::info!(
         attendee_id = %body.attendee_id,
         event_id = %body.event_id,
-        email = %claims.email,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         "hold deposit initiated"
     );
 
@@ -71,8 +71,8 @@ pub async fn hold_deposit_handler(
 
     if !attendee.email.eq_ignore_ascii_case(&claims.email) {
         tracing::warn!(
-            claims_email = %claims.email,
-            attendee_email = %attendee.email,
+            claims_fingerprint = %state.log_fingerprint(&claims.email),
+            attendee_fingerprint = %state.log_fingerprint(&attendee.email),
             attendee_id = %body.attendee_id,
             "hold deposit rejected: email mismatch"
         );
@@ -206,7 +206,7 @@ pub async fn hold_deposit_handler(
     )
     .await
     {
-        tracing::warn!(email = %claims.email, error = %e, "credit Sheets mirror (increment) failed — D1 ledger is authoritative");
+        tracing::warn!(identity_fingerprint = %state.log_fingerprint(&claims.email), error = %e, "credit Sheets mirror (increment) failed — D1 ledger is authoritative");
     }
 
     // 10. Get updated balance from the ledger (source of truth).
@@ -286,7 +286,7 @@ pub async fn credit_balance_handler(
                 .await
                 .unwrap_or_else(|e| {
                     tracing::warn!(
-                        email = %claims.email,
+                        identity_fingerprint = %state.log_fingerprint(&claims.email),
                         error = %e,
                         "credit balance read failed — reporting 0 (display only)"
                     );

@@ -283,3 +283,46 @@ jobs:
 
       - name: quasar test (build SBF program + run SVM suite)
         run: quasar test
+
+  deploy-scripts:
+    name: shellcheck + deploy fallback tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck every tracked shell script
+        # `worker/deploy.sh` used to embed Python inside double-quoted
+        # `python3 -c` arguments, so backticks in the Python comments ran as
+        # shell commands — one of them was a literal `wrangler deploy`
+        # (Issue #065). The gate is fail-closed: it checks every .sh in the
+        # repo minus an explicit deferral list, so a new script is covered
+        # automatically. See scripts/verify/shellcheck_gate.sh.
+        env:
+          # Pinned. Ubuntu's packaged ShellCheck lags, and the versions disagree:
+          # < 0.11 reports trap/indirect-call findings as SC2317 where 0.11
+          # reports SC2329, so an unpinned CI can red a gate that is green on a
+          # developer's machine (and vice versa). The gate prints the version it
+          # ran, so a future mismatch is visible in the log rather than puzzling.
+          SHELLCHECK_VERSION: v0.11.0
+        run: |
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/shellcheck-${SHELLCHECK_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJ --strip-components=1 -C /usr/local/bin "shellcheck-${SHELLCHECK_VERSION}/shellcheck"
+          bash scripts/verify/shellcheck_gate.sh
+
+      - name: Setup Python (3.11+ for tomllib)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install blake3 (wrangler-compatible asset hashing)
+        run: python3 -m pip install --quiet blake3
+
+      - name: Deploy fallback unit tests
+        # MIME mapping (a wrong Content-Type took the frontend down on
+        # 2026-07-26) and metadata binding completeness against the real
+        # wrangler.toml, so the fallback cannot silently drift from it again.
+        env:
+          PYTHONPATH: worker/scripts
+        run: python3 -m unittest discover -s tests/deploy_fallback -t tests/deploy_fallback -v

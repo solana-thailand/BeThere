@@ -130,7 +130,7 @@ pub async fn upload_poster(
         event_id = %event_id,
         key = %key,
         content_type = %image_ct,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "poster uploaded"
     );
 
@@ -195,7 +195,7 @@ pub async fn delete_poster(
 
     tracing::info!(
         event_id = %event_id,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "poster cleared"
     );
 

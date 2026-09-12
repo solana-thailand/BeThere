@@ -155,7 +155,7 @@ pub async fn put_post_event_registration(
         event_id = %event.id,
         open = req.open,
         until_ms = ?effective_until,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "post-event registration toggled"
     );
 

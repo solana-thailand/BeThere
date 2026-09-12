@@ -41,7 +41,9 @@ pub async fn execute_claim(
     // 2. Check walk-in path: D1-only
     let mut walkin: Option<WalkinAttendee> = None;
     if let Some(ref d1) = state.d1
-        && let Ok(Some(a)) = crate::db::attendees::get_attendee_by_claim_token(d1, token).await
+        && let Ok(Some(a)) =
+            crate::db::attendees::get_attendee_by_claim_token(d1, token, state.claim_token_policy())
+                .await
         && a.participation_type == "walkin"
     {
         walkin = Some(WalkinAttendee {
@@ -75,7 +77,13 @@ pub async fn execute_claim(
             // Sheets returned nothing — try D1 fallback
             tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: Sheets miss, trying D1 fallback");
             if let Some(ref d1) = state.d1 {
-                match crate::db::attendees::get_attendee_by_claim_token(d1, token).await {
+                match crate::db::attendees::get_attendee_by_claim_token(
+                    d1,
+                    token,
+                    state.claim_token_policy(),
+                )
+                .await
+                {
                     Ok(Some(a)) => {
                         tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: found in D1 fallback");
                         a
@@ -483,9 +491,9 @@ pub async fn execute_claim(
 
     tracing::info!(
         claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
-        name = %display_name,
+        name_fingerprint = %state.log_fingerprint(&display_name),
         asset_id = %mint_result.asset_id,
-        wallet_address = %wallet_address,
+        wallet_fingerprint = %state.log_fingerprint(wallet_address),
         "claim fulfilled"
     );
 

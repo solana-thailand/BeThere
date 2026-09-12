@@ -80,7 +80,7 @@ pub async fn upsert_user_log(
         let sheet_row = idx + 2;
         update_existing_user(&sheet_id, sheet_row, role, &now, &access_token).await?;
         tracing::info!(
-            staff_email = %email_lower,
+            staff_fingerprint = %state.log_fingerprint(&email_lower),
             sheet_row,
             %role,
             "updated existing user log row"
@@ -97,7 +97,7 @@ pub async fn upsert_user_log(
         )
         .await?;
         tracing::info!(
-            staff_email = %email_lower,
+            staff_fingerprint = %state.log_fingerprint(&email_lower),
             %role,
             "appended new user log row"
         );

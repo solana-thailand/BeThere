@@ -74,8 +74,11 @@ build() {
     # Trunk only copies JS files directly referenced by #[wasm_bindgen(module = "...")].
     # lazy_assets.js is imported by scanner.js/clipboard.js but not by Rust directly,
     # so trunk skips it. Copy manually to avoid module resolution failures at runtime.
-    SNIPPET_DIR="$(ls -d dist/snippets/event-checkin-frontend-*/js 2>/dev/null | head -1)"
-    if [[ -n "$SNIPPET_DIR" && -f js/lazy_assets.js ]]; then
+    # An unmatched glob expands to the literal pattern, so test the directory
+    # itself rather than the string being non-empty.
+    SNIPPET_DIRS=(dist/snippets/event-checkin-frontend-*/js)
+    SNIPPET_DIR="${SNIPPET_DIRS[0]}"
+    if [[ -d "$SNIPPET_DIR" && -f js/lazy_assets.js ]]; then
         cp js/lazy_assets.js "$SNIPPET_DIR/lazy_assets.js"
         echo "📋 Copied js/lazy_assets.js → $SNIPPET_DIR/lazy_assets.js"
     else

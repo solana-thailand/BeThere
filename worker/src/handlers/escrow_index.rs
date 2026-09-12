@@ -31,19 +31,23 @@ pub(crate) async fn apply_rollover_deposit_status(
     d1: Option<&worker::D1Database>,
     kv: Option<&KvStore>,
     event: &OnChainEvent,
+    redactor: crate::crypto::LogRedactor<'_>,
 ) {
     if event.instruction != EscrowInstruction::RolloverDeposit {
         return;
     }
     let Some(ref target_escrow) = event.target_escrow_address else {
-        tracing::warn!(sig = %event.signature, "rollover event has no target_escrow_address");
+        tracing::warn!(
+            sig_fingerprint = %redactor.fingerprint(&event.signature),
+            "rollover event has no target_escrow_address"
+        );
         return;
     };
 
     let target_event_id = escrow_indexer::resolve_event_by_escrow(d1, kv, target_escrow).await;
     let Some(target_id) = target_event_id else {
         tracing::warn!(
-            sig = %event.signature,
+            sig_fingerprint = %redactor.fingerprint(&event.signature),
             target_escrow = %target_escrow,
             "could not resolve target event ID for rollover deposit_status"
         );
@@ -98,10 +102,10 @@ pub(crate) async fn apply_rollover_deposit_status(
 
     let Some(api_id) = attendee_api_id else {
         tracing::warn!(
-            sig = %event.signature,
+            sig_fingerprint = %redactor.fingerprint(&event.signature),
             target_escrow = %target_escrow,
             source_escrow = %event.escrow_address,
-            wallet = %attendee_wallet,
+            wallet_fingerprint = %redactor.fingerprint(attendee_wallet),
             "could not resolve attendee API ID for rollover target deposit_status (tried both target and source events)"
         );
         return;
@@ -124,7 +128,7 @@ pub(crate) async fn apply_rollover_deposit_status(
 
     if existing.is_some() {
         tracing::info!(
-            sig = %event.signature,
+            sig_fingerprint = %redactor.fingerprint(&event.signature),
             target_event_id = %target_id,
             attendee_id = %api_id,
             "DepositStatus already exists on target event, skipping"
@@ -148,7 +152,7 @@ pub(crate) async fn apply_rollover_deposit_status(
             }
             if found == 0 {
                 tracing::warn!(
-                    sig = %event.signature,
+                    sig_fingerprint = %redactor.fingerprint(&event.signature),
                     source_escrow = %event.escrow_address,
                     attendee_id = %api_id,
                     "could not resolve rollover amount from on-chain or source deposit"
@@ -177,7 +181,7 @@ pub(crate) async fn apply_rollover_deposit_status(
         match crate::event_store::save_deposit_status(kv_ref, &deposit_status, d1).await {
             Ok(()) => {
                 tracing::info!(
-                    sig = %event.signature,
+                    sig_fingerprint = %redactor.fingerprint(&event.signature),
                     target_event_id = %target_id,
                     attendee_id = %api_id,
                     "created DepositStatus for rollover target event"
@@ -185,7 +189,7 @@ pub(crate) async fn apply_rollover_deposit_status(
             }
             Err(e) => {
                 tracing::warn!(
-                    sig = %event.signature,
+                    sig_fingerprint = %redactor.fingerprint(&event.signature),
                     error = %e,
                     "failed to save DepositStatus for rollover target"
                 );
@@ -270,7 +274,7 @@ pub async fn onchain_webhook_handler(
             continue;
         }
 
-        let Some(event) = escrow_indexer::parse_helius_transaction(tx) else {
+        let Some(event) = escrow_indexer::parse_helius_transaction(tx, state.log_redactor()) else {
             summary.skipped_no_event += 1;
             continue;
         };
@@ -282,7 +286,7 @@ pub async fn onchain_webhook_handler(
         let Some(event_id) = event_id else {
             tracing::warn!(
                 escrow = %event.escrow_address,
-                sig = %event.signature,
+                sig_fingerprint = %state.log_fingerprint(&event.signature),
                 "no off-chain event found for escrow address, skipping"
             );
             summary.skipped_no_event += 1;
@@ -292,7 +296,7 @@ pub async fn onchain_webhook_handler(
         match escrow_indexer::save_onchain_event(db, &event_id, event.clone()).await {
             Ok(true) => {
                 tracing::info!(
-                    sig = %event.signature,
+                    sig_fingerprint = %state.log_fingerprint(&event.signature),
                     instruction = %event.instruction,
                     event_id = %event_id,
                     "indexed on-chain event via webhook"
@@ -325,7 +329,7 @@ pub async fn onchain_webhook_handler(
                 }
 
                 // For RolloverDeposit: create DepositStatus on the target event
-                apply_rollover_deposit_status(Some(db), kv, &event).await;
+                apply_rollover_deposit_status(Some(db), kv, &event, state.log_redactor()).await;
 
                 summary.indexed += 1;
             }
@@ -334,7 +338,7 @@ pub async fn onchain_webhook_handler(
             }
             Err(e) => {
                 tracing::error!(
-                    sig = %event.signature,
+                    sig_fingerprint = %state.log_fingerprint(&event.signature),
                     error = %e,
                     "failed to save on-chain event"
                 );
@@ -416,20 +420,25 @@ pub async fn escrow_sync_handler(
     tracing::info!(
         event_id = %event.id,
         escrow = %event.escrow_address,
-        email = %claims.email,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         "manual escrow sync triggered"
     );
 
-    let summary =
-        escrow_indexer::poll_escrow_events(db, &rpc_url, &event.escrow_address, &event.id)
-            .await
-            .map_err(AppError::Internal)?;
+    let summary = escrow_indexer::poll_escrow_events(
+        db,
+        &rpc_url,
+        &event.escrow_address,
+        &event.id,
+        state.log_redactor(),
+    )
+    .await
+    .map_err(AppError::Internal)?;
 
     // Apply rollover deposit status hook for any newly indexed RolloverDeposit events
     if summary.indexed > 0 {
         let onchain_events = escrow_indexer::get_onchain_events(db, &event.id, 200).await;
         for ev in &onchain_events {
-            apply_rollover_deposit_status(Some(db), kv, ev).await;
+            apply_rollover_deposit_status(Some(db), kv, ev, state.log_redactor()).await;
         }
     }
 

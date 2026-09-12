@@ -13,10 +13,11 @@
 #   reads the .last-green sentinel mtime (see worker/scripts/preflight.sh).
 #   ./deploy.sh --force --reason "hotfix X"   # Bypass the gate (logs an audit entry)
 #
-# Staging note: the PUT API fallback below is PRODUCTION-ONLY (its bindings/vars
-# are hardcoded for the prod worker). `deploy.sh staging` uses the standard
-# `wrangler deploy --env staging` path only; if that fails, it reports and exits
-# rather than falling back to the production-hardcoded PUT flow.
+# Staging note: the PUT API fallback below is PRODUCTION-ONLY. It reads the
+# top-level [vars] and bindings from wrangler.toml and targets the prod account
+# and worker name; it does not resolve [env.staging]. `deploy.sh staging` uses
+# the standard `wrangler deploy --env staging` path only; if that fails, it
+# reports and exits rather than falling back to the production PUT flow.
 #
 # Wrangler 4.x uses the /versions API which returns 500 (code 10013).
 # This script works around it by:
@@ -142,6 +143,27 @@ check_wasm_bindgen_version() {
 }
 
 # ── Post-deploy content-type verification ───────────────────────────────────
+# Find a Python interpreter able to run the PUT-fallback generators.
+# Sets PYTHON_BIN. Requires 3.11+ (tomllib) and the blake3 package.
+PYTHON_BIN=""
+resolve_python() {
+  local candidate
+  for candidate in "${DEPLOY_PYTHON:-}" /opt/homebrew/bin/python3 "$(command -v python3 || true)"; do
+    if [ -z "$candidate" ] || [ ! -x "$candidate" ]; then
+      continue
+    fi
+    if "$candidate" -c 'import sys, tomllib, blake3; sys.exit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+      PYTHON_BIN="$candidate"
+      return 0
+    fi
+  done
+  echo "❌ No usable Python for the PUT API fallback."
+  echo "   Need Python 3.11+ (tomllib) with the blake3 package:"
+  echo "     python3 -m pip install blake3"
+  echo "   Override the interpreter with DEPLOY_PYTHON=/path/to/python3."
+  return 1
+}
+
 # A 2026-07-26 deploy shipped `/` and the JS bundle as `application/octet-stream`
 # (browsers downloaded a .dms file / blank page) yet returned HTTP 200 — the
 # status-only smoke test missed it. Root cause was a poisoned content-addressed
@@ -316,6 +338,17 @@ else
   echo "   Falling back to: PUT API + asset re-upload..."
   echo ""
 
+  # ── Step 1b: Resolve the interpreter the fallback generators need ──
+  # The generators live in worker/scripts/deploy_fallback/ as tracked modules
+  # (Issue #065). They need tomllib (3.11+) to read wrangler.toml and the
+  # blake3 package to reproduce wrangler's asset hashes. Fail here with an
+  # actionable message rather than half-way through an upload.
+  if ! resolve_python; then
+    restore_pnp
+    exit 1
+  fi
+  export PYTHONPATH="$SCRIPT_DIR/scripts${PYTHONPATH:+:$PYTHONPATH}"
+
   # ── Step 2: Extract OAuth token ──
   WRANGLER_CONFIG="$HOME/Library/Preferences/.wrangler/config/default.toml"
   if [ ! -f "$WRANGLER_CONFIG" ]; then
@@ -341,30 +374,11 @@ else
   echo "📤 Uploading static assets..."
 
   # Build asset manifest (path → { hash, size }) using BLAKE3 (matching wrangler's hashFile)
-  MANIFEST=$(/opt/homebrew/bin/python3 -c "
-import os, json, base64
-import blake3
-
-dist = '${DIST_DIR}'
-# _headers / _redirects are Cloudflare config files parsed by 'wrangler deploy',
-# NOT servable assets. The PUT fallback cannot parse them, so uploading them as
-# plain assets just exposes them as fetchable octet-stream blobs (see Issue #057).
-# Skip them entirely on this path.
-CONFIG_FILES = {'_headers', '_redirects'}
-manifest = {}
-for root, dirs, files in os.walk(dist):
-    for f in files:
-        if f in CONFIG_FILES:
-            continue
-        fp = os.path.join(root, f)
-        rel = '/' + os.path.relpath(fp, dist)
-        contents = open(fp, 'rb').read()
-        b64 = base64.b64encode(contents).decode()
-        ext = os.path.splitext(fp)[1].lstrip('.')
-        h = blake3.blake3((b64 + ext).encode()).hexdigest()[:32]
-        manifest[rel] = {'hash': h, 'size': os.path.getsize(fp)}
-print(json.dumps({'manifest': manifest}))
-")
+  if ! MANIFEST=$("$PYTHON_BIN" -m deploy_fallback.cli manifest --dist "$DIST_DIR"); then
+    echo "❌ Could not build the asset manifest."
+    restore_pnp
+    exit 1
+  fi
 
   # Initialize asset upload session, upload only the requested files, and
   # obtain the COMPLETION JWT (not the init/upload JWT).
@@ -382,129 +396,18 @@ print(json.dumps({'manifest': manifest}))
   #   - Used Content-Type: application/json; the API requires multipart/form-data
   #     (uploads silently failed → no completion JWT → fell back to init JWT).
   #   - Did not strip the `cfwau_` prefix the new API adds to every JWT.
-  ASSETS_JWT=$(echo "$MANIFEST" | /opt/homebrew/bin/python3 -c "
-import json, sys, base64, os
-from urllib.request import Request, urlopen
-from urllib.error import HTTPError
-
-def status(msg):
-    # Progress goes to stderr so it isn't captured into ASSETS_JWT.
-    print(msg, file=sys.stderr)
-
-manifest_body = json.load(sys.stdin)['manifest']
-api_base = '${API_BASE}'
-script = '${WORKER_NAME}'
-oauth = '${OAUTH_TOKEN}'
-dist = '${DIST_DIR}'
-
-import mimetypes
-# The upload endpoint stores/serves each object with the Content-Type declared on
-# its multipart part (the 2026-07-26 octet-stream incident proved the fallback's
-# hardcoded octet-stream part was served verbatim). Mirror wrangler's syncAssets:
-# type each part by extension, add charset=utf-8 to text/*, and for an unmapped
-# extension fall back to sniffing ('application/null' = wrangler's sentinel for
-# 'store no Content-Type') rather than a blind octet-stream — which would re-poison
-# the object as a forced download.
-MIME = {
-    'html': 'text/html; charset=utf-8', 'htm': 'text/html; charset=utf-8',
-    'js': 'text/javascript; charset=utf-8', 'mjs': 'text/javascript; charset=utf-8',
-    'css': 'text/css; charset=utf-8', 'txt': 'text/plain; charset=utf-8',
-    'wgsl': 'text/plain; charset=utf-8', 'xml': 'application/xml',
-    'wasm': 'application/wasm', 'json': 'application/json', 'map': 'application/json',
-    'webmanifest': 'application/manifest+json',
-    'svg': 'image/svg+xml', 'png': 'image/png', 'ico': 'image/x-icon',
-    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp',
-    'woff': 'font/woff', 'woff2': 'font/woff2', 'ttf': 'font/ttf', 'otf': 'font/otf',
-}
-def mime_for(path):
-    ext = os.path.splitext(path)[1].lstrip('.').lower()
-    if ext in MIME:
-        return MIME[ext]
-    return mimetypes.guess_type(path)[0] or 'application/null'
-
-# Build hash → base64-content and hash → MIME lookups (matches the manifest hashing).
-content_by_hash = {}
-mime_by_hash = {}
-for rel, info in manifest_body.items():
-    fp = os.path.join(dist, rel.lstrip('/'))
-    raw = open(fp, 'rb').read()
-    content_by_hash[info['hash']] = base64.b64encode(raw).decode()
-    mime_by_hash[info['hash']] = mime_for(rel)
-
-# 1. Initialize upload session.
-init_req = Request(
-    f'{api_base}/workers/scripts/{script}/assets-upload-session',
-    data=json.dumps({'manifest': manifest_body}).encode(),
-    headers={'Authorization': f'Bearer {oauth}', 'Content-Type': 'application/json'},
-    method='POST',
-)
-with urlopen(init_req) as r:
-    init = json.load(r)['result']
-init_jwt = init['jwt']
-buckets = init.get('buckets', [])
-requested = [h for bucket in buckets for h in bucket]
-
-if not requested:
-    status(f'   Assets already up-to-date (no new files to upload)')
-    print(init_jwt)
-    sys.exit(0)
-
-status(f'   Uploading {len(requested)} asset file(s)...')
-
-# 2. Upload each requested file via multipart/form-data. The API returns a
-#    fresh completion JWT in result.jwt on every successful upload.
-completion_jwt = ''
-upload_url = f'{api_base}/workers/assets/upload?base64=true'
-for i, file_hash in enumerate(requested, 1):
-    b64 = content_by_hash[file_hash]
-    # Build multipart/form-data body by hand (field name = hash, value = b64).
-    boundary = '----bethere' + os.urandom(8).hex()
-    part_ct = mime_by_hash.get(file_hash, 'application/null')
-    body = (
-        f'--{boundary}\r\n'
-        f'Content-Disposition: form-data; name=\"{file_hash}\"; filename=\"{file_hash}\"\r\n'
-        f'Content-Type: {part_ct}\r\n\r\n'
-        f'{b64}\r\n'
-        f'--{boundary}--\r\n'
-    ).encode()
-    req = Request(
-        upload_url,
-        data=body,
-        headers={
-            'Authorization': f'Bearer {init_jwt}',
-            'Content-Type': f'multipart/form-data; boundary={boundary}',
-        },
-        method='POST',
-    )
-    try:
-        with urlopen(req) as r:
-            resp = json.load(r)
-        new_jwt = resp.get('result', {}).get('jwt', '')
-        if new_jwt:
-            completion_jwt = new_jwt
-        status(f'  Uploaded {i}/{len(requested)}')
-    except HTTPError as e:
-        status(f'  Upload {i}/{len(requested)} FAILED: {e.code} {e.read().decode()[:300]}')
-        sys.exit(1)
-
-if not completion_jwt:
-    status('   No completion JWT returned by upload API')
-    sys.exit(1)
-print(completion_jwt)
-")
-  UPLOAD_EXIT=$?
-  if [ "$UPLOAD_EXIT" -ne 0 ]; then
+  if ! ASSETS_JWT=$(printf '%s' "$MANIFEST" \
+    | CLOUDFLARE_OAUTH_TOKEN="$OAUTH_TOKEN" "$PYTHON_BIN" \
+      -m deploy_fallback.cli upload \
+      --dist "$DIST_DIR" --api-base "$API_BASE" --script "$WORKER_NAME"); then
     echo "❌ Asset upload failed."
     restore_pnp
     exit 1
   fi
 
-  # Defensive: strip the `cfwau_` prefix if present. The assets-upload-session
-  # API prefixes upload-token JWTs with `cfwau_` (Cloudflare Workers Assets
-  # Upload). Completion JWTs returned after upload don't carry it, but the init
-  # JWT (used verbatim when nothing needs uploading) sometimes does. The legacy
-  # PUT API rejects a prefixed JWT with 10021 "could not JSON decode header".
-  ASSETS_JWT="${ASSETS_JWT#cfwau_}"
+  # The `cfwau_` prefix the upload API adds is stripped in
+  # deploy_fallback/upload.py (strip_jwt_prefix) — the PUT API rejects a
+  # prefixed JWT with 10021 "could not JSON decode header".
 
   echo "   Assets JWT obtained: ${ASSETS_JWT:0:20}..."
 
@@ -529,74 +432,12 @@ print(completion_jwt)
     exit 1
   fi
 
-  # Build metadata JSON with assets JWT + env vars from wrangler.toml
-  #
-  # IMPORTANT: Cloudflare's PUT /workers/scripts/{name} API expects env vars
-  # as `plain_text` entries in the `bindings` array — NOT as a top-level
-  # `vars` dict (that's the wrangler.toml format). Using `vars` silently
-  # drops every env var, causing the worker to fall back to hardcoded defaults
-  # (e.g. SERVER_URL → "https://event-checkin.workers.dev").
-  METADATA=$(/opt/homebrew/bin/python3 -c "
-import json
-
-plain_text_vars = {
-    'SERVER_URL': 'https://bethere.solana-thailand.workers.dev',
-    'CLAIM_BASE_URL': 'https://bethere.solana-thailand.workers.dev/claim',
-    'GOOGLE_SHEET_NAME': 'Attendees',
-    'GOOGLE_STAFF_SHEET_NAME': 'staff',
-    'PLATFORM_SHEET_ID': '1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM',
-    # Solana cluster for escrow tx-building (mirror wrangler.toml [vars]). The PUT-API
-    # fallback must send this too, else the worker falls back to the "devnet" default.
-    'SOLANA_CLUSTER': 'devnet',
-    'DEV_MODE': '0',
-    'DEV_EMAIL': 'ratchapon.poc@gmail.com',
-    'SUPER_ADMIN_EMAILS': 'ratchapon.poc@gmail.com,hackathon@colosseum.org',
-    'EVENT_NAME': 'Solana x AI Builders: The Road to Mainnet #1 (Bangkok)',
-    'EVENT_TAGLINE': 'Deep Dive into Rust, AI Agents, and the Solana Ecosystem',
-    'EVENT_LINK': 'https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/',
-    'EVENT_START_MS': '1777170600000',
-    'EVENT_END_MS': '1777183200000',
-    'EVENT_DEPOSIT_ENABLED': 'false',
-    'EVENT_DEPOSIT_AMOUNT_USDC': '0',
-    'EVENT_DEPOSIT_AMOUNT_THB': '0',
-    'EVENT_PROMPTPAY_ID': '',
-}
-
-bindings = [
-    {'type': 'kv_namespace', 'name': 'EVENTS', 'namespace_id': 'c8a6a87f9ed34ce0a3c8e48b84039214'},
-    {'type': 'd1', 'name': 'DB', 'id': '98d09542-e7d8-4413-ac34-4276a50d126c'},
-    {'type': 'r2_bucket', 'name': 'ASSETS_BUCKET', 'bucket_name': 'bethere-assets'},
-    # DO binding not supported by PUT API (10021 unknown type) — wrangler deploy handles it
-]
-# Env vars MUST be plain_text bindings for the PUT API to accept them.
-for name, value in plain_text_vars.items():
-    bindings.append({'type': 'plain_text', 'name': name, 'text': value})
-
-m = {
-    'main_module': 'shim.js',
-    'compatibility_date': '2024-09-23',
-    'compatibility_flags': ['nodejs_compat'],
-    'bindings': bindings,
-
-    'assets': {
-        'jwt': '${ASSETS_JWT}',
-        'router_config': {
-            'has_user_worker': True,
-        },
-        'asset_config': {
-            'not_found_handling': 'single-page-application',
-            # LIMITATION (Issue #057): the raw PUT API has no field for _headers
-            # rules, so this fallback path CANNOT apply the frontend-leptos/_headers
-            # Cache-Control policy (no-store on the shell, immutable on hashed assets).
-            # Only `wrangler deploy` parses _headers. Under the fallback, static assets
-            # get Cloudflare's default `max-age=0, must-revalidate` — correct (always
-            # revalidates, never serves a stale shell) but not maximally cacheable.
-            # This is perf-only and applies solely when the fallback is used.
-        }
-    }
-}
-print(json.dumps(m))
-")
+  # Build metadata JSON: assets JWT + every [vars] entry and binding declared in
+  # wrangler.toml. deploy_fallback/metadata.py owns the API shape (env vars must
+  # be `plain_text` bindings, not a top-level `vars` dict) and prints a warning
+  # for anything wrangler.toml declares that the PUT API cannot carry.
+  METADATA=$(CLOUDFLARE_ASSETS_JWT="$ASSETS_JWT" "$PYTHON_BIN" \
+    -m deploy_fallback.cli metadata --config wrangler.toml --main-module shim.js)
 
   echo "📤 Deploying worker code + assets binding..."
   RESPONSE=$(curl -s -w "\n%{http_code}" \
@@ -613,7 +454,7 @@ print(json.dumps(m))
   rm -rf "$DRY_DIR"
 
   if [ "$HTTP_CODE" = "200" ]; then
-    STARTUP_MS=$(echo "$BODY" | /opt/homebrew/bin/python3 -c "import json,sys; r=json.load(sys.stdin); print(r.get('result',{}).get('startup_time_ms','?'))" 2>/dev/null || echo "?")
+    STARTUP_MS=$(echo "$BODY" | "$PYTHON_BIN" -c "import json,sys; r=json.load(sys.stdin); print(r.get('result',{}).get('startup_time_ms','?'))" 2>/dev/null || echo "?")
     echo "✅ Deployed successfully! (startup: ${STARTUP_MS}ms)"
     echo "   https://${WORKER_NAME}.solana-thailand.workers.dev"
 
@@ -633,7 +474,7 @@ print(json.dumps(m))
     fi
   else
     echo "❌ Deploy failed (HTTP ${HTTP_CODE})"
-    echo "$BODY" | /opt/homebrew/bin/python3 -m json.tool 2>/dev/null || echo "$BODY"
+    echo "$BODY" | "$PYTHON_BIN" -m json.tool 2>/dev/null || echo "$BODY"
     restore_pnp
     exit 1
   fi

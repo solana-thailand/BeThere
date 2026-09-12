@@ -341,7 +341,7 @@ pub async fn sync_contacts_handler(
                 }
                 Err(e) => {
                     tracing::warn!(
-                        %email,
+                        contact_fingerprint = %state.log_fingerprint(&email),
                         event_id = %event_meta.id,
                         error = %e,
                         "failed to sync contact"
@@ -486,7 +486,7 @@ pub async fn audience_handler(
         scoped = event_ids.is_some(),
         want_csv,
         unregistered = unregistered_event_ids.len(),
-        staff = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "audience aggregation exported"
     );
 

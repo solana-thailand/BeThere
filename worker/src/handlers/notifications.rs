@@ -144,7 +144,7 @@ pub async fn retry(
     if !retried {
         return Err(AppError::Validation("Only failed notifications for this event can be retried. Accepted or uncertain messages cannot be resent.".into()).into());
     }
-    tracing::info!(event_id=%id,notification_id=body.notification_id,actor=%claims.email,"notification retry requested");
+    tracing::info!(event_id=%id,notification_id=body.notification_id,actor_fingerprint=%state.log_fingerprint(&claims.email),"notification retry requested");
     Ok(ApiOk::new(json!({"queued":true})))
 }
 

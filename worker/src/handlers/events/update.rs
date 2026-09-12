@@ -18,7 +18,7 @@ pub async fn update_event(
     Path(id): Path<String>,
     Json(body): Json<UpdateEventRequest>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(event_id = %id, staff_email = %claims.email, "update event requested");
+    tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "update event requested");
 
     let kv = state.events_kv.as_ref();
 
@@ -169,7 +169,7 @@ pub async fn update_event(
     tracing::info!(
         event_id = %config.id,
         status = %config.status.as_str(),
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "event updated",
     );
 

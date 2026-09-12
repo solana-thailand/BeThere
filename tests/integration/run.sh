@@ -72,8 +72,9 @@ else:
 
 wait_for_confirmation() {
     local sig="$1"
-    for i in $(seq 1 10); do
-        local status=$(rpc_call "getSignatureStatuses" "[[\"$sig\"]]" | python3 -c "
+    for _ in $(seq 1 10); do
+        local status
+        status=$(rpc_call "getSignatureStatuses" "[[\"$sig\"]]" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
 s = data['result']['value'][0]
@@ -95,9 +96,9 @@ else:
 # Program & key constants
 PROGRAM_ID="C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T"
 USDC_MINT="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-TOKEN_PROGRAM="TokenkeQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+TOKEN_PROGRAM="TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 ATA_PROGRAM="ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-SYSTEM_PROGRAM="11111111111111111111111111111111111111111"
+SYSTEM_PROGRAM="11111111111111111111111111111111"
 RENT_SYSVAR="SysvarRent111111111111111111111111111111111"
 
 # Solana CLI config for this test validator
@@ -207,19 +208,78 @@ log_step "Test 6: PDA derivation"
 
 EVENT_ID=42
 
-# Derive event escrow PDA
-ESCROW_PDA=$(python3 -c "
-from solders.pubkey import Pubkey
-program = Pubkey.from_string('$PROGRAM_ID')
-organizer = Pubkey.from_string('$ORGANIZER')
-pda, bump = Pubkey.find_program_address([b'escrow', bytes(organizer), (42).to_bytes(8, 'little')], program)
-print(f'{pda} bump={bump}')
-" 2>/dev/null || echo "ERR: solders not installed")
+# Derive the event escrow PDA. Seeds match bethere-escrow/src/state.rs:
+#   #[seeds(b"escrow", organizer: Address, event_id: u64)]
+# The program id, organizer and event id are passed as argv, never interpolated
+# into the program text (see .issues/065).
+if ESCROW_PDA=$(python3 - "$PROGRAM_ID" "$ORGANIZER" "$EVENT_ID" 2>/dev/null <<'PYPDA'
+import sys
 
-if [[ "$ESCROW_PDA" == ERR* ]]; then
-    log_fail "PDA derivation" "solders not installed — pip install solders"
+from solders.pubkey import Pubkey
+
+program = Pubkey.from_string(sys.argv[1])
+organizer = Pubkey.from_string(sys.argv[2])
+event_id = int(sys.argv[3])
+pda, bump = Pubkey.find_program_address(
+    [b"escrow", bytes(organizer), event_id.to_bytes(8, "little")], program
+)
+print(f"{pda} bump={bump}")
+PYPDA
+); then
+    log_pass "Event escrow PDA (event_id=$EVENT_ID): $ESCROW_PDA"
 else
-    log_pass "Event escrow PDA: $ESCROW_PDA"
+    log_fail "PDA derivation" "solders not installed — pip install solders"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 7: program constants decode to canonical 32-byte pubkeys
+# ---------------------------------------------------------------------------
+log_step "Test 7: program constant addresses"
+
+# Guards the constants above against transcription slips. Two of them were
+# silently malformed until this check existed (.issues/072 item 5):
+# TOKEN_PROGRAM was missing a "g" and SYSTEM_PROGRAM carried 41 ones, so both
+# decoded to something other than a 32-byte key. Pure base58 — no dependency,
+# so this runs even where solders is absent.
+CONST_CHECK=$(python3 - \
+    "PROGRAM_ID=$PROGRAM_ID" \
+    "USDC_MINT=$USDC_MINT" \
+    "TOKEN_PROGRAM=$TOKEN_PROGRAM" \
+    "ATA_PROGRAM=$ATA_PROGRAM" \
+    "SYSTEM_PROGRAM=$SYSTEM_PROGRAM" \
+    "RENT_SYSVAR=$RENT_SYSVAR" <<'PYCONST'
+import sys
+
+ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+
+def decode(text):
+    """Decode base58 text to bytes. Raises ValueError on a foreign character."""
+    acc = 0
+    for char in text:
+        acc = acc * 58 + ALPHABET.index(char)
+    body = acc.to_bytes((acc.bit_length() + 7) // 8, "big") if acc else b""
+    return b"\x00" * (len(text) - len(text.lstrip("1"))) + body
+
+
+bad = []
+for pair in sys.argv[1:]:
+    name, _, value = pair.partition("=")
+    try:
+        width = len(decode(value))
+    except ValueError as exc:
+        bad.append(f"{name} is not base58 ({exc})")
+        continue
+    if width != 32:
+        bad.append(f"{name} decodes to {width} bytes, not 32")
+
+print("; ".join(bad) if bad else "OK")
+PYCONST
+)
+if [[ "$CONST_CHECK" == "OK" ]]; then
+    log_pass "All 6 program constants decode to 32 bytes"
+else
+    log_fail "Program constant addresses" "$CONST_CHECK"
 fi
 
 # ---------------------------------------------------------------------------

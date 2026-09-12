@@ -31,7 +31,9 @@ pub async fn lookup_claim(
     let mut walkin: Option<WalkinAttendee> = None;
 
     if let Some(ref d1) = state.d1
-        && let Ok(Some(a)) = crate::db::attendees::get_attendee_by_claim_token(d1, token).await
+        && let Ok(Some(a)) =
+            crate::db::attendees::get_attendee_by_claim_token(d1, token, state.claim_token_policy())
+                .await
         && a.participation_type == "walkin"
     {
         walkin = Some(WalkinAttendee {
@@ -73,6 +75,11 @@ pub async fn lookup_claim(
             quiz_status: QuizStatus::NotRequired, // walk-ins skip quiz
             total_checked_in: 0,                  // walk-ins don't contribute to sheet stats
             total_claimed: 0,
+            // Response field only, and the one `api_id` in the codebase that
+            // embeds a personal identifier: walk-ins have no attendee row, so
+            // their claim response is keyed by address. Every other `api_id` is
+            // an internal id, which is why eight log sites render it as
+            // `attendee_id`. Never log this one (Issue 070).
             api_id: format!("walkin:{}", walkin.email),
             event_id: event.id.clone(),
             deposit_enabled: event.deposit_enabled,
@@ -106,7 +113,13 @@ pub async fn lookup_claim(
                 // so this fallback uses the attendee's real event.
                 tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: Sheets miss, trying D1 fallback");
                 if let Some(ref d1) = state.d1 {
-                    match crate::db::attendees::get_attendee_by_claim_token(d1, token).await {
+                    match crate::db::attendees::get_attendee_by_claim_token(
+                        d1,
+                        token,
+                        state.claim_token_policy(),
+                    )
+                    .await
+                    {
                         Ok(Some(a)) => {
                             tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: found in D1 fallback");
                             // Counts unavailable without event_id; claim page shows them as informational only

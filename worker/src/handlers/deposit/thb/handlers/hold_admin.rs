@@ -131,7 +131,7 @@ pub async fn admin_hold_deposit_handler(
     tracing::info!(
         attendee_id = %attendee_id,
         event_id = %body.event_id,
-        admin_email = %claims.email,
+        admin_fingerprint = %state.log_fingerprint(&claims.email),
         "admin hold deposit initiated"
     );
 
@@ -284,15 +284,15 @@ pub async fn admin_hold_deposit_handler(
     )
     .await
     {
-        tracing::warn!(email = %attendee_email, error = %e, "credit Sheets mirror (admin hold) failed — D1 ledger is authoritative");
+        tracing::warn!(attendee_fingerprint = %state.log_fingerprint(&attendee_email), error = %e, "credit Sheets mirror (admin hold) failed — D1 ledger is authoritative");
     }
 
     tracing::info!(
         attendee_id = %attendee_id,
         event_id = %event.id,
         amount = held_amount,
-        attendee_email = %attendee_email,
-        admin_email = %claims.email,
+        attendee_fingerprint = %state.log_fingerprint(&attendee_email),
+        admin_fingerprint = %state.log_fingerprint(&claims.email),
         "admin held deposit as credit"
     );
 
@@ -330,7 +330,7 @@ pub async fn credit_liability_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<crate::db::contacts::CreditLiability>, WorkerError> {
-    tracing::info!(admin_email = %claims.email, "credit liability requested");
+    tracing::info!(admin_fingerprint = %state.log_fingerprint(&claims.email), "credit liability requested");
 
     // Source of truth is the org-scoped credit ledger (the old path summed a D1
     // contacts column that hold never wrote, so it always read zero — masking a
@@ -383,7 +383,7 @@ pub async fn admin_apply_credit_handler(
     tracing::info!(
         attendee_id = %attendee_id,
         event_id = %body.event_id,
-        admin_email = %claims.email,
+        admin_fingerprint = %state.log_fingerprint(&claims.email),
         "admin apply-credit initiated"
     );
 
@@ -469,7 +469,14 @@ pub async fn admin_apply_credit_handler(
         .await
         .unwrap_or(0)
         .max(0);
-    tracing::info!(%email, event_id = %event.id, applied = required, remaining, healed, "admin applied rolling credit to complete registration");
+    tracing::info!(
+        attendee_fingerprint = %state.log_fingerprint(&email),
+        event_id = %event.id,
+        applied = required,
+        remaining,
+        healed,
+        "admin applied rolling credit to complete registration"
+    );
     Ok(ApiOk::new(serde_json::json!({
         "applied_thb": required,
         "email": email,

@@ -88,6 +88,7 @@ pub(crate) async fn run_backfill_workflow(
     kv: &worker::kv::KvStore,
     rpc_url: &str,
     event_ids: &[String],
+    redactor: crate::crypto::LogRedactor<'_>,
 ) -> BackfillResult {
     use futures_util::stream::{self, StreamExt};
 
@@ -154,7 +155,7 @@ pub(crate) async fn run_backfill_workflow(
                 tracing::info!(
                     attendee_id = %deposit.attendee_id,
                     event_id = %event_id,
-                    wallet = %wallet,
+                    wallet_fingerprint = %redactor.fingerprint(&wallet),
                     "Backfilled wallet_address"
                 );
                 deposit.wallet_address = Some(wallet.clone());
@@ -184,7 +185,10 @@ pub(crate) async fn run_backfill_workflow(
             Err(e) => {
                 tracing::warn!(
                     attendee_id = %deposit.attendee_id,
-                    tx_signature = ?deposit.tx_signature,
+                    tx_signature_fingerprint = ?deposit
+                        .tx_signature
+                        .as_deref()
+                        .map(|sig| redactor.fingerprint(sig)),
                     error = %e,
                     "Failed to resolve wallet from TX"
                 );

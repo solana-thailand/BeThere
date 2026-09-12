@@ -285,28 +285,6 @@ pub fn format_duration_label(hours: u32) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::refund_window_open_at;
-
-    const EVENT_END: i64 = 1_000;
-    const DEADLINE: i64 = 2_000;
-
-    #[test]
-    fn refund_window_matches_on_chain_boundaries() {
-        assert!(!refund_window_open_at(EVENT_END, DEADLINE, false, EVENT_END - 1));
-        assert!(refund_window_open_at(EVENT_END, DEADLINE, false, EVENT_END));
-        assert!(refund_window_open_at(EVENT_END, DEADLINE, false, DEADLINE - 1));
-        assert!(!refund_window_open_at(EVENT_END, DEADLINE, false, DEADLINE));
-        assert!(refund_window_open_at(EVENT_END, DEADLINE, true, DEADLINE));
-    }
-
-    #[test]
-    fn missing_deadline_fails_safe_for_no_show_only() {
-        assert!(!refund_window_open_at(EVENT_END, 0, false, EVENT_END));
-        assert!(refund_window_open_at(EVENT_END, 0, true, EVENT_END));
-    }
-}
 
 /// Format remaining seconds into a compact countdown string.
 /// Shows days/hours/minutes if > 1 day, hours/minutes/seconds if < 1 day,
@@ -429,5 +407,28 @@ pub fn deposit_method_display(
         crate::api::DepositMethod::Thb => (IconName::Baht, "THB (PromptPay)"),
         crate::api::DepositMethod::CreditThb => (IconName::Baht, "THB Credit (held deposit)"),
         crate::api::DepositMethod::CreditUsdc => (IconName::Coin, "USDC Credit (held deposit)"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::refund_window_open_at;
+
+    const EVENT_END: i64 = 1_000;
+    const DEADLINE: i64 = 2_000;
+
+    #[test]
+    fn refund_window_matches_on_chain_boundaries() {
+        assert!(!refund_window_open_at(EVENT_END, DEADLINE, false, EVENT_END - 1));
+        assert!(refund_window_open_at(EVENT_END, DEADLINE, false, EVENT_END));
+        assert!(refund_window_open_at(EVENT_END, DEADLINE, false, DEADLINE - 1));
+        assert!(!refund_window_open_at(EVENT_END, DEADLINE, false, DEADLINE));
+        assert!(refund_window_open_at(EVENT_END, DEADLINE, true, DEADLINE));
+    }
+
+    #[test]
+    fn missing_deadline_fails_safe_for_no_show_only() {
+        assert!(!refund_window_open_at(EVENT_END, 0, false, EVENT_END));
+        assert!(refund_window_open_at(EVENT_END, 0, true, EVENT_END));
     }
 }

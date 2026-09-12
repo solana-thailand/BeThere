@@ -83,7 +83,7 @@ pub async fn mark_checked_in(
 
     tracing::info!(
         row_index = row_index,
-        staff_email = %staff_email,
+        staff_fingerprint = %state.log_fingerprint(&staff_email),
         claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&claim_token),
         "bg_sync: marked row as checked in"
     );
@@ -223,7 +223,7 @@ pub async fn clear_checked_in(
 
     tracing::info!(
         row_index = row_index,
-        staff_email = %staff_email,
+        staff_fingerprint = %state.log_fingerprint(&staff_email),
         "bg_sync: cleared check-in fields (undo)"
     );
 
@@ -296,7 +296,7 @@ pub async fn mark_claimed(
 
     tracing::info!(
         row_index = row_index,
-        wallet_address = %wallet_address,
+        wallet_fingerprint = %state.log_fingerprint(&wallet_address),
         nft_proof_url = %nft_proof_url,
         "bg_sync: marked row as claimed"
     );
@@ -410,7 +410,7 @@ pub async fn append_attendee_row(
     {
         tracing::error!(
             %api_id,
-            %email,
+            attendee_fingerprint = %state.log_fingerprint(&email),
             error = %e,
             "bg_sync append_attendee_row: sheet write failed"
         );
@@ -419,7 +419,7 @@ pub async fn append_attendee_row(
 
     tracing::info!(
         %api_id,
-        %email,
+        attendee_fingerprint = %state.log_fingerprint(&email),
         "bg_sync: appended self-registration row to google sheet"
     );
 

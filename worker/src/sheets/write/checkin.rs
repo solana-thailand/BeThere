@@ -64,7 +64,7 @@ pub async fn mark_checked_in(
 
     tracing::info!(
         row_index = row_index,
-        staff_email = %staff_email,
+        staff_fingerprint = %state.log_fingerprint(staff_email),
         claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token),
         "marked row as checked in"
     );
@@ -180,7 +180,7 @@ pub async fn clear_checked_in(
 
     tracing::info!(
         row_index = row_index,
-        staff_email = %staff_email,
+        staff_fingerprint = %state.log_fingerprint(staff_email),
         "cleared check-in fields (undo)"
     );
 
@@ -236,7 +236,12 @@ pub async fn mark_claimed(
 
     batch_update_sheet(&url, &body, &access_token).await?;
 
-    tracing::info!(row_index = row_index, wallet_address = %wallet_address, nft_proof_url = %nft_proof_url, "marked row as claimed");
+    tracing::info!(
+        row_index = row_index,
+        wallet_fingerprint = %state.log_fingerprint(wallet_address),
+        nft_proof_url = %nft_proof_url,
+        "marked row as claimed"
+    );
 
     Ok(claimed_at.to_string())
 }

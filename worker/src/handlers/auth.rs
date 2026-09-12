@@ -143,14 +143,17 @@ pub async fn auth_callback(
             "/staff"
         };
         tracing::info!(
-            "staff login successful: {} (role={role}, redirect={dashboard})",
-            user_info.email,
+            identity_fingerprint = %state.log_fingerprint(&user_info.email),
+            role = %role,
+            redirect = %dashboard,
+            "staff login successful",
         );
         dashboard.to_string()
     } else {
         tracing::info!(
-            "attendee login successful: {} (role={role})",
-            user_info.email,
+            identity_fingerprint = %state.log_fingerprint(&user_info.email),
+            role = %role,
+            "attendee login successful",
         );
         "/".to_string()
     };
@@ -339,7 +342,10 @@ pub async fn wallet_verify(
     if let Err(e) =
         crate::solana::verify_siws_signature(&req.wallet_address, &stored_message, &req.signature)
     {
-        tracing::warn!(wallet = %req.wallet_address, "SIWS signature verification failed: {e}");
+        tracing::warn!(
+            wallet_fingerprint = %state.log_fingerprint(&req.wallet_address),
+            "SIWS signature verification failed: {e}"
+        );
         return Err(event_checkin_domain::models::error::AppError::Validation(
             "wallet signature verification failed".into(),
         )
@@ -446,7 +452,11 @@ pub async fn wallet_bind(
     if let Err(e) =
         crate::solana::verify_siws_signature(&req.wallet_address, &stored_message, &req.signature)
     {
-        tracing::warn!(email = %claims.email, wallet = %req.wallet_address, "wallet bind signature verification failed: {e}");
+        tracing::warn!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            wallet_fingerprint = %state.log_fingerprint(&req.wallet_address),
+            "wallet bind signature verification failed: {e}"
+        );
         return Err(event_checkin_domain::models::error::AppError::Validation(
             "wallet signature verification failed".into(),
         )
@@ -465,7 +475,8 @@ pub async fn wallet_bind(
         && !existing.eq_ignore_ascii_case(claims.email.trim())
     {
         tracing::warn!(
-            email = %claims.email, wallet = %req.wallet_address,
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            wallet_fingerprint = %state.log_fingerprint(&req.wallet_address),
             "wallet bind rejected: already linked to another account"
         );
         return Err(event_checkin_domain::models::error::AppError::Validation(

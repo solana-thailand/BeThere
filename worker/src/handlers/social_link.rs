@@ -81,7 +81,7 @@ pub async fn github_link_start(
          &state={encoded_state}"
     );
 
-    tracing::info!(email = %claims.email, "GitHub OAuth link started");
+    tracing::info!(identity_fingerprint = %state.log_fingerprint(&claims.email), "GitHub OAuth link started");
     Redirect::to(&github_auth_url).into_response()
 }
 
@@ -333,7 +333,11 @@ pub async fn github_link_callback(
         return Redirect::to("/profile?error=github_save_failed").into_response();
     }
 
-    tracing::info!(email = %email, github = %user_info.login, "GitHub account linked successfully");
+    tracing::info!(
+        identity_fingerprint = %state.log_fingerprint(&email),
+        github_fingerprint = %state.log_fingerprint(&user_info.login),
+        "GitHub account linked successfully"
+    );
     Redirect::to("/profile?linked=github").into_response()
 }
 
@@ -467,7 +471,7 @@ pub async fn telegram_verify(
     // Verify HMAC-SHA256 signature per Telegram Login Widget spec using SubtleCrypto
     let is_valid = verify_telegram_hash_subtle(&body, bot_token).await;
     if !is_valid {
-        tracing::warn!(email = %claims.email, "Telegram HMAC verification failed");
+        tracing::warn!(identity_fingerprint = %state.log_fingerprint(&claims.email), "Telegram HMAC verification failed");
         return Err(WorkerError(AppError::Validation(
             "Invalid Telegram signature".to_string(),
         )));
@@ -499,9 +503,8 @@ pub async fn telegram_verify(
         .map_err(|e| WorkerError(AppError::Internal(format!("Telegram save failed: {e}"))))?;
 
     tracing::info!(
-        email = %claims.email,
-        telegram_id = %body.id,
-        username = ?body.username,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
+        telegram_fingerprint = %state.log_fingerprint(&body.id.to_string()),
         "Telegram account linked successfully"
     );
 
@@ -603,7 +606,7 @@ pub async fn telegram_callback(
     };
 
     if !verify_telegram_hash_subtle(&data, bot_token).await {
-        tracing::warn!(email = %email, "Telegram callback HMAC verification failed");
+        tracing::warn!(identity_fingerprint = %state.log_fingerprint(&email), "Telegram callback HMAC verification failed");
         return Redirect::to("/profile?error=telegram_bad_signature").into_response();
     }
 
@@ -626,7 +629,11 @@ pub async fn telegram_callback(
         return Redirect::to("/profile?error=telegram_save_failed").into_response();
     }
 
-    tracing::info!(email = %email, telegram_id = %data.id, "Telegram linked via redirect callback");
+    tracing::info!(
+        identity_fingerprint = %state.log_fingerprint(&email),
+        telegram_fingerprint = %state.log_fingerprint(&data.id.to_string()),
+        "Telegram linked via redirect callback"
+    );
     Redirect::to("/profile?linked=telegram").into_response()
 }
 
@@ -687,7 +694,7 @@ pub async fn social_unlink(
         .await
         .map_err(|e| WorkerError(AppError::Internal(format!("Unlink failed: {e:?}"))))?;
 
-    tracing::info!(email = %claims.email, platform = %body.platform, "Social account unlinked");
+    tracing::info!(identity_fingerprint = %state.log_fingerprint(&claims.email), platform = %body.platform, "Social account unlinked");
 
     Ok(ApiOk::new(json!({
         "status": "unlinked",

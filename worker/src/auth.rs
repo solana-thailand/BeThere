@@ -350,7 +350,10 @@ pub async fn require_auth(
     //   1. Global sources (env var list + Google Sheet staff tab)
     //   2. Per-event assignments (organizer_emails / staff_emails in event registry)
     if !is_staff(&claims.email, &state).await {
-        tracing::warn!(email = %claims.email, "non-staff user attempted access");
+        tracing::warn!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            "non-staff user attempted access"
+        );
         return (
             axum::http::StatusCode::FORBIDDEN,
             Json(ApiResponse::<()> {
@@ -470,7 +473,10 @@ pub(crate) async fn verify_token(
 
     // VULN-011: Check JWT blacklist (logged-out tokens)
     if is_token_blacklisted(token, state).await {
-        tracing::debug!(email = %claims.email, "rejected blacklisted JWT");
+        tracing::debug!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            "rejected blacklisted JWT"
+        );
         return Err("token has been revoked".to_string());
     }
 
@@ -691,6 +697,7 @@ mod tests {
             telegram_bot_token: String::new(),
             telegram_bot_username: String::new(),
             slack_webhook_url: String::new(),
+            claim_token_ttl_secs: crate::claim::DEFAULT_CLAIM_TOKEN_TTL_SECS,
             staff_emails: [
                 "admin@example.com".to_string(),
                 "staff@example.com".to_string(),

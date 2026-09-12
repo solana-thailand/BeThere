@@ -7,7 +7,9 @@ set -euo pipefail
 
 # --- Config ---
 DIST_DIR="$(cd "$(dirname "$0")" && pwd)/dist"
-WASM_OPT_FLAGS="-Oz --enable-bulk-memory-opt --enable-nontrapping-float-to-int"
+# An array, not a string: these are separate argv words for wasm-opt, and an
+# unquoted string expansion to achieve that is a word-splitting trap (SC2086).
+WASM_OPT_FLAGS=(-Oz --enable-bulk-memory-opt --enable-nontrapping-float-to-int)
 
 # Colors
 RED='\033[0;31m'
@@ -103,8 +105,8 @@ main() {
     trap 'rm -f "$tmpfile"' EXIT
 
     # Step 1: wasm-opt
-    info "Running wasm-opt ${WASM_OPT_FLAGS} ..."
-    if ! wasm-opt $WASM_OPT_FLAGS -o "$tmpfile" "$wasm_file"; then
+    info "Running wasm-opt ${WASM_OPT_FLAGS[*]} ..."
+    if ! wasm-opt "${WASM_OPT_FLAGS[@]}" -o "$tmpfile" "$wasm_file"; then
         err "wasm-opt failed"
         exit 1
     fi
@@ -129,7 +131,8 @@ main() {
 
     # Report
     local saved=$((before_bytes - after_bytes))
-    local pct="$(echo "scale=1; $saved * 100 / $before_bytes" | bc)"
+    local pct
+    pct="$(echo "scale=1; $saved * 100 / $before_bytes" | bc)"
 
     echo ""
     echo "=========================================="

@@ -1,6 +1,7 @@
 //! On-chain discovery of a missing deposit TX signature, and the claim-binding guard.
 
 use super::rpc::parse_signatures_for_address_response;
+use crate::crypto::LogRedactor;
 
 /// Discover the most recent deposit TX signature for an attendee on-chain.
 ///
@@ -20,6 +21,7 @@ pub(crate) async fn discover_deposit_tx_on_chain(
     rpc_url: &str,
     escrow_address: &str,
     attendee_wallet: &str,
+    redactor: LogRedactor<'_>,
 ) -> Option<String> {
     use crate::solana_escrow::{escrow_program_id, pubkey_from_base58, pubkey_to_base58};
 
@@ -68,10 +70,16 @@ pub(crate) async fn discover_deposit_tx_on_chain(
 
     let deposit_pda_b58 = pubkey_to_base58(&deposit_pda);
 
+    // Issue 070: the AttendeeDeposit PDA is derived from the attendee wallet,
+    // so publishing it raw re-exposes the wallet to anyone reading the log.
+    // The escrow address is event-level rather than personal, so it stays
+    // readable — it is what makes these lines diagnosable at all.
+    let deposit_pda_fingerprint = redactor.fingerprint(&deposit_pda_b58);
+
     tracing::debug!(
-        deposit_pda = %deposit_pda_b58,
+        deposit_pda_fingerprint = %deposit_pda_fingerprint,
         escrow = %escrow_address,
-        attendee = %attendee_wallet,
+        attendee_fingerprint = %redactor.fingerprint(attendee_wallet),
         "Querying getSignaturesForAddress for AttendeeDeposit PDA"
     );
 
@@ -139,13 +147,13 @@ pub(crate) async fn discover_deposit_tx_on_chain(
     let signature = parse_signatures_for_address_response(&parsed);
     if let Some(ref sig) = signature {
         tracing::info!(
-            signature = %sig,
-            deposit_pda = %deposit_pda_b58,
+            tx_signature_fingerprint = %redactor.fingerprint(sig),
+            deposit_pda_fingerprint = %deposit_pda_fingerprint,
             "Discovered deposit TX signature on-chain via PDA history"
         );
     } else {
         tracing::debug!(
-            deposit_pda = %deposit_pda_b58,
+            deposit_pda_fingerprint = %deposit_pda_fingerprint,
             "No deposit signatures found for AttendeeDeposit PDA"
         );
     }

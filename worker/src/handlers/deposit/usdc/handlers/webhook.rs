@@ -100,8 +100,8 @@ pub async fn deposit_webhook_handler(
             tracing::warn!(
                 attendee_id = %body.attendee_id,
                 event_id = %body.event_id,
-                recorded_tx_signature = %recorded,
-                incoming_tx_signature = %body.tx_signature,
+                recorded_tx_fingerprint = %state.log_fingerprint(recorded),
+                incoming_tx_fingerprint = %state.log_fingerprint(&body.tx_signature),
                 "deposit webhook refused: deposit already verified with a different TX signature"
             );
         }
@@ -122,7 +122,7 @@ pub async fn deposit_webhook_handler(
 
     tracing::info!(
         attendee_id = %body.attendee_id,
-        tx_signature = %body.tx_signature,
+        tx_signature_fingerprint = %state.log_fingerprint(&body.tx_signature),
         "USDC deposit TX signature recorded, pending on-chain verification"
     );
 

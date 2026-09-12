@@ -119,6 +119,7 @@ pub async fn poll_escrow_events(
     rpc_url: &str,
     escrow_address: &str,
     event_id: &str,
+    redactor: crate::crypto::LogRedactor<'_>,
 ) -> Result<IndexSummary, String> {
     let mut summary = IndexSummary::default();
 
@@ -159,7 +160,7 @@ pub async fn poll_escrow_events(
                 Ok(None) => (sig_info, FetchOutcome::SkippedNoEvent),
                 Err(e) => {
                     tracing::error!(
-                        sig = %sig_info.signature,
+                        sig_fingerprint = %redactor.fingerprint(&sig_info.signature),
                         error = %e,
                         "failed to fetch transaction"
                     );
@@ -188,7 +189,7 @@ pub async fn poll_escrow_events(
                 match super::store::save_onchain_event(db, event_id, event.clone()).await {
                     Ok(true) => {
                         tracing::info!(
-                            sig = %sig_info.signature,
+                            sig_fingerprint = %redactor.fingerprint(&sig_info.signature),
                             "indexed on-chain event via polling"
                         );
                         summary.indexed += 1;
@@ -197,7 +198,11 @@ pub async fn poll_escrow_events(
                         summary.duplicates += 1;
                     }
                     Err(e) => {
-                        tracing::error!(sig = %sig_info.signature, error = %e, "failed to save polled event");
+                        tracing::error!(
+                            sig_fingerprint = %redactor.fingerprint(&sig_info.signature),
+                            error = %e,
+                            "failed to save polled event"
+                        );
                         summary.errors += 1;
                     }
                 }

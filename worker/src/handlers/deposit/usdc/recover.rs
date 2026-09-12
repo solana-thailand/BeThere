@@ -47,6 +47,10 @@ pub(crate) async fn recover_and_verify_deposit(
     let d1 = state.d1.as_deref();
     let rpc_url = state.config.solana.full_rpc_url();
     let attendee_id = status.attendee_id.clone();
+    // Issue 070: `attendee_id` is an internal identifier and stays readable;
+    // wallet addresses and TX signatures are durable person-linking values and
+    // are reduced to keyed fingerprints before they reach the log stream.
+    let redactor = crate::crypto::LogRedactor::new(&state.config.jwt_secret);
 
     // ── Phase 1: discover tx_signature on-chain if missing ──
     if status.tx_signature.as_deref().is_none_or(|s| s.is_empty()) {
@@ -86,12 +90,12 @@ pub(crate) async fn recover_and_verify_deposit(
 
             if let (Some(wallet), Some(escrow)) = (wallet, escrow_addr)
                 && let Some(discovered_sig) =
-                    discover_deposit_tx_on_chain(&rpc_url, &escrow, wallet).await
+                    discover_deposit_tx_on_chain(&rpc_url, &escrow, wallet, redactor).await
             {
                 tracing::info!(
                     attendee_id = %attendee_id,
                     event_id = %event.id,
-                    tx_signature = %discovered_sig,
+                    tx_signature_fingerprint = %redactor.fingerprint(&discovered_sig),
                     "Recovered deposit TX signature via on-chain PDA discovery (read-path)"
                 );
                 status.tx_signature = Some(discovered_sig);
@@ -119,12 +123,12 @@ pub(crate) async fn recover_and_verify_deposit(
     };
 
     let expected_wallet = status.wallet_address.as_deref();
-    let outcome = verify_tx_with_signer(&rpc_url, sig, expected_wallet).await;
+    let outcome = verify_tx_with_signer(&rpc_url, sig, expected_wallet, redactor).await;
     if !outcome.is_confirmed_and_matched() {
         if outcome.is_confirmed() {
             tracing::warn!(
                 attendee_id = %attendee_id,
-                tx_signature = %sig,
+                tx_signature_fingerprint = %redactor.fingerprint(sig),
                 "TX confirmed on-chain but signer does not match expected wallet (read-path) — refusing to verify"
             );
         }
@@ -222,7 +226,7 @@ pub(crate) async fn recover_and_verify_deposit(
         tracing::warn!(
             attendee_id = %attendee_id,
             event_id = %event.id,
-            tx_signature = %sig,
+            tx_signature_fingerprint = %redactor.fingerprint(sig),
             wallet_owner = ?wallet_owner,
             tx_owner = ?tx_owner,
             "read-path recovery refused: deposit already bound to a different attendee"
@@ -270,7 +274,7 @@ pub(crate) async fn recover_and_verify_deposit(
 
     tracing::info!(
         attendee_id = %attendee_id,
-        tx_signature = %sig,
+        tx_signature_fingerprint = %redactor.fingerprint(sig),
         "USDC deposit self-healed via read-path recovery"
     );
 

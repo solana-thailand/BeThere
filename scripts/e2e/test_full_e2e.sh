@@ -133,7 +133,7 @@ AUTH_TOKEN=$(python3 -c "
 import hmac, hashlib, base64, json, time
 
 # JWT header must exactly match: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9
-# which is base64url({"alg":"HS256","typ":"JWT"}) — no spaces, compact JSON
+# which is base64url of the compact header object, no spaces
 JWT_HEADER_B64 = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'
 header = JWT_HEADER_B64
 

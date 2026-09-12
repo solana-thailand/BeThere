@@ -96,30 +96,6 @@ pub fn community_links_section(
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::is_community_link;
-    use crate::api::CommunityLink;
-
-    fn link(platform: &str) -> CommunityLink {
-        CommunityLink {
-            platform: platform.into(),
-            url: "https://example.com".into(),
-            label: String::new(),
-        }
-    }
-
-    #[test]
-    fn excludes_links_rendered_in_dedicated_sections() {
-        assert!(!is_community_link(&link("guide")));
-        assert!(!is_community_link(&link("slides")));
-        assert!(!is_community_link(&link("source")));
-        assert!(!is_community_link(&link("download")));
-        assert!(!is_community_link(&link("resource")));
-        assert!(is_community_link(&link("discord")));
-    }
-}
-
 /// Ticket page variant — compact card with accent border.
 fn render_ticket_variant(links: Vec<CommunityLink>) -> impl IntoView {
     let items: Vec<_> = links
@@ -201,5 +177,29 @@ fn render_public_event_variant(links: Vec<CommunityLink>) -> impl IntoView {
                 {items}
             </div>
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_community_link;
+    use crate::api::CommunityLink;
+
+    fn link(platform: &str) -> CommunityLink {
+        CommunityLink {
+            platform: platform.into(),
+            url: "https://example.com".into(),
+            label: String::new(),
+        }
+    }
+
+    #[test]
+    fn excludes_links_rendered_in_dedicated_sections() {
+        assert!(!is_community_link(&link("guide")));
+        assert!(!is_community_link(&link("slides")));
+        assert!(!is_community_link(&link("source")));
+        assert!(!is_community_link(&link("download")));
+        assert!(!is_community_link(&link("resource")));
+        assert!(is_community_link(&link("discord")));
     }
 }

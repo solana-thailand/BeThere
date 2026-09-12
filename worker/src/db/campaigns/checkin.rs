@@ -17,7 +17,12 @@ struct CampaignIdRow {
 
 /// After a successful check-in, update campaign progress for any campaigns that include this event.
 /// Non-blocking: errors are logged but don't affect check-in.
-pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_email: &str) {
+pub(crate) async fn on_event_checkin(
+    db: &D1Database,
+    event_id: &str,
+    developer_email: &str,
+    developer_fingerprint: &str,
+) {
     // 1. Find all campaigns that include this event
     let campaigns_stmt = match db
         .prepare("SELECT DISTINCT campaign_id FROM campaign_events WHERE event_id = ?")
@@ -122,14 +127,14 @@ pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_
         {
             tracing::warn!(
                 campaign_id = %campaign_id,
-                developer_email = %developer_email,
+                developer_fingerprint = %developer_fingerprint,
                 error = %e,
                 "campaign auto-progress: failed to upsert"
             );
         } else {
             tracing::info!(
                 campaign_id = %campaign_id,
-                developer_email = %developer_email,
+                developer_fingerprint = %developer_fingerprint,
                 events_completed = events_completed,
                 total_required = total_required,
                 is_complete = is_complete,

@@ -53,8 +53,10 @@ TEMP_SQL=$(mktemp /tmp/bethere_walkin_migration_XXXXXX.sql)
 TEMP_CSV=$(mktemp /tmp/bethere_walkin_migration_XXXXXX.csv)
 
 echo "📥 Reading walk-in records from KV..."
+# MIGRATED counts SQL statements WRITTEN, not rows inserted: each statement is
+# an `INSERT ... WHERE NOT EXISTS`, so D1 — not this script — decides whether a
+# record is new. Step 5's verification query is the only real row count.
 MIGRATED=0
-SKIPPED=0
 ERRORS=0
 
 # Extract key names
@@ -165,7 +167,8 @@ npx wrangler d1 execute "$D1_DB" --file="$TEMP_SQL" --remote 2>&1 || {
 
 echo ""
 echo "✅ Migration complete!"
-echo "   $MIGRATED walk-in record(s) migrated to D1"
+echo "   $MIGRATED walk-in record(s) submitted to D1 (already-present rows are"
+echo "   skipped by the INSERT guard — see the verification count below)"
 if [[ $ERRORS -gt 0 ]]; then
     echo "   ⚠️  $ERRORS record(s) had errors and were skipped"
 fi

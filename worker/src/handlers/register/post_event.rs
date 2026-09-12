@@ -143,12 +143,12 @@ pub async fn register_post_event(
         // Answering "Thanks!" then would be a lie, and the visitor would never
         // know to retry.
         let attendee_id = attendee_result.map_err(|e| {
-            tracing::error!(%api_id, %email, %event_id, error = %e, "D1 post-event attendee upsert failed");
+            tracing::error!(%api_id, attendee_fingerprint = %state.log_fingerprint(&email), %event_id, error = %e, "D1 post-event attendee upsert failed");
             AppError::Internal("could not save your registration — please try again".to_string())
         })?;
 
         if let Err(e) = contact_result {
-            tracing::warn!(%email, error = %e, "D1 post-event contact upsert failed (non-fatal)");
+            tracing::warn!(attendee_fingerprint = %state.log_fingerprint(&email), error = %e, "D1 post-event contact upsert failed (non-fatal)");
         }
 
         // Developer profile + registration responses (the primary value of lead capture).
@@ -182,10 +182,16 @@ pub async fn register_post_event(
             photo_consent_given: false,
             consent_marketing: body.consent_marketing.unwrap_or(false),
             profile_fields,
+            redactor: state.log_redactor(),
         })
         .await;
 
-        tracing::info!(%email, %event_id, %attendee_id, "post-event registration captured");
+        tracing::info!(
+            attendee_fingerprint = %state.log_fingerprint(&email),
+            %event_id,
+            %attendee_id,
+            "post-event registration captured"
+        );
 
         return Ok(ApiOk::new(serde_json::json!({
             "attendee_id": attendee_id,

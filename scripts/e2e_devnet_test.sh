@@ -96,15 +96,19 @@ api_put() {
 
 # Compute FNV-1a hash to match Rust's derive_on_chain_event_id.
 # Intentionally FNV-1a — must match on-chain PDA seed derivation (see VULN-007).
+# The slug arrives as argv, never interpolated into the program text (.issues/065).
 fnv1a_hash() {
-  python3 -c "
-h = 0xcbf29ce484222325
-for c in '$1'.encode():
+  python3 - "$1" <<'PYFNV'
+import sys
+
+h = 0xCBF29CE484222325
+for c in sys.argv[1].encode():
     h ^= c
-    h = (h * 0x100000001b3) & 0xFFFFFFFFFFFFFFFF
-if h == 0: h = 1
+    h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+if h == 0:
+    h = 1
 print(h)
-"
+PYFNV
 }
 
 wait_for_confirmation() {
@@ -125,25 +129,31 @@ wait_for_confirmation() {
   fail "TX not confirmed after $max_attempts attempts"
 }
 
-# Sign a base64-encoded unsigned TX with a keypair and return base64 signed TX
+# Sign a base64-encoded unsigned TX with a keypair and return base64 signed TX.
+# Both arguments are paths passed as argv; Python opens the keypair itself, so
+# the secret key never reaches the process argument vector (.issues/073).
 sign_tx() {
   local tx_b64_file="$1"
   local keypair_file="$2"
 
-  python3 -c "
-import base64, json
+  python3 - "$tx_b64_file" "$keypair_file" <<'PYSIGN'
+import base64
+import sys
+
 from solders.keypair import Keypair
 from solders.message import Message
 from solders.transaction import Transaction
 
-tx_bytes = base64.b64decode(open('$tx_b64_file').read().strip())
+with open(sys.argv[1]) as f:
+    tx_bytes = base64.b64decode(f.read().strip())
 
-with open('$keypair_file') as f:
+with open(sys.argv[2]) as f:
     kp = Keypair.from_json(f.read())
 
 # Parse unsigned transaction: compact-u16 num_sigs | sig placeholders | message
 pos = 0
-sig_count = tx_bytes[pos]; pos += 1
+sig_count = tx_bytes[pos]
+pos += 1
 if sig_count > 0:
     pos += 64  # skip zero-filled signature placeholder
 message = tx_bytes[pos:]
@@ -152,37 +162,99 @@ msg = Message.from_bytes(message)
 tx = Transaction.new_unsigned(msg)
 tx.sign([kp], msg.recent_blockhash)
 print(base64.b64encode(bytes(tx)).decode())
-"
+PYSIGN
 }
 
-# Send a base64-encoded signed TX to the RPC
+# Send a base64-encoded signed TX to the RPC.
 send_tx() {
   local signed_b64="$1"
 
-  python3 -c "
-import json, urllib.request
-data = json.dumps({
-    'jsonrpc': '2.0', 'id': 'e2e',
-    'method': 'sendTransaction',
-    'params': ['$signed_b64', {'encoding': 'base64', 'skipPreflight': True}]
-}).encode()
-req = urllib.request.Request('$PUBLIC_RPC', data=data, headers={'Content-Type': 'application/json'})
-resp = urllib.request.urlopen(req)
-result = json.loads(resp.read())
-print(result.get('result', result.get('error', json.dumps(result))))
-"
+  python3 - "$signed_b64" "$PUBLIC_RPC" <<'PYSEND'
+import json
+import sys
+import urllib.request
+
+payload = json.dumps(
+    {
+        "jsonrpc": "2.0",
+        "id": "e2e",
+        "method": "sendTransaction",
+        "params": [sys.argv[1], {"encoding": "base64", "skipPreflight": True}],
+    }
+).encode()
+req = urllib.request.Request(
+    sys.argv[2], data=payload, headers={"Content-Type": "application/json"}
+)
+result = json.loads(urllib.request.urlopen(req).read())
+print(result.get("result", result.get("error", json.dumps(result))))
+PYSEND
 }
 
-# Derive PDA address using solders
-derive_pda() {
-  local seeds_py="$1"
-  local program_id="$2"
+# Derive the AttendeeDeposit PDA. Seeds match bethere-escrow/src/state.rs:57 —
+#   #[seeds(b"deposit", event: Address, attendee: Address)]
+# where the "event" seed is the EventEscrow address. Addresses arrive as argv.
+derive_deposit_pda() {
+  local escrow_address="$1"
+  local attendee_address="$2"
 
-  python3 -c "
+  python3 - "$ESCROW_PROGRAM" "$escrow_address" "$attendee_address" <<'PYDEPOSITPDA'
+import sys
+
 from solders.pubkey import Pubkey
-program_id = Pubkey.from_string('$program_id')
-$seeds_py
-"
+
+program_id = Pubkey.from_string(sys.argv[1])
+escrow = Pubkey.from_string(sys.argv[2])
+attendee = Pubkey.from_string(sys.argv[3])
+pda, _ = Pubkey.find_program_address(
+    [b"deposit", bytes(escrow), bytes(attendee)], program_id
+)
+print(str(pda))
+PYDEPOSITPDA
+}
+
+# Decode a base64 AttendeeDeposit account into shell-parseable `key=value` lines.
+# Offsets are the tested ones from flow-harness/src/chain.rs:173, which match
+# bethere-escrow/src/state.rs:57:
+#   [0] discriminator=2, [1] version, [2..34] attendee, [34..66] event,
+#   [66..74] amount, [74..82] deposited_at, [82] checked_in, [83] refunded,
+#   [84] bump, [85..96] padding.
+# The account data arrives as argv. Callers assert in shell, so the expected
+# values are never interpolated into the program text.
+decode_deposit() {
+  python3 - "$1" <<'PYDECODE'
+import base64
+import struct
+import sys
+
+MIN_LEN = 96
+DISCRIMINATOR = 2
+
+data = base64.b64decode(sys.argv[1])
+if len(data) < MIN_LEN:
+    print(f"AttendeeDeposit too short: {len(data)} < {MIN_LEN}", file=sys.stderr)
+    raise SystemExit(1)
+if data[0] != DISCRIMINATOR:
+    print(
+        f"AttendeeDeposit discriminator = {data[0]}, expected {DISCRIMINATOR}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+
+print(f"len={len(data)}")
+print(f"version={data[1]}")
+print(f"amount={struct.unpack('<Q', data[66:74])[0]}")
+print(f"deposited_at={struct.unpack('<q', data[74:82])[0]}")
+print(f"checked_in={'true' if data[82] else 'false'}")
+print(f"refunded={'true' if data[83] else 'false'}")
+print(f"bump={data[84]}")
+PYDECODE
+}
+
+# Pull one `key=value` field out of decode_deposit output.
+deposit_field() {
+  local fields="$1"
+  local key="$2"
+  printf '%s\n' "$fields" | sed -n "s/^${key}=//p"
 }
 
 # ---------------------------------------------------------------------------
@@ -328,9 +400,14 @@ fund_usdc() {
 step_create_event_kv() {
   log "=== Step 2: Create event in KV ==="
 
-  local event_end_ms refund_deadline_ms
+  # The refund deadline travels as `refund_deadline_hours`, relative to
+  # event_end_ms — the events API has no absolute-timestamp field for it. The
+  # Worker derives refund_deadline_ms = event_end_ms + hours * 3_600_000
+  # (worker/src/handlers/deposit/usdc/handlers/status.rs:114). 168h = 7 days,
+  # matching the Worker's own default (worker/src/db/events.rs:242).
+  local event_end_ms refund_deadline_hours
   event_end_ms=$(( (TIMESTAMP + 120) * 1000 ))  # 2 min from now (deposits accepted)
-  refund_deadline_ms=$(( (TIMESTAMP + 86400 * 30) * 1000 ))  # 30 days
+  refund_deadline_hours=168
 
   local event_body
   event_body=$(cat <<EOF
@@ -351,7 +428,7 @@ step_create_event_kv() {
   "on_chain_event_id": 0,
   "event_start_ms": $(( (TIMESTAMP - 7200) * 1000 )),
   "event_end_ms": $event_end_ms,
-  "refund_deadline_hours": 168,
+  "refund_deadline_hours": $refund_deadline_hours,
   "claim_base_url": "$WORKER_URL/claim",
   "sheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
 }
@@ -458,8 +535,10 @@ step_create_event_onchain() {
   if echo "$send_result" | grep -qE "^[1-9A-HJ-NP-Za-km-z]+"; then
     wait_for_confirmation "$send_result"
     ok "Event created on-chain: $escrow_address"
+    # The file is the channel between steps, not a shell variable: steps 5, 7
+    # and the summary each re-read escrow_address.txt, so a single step can be
+    # re-run in a fresh shell.
     echo "$escrow_address" > "$TEST_DIR/escrow_address.txt"
-    ESCROW_ADDRESS="$escrow_address"
 
     # Update event in KV with escrow info so subsequent API calls work
     local update_resp
@@ -544,17 +623,8 @@ step_verify_deposit() {
 
   # Derive AttendeeDeposit PDA
   local deposit_pda
-  deposit_pda=$(python3 -c "
-from solders.pubkey import Pubkey
-program_id = Pubkey.from_string('$ESCROW_PROGRAM')
-escrow = Pubkey.from_string('$escrow_address')
-attendee = Pubkey.from_string('$ATTENDEE_ADDR')
-pda, _ = Pubkey.find_program_address(
-    [b'deposit', bytes(escrow), bytes(attendee)],
-    program_id
-)
-print(str(pda))
-" 2>&1) || fail "PDA derivation failed: $deposit_pda"
+  deposit_pda=$(derive_deposit_pda "$escrow_address" "$ATTENDEE_ADDR" 2>&1) \
+    || fail "PDA derivation failed: $deposit_pda"
 
   log "AttendeeDeposit PDA: $deposit_pda"
 
@@ -582,39 +652,24 @@ print(str(pda))
 
   ok "AttendeeDeposit account exists"
 
-  # Decode and verify
-  python3 -c "
-import base64, struct
+  # Decode and verify. Assertions live in the shell so the expected amount is
+  # never interpolated into the Python program text.
+  local fields
+  fields=$(decode_deposit "$data_b64") || fail "AttendeeDeposit decode failed"
 
-data = base64.b64decode('$data_b64')
-print(f'Data length: {len(data)} bytes')
+  local amount checked_in refunded
+  amount=$(deposit_field "$fields" amount)
+  checked_in=$(deposit_field "$fields" checked_in)
+  refunded=$(deposit_field "$fields" refunded)
 
-# AttendeeDeposit layout (quasar-lang: 1-byte discriminator):
-# 1 (discriminator) + 32 (attendee) + 32 (event) + 8 (amount) + 8 (deposited_at) + 1 (checked_in) + 1 (refunded) + 1 (bump) = 84 bytes
-if len(data) >= 84:
-    off = 1
-    attendee = data[off:off+32]; off += 32
-    event = data[off:off+32]; off += 32
-    amount = struct.unpack('<Q', data[off:off+8])[0]; off += 8
-    deposited_at = struct.unpack('<q', data[off:off+8])[0]; off += 8
-    checked_in = data[off] != 0; off += 1
-    refunded = data[off] != 0; off += 1
-    bump = data[off]
+  log "  Amount:     $amount ($((amount / 1000000)).$(printf '%06d' $((amount % 1000000))) USDC)"
+  log "  Checked in: $checked_in"
+  log "  Refunded:   $refunded"
+  log "  Bump:       $(deposit_field "$fields" bump)"
 
-    print(f'  Amount:     {amount} ({amount/1_000_000:.2f} USDC)')
-    print(f'  Checked in: {checked_in}')
-    print(f'  Refunded:   {refunded}')
-    print(f'  Bump:       {bump}')
-
-    assert amount == $DEPOSIT_AMOUNT, f'Amount mismatch: {amount} != $DEPOSIT_AMOUNT'
-    assert not refunded, 'Should not be refunded yet'
-    print('✓ Deposit verified!')
-else:
-    print(f'Data too short ({len(data)} bytes), may be closed')
-    raise SystemExit(1)
-"
-
-  ok "Deposit verified on-chain"
+  [ "$amount" = "$DEPOSIT_AMOUNT" ] || fail "Amount mismatch: $amount != $DEPOSIT_AMOUNT"
+  [ "$refunded" = "false" ] || fail "Should not be refunded yet"
+  ok "Deposit verified on-chain (version=$(deposit_field "$fields" version))"
 }
 
 # ---------------------------------------------------------------------------
@@ -722,39 +777,30 @@ step_verify_refund() {
 
   # Derive AttendeeDeposit PDA
   local deposit_pda
-  deposit_pda=$(python3 -c "
-from solders.pubkey import Pubkey
-program_id = Pubkey.from_string('$ESCROW_PROGRAM')
-escrow = Pubkey.from_string('$escrow_address')
-attendee = Pubkey.from_string('$ATTENDEE_ADDR')
-pda, _ = Pubkey.find_program_address(
-    [b'deposit', bytes(escrow), bytes(attendee)],
-    program_id
-)
-print(str(pda))
-" 2>&1)
+  deposit_pda=$(derive_deposit_pda "$escrow_address" "$ATTENDEE_ADDR" 2>&1) \
+    || fail "PDA derivation failed: $deposit_pda"
 
   # Fetch account data with retry until refunded=true (RPC can be stale)
   sleep 5
-  local account_info data_b64
+  local account_info data_b64 fields
   local retry=0
   local refunded=false
+  data_b64=""
+  fields=""
   while [ $retry -lt 10 ]; do
     account_info=$(rpc_call "getAccountInfo" "[\"$deposit_pda\",{\"encoding\":\"base64\"}]")
     data_b64=$(echo "$account_info" | jq -r '.result.value.data[0] // empty')
     if [ -n "$data_b64" ]; then
-      # Check if refunded flag is set
-      refunded=$(python3 -c "
-import base64
-data = base64.b64decode('$data_b64')
-if len(data) >= 84:
-    off = 1 + 32 + 32 + 8 + 8 + 1  # disc + attendee + event + amount + deposited_at + checked_in
-    print('true' if data[off] != 0 else 'false')
-else:
-    print('false')
-" 2>&1)
-      if [ "$refunded" = "true" ]; then
-        break
+      # Poll the refunded flag. A decode failure here means the account is
+      # short or carries the wrong discriminator — keep retrying rather than
+      # treating an unreadable account as "not refunded yet".
+      if fields=$(decode_deposit "$data_b64" 2>/dev/null); then
+        refunded=$(deposit_field "$fields" refunded)
+        if [ "$refunded" = "true" ]; then
+          break
+        fi
+      else
+        fields=""
       fi
     fi
     retry=$((retry + 1))
@@ -765,32 +811,19 @@ else:
   if [ -z "$data_b64" ]; then
     fail "AttendeeDeposit account not found after 10 retries"
   fi
+  [ -n "$fields" ] || fail "AttendeeDeposit at $deposit_pda did not decode: $(decode_deposit "$data_b64" 2>&1 >/dev/null)"
 
-  python3 -c "
-import base64, struct
+  local amount checked_in
+  amount=$(deposit_field "$fields" amount)
+  checked_in=$(deposit_field "$fields" checked_in)
+  refunded=$(deposit_field "$fields" refunded)
 
-data = base64.b64decode('$data_b64')
+  log "  Amount:     $amount ($((amount / 1000000)).$(printf '%06d' $((amount % 1000000))) USDC)"
+  log "  Checked in: $checked_in"
+  log "  Refunded:   $refunded"
 
-if len(data) >= 84:
-    off = 1  # quasar-lang: 1-byte discriminator
-    attendee = data[off:off+32]; off += 32
-    event = data[off:off+32]; off += 32
-    amount = struct.unpack('<Q', data[off:off+8])[0]; off += 8
-    deposited_at = struct.unpack('<q', data[off:off+8])[0]; off += 8
-    checked_in = data[off] != 0; off += 1
-    refunded = data[off] != 0
-
-    print(f'  Amount:     {amount} ({amount/1_000_000:.2f} USDC)')
-    print(f'  Checked in: {checked_in}')
-    print(f'  Refunded:   {refunded}')
-
-    assert checked_in, 'Should be checked in'
-    assert refunded, 'Should be refunded'
-    print('✓ Refund verified!')
-else:
-    print(f'Data too short ({len(data)} bytes) — account may be closed')
-    raise SystemExit(1)
-"
+  [ "$checked_in" = "true" ] || fail "Should be checked in, got checked_in=$checked_in"
+  [ "$refunded" = "true" ] || fail "Should be refunded, got refunded=$refunded"
 
   ok "Full escrow cycle verified!"
 }

@@ -64,7 +64,7 @@ pub async fn duplicate_event(
 
     tracing::info!(
         source_id = %source_id,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         override_sheet_id = !body.new_sheet_id.trim().is_empty(),
         override_name = !body.new_name.trim().is_empty(),
         "duplicate event requested",
@@ -256,7 +256,7 @@ pub async fn duplicate_event(
         source_id = %source_id,
         new_event_id = %new_config.id,
         new_event_name = %new_config.name,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         warning_count = warnings.len(),
         "event duplicated",
     );
