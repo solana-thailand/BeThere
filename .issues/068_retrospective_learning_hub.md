@@ -99,6 +99,14 @@ uses `registration_phase = 'post_event'` and
 `approval_status = 'post_event_registered'`; it has no deposit, check-in,
 claim token, or attendance-NFT eligibility.
 
+All live-track counters must treat retrospective as neither in-person nor
+online. In particular, do not derive online counts from `!is_in_person()`;
+use the canonical participation classifier so legacy unknown values preserve
+their historical bucket while retrospective leads stay out of capacity and
+published online-registration metrics. Live signup and attendance-type override
+endpoints must accept only `in_person` or `online`; retrospective is reserved
+for the post-event writer.
+
 Completed public event pages use the existing organizer-managed `events.link`
 only when it is a trusted Genesis event URL. The DevRel repository owns the
 slug-to-archive mapping; BeThere must not duplicate it. Opening enrollment goes

@@ -12,7 +12,7 @@
 
 ---
 
-## 1. Provisioning state (verified 2026-09-12 on `develop` @ `ffed1be`)
+## 1. Provisioning state (verified 2026-09-12 on `develop` @ `9954731`)
 
 The Cloudflare resources are **already provisioned** (real IDs committed in
 `worker/wrangler.toml`, dated 2026-07-10). Plan 005's status note saying
@@ -29,8 +29,8 @@ The Cloudflare resources are **already provisioned** (real IDs committed in
 | Staging secret names | — | required auth/Sheets/Helius names present; values are intentionally unreadable | ✅ verified (§3) |
 | Google OAuth staging redirect URI | — | secret exists; interactive login remains a manual verification step | ⚠️ verify (§4) |
 | D1 migrations applied to staging | — | health connects and current tables including `nft_mint_jobs` exist | ✅ verified (§5) |
-| Staging Worker deployed | — | version `613d0fe2-1f9d-468e-ba70-e10dff1a54f0` | ✅ deployed (§6) |
-| Isolation verified | — | health reports one staging attendee; repeat aggregate check before each R1/R2 run | ✅ verified (§8) |
+| Staging Worker deployed | — | version `2cf965f1-84d1-4864-b899-10d0011d3554` | ✅ deployed (§6) |
+| Isolation verified | — | health is connected; the disposable completed-event fixture has one retrospective lead and no money/NFT state | ✅ verified (§8) |
 
 The staging Worker URL is `https://bethere-staging.solana-thailand.workers.dev`
 (declared in `[env.staging.vars].SERVER_URL`).

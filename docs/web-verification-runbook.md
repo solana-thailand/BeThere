@@ -89,6 +89,15 @@ Never enable retrospective enrollment for a historical production event during
 this test. The DevRel Genesis archive remains the source of the archive mapping;
 BeThere stores only the organizer-selected event link.
 
+**Recorded staging API proof (2026-09-12):** the isolated `test` fixture was
+completed through the protected event lifecycle endpoint, linked to its canonical
+Genesis archive, opened briefly, and closed again. One disposable lead persisted
+as `registration_phase = 'post_event'`, `approval_status =
+'post_event_registered'`, and `participation_type = 'retrospective'`, with no
+deposit or NFT job. Its public payload returned `online_count = 0` and the
+closed endpoint returned `409`. This proves server-side isolation; it does not
+replace the organizer-UI/browser steps above.
+
 ## 3. Authentication and admin readiness (R0/R1)
 
 Use the staging admin identity. Opening `/admin` while signed out must redirect to

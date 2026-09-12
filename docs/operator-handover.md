@@ -13,8 +13,8 @@ a copied commit or Worker version in this document.
 | Area | State |
 |---|---|
 | Git | `develop` is the integration branch. The separate Wrangler 4.131.1 lockfile update is intentionally uncommitted pending dependency-review approval. |
-| Staging | Healthy and isolated. The last verified deploy is version `613d0fe2-1f9d-468e-ba70-e10dff1a54f0` (2026-09-12); read the current version through Wrangler before a later release. |
-| Completed-event learning gateway | Merged to `develop` at `8e8673b` and deployed to staging. Browser journey validation remains pending a disposable completed event created through admin UI; it keeps retrospective leads separate from published online-registration reporting. |
+| Staging | Healthy and isolated. The last verified deploy is version `2cf965f1-84d1-4864-b899-10d0011d3554` (2026-09-12); read the current version through Wrangler before a later release. |
+| Completed-event learning gateway | Merged to `develop` at `8e8673b`, with retrospective-isolation hardening at `9954731`, and deployed to staging. The protected staging API proof passed: the disposable completed fixture's retrospective lead produces `online_count = 0`, has no live actions, and remains closed to new enrollment. Browser UI journey proof through organizer controls remains pending. |
 | Production | Read the current version through Wrangler before a release; do not infer it from staging or Git history. |
 | Networks | Escrow stays on devnet. Staging RPC/NFT/escrow roles report devnet |
 | Staging NFT | Disabled because no staging Crossmint collection is configured; health reports `nft_not_configured` |
@@ -84,13 +84,15 @@ bindings, then verifies HTML and JavaScript content types. Record the printed
 version ID and health result. Staging data must remain disposable and isolated
 from production.
 
-The completed-event gateway was deployed as staging version
-`613d0fe2-1f9d-468e-ba70-e10dff1a54f0`; health returned `status: ok`, D1
-connected, and the root/hashed-JS responses served `text/html` and
-`text/javascript`. The remaining R1 browser test needs a new completed fixture:
-staging currently has no completed events. Create it with normal admin controls,
-not a direct D1 update, then follow the completed-event section in the Web
-Verification Runbook.
+The completed-event gateway and retrospective-isolation hardening were deployed
+as staging version `2cf965f1-84d1-4864-b899-10d0011d3554`; health returned
+`status: ok`, D1 connected, and the root response served `text/html`. The
+isolated `test` fixture is completed, points to the canonical Genesis archive,
+and has one disposable retrospective lead. Its public payload was verified with
+`online_count = 0`; post-event enrollment is closed and a new submission returns
+`409`. Do not use this fixture as production-like data. The remaining R1
+browser test must still create or edit a disposable event using normal organizer
+controls and follow the completed-event section in the Web Verification Runbook.
 
 ## Production release gate
 
