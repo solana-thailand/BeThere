@@ -41,6 +41,11 @@ use solana_sdk::signer::Signer;
 use crate::context::StagingContext;
 use crate::error::{EscrowCode, HarnessError, HarnessResult, WorkerError};
 
+/// Keep a broken staging dependency from consuming an entire focused run.
+/// Worker endpoints normally complete in well under a second; fifteen seconds
+/// leaves room for cold starts while preserving actionable failure output.
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
 // ── Request/Response types not in `domain` ───────────────────────────────────
 //
 // These mirror the worker handler I/O shapes. They live here (not in `domain`)
@@ -153,11 +158,11 @@ impl std::fmt::Debug for WorkerClient {
 }
 
 impl WorkerClient {
-    /// Create a client targeting `base_url` with sensible defaults (30s
+    /// Create a client targeting `base_url` with sensible defaults (15s
     /// timeout, JSON accept, redirect-follow on for the OAuth callback path).
     pub fn new(base_url: Url) -> HarnessResult<Self> {
         let http = Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(REQUEST_TIMEOUT)
             .redirect(reqwest::redirect::Policy::limited(5))
             .user_agent("bethere-flow-harness/0.1")
             .build()
@@ -301,12 +306,14 @@ impl WorkerClient {
     /// self-contained: no browser cookie or Google account token is required.
     pub async fn authenticate_wallet(&self, ctx: &StagingContext) -> HarnessResult<WalletSession> {
         let wallet_address = ctx.payer_pubkey().to_string();
+        eprintln!("   SIWS: requesting nonce");
         let nonce: WalletNonceResponse = self
             .post_json(ctx.auth_wallet_nonce_url()?, &WalletNonceRequest {
                 wallet_address: wallet_address.clone(),
             })
             .await?;
         let signature = ctx.payer.as_ref().sign_message(nonce.message.as_bytes()).to_string();
+        eprintln!("   SIWS: verifying signed nonce");
         let verified: WalletVerifyResponse = self
             .post_json(ctx.auth_wallet_verify_url()?, &WalletVerifyRequest {
                 wallet_address,
@@ -315,6 +322,7 @@ impl WorkerClient {
                 nonce: nonce.nonce,
             })
             .await?;
+        eprintln!("   SIWS: session established");
         if !verified.authenticated || verified.token.is_empty() {
             return Err(HarnessError::AssertionFailed {
                 flow: "auth",

@@ -269,10 +269,17 @@ impl StagingContext {
 
     /// Worker-side URL for a deposit-status fetch.
     pub fn deposit_status_url(&self, attendee_id: &str) -> HarnessResult<Url> {
-        join_path(
+        let mut url = join_path(
             &self.worker_url,
             &format!("/api/deposit/status/{attendee_id}"),
-        )
+        )?;
+        // The Worker permits an omitted event id for legacy UI callers, but a
+        // harness fixture must never rely on that fallback: several staging
+        // events may coexist and the wrong one can produce a plausible empty
+        // status. Keep every named-fixture read bound to its exact event.
+        url.query_pairs_mut()
+            .append_pair("event_id", &self.event_id_str);
+        Ok(url)
     }
 
     /// Worker-side URL for the USDC deposit (Solana Pay URL) endpoint.
@@ -642,7 +649,7 @@ mod tests {
         let url = c.deposit_status_url("abc").unwrap();
         assert_eq!(
             url.as_str(),
-            "https://staging.example.workers.dev/api/deposit/status/abc"
+            "https://staging.example.workers.dev/api/deposit/status/abc?event_id=flow-test-event"
         );
     }
 

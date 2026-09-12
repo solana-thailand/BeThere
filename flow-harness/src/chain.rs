@@ -45,6 +45,16 @@ const B64: base64::engine::general_purpose::GeneralPurpose = base64::engine::gen
 /// How many times to poll `getSignatureStatuses` before giving up (≈ the
 /// blockhash validity window at ~1s between polls).
 const CONFIRM_POLLS: usize = 45;
+/// Bound every RPC operation so a provider outage produces a harness result
+/// instead of leaving the deployment gate waiting indefinitely.
+const RPC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+fn rpc_client() -> HarnessResult<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(RPC_TIMEOUT)
+        .build()
+        .map_err(HarnessError::from)
+}
 
 // ── Transaction signing (pure, offline-tested) ───────────────────────────────
 
@@ -190,7 +200,7 @@ pub fn decode_attendee_deposit(data: &[u8]) -> HarnessResult<AttendeeDepositView
 /// [`EscrowCode`]; RPC/transport problems surface as [`HarnessError::Solana`].
 pub async fn submit_tx(ctx: &StagingContext, tx_b64: &str) -> HarnessResult<Signature> {
     let (signed_b64, sig) = sign_worker_tx(tx_b64, &ctx.payer)?;
-    let http = reqwest::Client::new();
+    let http = rpc_client()?;
     let resp = rpc_call(
         &http,
         ctx.rpc_url.as_str(),
@@ -213,7 +223,7 @@ pub async fn fetch_account(
     ctx: &StagingContext,
     pubkey: &Pubkey,
 ) -> HarnessResult<Option<FetchedAccount>> {
-    let http = reqwest::Client::new();
+    let http = rpc_client()?;
     let resp = rpc_call(
         &http,
         ctx.rpc_url.as_str(),
@@ -237,7 +247,7 @@ pub async fn latest_signature_for_address(
     ctx: &StagingContext,
     address: &Pubkey,
 ) -> HarnessResult<Option<String>> {
-    let http = reqwest::Client::new();
+    let http = rpc_client()?;
     let resp = rpc_call(
         &http,
         ctx.rpc_url.as_str(),
