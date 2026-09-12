@@ -180,34 +180,39 @@ impl Flow for DepositFlow {
 
         // Recover first: an interrupted prior run may already have sent its
         // transaction. Retrying must never create a duplicate attendee PDA.
-        let status = if let Some(status) =
-            confirmed_status(client, ctx, &self.config.attendee_id).await?
-        {
-            status
-        } else {
-            let deposit_req = DepositUsdcRequest {
-                attendee_id: self.config.attendee_id.clone(),
-                event_id: self.config.event_id.clone(),
-                wallet_address: wallet.clone(),
-            };
-            let deposit_resp = client.request_deposit_usdc(ctx, &deposit_req).await?;
-            assert_solana_pay_url(&deposit_resp.solana_pay_url)?;
-            let tx_resp = client
-                .fetch_deposit_transaction(ctx, &self.config.attendee_id, &wallet)
-                .await?;
-            assert_transaction_present(&tx_resp.transaction)?;
-            let signature = submit_deposit_transaction(ctx, &tx_resp.transaction).await?;
-            client
-                .record_deposit_signature(
-                    ctx,
-                    &DepositSignatureRequest {
-                        attendee_id: self.config.attendee_id.clone(),
-                        event_id: self.config.event_id.clone(),
-                        tx_signature: signature,
-                    },
-                )
-                .await?;
-            wait_for_confirmed_status(client, ctx, &self.config).await?
+        let status = match confirmation_probe(client, ctx, &self.config.attendee_id).await? {
+            ConfirmationProbe::Verified(status) => *status,
+            // The Worker has accepted the on-chain proof but its following
+            // read is not yet consistent. Keep polling; never build another
+            // deposit transaction for this attendee PDA.
+            ConfirmationProbe::Persisting => {
+                wait_for_confirmed_status(client, ctx, &self.config).await?
+            }
+            ConfirmationProbe::NotConfirmed => {
+                let deposit_req = DepositUsdcRequest {
+                    attendee_id: self.config.attendee_id.clone(),
+                    event_id: self.config.event_id.clone(),
+                    wallet_address: wallet.clone(),
+                };
+                let deposit_resp = client.request_deposit_usdc(ctx, &deposit_req).await?;
+                assert_solana_pay_url(&deposit_resp.solana_pay_url)?;
+                let tx_resp = client
+                    .fetch_deposit_transaction(ctx, &self.config.attendee_id, &wallet)
+                    .await?;
+                assert_transaction_present(&tx_resp.transaction)?;
+                let signature = submit_deposit_transaction(ctx, &tx_resp.transaction).await?;
+                client
+                    .record_deposit_signature(
+                        ctx,
+                        &DepositSignatureRequest {
+                            attendee_id: self.config.attendee_id.clone(),
+                            event_id: self.config.event_id.clone(),
+                            tx_signature: signature,
+                        },
+                    )
+                    .await?;
+                wait_for_confirmed_status(client, ctx, &self.config).await?
+            }
         };
 
         // ── Step 4: Assert the deposit-status response is internally
@@ -262,25 +267,27 @@ async fn record_discovered_signature(
     Ok(())
 }
 
-async fn confirmed_status(
+enum ConfirmationProbe {
+    NotConfirmed,
+    Persisting,
+    Verified(Box<DepositStatusResponse>),
+}
+
+async fn confirmation_probe(
     client: &WorkerClient,
     ctx: &StagingContext,
     attendee_id: &str,
-) -> HarnessResult<Option<DepositStatusResponse>> {
+) -> HarnessResult<ConfirmationProbe> {
     let confirmation = client.confirm_deposit(ctx, attendee_id).await?;
     if !confirmation.confirmed {
-        return Ok(None);
+        return Ok(ConfirmationProbe::NotConfirmed);
     }
 
     let status = client.fetch_deposit_status(ctx, attendee_id).await?;
     if is_verified(status.status.as_ref()) {
-        Ok(Some(status))
+        Ok(ConfirmationProbe::Verified(Box::new(status)))
     } else {
-        Err(HarnessError::AssertionFailed {
-            flow: FLOW_NAME,
-            reason: "confirmation endpoint reported confirmed but attendee status is not verified"
-                .to_string(),
-        })
+        Ok(ConfirmationProbe::Persisting)
     }
 }
 
@@ -301,8 +308,9 @@ async fn wait_for_confirmed_status(
                 ),
             });
         }
-        if let Some(status) = confirmed_status(client, ctx, &config.attendee_id).await? {
-            return Ok(status);
+        match confirmation_probe(client, ctx, &config.attendee_id).await? {
+            ConfirmationProbe::Verified(status) => return Ok(*status),
+            ConfirmationProbe::NotConfirmed | ConfirmationProbe::Persisting => {}
         }
         tokio::time::sleep(config.poll_interval).await;
     }
