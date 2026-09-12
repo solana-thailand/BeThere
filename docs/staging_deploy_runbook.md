@@ -12,7 +12,7 @@
 
 ---
 
-## 1. Provisioning state (verified 2026-09-11 on `develop` @ `ca9ff28`)
+## 1. Provisioning state (verified 2026-09-12 on `develop` @ `ffed1be`)
 
 The Cloudflare resources are **already provisioned** (real IDs committed in
 `worker/wrangler.toml`, dated 2026-07-10). Plan 005's status note saying
@@ -29,7 +29,7 @@ The Cloudflare resources are **already provisioned** (real IDs committed in
 | Staging secret names | — | required auth/Sheets/Helius names present; values are intentionally unreadable | ✅ verified (§3) |
 | Google OAuth staging redirect URI | — | secret exists; interactive login remains a manual verification step | ⚠️ verify (§4) |
 | D1 migrations applied to staging | — | health connects and current tables including `nft_mint_jobs` exist | ✅ verified (§5) |
-| Staging Worker deployed | — | version `963012dc-55ef-4654-ae41-74315dff43ff` | ✅ deployed (§6) |
+| Staging Worker deployed | — | version `613d0fe2-1f9d-468e-ba70-e10dff1a54f0` | ✅ deployed (§6) |
 | Isolation verified | — | health reports one staging attendee; repeat aggregate check before each R1/R2 run | ✅ verified (§8) |
 
 The staging Worker URL is `https://bethere-staging.solana-thailand.workers.dev`
@@ -46,6 +46,9 @@ The staging Worker URL is `https://bethere-staging.solana-thailand.workers.dev`
   fails fast; retry once it recovers.
 - **Preflight gate:** staging deploys **skip** the §3.5 gate. Production deploys
   require a green harness run by default; bypass requires `--force --reason`.
+- **Toolchain baseline:** deployment on 2026-09-12 used the committed Wrangler
+  4.99.0 baseline. Do not run an uncommitted Wrangler/lockfile upgrade or add a
+  release-age bypass merely to deploy; see [Issue 069](../.issues/069_wrangler_4_131_toolchain_review.md).
 - **DEV_MODE = "1"** (staging-only) permits test shortcuts; production stays `0`.
 - **Bindings are non-inheritable** — `[env.staging]` redeclares the full `vars`
   set + D1/KV/R2 with staging IDs. Adding a new prod var requires mirroring it
