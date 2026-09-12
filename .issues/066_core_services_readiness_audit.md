@@ -63,6 +63,10 @@ No attendee PII was queried for this audit.
 - [ ] Validate Crossmint host, collection, and collection network at startup or
       event activation. Production currently uses `www.crossmint.com` while the
       config comment identifies the collection as devnet.
+  The claim lookup now reports availability from the actual Crossmint host,
+  key, and collection prerequisites rather than unrelated Helius read
+  credentials. Startup/provider-side collection-network validation remains
+  open; it requires a non-mutating Crossmint account check.
 - [x] Report separate NFT/RPC and escrow clusters in health/readiness. The current
       health cluster inferred from the Helius URL can say mainnet-beta while
       `SOLANA_CLUSTER` for escrow is devnet.

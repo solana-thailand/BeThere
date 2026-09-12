@@ -48,12 +48,11 @@ pub async fn lookup_claim(
     }
 
     if let Some(walkin) = walkin {
-        tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), email = %walkin.email, "claim lookup: found walk-in attendee");
+        tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: found walk-in attendee");
 
-        // API key + image URL are required; metadata_uri/collection_mint are optional
-        // enhancements passed to Helius when set.
-        let nft_available =
-            !event.nft_image_url.is_empty() && !state.config.solana.api_key.is_empty();
+        // Match the actual mint executor. Helius is used for reads, while NFT
+        // minting requires Crossmint credentials, collection, and known host.
+        let nft_available = state.config.solana.crossmint_minting_configured();
 
         return Ok(ClaimLookup {
             name: walkin.name.clone(),
@@ -138,9 +137,9 @@ pub async fn lookup_claim(
     let claimed = attendee.claimed_at.is_some();
     let claimed_at = attendee.claimed_at.clone();
 
-    // API key + image URL are required; metadata_uri/collection_mint are optional
-    // enhancements passed to Helius when set.
-    let nft_available = !event.nft_image_url.is_empty() && !state.config.solana.api_key.is_empty();
+    // Match the actual mint executor. Helius is used for reads, while NFT
+    // minting requires Crossmint credentials, collection, and known host.
+    let nft_available = state.config.solana.crossmint_minting_configured();
 
     let api_event = ApiEventConfig {
         event_name: event.name.clone(),
