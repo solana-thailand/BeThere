@@ -81,11 +81,58 @@ check_json() {
     fi
 }
 
+# Escrow program ID. Source of truth is `bethere-escrow/src/lib.rs`
+# (`declare_id!`); overridable so the script can run against a locally
+# redeployed program.
+ESCROW_PROGRAM="${ESCROW_PROGRAM:-C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T}"
+
+# Assert that an escrow address handed to us by the Worker is a real account
+# owned by the escrow program.
+#
+# The address arrives in an API response, so nothing downstream proves it is a
+# genuine EventEscrow PDA. Every later check reads it indirectly — vault
+# balances go through `spl-token balance --owner "$ADDR"`, which reports "0" for
+# a wrong address rather than an error, so a bad address would surface as a
+# plausible-looking balance instead of a failure. `test_escrow_devnet.sh` has
+# this check; the rollover scripts did not (.issues/072).
+assert_escrow_owned_by_program() {
+    local label="$1" addr="$2" account_info owner
+    case "$addr" in
+        "")
+            case "${SKIP_SETUP:-false}" in
+                true) skip "$label escrow ownership — address not captured in --skip-setup mode" ;;
+                *) fail "$label escrow address is empty — nothing to verify" ;;
+            esac
+            return
+            ;;
+    esac
+    account_info=$(solana account "$addr" --url "$RPC_URL" 2>&1 || echo "NOT_FOUND")
+    # `solana account` prints capitalized, line-anchored field names
+    # (`Owner:`, `Length:` — verified against solana-cli 3.1.10). Matched
+    # case-insensitively and anchored: unanchored would also hit the hexdump,
+    # and a case-sensitive lowercase pattern never matches at all, which is how
+    # the equivalent check in `test_escrow_devnet.sh` silently never passed.
+    if ! echo "$account_info" | grep -qi "^length:"; then
+        fail "$label escrow PDA not found on-chain: $addr"
+        return
+    fi
+    owner=$(echo "$account_info" | grep -i "^owner:" | awk '{print $2}' || echo "?")
+    case "$owner" in
+        "$ESCROW_PROGRAM") pass "$label escrow owned by the escrow program ($addr)" ;;
+        *) fail "$label escrow $addr owned by $owner, expected $ESCROW_PROGRAM" ;;
+    esac
+}
+
 sign_and_submit_tx() {
     local tx_b64="$1"
-    local keypair_json="$2"
+    local keypair_path="$2"
     local rpc_url="${3:-$RPC_URL}"
-    python3 "$(dirname "$0")/sign_and_submit.py" "$tx_b64" "$keypair_json" "$rpc_url"
+    # The signer travels as a path and the RPC URL via the environment, so
+    # neither lands in argv, where `ps` exposes it to any local user
+    # (.issues/073). sign_and_submit.py reads the file itself.
+    SIGNER_KEYPAIR_PATH="$keypair_path" \
+    SOLANA_RPC_URL="$rpc_url" \
+        python3 "$(dirname "$0")/sign_and_submit.py" "$tx_b64"
 }
 
 # --- Parse args ---
@@ -129,7 +176,6 @@ info "Organizer wallet: ${ORGANIZER_WALLET:0:8}...${ORGANIZER_WALLET: -4}"
 info "Attendee wallet:  ${ATTENDEE_WALLET:0:8}...${ATTENDEE_WALLET: -4}"
 
 USDC_MINT="4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
-ESCROW_PROGRAM="C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T"
 
 # Test attendee ID
 TEST_ATTENDEE_ID="rollover-test-att-$TIMESTAMP"
@@ -317,8 +363,8 @@ else
         info "On-chain event ID: $SOURCE_ON_CHAIN_ID"
 
         # Submit with organizer keypair
-        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
-        SRC_SUBMIT=$(sign_and_submit_tx "$SRC_TX_B64" "$ORG_KEYPAIR_JSON")
+        ORG_KEYPAIR_PATH="$HOME/.config/solana/id.json"
+        SRC_SUBMIT=$(sign_and_submit_tx "$SRC_TX_B64" "$ORG_KEYPAIR_PATH")
         info "Submit: $SRC_SUBMIT"
 
         if echo "$SRC_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -382,8 +428,8 @@ else
         info "On-chain event ID: $TARGET_ON_CHAIN_ID"
 
         # Submit with organizer keypair
-        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
-        TGT_SUBMIT=$(sign_and_submit_tx "$TGT_TX_B64" "$ORG_KEYPAIR_JSON")
+        ORG_KEYPAIR_PATH="$HOME/.config/solana/id.json"
+        TGT_SUBMIT=$(sign_and_submit_tx "$TGT_TX_B64" "$ORG_KEYPAIR_PATH")
         info "Submit: $TGT_SUBMIT"
 
         if echo "$TGT_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -420,6 +466,11 @@ else
         fail "Target escrow TX build failed: $ERR"
     fi
 fi
+
+# Both escrow addresses came from the Worker — confirm they are real PDAs owned
+# by the escrow program before any balance assertion relies on them.
+assert_escrow_owned_by_program "Source" "$SOURCE_ESCROW_ADDR"
+assert_escrow_owned_by_program "Target" "$TARGET_ESCROW_ADDR"
 
 # Extend source event_end_ms server-side for deposit acceptance
 section "Step 3c: Extend Source Event End (server-side)"
@@ -464,8 +515,8 @@ if [ "$DEP_INIT_SUCCESS" = "true" ]; then
         pass "Deposit TX built via callback"
 
         # Sign and submit with attendee keypair
-        ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
-        DEP_SUBMIT=$(sign_and_submit_tx "$DEP_TX_B64" "$ATT_KEYPAIR_JSON")
+        ATT_KEYPAIR_PATH="$ATTENDEE_KEYPAIR"
+        DEP_SUBMIT=$(sign_and_submit_tx "$DEP_TX_B64" "$ATT_KEYPAIR_PATH")
         info "Deposit submit: $DEP_SUBMIT"
 
         if echo "$DEP_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -544,8 +595,8 @@ if [ "$MARK_CI_SUCCESS" = "true" ]; then
     pass "mark_checked_in TX built"
     info "Message: $MARK_CI_MSG"
 
-    ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
-    MARK_CI_SUBMIT=$(sign_and_submit_tx "$MARK_CI_TX" "$ORG_KEYPAIR_JSON")
+    ORG_KEYPAIR_PATH="$HOME/.config/solana/id.json"
+    MARK_CI_SUBMIT=$(sign_and_submit_tx "$MARK_CI_TX" "$ORG_KEYPAIR_PATH")
     info "Submit: $MARK_CI_SUBMIT"
 
     if echo "$MARK_CI_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -608,8 +659,8 @@ if [ "$ROLLOVER_SUCCESS" = "true" ]; then
     info "Transaction: ${ROLLOVER_TX_B64:0:60}..."
 
     # Sign and submit with attendee keypair (attendee is the signer)
-    ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
-    ROLLOVER_SUBMIT=$(sign_and_submit_tx "$ROLLOVER_TX_B64" "$ATT_KEYPAIR_JSON")
+    ATT_KEYPAIR_PATH="$ATTENDEE_KEYPAIR"
+    ROLLOVER_SUBMIT=$(sign_and_submit_tx "$ROLLOVER_TX_B64" "$ATT_KEYPAIR_PATH")
     info "Rollover submit: $ROLLOVER_SUBMIT"
 
     if echo "$ROLLOVER_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -644,8 +695,8 @@ else
         pass "Rollover TX built (wrapped response)"
         info "Message: $ROLLOVER_MSG"
 
-        ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
-        ROLLOVER_SUBMIT=$(sign_and_submit_tx "$ROLLOVER_TX_B64" "$ATT_KEYPAIR_JSON")
+        ATT_KEYPAIR_PATH="$ATTENDEE_KEYPAIR"
+        ROLLOVER_SUBMIT=$(sign_and_submit_tx "$ROLLOVER_TX_B64" "$ATT_KEYPAIR_PATH")
         info "Rollover submit: $ROLLOVER_SUBMIT"
 
         if echo "$ROLLOVER_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -841,8 +892,8 @@ if [ "$REFUND_SUCCESS" = "true" ]; then
     info "Message: $REFUND_MSG"
 
     # Attendee signs the refund TX
-    ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
-    REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
+    ATT_KEYPAIR_PATH="$ATTENDEE_KEYPAIR"
+    REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_PATH")
     info "Refund submit: $REFUND_SUBMIT"
 
     if echo "$REFUND_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -899,7 +950,7 @@ info "Attendee USDC (post-refund): $ATT_USDC_POST"
 # ============================================================================
 section "Step 12: Deactivate Both Events"
 
-ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
+ORG_KEYPAIR_PATH="$HOME/.config/solana/id.json"
 
 # --- Deactivate Source Event ---
 info "Deactivating source event..."
@@ -912,7 +963,7 @@ SRC_DEACT_SUCCESS=$(echo "$SRC_DEACT" | python3 -c "import sys,json; print(str(j
 
 if [ "$SRC_DEACT_SUCCESS" = "true" ]; then
     SRC_DEACT_TX=$(echo "$SRC_DEACT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
-    SRC_DEACT_SUBMIT=$(sign_and_submit_tx "$SRC_DEACT_TX" "$ORG_KEYPAIR_JSON")
+    SRC_DEACT_SUBMIT=$(sign_and_submit_tx "$SRC_DEACT_TX" "$ORG_KEYPAIR_PATH")
 
     if echo "$SRC_DEACT_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         SRC_DEACT_SIG=$(echo "$SRC_DEACT_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
@@ -944,7 +995,7 @@ TGT_DEACT_SUCCESS=$(echo "$TGT_DEACT" | python3 -c "import sys,json; print(str(j
 
 if [ "$TGT_DEACT_SUCCESS" = "true" ]; then
     TGT_DEACT_TX=$(echo "$TGT_DEACT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
-    TGT_DEACT_SUBMIT=$(sign_and_submit_tx "$TGT_DEACT_TX" "$ORG_KEYPAIR_JSON")
+    TGT_DEACT_SUBMIT=$(sign_and_submit_tx "$TGT_DEACT_TX" "$ORG_KEYPAIR_PATH")
 
     if echo "$TGT_DEACT_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         TGT_DEACT_SIG=$(echo "$TGT_DEACT_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
@@ -981,7 +1032,7 @@ SRC_CLOSE_SUCCESS=$(echo "$SRC_CLOSE" | python3 -c "import sys,json; print(str(j
 
 if [ "$SRC_CLOSE_SUCCESS" = "true" ]; then
     SRC_CLOSE_TX=$(echo "$SRC_CLOSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
-    SRC_CLOSE_SUBMIT=$(sign_and_submit_tx "$SRC_CLOSE_TX" "$ORG_KEYPAIR_JSON")
+    SRC_CLOSE_SUBMIT=$(sign_and_submit_tx "$SRC_CLOSE_TX" "$ORG_KEYPAIR_PATH")
 
     if echo "$SRC_CLOSE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         SRC_CLOSE_SIG=$(echo "$SRC_CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
@@ -1015,7 +1066,7 @@ TGT_CLOSE_SUCCESS=$(echo "$TGT_CLOSE" | python3 -c "import sys,json; print(str(j
 
 if [ "$TGT_CLOSE_SUCCESS" = "true" ]; then
     TGT_CLOSE_TX=$(echo "$TGT_CLOSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
-    TGT_CLOSE_SUBMIT=$(sign_and_submit_tx "$TGT_CLOSE_TX" "$ORG_KEYPAIR_JSON")
+    TGT_CLOSE_SUBMIT=$(sign_and_submit_tx "$TGT_CLOSE_TX" "$ORG_KEYPAIR_PATH")
 
     if echo "$TGT_CLOSE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         TGT_CLOSE_SIG=$(echo "$TGT_CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)

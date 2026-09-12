@@ -157,7 +157,7 @@ for RESULT in "${RESULTS[@]}"; do
         FAIL) STATUS_FMT="${RED}FAIL${NC}" ;;
         SKIP) STATUS_FMT="${YELLOW}SKIP${NC}" ;;
     esac
-    printf "  %-20s %-8s %-10s %s\n" "$NAME" "$(echo -e $STATUS_FMT)" "$TIME_DESC" "$DESC"
+    printf "  %-20s %-8s %-10s %s\n" "$NAME" "$(echo -e "$STATUS_FMT")" "$TIME_DESC" "$DESC"
 done
 
 echo ""

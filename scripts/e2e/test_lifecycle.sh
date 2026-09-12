@@ -37,13 +37,22 @@ section() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
 sign_and_submit() {
     local tx_b64="$1"
-    python3 "$(dirname "$0")/sign_and_submit.py" "$tx_b64" "$(cat ~/.config/solana/id.json)" "$RPC_URL"
+    # Path + environment, never argv: `cat`-ing the keypair onto the command
+    # line exposed the secret key via `ps` (.issues/073).
+    SIGNER_KEYPAIR_PATH="$HOME/.config/solana/id.json" \
+    SOLANA_RPC_URL="$RPC_URL" \
+        python3 "$(dirname "$0")/sign_and_submit.py" "$tx_b64"
 }
 
 REUSE=false
 for arg in "$@"; do
     case "$arg" in
         --reuse) REUSE=true ;;
+        *)
+            echo -e "  ${RED}❌ Unknown argument: $arg${NC}" >&2
+            echo "     Usage: [EVENT_ID=<slug>] bash $0 [--reuse]" >&2
+            exit 2
+            ;;
     esac
 done
 
@@ -70,34 +79,59 @@ NOW_S=$(date +%s)
 EVENT_END_MS=$(( (NOW_S + 86400) * 1000 ))
 EVENT_START_MS=$(( NOW_S * 1000 ))
 
-EVENT_RESP=$(curl -s -X POST "$BASE_URL/api/events" \
-    -H "Authorization: Bearer dev-token" \
-    -H "Content-Type: application/json" \
-    -d "{
-        \"name\": \"Lifecycle Test\",
-        \"slug\": \"$EVENT_ID\",
-        \"tagline\": \"Automated lifecycle test\",
-        \"link\": \"https://example.com\",
-        \"sheet_id\": \"test\",
-        \"event_start_ms\": $EVENT_START_MS,
-        \"event_end_ms\": $EVENT_END_MS,
-        \"status\": \"active\",
-        \"deposit_enabled\": true,
-        \"deposit_amount_usdc\": 1000000,
-        \"deposit_amount_thb\": 100,
-        \"promptpay_id\": \"0812345678\",
-        \"organizer_wallet\": \"$ORGANIZER_WALLET\",
-        \"refund_deadline_hours\": 168
-    }")
-
-EVENT_SUCCESS=$(echo "$EVENT_RESP" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
-if [ "$EVENT_SUCCESS" = "true" ]; then
-    EVENT_ID=$(echo "$EVENT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['id'])" 2>/dev/null)
-    pass "Event created: $EVENT_ID"
+if [ "$REUSE" = true ]; then
+    # --reuse: take the event named by $EVENT_ID as-is. Creating it again would
+    # fail on the duplicate slug, so verify it exists rather than POSTing.
+    EVENT_DETAIL=$(curl -s "$BASE_URL/api/events/$EVENT_ID" \
+        -H "Authorization: Bearer dev-token")
+    REUSE_OK=$(echo "$EVENT_DETAIL" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+    if [ "$REUSE_OK" = "true" ]; then
+        pass "Reusing existing event: $EVENT_ID"
+        REUSE_WALLET=$(echo "$EVENT_DETAIL" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']['event']; print(d.get('organizer_wallet',''))" 2>/dev/null || echo "")
+        if [ -n "$REUSE_WALLET" ] && [ "$REUSE_WALLET" != "$ORGANIZER_WALLET" ]; then
+            # Every later step signs with the local keypair, so a mismatch here
+            # means the escrow PDA belongs to someone else and Step 3 onwards
+            # would fail Unauthorized (escrow code 9).
+            fail "Event organizer_wallet is $REUSE_WALLET but the local keypair is $ORGANIZER_WALLET"
+            exit 1
+        fi
+        info "organizer_wallet=$REUSE_WALLET"
+    else
+        ERR=$(echo "$EVENT_DETAIL" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "$EVENT_DETAIL")
+        fail "--reuse given but event '$EVENT_ID' was not found: $ERR"
+        echo "     Pass EVENT_ID=<existing slug>, or drop --reuse to create one." >&2
+        exit 1
+    fi
 else
-    ERR=$(echo "$EVENT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "$EVENT_RESP")
-    fail "Event creation: $ERR"
-    exit 1
+    EVENT_RESP=$(curl -s -X POST "$BASE_URL/api/events" \
+        -H "Authorization: Bearer dev-token" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"name\": \"Lifecycle Test\",
+            \"slug\": \"$EVENT_ID\",
+            \"tagline\": \"Automated lifecycle test\",
+            \"link\": \"https://example.com\",
+            \"sheet_id\": \"test\",
+            \"event_start_ms\": $EVENT_START_MS,
+            \"event_end_ms\": $EVENT_END_MS,
+            \"status\": \"active\",
+            \"deposit_enabled\": true,
+            \"deposit_amount_usdc\": 1000000,
+            \"deposit_amount_thb\": 100,
+            \"promptpay_id\": \"0812345678\",
+            \"organizer_wallet\": \"$ORGANIZER_WALLET\",
+            \"refund_deadline_hours\": 168
+        }")
+
+    EVENT_SUCCESS=$(echo "$EVENT_RESP" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+    if [ "$EVENT_SUCCESS" = "true" ]; then
+        EVENT_ID=$(echo "$EVENT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['id'])" 2>/dev/null)
+        pass "Event created: $EVENT_ID"
+    else
+        ERR=$(echo "$EVENT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "$EVENT_RESP")
+        fail "Event creation: $ERR"
+        exit 1
+    fi
 fi
 
 # --- Step 2: Init Escrow (combined ATA + CreateEvent) ---

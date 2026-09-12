@@ -55,6 +55,7 @@ move_pnp() {
     fi
 }
 
+# shellcheck disable=SC2329  # invoked indirectly via cleanup() in the EXIT trap
 restore_pnp() {
     if [ "$MOVED" = true ] && [ -f "$PNP_BACKUP" ]; then
         mv "$PNP_BACKUP" "$PNP_FILE"
@@ -69,6 +70,7 @@ SKIP_BUILD="${SKIP_BUILD:-0}"
 
 # ── Prepare temp dir + cleanup trap ─────────────────────────────────────────
 DRY_DIR="$(mktemp -d)"
+# shellcheck disable=SC2329  # invoked indirectly by `trap cleanup EXIT INT TERM`
 cleanup() {
     restore_pnp
     rm -rf "$DRY_DIR" 2>/dev/null || true
@@ -94,7 +96,8 @@ SIZE_LINE=""
 
 if [ "$SKIP_BUILD" = "1" ]; then
     # Fast path — measure existing artifacts
-    WASM_FILE="$(ls build/worker/*.wasm 2>/dev/null | head -1 || true)"
+    WASM_FILES=(build/worker/*.wasm)
+    WASM_FILE="${WASM_FILES[0]}"
     if [ -z "$WASM_FILE" ] || [ ! -f "$WASM_FILE" ]; then
         echo "❌ SKIP_BUILD=1 but no build/worker/*.wasm found."
         echo "   Run the full check (without SKIP_BUILD) to produce artifacts first."

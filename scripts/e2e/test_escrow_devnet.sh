@@ -32,7 +32,6 @@
 # Usage:
 #   bash scripts/e2e/test_escrow_devnet.sh
 #   bash scripts/e2e/test_escrow_devnet.sh --skip-setup       # reuse existing event
-#   bash scripts/e2e/test_escrow_devnet.sh --with-vault-ata   # run create_vault_ata step
 #   EVENT_ID=myevent bash scripts/e2e/test_escrow_devnet.sh
 # ============================================================================
 
@@ -45,6 +44,9 @@ DEPOSIT_AMOUNT_USDC="${DEPOSIT_AMOUNT_USDC:-1000000}"  # 1 USDC (6 decimals)
 DEPOSIT_AMOUNT_THB="${DEPOSIT_AMOUNT_THB:-100}"         # 100 THB
 ORGANIZER_WALLET="${ORGANIZER_WALLET:-}"
 ATTENDEE_WALLET="${ATTENDEE_WALLET:-}"
+# Captured before the default lands, so the Helius upgrade below cannot
+# override an endpoint the caller pinned deliberately.
+RPC_URL_EXPLICIT="${RPC_URL:+1}"
 RPC_URL="${RPC_URL:-https://api.devnet.solana.com}"
 
 # Colors
@@ -84,9 +86,14 @@ check_json() {
 
 sign_and_submit_tx() {
     local tx_b64="$1"
-    local keypair_json="$2"
+    local keypair_path="$2"
     local rpc_url="${3:-$RPC_URL}"
-    python3 "$(dirname "$0")/sign_and_submit.py" "$tx_b64" "$keypair_json" "$rpc_url"
+    # The signer travels as a path and the RPC URL via the environment, so
+    # neither lands in argv, where `ps` exposes it to any local user
+    # (.issues/073). sign_and_submit.py reads the file itself.
+    SIGNER_KEYPAIR_PATH="$keypair_path" \
+    SOLANA_RPC_URL="$rpc_url" \
+        python3 "$(dirname "$0")/sign_and_submit.py" "$tx_b64"
 }
 
 # --- Parse args ---
@@ -99,18 +106,31 @@ for arg in "$@"; do
     esac
 done
 
-echo ""
-echo -e "${BOLD}🧪 BeThere Devnet Escrow E2E Test Suite${NC}"
-echo "   BASE_URL:    $BASE_URL"
-echo "   EVENT_ID:    $EVENT_ID"
-echo "   RPC_URL:     $RPC_URL"
-echo ""
-
 # --- Read config from .dev.vars ---
+# The key upgrades the RPC from the public devnet endpoint — aggressively rate
+# limited, which surfaces here as flaky confirmations — to the authenticated
+# Helius devnet endpoint the Worker itself uses (worker/wrangler.toml:263,
+# worker/src/state.rs:172). Safe only because #073 moved the RPC URL out of
+# argv and into the environment; it must never be printed or passed positionally.
 HELIUS_API_KEY=""
 if [ -f "worker/.dev.vars" ]; then
     HELIUS_API_KEY=$(grep "^HELIUS_API_KEY=" worker/.dev.vars | cut -d= -f2- | tr -d '"' | tr -d "'" || true)
 fi
+
+RPC_LABEL="$RPC_URL"
+if [ -z "$RPC_URL_EXPLICIT" ] && [ -n "$HELIUS_API_KEY" ]; then
+    RPC_URL="https://devnet.helius-rpc.com/?api-key=$HELIUS_API_KEY"
+    # This script's output gets pasted into issues — print the endpoint, never
+    # the credential.
+    RPC_LABEL="https://devnet.helius-rpc.com/?api-key=<redacted>"
+fi
+
+echo ""
+echo -e "${BOLD}🧪 BeThere Devnet Escrow E2E Test Suite${NC}"
+echo "   BASE_URL:    $BASE_URL"
+echo "   EVENT_ID:    $EVENT_ID"
+echo "   RPC_URL:     $RPC_LABEL"
+echo ""
 
 # --- Resolve wallets ---
 if [ -z "$ORGANIZER_WALLET" ]; then
@@ -139,6 +159,9 @@ info "Keypair path:     $ATTENDEE_KEYPAIR"
 # USDC devnet constants
 USDC_MINT="4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 ESCROW_PROGRAM="C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T"
+
+# Set only when this run builds the init TX; stays empty under --skip-setup.
+VAULT_ADDR=""
 
 # ============================================================================
 # Step 0: Prerequisites Check
@@ -372,9 +395,9 @@ else
 
         # Submit TX with organizer keypair
         info "Signing and submitting TX to devnet..."
-        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
+        ORG_KEYPAIR_PATH="$HOME/.config/solana/id.json"
 
-        SUBMIT_OUTPUT=$(sign_and_submit_tx "$TX_B64" "$ORG_KEYPAIR_JSON")
+        SUBMIT_OUTPUT=$(sign_and_submit_tx "$TX_B64" "$ORG_KEYPAIR_PATH")
         info "Submit output: $SUBMIT_OUTPUT"
 
         if echo "$SUBMIT_OUTPUT" | grep -q "STATUS=CONFIRMED"; then
@@ -465,45 +488,52 @@ if [ -n "$ESCROW_ADDR" ] && [ "$ESCROW_ADDR" != "" ]; then
     info "Checking escrow account: $ESCROW_ADDR"
     ESCROW_INFO=$(solana account "$ESCROW_ADDR" --url devnet 2>&1 || echo "NOT_FOUND")
 
-    if echo "$ESCROW_INFO" | grep -qi "length:"; then
-        ESCROW_LAMPORTS=$(echo "$ESCROW_INFO" | grep "lamports:" | awk '{print $2}' || echo "0")
-        ESCROW_OWNER=$(echo "$ESCROW_INFO" | grep "owner:" | awk '{print $2}' || echo "?")
+    if echo "$ESCROW_INFO" | grep -qi "^length:"; then
+        # `solana account` prints `Balance:` / `Owner:` capitalized and
+        # line-anchored (verified against solana-cli 3.1.10). The lowercase,
+        # case-sensitive patterns here never matched, so `ESCROW_OWNER` was
+        # always "?" and the ownership assertion below could never pass.
+        ESCROW_BALANCE_SOL=$(echo "$ESCROW_INFO" | grep -i "^balance:" | awk '{print $2}' || echo "0")
+        ESCROW_OWNER=$(echo "$ESCROW_INFO" | grep -i "^owner:" | awk '{print $2}' || echo "?")
         pass "Escrow PDA exists on-chain"
-        info "Lamports: $ESCROW_LAMPORTS, Owner: $ESCROW_OWNER"
+        info "Balance: $ESCROW_BALANCE_SOL SOL, Owner: $ESCROW_OWNER"
 
         # Verify it's owned by our escrow program
         if [ "$ESCROW_OWNER" = "$ESCROW_PROGRAM" ]; then
             pass "Escrow owned by correct program"
         else
-            warn "Escrow owner: $ESCROW_OWNER (expected: $ESCROW_PROGRAM)"
+            fail "Escrow owner: $ESCROW_OWNER (expected: $ESCROW_PROGRAM)"
         fi
     else
         warn "Escrow PDA not found: $ESCROW_ADDR"
         info "This is expected if create_event TX hasn't been submitted yet"
     fi
 
-    # Derive and check vault ATA
+    # Cross-check the vault ATA. The Worker derives it as
+    # get_associated_token_address(event_escrow, usdc_mint) — seeds
+    # [escrow, TOKEN_PROGRAM, mint] under the ATA program
+    # (worker/src/solana_escrow/crypto.rs:342). `spl-token address` derives the
+    # same address independently, so a mismatch means the Worker would fund the
+    # wrong account. The devnet USDC mint is owned by the legacy token program,
+    # so both sides use the same TOKEN_PROGRAM seed.
     info "Deriving vault ATA..."
-    # Use python to derive ATA (same logic as worker)
-    VAULT_ATA=$(python3 -c "
-import hashlib, struct, base58
+    DERIVED_VAULT=$(spl-token address \
+        --token "$USDC_MINT" \
+        --owner "$ESCROW_ADDR" \
+        --verbose \
+        --url devnet 2>/dev/null | awk '/^Associated token address:/ { print $NF }')
 
-def find_pda(seeds, program_id):
-    \"\"\"Find program derived address (PDA).\"\"\"
-    # In production, use proper PDA derivation
-    # For devnet, we can use the Solana RPC's findProgramAddress
-    pass
-
-# Use solana RPC to derive ATA
-import urllib.request, json
-
-# Actually, just check if the vault exists via the event escrow
-# The ATA is: SHA256(event_escrow + TOKEN_PROGRAM + usdc_mint) truncated
-# Let's use RPC getAccountInfo to check
-
-# For now, just check via spl-token
-print('checking...')
-" 2>/dev/null || echo "")
+    if [ -z "$DERIVED_VAULT" ]; then
+        warn "Could not derive vault ATA (spl-token unavailable or devnet RPC down)"
+    elif [ -z "$VAULT_ADDR" ]; then
+        # Escrow pre-existed (--skip-setup), so the Worker never returned a
+        # vault_address this run — nothing to compare against.
+        info "Vault ATA (derived): $DERIVED_VAULT — no Worker value this run"
+    elif [ "$DERIVED_VAULT" = "$VAULT_ADDR" ]; then
+        pass "Vault ATA matches the Worker's derivation: $VAULT_ADDR"
+    else
+        fail "Vault ATA mismatch — Worker: $VAULT_ADDR, spl-token: $DERIVED_VAULT"
+    fi
 
     # Check vault via spl-token balance for the escrow PDA
     info "Checking vault USDC balance (if vault ATA exists)..."
@@ -583,9 +613,9 @@ if [ "$DEP_INIT_SUCCESS" = "true" ]; then
     if [ -n "$DEP_TX_B64" ] && [ "$DEP_TX_B64" != "" ] && [ -f "$ATTENDEE_KEYPAIR" ]; then
         info "Signing and submitting deposit TX with attendee keypair..."
 
-        ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
+        ATT_KEYPAIR_PATH="$ATTENDEE_KEYPAIR"
 
-        DEP_SUBMIT=$(sign_and_submit_tx "$DEP_TX_B64" "$ATT_KEYPAIR_JSON")
+        DEP_SUBMIT=$(sign_and_submit_tx "$DEP_TX_B64" "$ATT_KEYPAIR_PATH")
         info "Deposit submit: $DEP_SUBMIT"
 
         if echo "$DEP_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -708,8 +738,8 @@ else
         info "Message: $MARK_CI_MSG"
 
         # Submit TX with organizer keypair (organizer signs this)
-        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
-        MARK_CI_SUBMIT=$(sign_and_submit_tx "$MARK_CI_TX" "$ORG_KEYPAIR_JSON")
+        ORG_KEYPAIR_PATH="$HOME/.config/solana/id.json"
+        MARK_CI_SUBMIT=$(sign_and_submit_tx "$MARK_CI_TX" "$ORG_KEYPAIR_PATH")
         info "Mark checked-in submit: $MARK_CI_SUBMIT"
 
         if echo "$MARK_CI_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -790,9 +820,9 @@ if [ "$REFUND_SUCCESS" = "yes" ]; then
     if [ -f "$ATTENDEE_KEYPAIR" ]; then
         info "Signing and submitting refund TX with attendee keypair..."
 
-        ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
+        ATT_KEYPAIR_PATH="$ATTENDEE_KEYPAIR"
 
-        REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
+        REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_PATH")
         info "Refund submit: $REFUND_SUBMIT"
 
         if echo "$REFUND_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -833,8 +863,8 @@ else
         # Submit refund TX with attendee keypair
         if [ -f "$ATTENDEE_KEYPAIR" ] && [ -n "$REFUND_TX_B64" ]; then
             info "Signing and submitting refund TX with attendee keypair..."
-            ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
-            REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
+            ATT_KEYPAIR_PATH="$ATTENDEE_KEYPAIR"
+            REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_PATH")
             info "Refund submit: $REFUND_SUBMIT"
 
             if echo "$REFUND_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -946,8 +976,8 @@ else
         info "Message: $DEACTIVATE_MSG"
 
         # Submit TX with organizer keypair
-        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
-        DEACTIVATE_SUBMIT=$(sign_and_submit_tx "$DEACTIVATE_TX" "$ORG_KEYPAIR_JSON")
+        ORG_KEYPAIR_PATH="$HOME/.config/solana/id.json"
+        DEACTIVATE_SUBMIT=$(sign_and_submit_tx "$DEACTIVATE_TX" "$ORG_KEYPAIR_PATH")
         info "Deactivate submit: $DEACTIVATE_SUBMIT"
 
         if echo "$DEACTIVATE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -1003,8 +1033,8 @@ else
         info "Message: $CLAIM_MSG"
 
         # Submit TX with organizer keypair
-        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
-        CLAIM_SUBMIT=$(sign_and_submit_tx "$CLAIM_TX" "$ORG_KEYPAIR_JSON")
+        ORG_KEYPAIR_PATH="$HOME/.config/solana/id.json"
+        CLAIM_SUBMIT=$(sign_and_submit_tx "$CLAIM_TX" "$ORG_KEYPAIR_PATH")
         info "Claim forfeited submit: $CLAIM_SUBMIT"
 
         if echo "$CLAIM_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
@@ -1063,8 +1093,8 @@ else
         info "Message: $CLOSE_MSG"
 
         # Submit TX with organizer keypair
-        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
-        CLOSE_SUBMIT=$(sign_and_submit_tx "$CLOSE_TX" "$ORG_KEYPAIR_JSON")
+        ORG_KEYPAIR_PATH="$HOME/.config/solana/id.json"
+        CLOSE_SUBMIT=$(sign_and_submit_tx "$CLOSE_TX" "$ORG_KEYPAIR_PATH")
         info "Close event submit: $CLOSE_SUBMIT"
 
         if echo "$CLOSE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
