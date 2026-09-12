@@ -197,3 +197,18 @@ this issue.
 - The `Validation(format!("escrow not found on-chain: {e}"))` sites are now
   URL-scrubbed, but they still hand the caller an RPC error's prose. Worth a
   look if that endpoint's audience ever widens.
+- **`BackfillDetail.error` is a second envelope and is not covered.**
+  `POST /api/escrow/backfill-wallets` returns a *success* body whose per-row
+  `details[].error` carries the raw `Result<_, String>` from
+  `resolve_wallet_from_tx` / `save_wallet`
+  (`handlers/deposit/escrow/workflows.rs:120,173,200`). Those strings are built
+  with `{e:?}` around `worker::Request::new_with_init(rpc_url, ..)` and
+  `Fetch::send()`, so a URL *could* appear — `SolanaConfig::full_rpc_url()`
+  carries the RPC key in its query string.
+
+  Not fixed, and deliberately not filed as its own issue, because unlike the
+  Sheets case it was **not reproduced**: whether workers-rs puts the URL into
+  those `Debug` renderings was not demonstrated either way. It is also a
+  narrower audience — the route sits in the `protected` router behind
+  `auth::require_auth`, so it is staff-only, not anonymous. Worth reproducing
+  before deciding; the fix, if needed, is the same shape as this issue's.
