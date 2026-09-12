@@ -697,6 +697,7 @@ mod tests {
             telegram_bot_token: String::new(),
             telegram_bot_username: String::new(),
             slack_webhook_url: String::new(),
+            claim_token_ttl_secs: crate::claim::DEFAULT_CLAIM_TOKEN_TTL_SECS,
             staff_emails: [
                 "admin@example.com".to_string(),
                 "staff@example.com".to_string(),

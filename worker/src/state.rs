@@ -93,6 +93,14 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// The capability-token replay window for this request (Issue 071).
+    ///
+    /// One place turns configuration into a policy, so the window cannot drift
+    /// between the claim, quiz and adventure paths.
+    pub(crate) fn claim_token_policy(&self) -> crate::claim::ClaimTokenPolicy {
+        crate::claim::ClaimTokenPolicy::enforced(self.config.claim_token_ttl_secs)
+    }
+
     /// Build `AppConfig` from Workers environment (called once, cached globally).
     ///
     /// Reads 22+ env vars, creates 2 `HashSet`s, and performs string
@@ -297,6 +305,14 @@ impl AppState {
                 .or_else(|_| get_var(env, "TELEGRAM_BOT_USERNAME"))
                 .unwrap_or_default(),
             slack_webhook_url: get_secret(env, "SLACK_WEBHOOK_URL").unwrap_or_default(),
+            // Issue 071: bounds the replay window opened by carrying capability
+            // tokens in the URL path, where Cloudflare's request log records
+            // them. A non-numeric or absent value falls back to the default;
+            // an explicit `0` disables the check (operational kill switch).
+            claim_token_ttl_secs: get_var(env, "CLAIM_TOKEN_TTL_SECS")
+                .ok()
+                .and_then(|raw| raw.trim().parse::<i64>().ok())
+                .unwrap_or(crate::claim::DEFAULT_CLAIM_TOKEN_TTL_SECS),
         })
     }
 

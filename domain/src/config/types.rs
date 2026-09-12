@@ -261,6 +261,12 @@ pub struct AppConfig {
     /// Slack incoming-webhook URL for server-error (5xx) alerts. Empty disables
     /// alerting (the middleware becomes a no-op). Best-effort, fire-and-forget.
     pub slack_webhook_url: String,
+    // ---- Capability tokens ----
+    /// Seconds after check-in that a claim/quiz/adventure capability token stays
+    /// usable (Issue 071). Claim tokens travel in the URL path, so Cloudflare's
+    /// platform request log records them; this bounds the replay window that
+    /// exposure opens. `0` disables the check. Set via `CLAIM_TOKEN_TTL_SECS`.
+    pub claim_token_ttl_secs: i64,
 }
 
 impl fmt::Debug for AppConfig {

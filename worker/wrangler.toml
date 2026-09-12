@@ -69,6 +69,14 @@ NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""
 SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
+# Issue 071: claim/quiz/adventure capability tokens travel in the URL path, so
+# Cloudflare's own request log records them - Workers Logs readers can replay a
+# claim for as long as the token is accepted. This bounds that window to N
+# seconds after the attendee's CHECK-IN (not token issuance: the token is minted
+# at registration and reused, so an issuance anchor would expire attendees
+# mid-event). 2592000 = 30 days. "0" disables the check - the kill switch if it
+# ever denies a real attendee.
+CLAIM_TOKEN_TTL_SECS = "2592000"
 # Telegram Login Widget bot username (public). The widget stays OFF until the
 # TELEGRAM_BOT_TOKEN secret is also set — see /api/auth/telegram/config.
 TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
@@ -252,6 +260,7 @@ name = "bethere-staging"
 # environment"). Below mirrors production and overrides the env-specific ones.
 SERVER_URL = "https://bethere-staging.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere-staging.solana-thailand.workers.dev/claim"
+CLAIM_TOKEN_TTL_SECS = "2592000"
 # Keep outbound notifications and NFT minting fail-closed in staging until their
 # staging-only credentials and resources are deliberately configured.
 NOTIFICATIONS_ENABLED = "0"
