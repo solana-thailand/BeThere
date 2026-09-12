@@ -45,6 +45,7 @@ use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use serde::{Deserialize, Serialize};
 
+use crate::crypto::LogRedactor;
 use crate::error::{ApiOk, WorkerError};
 use crate::state::AppState;
 
@@ -76,8 +77,15 @@ pub async fn request_credit_refund_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<RequestCreditRefundResponse>, WorkerError> {
+    // Issue 070: the contact email is the primary key of this whole flow, so it
+    // appears on every branch below. Fingerprint it once under the deployment
+    // key — the D1 contact row and the Sheets mirror remain the access-
+    // controlled records that hold the address itself.
+    let redactor = state.log_redactor();
+    let attendee_fingerprint = redactor.fingerprint(&claims.email);
+
     tracing::info!(
-        email = %claims.email,
+        attendee_fingerprint = %attendee_fingerprint,
         "credit refund requested (attendee) — setting flag"
     );
 
@@ -105,7 +113,7 @@ pub async fn request_credit_refund_handler(
 
     if !flagged {
         tracing::error!(
-            email = %claims.email,
+            attendee_fingerprint = %attendee_fingerprint,
             "credit refund request matched no contact row — not queued"
         );
         return Err(AppError::Internal(
@@ -144,20 +152,20 @@ pub async fn request_credit_refund_handler(
             .await
             {
                 tracing::warn!(
-                    email = %claims.email,
+                    attendee_fingerprint = %attendee_fingerprint,
                     error = %e,
                     "Sheets credit-refund-request mirror failed (non-fatal; D1 queue already has it)"
                 );
             }
         }
         _ => tracing::warn!(
-            email = %claims.email,
+            attendee_fingerprint = %attendee_fingerprint,
             "contacts sheet or EVENTS KV not configured — skipping credit-refund-request mirror"
         ),
     }
 
     tracing::info!(
-        email = %claims.email,
+        attendee_fingerprint = %attendee_fingerprint,
         "credit refund requested flag set on contact"
     );
 
@@ -232,7 +240,10 @@ pub async fn credit_refund_requests_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<CreditRefundRequestsResponse>, WorkerError> {
-    tracing::info!(admin_email = %claims.email, "credit refund requests listed (admin)");
+    tracing::info!(
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
+        "credit refund requests listed (admin)"
+    );
 
     let requests = match state.d1.as_deref() {
         Some(db) => crate::db::contacts::credit_refund_requests(db).await,
@@ -278,6 +289,7 @@ async fn reverse_held_credit(
     db: &worker::D1Database,
     email: &str,
     requested_at: &str,
+    redactor: LogRedactor<'_>,
 ) -> Result<(), String> {
     let buckets = crate::db::credit_ledger::positive_balances(db, email).await?;
     for bucket in buckets {
@@ -301,7 +313,7 @@ async fn reverse_held_credit(
         )
         .await?;
         tracing::info!(
-            %email,
+            contact_fingerprint = %redactor.fingerprint(email),
             organization_id = %bucket.organization_id,
             currency = %bucket.currency,
             amount = bucket.balance,
@@ -339,9 +351,16 @@ pub async fn clear_credit_refund_request_handler(
     Extension(claims): Extension<Claims>,
     Json(body): Json<ClearCreditRefundRequest>,
 ) -> Result<ApiOk<ClearCreditRefundResponse>, WorkerError> {
+    // Issue 070: both the acting admin and the target contact are identified by
+    // email. The event audit trail keeps the attributable actor under its own
+    // access controls; the general log stream gets fingerprints only.
+    let redactor = state.log_redactor();
+    let staff_fingerprint = redactor.fingerprint(&claims.email);
+    let target_fingerprint = redactor.fingerprint(&body.email);
+
     tracing::info!(
-        admin_email = %claims.email,
-        target_email = %body.email,
+        staff_fingerprint = %staff_fingerprint,
+        target_fingerprint = %target_fingerprint,
         "admin clearing credit refund request flag"
     );
 
@@ -370,7 +389,7 @@ pub async fn clear_credit_refund_request_handler(
     if let Some(requested_at) =
         crate::db::contacts::get_credit_refund_requested_at(db, &body.email).await
     {
-        reverse_held_credit(db, &body.email, &requested_at)
+        reverse_held_credit(db, &body.email, &requested_at, redactor)
             .await
             .map_err(AppError::Internal)?;
     }
@@ -382,7 +401,7 @@ pub async fn clear_credit_refund_request_handler(
     // refresh will pick up the clear.
     if let Err(e) = crate::db::contacts::clear_credit_refund_requested(db, &body.email).await {
         tracing::warn!(
-            email = %body.email,
+            target_fingerprint = %target_fingerprint,
             error = %e,
             "D1 clear_credit_refund_requested failed — flag may persist"
         );
@@ -412,21 +431,21 @@ pub async fn clear_credit_refund_request_handler(
         .await
         {
             tracing::warn!(
-                email = %body.email,
+                target_fingerprint = %target_fingerprint,
                 error = %e,
                 "Sheets clear_credit_refund_requested failed — column N may stay stale"
             );
         }
     } else {
         tracing::debug!(
-            email = %body.email,
+            target_fingerprint = %target_fingerprint,
             "Sheets clear skipped (KV or contacts sheet not configured)"
         );
     }
 
     tracing::info!(
-        admin_email = %claims.email,
-        target_email = %body.email,
+        staff_fingerprint = %staff_fingerprint,
+        target_fingerprint = %target_fingerprint,
         "credit refund request flag cleared"
     );
 

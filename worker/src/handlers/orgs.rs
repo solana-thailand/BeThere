@@ -55,7 +55,7 @@ pub async fn list_orgs(
         .map_err(AppError::Internal)?;
 
     tracing::debug!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         org_count = orgs.len(),
         "org list read"
     );
@@ -99,7 +99,7 @@ pub async fn create_org(
     tracing::info!(
         org_id = %config.id,
         name = %config.name,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "org created"
     );
 
@@ -180,7 +180,7 @@ pub async fn update_org(
 
     tracing::info!(
         org_id = %id,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "org updated"
     );
 
@@ -219,7 +219,7 @@ pub async fn delete_org(
 
     tracing::info!(
         org_id = %id,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "org deleted"
     );
 

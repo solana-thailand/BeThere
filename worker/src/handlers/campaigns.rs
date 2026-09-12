@@ -859,7 +859,7 @@ pub async fn claim_campaign_reward(
     tracing::info!(
         campaign_id = %id,
         asset_id = %mint_result.asset_id,
-        signature = %mint_result.signature,
+        tx_signature_fingerprint = %state.log_fingerprint(&mint_result.signature),
         "campaign reward cNFT minted"
     );
 

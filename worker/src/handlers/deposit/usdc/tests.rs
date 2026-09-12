@@ -10,6 +10,14 @@
 
 use super::discovery::binding_conflict;
 use super::rpc::{parse_get_transaction_response, parse_signatures_for_address_response};
+use crate::crypto::LogRedactor;
+
+/// Fixed key for the log fingerprints these parsers emit. The tests assert on
+/// the returned `VerifyWithSignerOutcome`, never on log output, so any stable
+/// non-empty secret works here.
+fn test_redactor() -> LogRedactor<'static> {
+    LogRedactor::new("test-log-secret")
+}
 use super::types::VerifyWithSignerOutcome;
 
 // ─── binding_conflict (plan 003 — claim-binding guard) ───────────────
@@ -130,6 +138,7 @@ fn test_parse_confirmed_signer_matches_expected_wallet() {
         &parsed,
         "sig123",
         Some("AqdrF1bMEayzZC72R7SxsC2KFqybT5rHPYswkFWe5Mkn"),
+        test_redactor(),
     );
     assert!(outcome.is_confirmed_and_matched());
     assert_eq!(
@@ -142,7 +151,7 @@ fn test_parse_confirmed_signer_matches_expected_wallet() {
 fn test_parse_finalized_signer_matches() {
     // "finalized" should also count as confirmed.
     let parsed = confirmed_tx("WalletX", "finalized");
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletX"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletX"), test_redactor());
     assert!(outcome.is_confirmed_and_matched());
 }
 
@@ -150,7 +159,7 @@ fn test_parse_finalized_signer_matches() {
 fn test_parse_confirmed_no_expected_wallet_backfills_signer() {
     // No expected_wallet → signer is extracted, signer_matched defaults to true.
     let parsed = confirmed_tx("ResolvedSignerABC", "confirmed");
-    let outcome = parse_get_transaction_response(&parsed, "sig", None);
+    let outcome = parse_get_transaction_response(&parsed, "sig", None, test_redactor());
     assert!(outcome.is_confirmed_and_matched());
     assert_eq!(outcome.signer(), Some("ResolvedSignerABC"));
 }
@@ -160,7 +169,12 @@ fn test_parse_confirmed_no_expected_wallet_backfills_signer() {
 #[test]
 fn test_parse_confirmed_signer_does_not_match_expected_wallet() {
     let parsed = confirmed_tx("AttackerWallet", "confirmed");
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("ExpectedAttendeeWallet"));
+    let outcome = parse_get_transaction_response(
+        &parsed,
+        "sig",
+        Some("ExpectedAttendeeWallet"),
+        test_redactor(),
+    );
     // Confirmed, but NOT matched — caller must refuse verification.
     assert!(outcome.is_confirmed());
     assert!(!outcome.is_confirmed_and_matched());
@@ -171,7 +185,8 @@ fn test_parse_confirmed_signer_does_not_match_expected_wallet() {
 fn test_parse_signer_match_is_case_insensitive() {
     // Defensive case-insensitive comparison handles base58 encoding quirks.
     let parsed = confirmed_tx("WalletABC", "confirmed");
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("walletabc"));
+    let outcome =
+        parse_get_transaction_response(&parsed, "sig", Some("walletabc"), test_redactor());
     assert!(outcome.is_confirmed_and_matched());
 }
 
@@ -180,21 +195,21 @@ fn test_parse_signer_match_is_case_insensitive() {
 #[test]
 fn test_parse_result_null_is_pending() {
     let parsed = serde_json::json!({ "result": null });
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"), test_redactor());
     assert!(matches!(outcome, VerifyWithSignerOutcome::Pending));
 }
 
 #[test]
 fn test_parse_result_missing_is_pending() {
     let parsed = serde_json::json!({});
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"), test_redactor());
     assert!(matches!(outcome, VerifyWithSignerOutcome::Pending));
 }
 
 #[test]
 fn test_parse_tx_failed_on_chain_is_pending() {
     let parsed = failed_tx("InstructionError");
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"), test_redactor());
     assert!(matches!(outcome, VerifyWithSignerOutcome::Pending));
 }
 
@@ -202,7 +217,7 @@ fn test_parse_tx_failed_on_chain_is_pending() {
 fn test_parse_tx_processed_but_not_confirmed_is_pending() {
     // Some RPCs return "processed" before it reaches "confirmed".
     let parsed = confirmed_tx("WalletA", "processed");
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"), test_redactor());
     assert!(matches!(outcome, VerifyWithSignerOutcome::Pending));
 }
 
@@ -213,7 +228,7 @@ fn test_parse_rpc_level_error_is_rpc_error() {
     let parsed = serde_json::json!({
         "error": { "code": -32000, "message": "memory allocation failed" }
     });
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"), test_redactor());
     assert!(matches!(outcome, VerifyWithSignerOutcome::RpcError));
 }
 
@@ -226,7 +241,7 @@ fn test_parse_confirmed_but_account_keys_missing_is_rpc_error() {
             "meta": { "err": null, "confirmationStatus": "confirmed" }
         }
     });
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"), test_redactor());
     assert!(matches!(outcome, VerifyWithSignerOutcome::RpcError));
 }
 
@@ -239,7 +254,7 @@ fn test_parse_confirmed_but_account_keys_empty_is_rpc_error() {
             "meta": { "err": null, "confirmationStatus": "confirmed" }
         }
     });
-    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"));
+    let outcome = parse_get_transaction_response(&parsed, "sig", Some("WalletA"), test_redactor());
     assert!(matches!(outcome, VerifyWithSignerOutcome::RpcError));
 }
 
@@ -254,7 +269,12 @@ fn test_parse_realistic_devnet_self_deposit_signer_matches() {
     // cross-check is designed to recover from.
     let organizer_wallet = "AqdrF1bMEayzZC72R7SxsC2KFqybT5rHPYswkFWe5Mkn";
     let parsed = confirmed_tx(organizer_wallet, "finalized");
-    let outcome = parse_get_transaction_response(&parsed, "real-sig", Some(organizer_wallet));
+    let outcome = parse_get_transaction_response(
+        &parsed,
+        "real-sig",
+        Some(organizer_wallet),
+        test_redactor(),
+    );
     assert!(outcome.is_confirmed_and_matched());
     assert_eq!(outcome.signer(), Some(organizer_wallet));
 }

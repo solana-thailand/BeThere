@@ -403,7 +403,7 @@ pub async fn quest_complete_checkin(
     .await?;
 
     tracing::info!(
-        email = %claims.email,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         event_id = %event.id,
         attendee_id = %attendee.api_id,
         "virtual check-in completed via adventure quest-complete endpoint"

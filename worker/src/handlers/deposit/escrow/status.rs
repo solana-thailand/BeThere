@@ -480,7 +480,7 @@ pub async fn rollover_deposit_tx_handler(
         // DEV_MODE bypass: skip Google Sheets lookup, trust JWT claims
         tracing::info!(
             attendee_id = %body.attendee_id,
-            email = %claims.email,
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
             "DEV_MODE: skipping sheet lookup for rollover, using claims email"
         );
         Attendee {
@@ -531,8 +531,8 @@ pub async fn rollover_deposit_tx_handler(
 
     if !source_attendee.email.eq_ignore_ascii_case(&claims.email) {
         tracing::warn!(
-            claims_email = %claims.email,
-            attendee_email = %source_attendee.email,
+            claims_fingerprint = %state.log_fingerprint(&claims.email),
+            attendee_fingerprint = %state.log_fingerprint(&source_attendee.email),
             attendee_id = %body.attendee_id,
             "rollover deposit rejected: email mismatch"
         );

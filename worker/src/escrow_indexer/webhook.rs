@@ -138,10 +138,16 @@ pub struct HeliusTokenTransfer {
 ///
 /// Looks for instructions targeting the escrow program, decodes the
 /// discriminator from the instruction data, and extracts accounts.
-pub fn parse_helius_transaction(tx: &HeliusEnhancedTransaction) -> Option<OnChainEvent> {
+pub fn parse_helius_transaction(
+    tx: &HeliusEnhancedTransaction,
+    redactor: crate::crypto::LogRedactor<'_>,
+) -> Option<OnChainEvent> {
     // Skip failed transactions
     if tx.transaction_error.is_some() {
-        tracing::debug!(sig = %tx.signature, "skipping failed transaction");
+        tracing::debug!(
+            sig_fingerprint = %redactor.fingerprint(&tx.signature),
+            "skipping failed transaction"
+        );
         return None;
     }
 
@@ -155,7 +161,7 @@ pub fn parse_helius_transaction(tx: &HeliusEnhancedTransaction) -> Option<OnChai
             Ok(bytes) => bytes,
             Err(e) => {
                 tracing::warn!(
-                    sig = %tx.signature,
+                    sig_fingerprint = %redactor.fingerprint(&tx.signature),
                     data = %instr.data,
                     "failed to decode instruction data: {e:?}"
                 );
@@ -171,7 +177,7 @@ pub fn parse_helius_transaction(tx: &HeliusEnhancedTransaction) -> Option<OnChai
         let instruction = EscrowInstruction::from(discriminator);
         if instruction == EscrowInstruction::Unknown {
             tracing::debug!(
-                sig = %tx.signature,
+                sig_fingerprint = %redactor.fingerprint(&tx.signature),
                 disc = discriminator,
                 "unknown instruction discriminator, skipping"
             );
@@ -254,6 +260,7 @@ pub async fn index_helius_transactions(
     db: &D1Database,
     transactions: &[HeliusEnhancedTransaction],
     event_resolver: &dyn Fn(&str) -> Option<String>,
+    redactor: crate::crypto::LogRedactor<'_>,
 ) -> IndexSummary {
     let mut summary = IndexSummary::default();
 
@@ -264,7 +271,7 @@ pub async fn index_helius_transactions(
             continue;
         }
 
-        let Some(event) = parse_helius_transaction(tx) else {
+        let Some(event) = parse_helius_transaction(tx, redactor) else {
             summary.skipped_no_event += 1;
             continue;
         };
@@ -273,7 +280,7 @@ pub async fn index_helius_transactions(
         let Some(event_id) = event_resolver(&event.escrow_address) else {
             tracing::warn!(
                 escrow = %event.escrow_address,
-                sig = %event.signature,
+                sig_fingerprint = %redactor.fingerprint(&event.signature),
                 "no off-chain event found for escrow address, skipping"
             );
             summary.skipped_no_event += 1;
@@ -283,7 +290,7 @@ pub async fn index_helius_transactions(
         match super::store::save_onchain_event(db, &event_id, event.clone()).await {
             Ok(true) => {
                 tracing::info!(
-                    sig = %event.signature,
+                    sig_fingerprint = %redactor.fingerprint(&event.signature),
                     instruction = %event.instruction,
                     event_id = %event_id,
                     "indexed on-chain event"
@@ -298,7 +305,11 @@ pub async fn index_helius_transactions(
                 summary.duplicates += 1;
             }
             Err(e) => {
-                tracing::error!(sig = %event.signature, error = %e, "failed to save on-chain event");
+                tracing::error!(
+                    sig_fingerprint = %redactor.fingerprint(&event.signature),
+                    error = %e,
+                    "failed to save on-chain event"
+                );
                 summary.errors += 1;
             }
         }

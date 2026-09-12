@@ -96,7 +96,7 @@ pub async fn my_registration(
     );
 
     tracing::info!(
-        email = %claims.email,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         slug = %slug,
         attendee_id = %attendee.api_id,
         "my-registration lookup successful"
@@ -132,7 +132,12 @@ pub async fn my_registrations(
         let results = my_registrations_from_d1(db, &claims.email, &state)
             .await
             .map_err(AppError::Internal)?;
-        tracing::info!(email = %claims.email, count = results.len(), source = "d1", "my-registrations lookup complete");
+        tracing::info!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            count = results.len(),
+            source = "d1",
+            "my-registrations lookup complete"
+        );
         return Ok(ApiOk::new(results));
     }
 
@@ -282,7 +287,7 @@ pub async fn my_registrations(
         .collect();
 
     tracing::info!(
-        email = %claims.email,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         count = results.len(),
         "my-registrations lookup complete"
     );

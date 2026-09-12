@@ -51,7 +51,7 @@ pub(super) async fn upsert_contact_after_registration(
     .await
     {
         tracing::warn!(
-            %email,
+            attendee_fingerprint = %state.log_fingerprint(email),
             %event_id,
             error = %e,
             "failed to upsert contact to master sheet (non-fatal)"
@@ -75,13 +75,15 @@ pub(super) async fn write_developer_data(data: &DeveloperData<'_>) {
         photo_consent_given,
         consent_marketing,
         profile_fields: _,
+        redactor,
     } = data;
+    let attendee_fingerprint = redactor.fingerprint(email);
 
     // 1. Upsert developer profile (display_name + consent_outreach)
     if let Err(e) =
         crate::db::developers::upsert_developer_field(d1, email, "display_name", name).await
     {
-        tracing::warn!(%email, error = %e, "D1 developer display_name upsert failed (non-fatal)");
+        tracing::warn!(attendee_fingerprint = %attendee_fingerprint, error = %e, "D1 developer display_name upsert failed (non-fatal)");
     }
 
     // 1b. Upsert consent_outreach from marketing consent
@@ -90,7 +92,7 @@ pub(super) async fn write_developer_data(data: &DeveloperData<'_>) {
         crate::db::developers::upsert_developer_field(d1, email, "consent_outreach", consent_val)
             .await
     {
-        tracing::warn!(%email, error = %e, "D1 developer consent_outreach upsert failed (non-fatal)");
+        tracing::warn!(attendee_fingerprint = %attendee_fingerprint, error = %e, "D1 developer consent_outreach upsert failed (non-fatal)");
     }
 
     // 1c. Upsert dynamic profile fields
@@ -104,7 +106,7 @@ pub(super) async fn write_developer_data(data: &DeveloperData<'_>) {
             )
             .await
         {
-            tracing::warn!(%email, key, error = %e, "D1 developer field upsert failed (non-fatal)");
+            tracing::warn!(attendee_fingerprint = %attendee_fingerprint, key, error = %e, "D1 developer field upsert failed (non-fatal)");
         }
     }
 
@@ -146,7 +148,7 @@ pub(super) async fn write_developer_data(data: &DeveloperData<'_>) {
             .await
     {
         tracing::warn!(
-            %email,
+            attendee_fingerprint = %attendee_fingerprint,
             %event_id,
             error = %e,
             "D1 batch registration responses failed (non-fatal)"

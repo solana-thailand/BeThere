@@ -166,9 +166,9 @@ pub(super) async fn execute_walkin_claim(
 
     tracing::info!(
         claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
-        name = %display_name,
+        name_fingerprint = %state.log_fingerprint(&display_name),
         asset_id = %mint_result.asset_id,
-        wallet_address = %wallet_address,
+        wallet_fingerprint = %state.log_fingerprint(wallet_address),
         "walk-in claim fulfilled"
     );
 

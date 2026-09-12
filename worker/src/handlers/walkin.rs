@@ -49,7 +49,7 @@ async fn sync_walkin_to_sheet(
         tracing::error!(
             attendee_event_id = %attendee.event_id,
             resolved_event_id = %event_id,
-            email = %attendee.email,
+            attendee_fingerprint = %state.log_fingerprint(&attendee.email),
             "walk-in auto-sync ABORTED: attendee event_id mismatch"
         );
         return;
@@ -105,7 +105,7 @@ async fn sync_walkin_to_sheet(
 
     tracing::info!(
         event_id = %event_id,
-        email = %attendee.email,
+        attendee_fingerprint = %state.log_fingerprint(&attendee.email),
         sheet_id = %sheet_id,
         sheet_name = %sheet_name,
         "walk-in auto-sync: starting"
@@ -135,14 +135,14 @@ async fn sync_walkin_to_sheet(
                 Ok(()) => {
                     tracing::info!(
                         event_id = %event_id,
-                        email = %attendee.email,
+                        attendee_fingerprint = %state.log_fingerprint(&attendee.email),
                         "walk-in auto-synced to google sheet"
                     );
                 }
                 Err(e) => {
                     tracing::warn!(
                         event_id = %event_id,
-                        email = %attendee.email,
+                        attendee_fingerprint = %state.log_fingerprint(&attendee.email),
                         error = %e,
                         "walk-in auto-sync to google sheet failed, will be retried by /walkin/sync"
                     );
@@ -254,6 +254,8 @@ pub async fn register_walkin(
     }
 
     let email_lower = email.to_lowercase();
+    let attendee_fingerprint = state.log_fingerprint(&email_lower);
+    let staff_fingerprint = state.log_fingerprint(&claims.email);
 
     // 2. Check for duplicate (D1)
     let db = state.d1.as_deref().ok_or_else(|| {
@@ -263,14 +265,14 @@ pub async fn register_walkin(
     let is_duplicate = crate::db::attendees::check_walkin_duplicate(db, &event.id, &email_lower)
         .await
         .map_err(|e| {
-            tracing::error!(event_id = %event.id, email = %email_lower, error = %e, "D1 walkin duplicate check failed");
+            tracing::error!(event_id = %event.id, attendee_fingerprint = %attendee_fingerprint, error = %e, "D1 walkin duplicate check failed");
             AppError::Internal(format!("D1 duplicate check failed: {e}"))
         })?;
 
     if is_duplicate {
         tracing::warn!(
             event_id = %event.id,
-            email = %email_lower,
+            attendee_fingerprint = %attendee_fingerprint,
             "walk-in duplicate: already registered"
         );
         return Err(AppError::Validation(
@@ -326,13 +328,13 @@ pub async fn register_walkin(
     )
     .await
     .map_err(|e| {
-        tracing::error!(event_id = %event.id, email = %email_lower, error = %e, "D1 walkin write failed");
+        tracing::error!(event_id = %event.id, attendee_fingerprint = %attendee_fingerprint, error = %e, "D1 walkin write failed");
         AppError::Internal(format!("D1 walkin write failed: {e}"))
     })?;
     if !inserted {
         tracing::warn!(
             event_id = %event.id,
-            email = %email_lower,
+            attendee_fingerprint = %attendee_fingerprint,
             "walk-in duplicate detected at insert time (race condition)"
         );
         return Err(AppError::Validation(
@@ -340,16 +342,15 @@ pub async fn register_walkin(
         )
         .into());
     }
-    tracing::info!(event_id = %event.id, email = %email_lower, "walkin registered to D1");
+    tracing::info!(event_id = %event.id, attendee_fingerprint = %attendee_fingerprint, "walkin registered to D1");
 
     // 7. Build claim URL
     let claim_url = format!("{}/{}", state.config.server.claim_base_url, claim_token);
 
     tracing::info!(
         event_id = %event.id,
-        email = %email_lower,
-        name = %name,
-        staff = %claims.email,
+        attendee_fingerprint = %attendee_fingerprint,
+        staff_fingerprint = %staff_fingerprint,
         claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&claim_token),
         "walk-in registered"
     );
@@ -460,7 +461,7 @@ pub async fn list_walkin_handler(
     tracing::info!(
         event_id = %event.id,
         count,
-        staff = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "listed walk-in attendees"
     );
 
@@ -536,7 +537,7 @@ pub async fn walkin_export_csv_handler(
     tracing::info!(
         event_id = %event.id,
         count,
-        staff = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "walk-in CSV exported"
     );
 
@@ -677,7 +678,7 @@ pub async fn walkin_sync_handler(
             }
             Err(e) => {
                 tracing::warn!(
-                    email = %a.email,
+                    attendee_fingerprint = %state.log_fingerprint(&a.email),
                     error = %e,
                     "failed to sync walk-in to sheet"
                 );
@@ -692,7 +693,7 @@ pub async fn walkin_sync_handler(
         skipped,
         errors = errors.len(),
         total = attendees.len(),
-        staff = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "walk-in sheet sync completed"
     );
 

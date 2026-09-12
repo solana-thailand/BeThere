@@ -191,7 +191,7 @@ pub async fn deposit_usdc_handler(
                 event_id = %event.id,
                 new_attendee_id = %body.attendee_id,
                 existing_attendee_id = %owner_id,
-                wallet = %body.wallet_address,
+                wallet_fingerprint = %state.log_fingerprint(&body.wallet_address),
                 "deposit initiation rejected: wallet already bound to another registration"
             );
             return Err(event_checkin_domain::models::error::AppError::Validation(

@@ -58,7 +58,12 @@ pub async fn delete_request(
     Query(query): Query<DeleteRequestQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let email = claims.email.to_lowercase();
-    tracing::info!(email = %email, event_id = ?query.event_id, "PDPA data deletion request");
+    let subject_fingerprint = state.log_fingerprint(&email);
+    tracing::info!(
+        subject_fingerprint = %subject_fingerprint,
+        event_id = ?query.event_id,
+        "PDPA data deletion request"
+    );
 
     let now_ms = js_sys::Date::now() as i64;
     let mut summary = DeletionSummary::default();
@@ -207,7 +212,7 @@ pub async fn delete_request(
         match crate::db::contacts::clear_contact_pii(db, &email).await {
             Ok(()) => summary.d1_contacts_cleared += 1,
             Err(e) => {
-                tracing::warn!(email = %email, error = %e, "D1 clear_contact_pii failed");
+                tracing::warn!(subject_fingerprint = %subject_fingerprint, error = %e, "D1 clear_contact_pii failed");
                 summary.record_failure("clear_contact_pii");
             }
         }
@@ -216,7 +221,7 @@ pub async fn delete_request(
         match crate::db::developers::clear_developer_pii(db, &email).await {
             Ok(()) => summary.d1_developer_cleared += 1,
             Err(e) => {
-                tracing::warn!(email = %email, error = %e, "D1 clear_developer_pii failed");
+                tracing::warn!(subject_fingerprint = %subject_fingerprint, error = %e, "D1 clear_developer_pii failed");
                 summary.record_failure("clear_developer_pii");
             }
         }
@@ -225,7 +230,7 @@ pub async fn delete_request(
         match crate::db::developers::delete_developer_responses(db, &email).await {
             Ok(n) => summary.d1_responses_deleted += n,
             Err(e) => {
-                tracing::warn!(email = %email, error = %e, "D1 delete_developer_responses failed");
+                tracing::warn!(subject_fingerprint = %subject_fingerprint, error = %e, "D1 delete_developer_responses failed");
                 summary.record_failure("delete_developer_responses");
             }
         }
@@ -254,7 +259,7 @@ pub async fn delete_request(
     }
 
     tracing::info!(
-        email = %email,
+        subject_fingerprint = %subject_fingerprint,
         events = summary.events_affected,
         d1_attendees = summary.d1_attendees_cleared,
         kv_keys = summary.kv_keys_deleted,
@@ -313,7 +318,11 @@ pub async fn unsubscribe_marketing(
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let email = claims.email.to_lowercase();
-    tracing::info!(email = %email, "PDPA marketing unsubscribe request");
+    let subject_fingerprint = state.log_fingerprint(&email);
+    tracing::info!(
+        subject_fingerprint = %subject_fingerprint,
+        "PDPA marketing unsubscribe request"
+    );
 
     let mut rows_updated: usize = 0;
 
@@ -340,7 +349,7 @@ pub async fn unsubscribe_marketing(
     }
 
     tracing::info!(
-        email = %email,
+        subject_fingerprint = %subject_fingerprint,
         rows_updated,
         "PDPA marketing unsubscribe completed"
     );

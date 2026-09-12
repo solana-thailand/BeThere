@@ -96,3 +96,6 @@ rustc-ice-*.txt
 
 # Prod data exports (never commit)
 /exports/
+
+# pnpm store (parked Wrangler 4.131.1 review — never commit, see .issues/069)
+.pnpm-store/

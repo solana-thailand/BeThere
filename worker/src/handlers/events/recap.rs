@@ -187,7 +187,7 @@ pub async fn put_recap(
         event_id = %event.id,
         publish = req.publish,
         markdown_bytes = req.recap_markdown.len(),
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "recap authored"
     );
 

@@ -90,12 +90,12 @@ pub(crate) async fn verify_and_confirm_deposit(
     match (was_verified, status.verified) {
         (false, true) => tracing::info!(
             attendee_id = %body.attendee_id,
-            tx_signature = %body.tx_signature,
+            tx_signature_fingerprint = %state.log_fingerprint(&body.tx_signature),
             "USDC deposit verified in background"
         ),
         (false, false) => tracing::info!(
             attendee_id = %body.attendee_id,
-            tx_signature = %body.tx_signature,
+            tx_signature_fingerprint = %state.log_fingerprint(&body.tx_signature),
             "USDC deposit not verified in background — not yet confirmed, or a guard refused"
         ),
         (true, _) => tracing::debug!(

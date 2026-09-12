@@ -126,7 +126,7 @@ pub async fn append_attendee_row(
 
     tracing::info!(
         %api_id,
-        %email,
+        attendee_fingerprint = %state.log_fingerprint(email),
         %participation_type,
         "appended self-registration row to google sheet"
     );
@@ -226,7 +226,7 @@ pub async fn append_walkin_row(
 
     tracing::info!(
         %api_id,
-        %email,
+        attendee_fingerprint = %state.log_fingerprint(email),
         "appended walk-in row to google sheet"
     );
 

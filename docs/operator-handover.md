@@ -18,6 +18,7 @@ a copied commit or Worker version in this document.
 | Production | Read the current version through Wrangler before a release; do not infer it from staging or Git history. |
 | Networks | Escrow stays on devnet. Staging RPC/NFT/escrow roles report devnet |
 | Staging NFT | Disabled because no staging Crossmint collection is configured; health reports `nft_not_configured`. Claim lookup now uses these actual Crossmint prerequisites, not Helius read credentials. |
+| Worker log privacy | Issue 070 migration is complete: every email, wallet, transaction signature, and attendee display name in the Worker log stream is now a keyed one-way fingerprint. The `log_pii_guard` source guard is enabled and fails the suite on reintroduction. Event, org, and escrow addresses stay readable by design. Staging log inspection on a disposable fixture is the one remaining step. |
 | Credit integrity | PR #68 is merged and staged. Production has six aggregate-only legacy THB credit statuses eligible for the guarded reconciliation repair after release |
 | Escrow staging proof | Focused SIWS auth, authenticated deposit confirmation, D1 verified status, and matching Devnet attendee PDA passed on 2026-09-12. See [Fixture Strategy](flow_harness_fixture_strategy.md). |
 | Escrow release gate | Still blocked: refund and NFT fixtures are not yet provisioned, so there is no full-suite green sentinel for production preflight. |
@@ -151,6 +152,7 @@ If health, assets, auth, registration, or deposit state regresses:
 | Judge escrow mainnet readiness | [Mainnet Readiness Runbook](mainnet_readiness_runbook.md) |
 | See architecture and source-of-truth boundaries | [Architecture](architecture.md) |
 | Track remaining core risks | [Core services audit](../.issues/066_core_services_readiness_audit.md) |
+| Continue Worker log PII redaction | [Issue 070](../.issues/070_worker_log_pii_redaction.md) |
 
 ## Next implementation order
 
@@ -163,3 +165,5 @@ If health, assets, auth, registration, or deposit state regresses:
 3. Consolidate THB verification projections and reconciliation.
 4. Add browser E2E coverage for registration recovery and attendee deposit,
    quiz, ticket, and claim states.
+5. Finish the staged Worker log PII-redaction migration in Issue 070 before
+   widening operational diagnostics or retention.

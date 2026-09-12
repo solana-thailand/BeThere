@@ -33,6 +33,7 @@ pub async fn join_waitlist(
     Json(body): Json<WaitlistRequest>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     let email = body.email.trim().to_lowercase();
+    let subscriber_fingerprint = state.log_fingerprint(&email);
 
     // Shared plausibility check — also bounds the length at 254.
     if !event_checkin_domain::validation::is_plausible_email(&email) {
@@ -43,7 +44,7 @@ pub async fn join_waitlist(
     match get_existing_waitlist_emails(&state).await {
         Ok(existing) => {
             if existing.contains(&email) {
-                tracing::info!(staff_email = %email, "waitlist duplicate");
+                tracing::info!(subscriber_fingerprint = %subscriber_fingerprint, "waitlist duplicate");
                 return Err(
                     AppError::Validation("This email is already on the waitlist".into()).into(),
                 );
@@ -62,11 +63,11 @@ pub async fn join_waitlist(
         }
     }
 
-    tracing::info!(staff_email = %email, "waitlist signup");
+    tracing::info!(subscriber_fingerprint = %subscriber_fingerprint, "waitlist signup");
 
     // Append to Google Sheet
     append_to_waitlist(&email, &state).await.map_err(|e| {
-        tracing::error!(staff_email = %email, error = ?e, "waitlist signup failed");
+        tracing::error!(subscriber_fingerprint = %subscriber_fingerprint, error = ?e, "waitlist signup failed");
         AppError::Internal(format!("Failed to join waitlist: {e}"))
     })?;
 

@@ -79,7 +79,7 @@ pub async fn update_participation_type(
     tracing::info!(
         attendee_id = %id,
         new_participation_type = %new_value,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "manual participation_type override"
     );
 

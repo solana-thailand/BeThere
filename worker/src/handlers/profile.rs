@@ -99,12 +99,13 @@ pub async fn get_my_profile(
         .as_ref()
         .ok_or_else(|| AppError::NotFound("D1 database not available".to_string()))?;
 
-    tracing::info!(email = %claims.email, "GET /api/my-profile");
+    let identity_fingerprint = state.log_fingerprint(&claims.email);
+    tracing::info!(identity_fingerprint = %identity_fingerprint, "GET /api/my-profile");
 
     let profile = match crate::db::developers::get_developer_profile(d1, &claims.email).await {
         Ok(Some(p)) => p,
         Ok(None) => {
-            tracing::info!(email = %claims.email, "no profile found, returning defaults");
+            tracing::info!(identity_fingerprint = %identity_fingerprint, "no profile found, returning defaults");
             // Return a default empty profile for new users
             crate::db::developers::DeveloperProfileRow {
                 email: claims.email.clone(),
@@ -137,7 +138,7 @@ pub async fn get_my_profile(
             }
         }
         Err(e) => {
-            tracing::error!(email = %claims.email, error = %e, "D1 get_developer_profile failed");
+            tracing::error!(identity_fingerprint = %identity_fingerprint, error = %e, "D1 get_developer_profile failed");
             return Err(WorkerError(AppError::Internal(format!(
                 "Failed to fetch profile: {e}"
             ))));
@@ -150,7 +151,7 @@ pub async fn get_my_profile(
     let events_joined = crate::db::developers::count_events_joined(d1, &claims.email)
         .await
         .unwrap_or_else(|e| {
-            tracing::warn!(email = %claims.email, error = %e, "count_events_joined failed; falling back to stored total_events");
+            tracing::warn!(identity_fingerprint = %identity_fingerprint, error = %e, "count_events_joined failed; falling back to stored total_events");
             profile.total_events.unwrap_or(0)
         });
 

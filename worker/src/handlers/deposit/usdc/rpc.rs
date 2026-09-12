@@ -1,6 +1,7 @@
 //! Solana RPC calls for deposit verification and their pure response parsers.
 
 use super::types::VerifyWithSignerOutcome;
+use crate::crypto::LogRedactor;
 
 /// Maximum wall-clock time to wait for a single RPC `getTransaction` response.
 ///
@@ -33,6 +34,8 @@ const RPC_TIMEOUT_MS: u32 = 8_000;
 /// - `expected_wallet` — The attendee wallet address (base58) that should have
 ///   signed the TX. If `None`, the signer is not cross-checked (caller must
 ///   handle the extracted signer via [`VerifyWithSignerOutcome::signer`]).
+/// - `redactor` — Mints the keyed fingerprints used in place of the raw
+///   signature and wallet addresses in this module's log output (Issue 070).
 ///
 /// Each attempt is bounded by [`RPC_TIMEOUT_MS`]. On a transient `RpcError`
 /// the call is retried once after a short backoff.
@@ -40,17 +43,30 @@ pub(crate) async fn verify_tx_with_signer(
     rpc_url: &str,
     signature: &str,
     expected_wallet: Option<&str>,
+    redactor: LogRedactor<'_>,
 ) -> VerifyWithSignerOutcome {
-    let outcome =
-        verify_tx_with_signer_impl(rpc_url, signature, expected_wallet, RPC_TIMEOUT_MS).await;
+    let outcome = verify_tx_with_signer_impl(
+        rpc_url,
+        signature,
+        expected_wallet,
+        RPC_TIMEOUT_MS,
+        redactor,
+    )
+    .await;
     if matches!(outcome, VerifyWithSignerOutcome::RpcError) {
         tracing::warn!(
-            tx_signature = %signature,
+            tx_signature_fingerprint = %redactor.fingerprint(signature),
             "RPC error on first verify-with-signer attempt, retrying after 500ms"
         );
         worker::Delay::from(std::time::Duration::from_millis(500)).await;
-        return verify_tx_with_signer_impl(rpc_url, signature, expected_wallet, RPC_TIMEOUT_MS)
-            .await;
+        return verify_tx_with_signer_impl(
+            rpc_url,
+            signature,
+            expected_wallet,
+            RPC_TIMEOUT_MS,
+            redactor,
+        )
+        .await;
     }
     outcome
 }
@@ -61,6 +77,7 @@ async fn verify_tx_with_signer_impl(
     signature: &str,
     expected_wallet: Option<&str>,
     timeout_ms: u32,
+    redactor: LogRedactor<'_>,
 ) -> VerifyWithSignerOutcome {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
@@ -123,7 +140,7 @@ async fn verify_tx_with_signer_impl(
         },
         _ = timeout => {
             tracing::warn!(
-                tx_signature = %signature,
+                tx_signature_fingerprint = %redactor.fingerprint(signature),
                 timeout_ms,
                 "RPC getTransaction timed out"
             );
@@ -149,7 +166,7 @@ async fn verify_tx_with_signer_impl(
 
     // Delegate to the pure parsing function so the decision logic is unit-testable
     // without needing to mock the Cloudflare Workers Fetch/Delay runtime.
-    parse_get_transaction_response(&parsed, signature, expected_wallet)
+    parse_get_transaction_response(&parsed, signature, expected_wallet, redactor)
 }
 
 /// Pure parser for a `getTransaction` RPC response.
@@ -174,7 +191,14 @@ pub(crate) fn parse_get_transaction_response(
     parsed: &serde_json::Value,
     signature: &str,
     expected_wallet: Option<&str>,
+    redactor: LogRedactor<'_>,
 ) -> VerifyWithSignerOutcome {
+    // Issue 070: the signature is a durable, person-linking identifier, so the
+    // log stream carries only its keyed fingerprint. Computed once here and
+    // reused by every branch below — an authorized investigator re-derives it
+    // from the signature held in D1 to correlate these lines.
+    let signature_fingerprint = redactor.fingerprint(signature);
+
     // Check for RPC-level error.
     if let Some(error) = parsed.get("error") {
         let msg = error
@@ -182,7 +206,7 @@ pub(crate) fn parse_get_transaction_response(
             .and_then(|m| m.as_str())
             .unwrap_or("unknown");
         tracing::warn!(
-            tx_signature = %signature,
+            tx_signature_fingerprint = %signature_fingerprint,
             rpc_error = %msg,
             "RPC error on getTransaction"
         );
@@ -192,14 +216,14 @@ pub(crate) fn parse_get_transaction_response(
     // `result` is `null` if the TX is not found.
     let Some(result) = parsed.get("result") else {
         tracing::debug!(
-            tx_signature = %signature,
+            tx_signature_fingerprint = %signature_fingerprint,
             "getTransaction returned no result — TX not found"
         );
         return VerifyWithSignerOutcome::Pending;
     };
     if result.is_null() {
         tracing::debug!(
-            tx_signature = %signature,
+            tx_signature_fingerprint = %signature_fingerprint,
             "getTransaction result is null — TX not found"
         );
         return VerifyWithSignerOutcome::Pending;
@@ -213,7 +237,7 @@ pub(crate) fn parse_get_transaction_response(
     if has_error {
         let err = result.get("meta").and_then(|m| m.get("err"));
         tracing::warn!(
-            tx_signature = %signature,
+            tx_signature_fingerprint = %signature_fingerprint,
             tx_err = ?err,
             "TX failed on-chain"
         );
@@ -231,7 +255,7 @@ pub(crate) fn parse_get_transaction_response(
 
     if !confirmed {
         tracing::debug!(
-            tx_signature = %signature,
+            tx_signature_fingerprint = %signature_fingerprint,
             confirmation_status = %confirmation,
             "TX not yet confirmed"
         );
@@ -247,7 +271,7 @@ pub(crate) fn parse_get_transaction_response(
 
     let Some(account_keys) = account_keys else {
         tracing::warn!(
-            tx_signature = %signature,
+            tx_signature_fingerprint = %signature_fingerprint,
             "TX confirmed but accountKeys missing — treating as RPC error"
         );
         return VerifyWithSignerOutcome::RpcError;
@@ -255,7 +279,7 @@ pub(crate) fn parse_get_transaction_response(
 
     let Some(first_key) = account_keys.first().and_then(|k| k.as_str()) else {
         tracing::warn!(
-            tx_signature = %signature,
+            tx_signature_fingerprint = %signature_fingerprint,
             "TX confirmed but accountKeys[0] missing — treating as RPC error"
         );
         return VerifyWithSignerOutcome::RpcError;
@@ -269,15 +293,15 @@ pub(crate) fn parse_get_transaction_response(
             let matched = signer.eq_ignore_ascii_case(expected);
             if !matched {
                 tracing::warn!(
-                    tx_signature = %signature,
-                    signer = %signer,
-                    expected_wallet = %expected,
+                    tx_signature_fingerprint = %signature_fingerprint,
+                    signer_fingerprint = %redactor.fingerprint(&signer),
+                    expected_wallet_fingerprint = %redactor.fingerprint(expected),
                     "Signer mismatch — TX confirmed but does not match expected wallet"
                 );
             } else {
                 tracing::info!(
-                    tx_signature = %signature,
-                    signer = %signer,
+                    tx_signature_fingerprint = %signature_fingerprint,
+                    signer_fingerprint = %redactor.fingerprint(&signer),
                     "TX confirmed and signer matches expected wallet"
                 );
             }
@@ -285,8 +309,8 @@ pub(crate) fn parse_get_transaction_response(
         }
         None => {
             tracing::info!(
-                tx_signature = %signature,
-                signer = %signer,
+                tx_signature_fingerprint = %signature_fingerprint,
+                signer_fingerprint = %redactor.fingerprint(&signer),
                 "TX confirmed with signer extraction (no expected wallet provided)"
             );
             true

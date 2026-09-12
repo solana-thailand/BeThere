@@ -52,7 +52,7 @@ pub async fn repair_claim_tokens(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(staff_email = %claims.email, "claim token repair requested");
+    tracing::info!(staff_fingerprint = %state.log_fingerprint(&claims.email), "claim token repair requested");
 
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
     if role != crate::auth::UserRole::SuperAdmin {
