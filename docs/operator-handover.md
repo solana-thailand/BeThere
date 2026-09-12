@@ -14,6 +14,7 @@ a copied commit or Worker version in this document.
 |---|---|
 | Git | `develop` is the integration branch. The separate Wrangler 4.131.1 lockfile update is intentionally uncommitted pending dependency-review approval. |
 | Staging | Healthy and isolated. Read the current version through Wrangler before a release. |
+| Completed-event learning gateway | Merged to `develop` at `8e8673b`; staging deploy and browser journey validation remain pending. It keeps retrospective leads separate from published online-registration reporting. |
 | Production | Read the current version through Wrangler before a release; do not infer it from staging or Git history. |
 | Networks | Escrow stays on devnet. Staging RPC/NFT/escrow roles report devnet |
 | Staging NFT | Disabled because no staging Crossmint collection is configured; health reports `nft_not_configured` |
@@ -61,6 +62,11 @@ CI is the final cross-platform gate and currently runs five jobs covering these
 surfaces.
 
 ## Deploy staging
+
+Before deploying, require a clean committed application change. Do not use a
+package-manager release-age bypass merely to run a newer Wrangler; review and
+commit a Wrangler/lockfile update separately, after its dependencies have aged
+normally. The pending 4.131.1 files are deliberately not part of `8e8673b`.
 
 ```sh
 bash worker/deploy.sh staging

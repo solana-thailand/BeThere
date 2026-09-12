@@ -53,6 +53,7 @@ Verify at desktop width and at 390 x 844 mobile width:
 |---|---|---|
 | Landing | `/` | Upcoming events render; primary navigation and footer links work |
 | Event detail | `/e/<slug>` | Name, dates, venue/online mode, capacity and payment wording match the selected event |
+| Completed event | `/e/<completed-slug>` | Archive gateway appears; it exposes no live registration, payment, check-in, claim, quiz, or NFT action |
 | Past events | `/past-events` | Only completed events with published recaps appear |
 | Recap | `/events/<slug>/recap` | Published content renders; unknown/private recap fails safely |
 | Privacy | `/privacy` and `/data-privacy` | Policies render without authentication |
@@ -60,6 +61,33 @@ Verify at desktop width and at 390 x 844 mobile width:
 
 In DevTools, confirm there are no failed JS/WASM requests, uncaught exceptions,
 mixed-content errors, or API responses cached for a different user.
+
+### Completed-event retrospective journey (R1)
+
+Use an isolated **staging** event that was completed through normal organizer
+controls. Do not change D1 rows directly. Set its external event link through
+the event form to its canonical Genesis event page, then use the protected
+post-event-registration control to open a short, bounded enrollment window.
+
+1. Open `/e/<completed-slug>` in a private window. Confirm the archive button
+   opens the Genesis event page and the normal registration, deposit, check-in,
+   quiz, claim, and NFT controls are absent.
+2. With enrollment closed, confirm "Join the community" is absent. Open it with
+   a future deadline through the organizer UI, refresh the public page, and
+   confirm the CTA appears.
+3. Follow the CTA while signed out. After Google login, confirm the browser
+   returns to `/events/<slug>/post-event-register`, not the landing page.
+4. Submit a disposable account. Confirm the success state and, in staging
+   admin/D1 evidence, `registration_phase = 'post_event'`,
+   `approval_status = 'post_event_registered'`, and
+   `participation_type = 'retrospective'`.
+5. Confirm no deposit, check-in, claim token, or NFT job was created. Close the
+   enrollment window or let its deadline pass; after refresh, the CTA must be
+   absent and the endpoint must refuse another submission.
+
+Never enable retrospective enrollment for a historical production event during
+this test. The DevRel Genesis archive remains the source of the archive mapping;
+BeThere stores only the organizer-selected event link.
 
 ## 3. Authentication and admin readiness (R0/R1)
 

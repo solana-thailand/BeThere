@@ -1,6 +1,6 @@
 # Plan 008 — Event Lifecycle: Summary, Recap, Post-Event Registration, PR Generator
 
-> **Status**: Phase 1 (Post-Event Summary) ✅ shipped (`48d25b1`, deployed) · Phase 2 (Public Recap + Past Events) ✅ merged to `develop` 2026-07-16 via PR #20 (rebased from `feature/event_recap` `9549532` + visibility-fix `74bc43d`); deploy pending · Phase 3 (Post-Event Registration) ✅ merged to `develop` 2026-07-16 via PR #20 (originally implemented 2026-07-09: toggle + public register + frontend form); live validation still blocked on Plan 005 staging · Phase 4 (PR Generator) ✅ merged to `develop` 2026-07-16 via PR #20 (originally `63270ac`). Cross-cutting checks (clippy clean, tests green) re-run and passing on `develop` @ `f83644f` (367 tests).
+> **Status**: Phase 1 (Post-Event Summary) ✅ shipped (`48d25b1`, deployed) · Phase 2 (Public Recap + Past Events) ✅ merged to `develop` 2026-07-16 via PR #20 (rebased from `feature/event_recap` `9549532` + visibility-fix `74bc43d`); deploy pending · Phase 3 (Post-Event Registration) ✅ merged to `develop` 2026-07-16 via PR #20; its completed-event gateway and reporting safeguards are merged on `develop` at `8e8673b` (2026-09-12), with staging browser validation pending deployment · Phase 4 (PR Generator) ✅ merged to `develop` 2026-07-16 via PR #20 (originally `63270ac`). The gateway change passed domain tests (130), Worker tests (252), WASM compile, formatting, and strict Worker clippy.
 > **Type**: feature (event lifecycle workflow) + content (PR/recap generation)
 > **Priority**: P2 — closes the "what happens after an event ends" gap and turns past events into lead-capture surfaces. Independent of plans 005/006/007; can start in parallel.
 > **Created**: 2026-06-23
@@ -295,7 +295,8 @@ Extend `worker/src/handlers/register.rs`:
   - Creates `attendees` row with:
     - `registration_phase = 'post_event'`
     - `approval_status = 'post_event_registered'` (new value — naturally excluded from existing `approval_status = 'approved'` queries)
-    - `participation_type = 'online'` (placeholder; not used for capacity)
+    - `participation_type = 'retrospective'` (a dedicated post-event-learning
+      value; never reuse `online`, which is a published live-registration metric)
     - `checked_in_at = NULL`, no `claim_token` (no NFT to claim)
   - Upserts `contacts` and `developer_profiles` exactly like normal registration (reuse existing helpers).
   - Returns `{ attendee_id, message: "Thanks! We'll notify you about future events." }`.
@@ -324,7 +325,10 @@ Extend `worker/src/handlers/register.rs`:
 
 #### 3.3.4 Frontend — post-event registration form
 
-- [x] Extend `event_recap.rs` page (from 3.2.4): if `event.post_event_registration_open == true`, render a "Missed this event? Join the community" CTA below the recap.
+- [x] Completed events use `/e/{slug}` as the canonical gateway: it exposes a
+  trusted Genesis archive link and, only when the server says enrollment accepts
+  a submission now, a "Join the community" CTA. A recap remains optional and
+  is never required for the gateway.
 - [x] New component `frontend-leptos/src/pages/public/post_event_register.rs` — form mirroring the normal registration form but stripped of deposit/participation fields. Shows developer-profile questions (experience_level, tech_stack, interests, etc.) — this is the **primary value** of post-event reg.
 - [x] Submit success state: "You're on the list. We'll email you about the next event."
     (Verified 2026-07-09: CTA card added to `event_recap.rs::render_recap` (gated on
@@ -333,8 +337,10 @@ Extend `worker/src/handlers/register.rs`:
     tech_stack, interests, consent checkboxes. Auth-gated via `get_me()` + redirect to /login
     (self-gate pattern, same as dev-profile). Success state "You're on the list!". API types
     (`PostEventRegisterBody`, `register_post_event`, `put_post_event_registration`) in
-    `api/event.rs`. `PublicRecapEvent` gained `post_event_registration_open`; worker's
-    `get_public_recap` now serializes it.)
+      `api/event.rs`. `PublicRecapEvent` gained `post_event_registration_open`; worker's
+      `get_public_recap` now serializes it. The completed-event gateway was added in
+      `8e8673b`: the public-event payload supplies a server-calculated accepting flag
+      and a Genesis URL only when `events.link` is a trusted Genesis event path.)
 
 ### 3.4 Phase 4 — Upcoming PR Generator
 
@@ -522,7 +528,7 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
       caller mints a fresh `Uuid::now_v7()` per request, so that clause could
       never fire. The real conflict is on `idx_attendees_unique_event_email`
       (migration 0026, partial on `participation_type <> 'walkin'` — post-event
-      rows use `online`, so they are covered). Reproduced: second submission →
+      rows use `retrospective`, so they are covered). Reproduced: second submission →
       `UNIQUE constraint failed: index 'idx_attendees_unique_event_email'`,
       swallowed by the handler's "non-fatal" warn → **HTTP 200 "Thanks!"** with a
       brand-new `attendee_id` matching no row, and the attendee row unchanged.
@@ -534,7 +540,7 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
       `RETURNING id`. The `DO UPDATE` set deliberately omits `approval_status` /
       `participation_type` / `registration_phase`: the conflicting row may be a
       genuine pre-event in-person attendee, and refreshing their contact details
-      is right while demoting them to an `online` lead is not. Verified: repeat
+      is right while demoting them to a `retrospective` lead is not. Verified: repeat
       submission now updates the one row and returns its real id; a seeded
       `approved` / `in_person` / `pre_event` row keeps all three fields.
 
@@ -750,8 +756,9 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 - [~] Validate: register as a brand-new email → confirm `developer_profiles` row appears with expected fields → confirm `approval_status = 'post_event_registered'` excludes from capacity / check-in queries.
       (Code-trace verified: `upsert_post_event_attendee` sets approval_status='post_event_registered' +
       registration_phase='post_event'; existing capacity/check-in queries filter on approval_status='approved'
-      and registration_phase='pre_event', so post-event rows are naturally excluded. Live validation against
-      a real completed event needs staging infra — blocked on Plan 005.)
+      and registration_phase='pre_event', so post-event rows are naturally excluded. The staging
+      environment is available; the remaining validation is the browser journey after the gateway
+      deploy, using an isolated completed event and no raw D1 writes.)
 
 **Phase 4**
 
@@ -924,7 +931,9 @@ belong to the Manual section.
       fresh event id when you need a KV-cold read.
 - [~] A signed-in user can register post-event; the form captures developer-profile fields.
       (API half verified 2026-09-04 — see the `post_event_registration.rs` integration note
-      above, which also found and fixed two defects. Rendering the form is Manual.)
+      above, which also found and fixed two defects. The remaining browser check starts at
+      `/e/{slug}` and must confirm the completed-event gateway, archive link, login return,
+      form rendering, and submission.)
 - [x] The new `attendees` row has `registration_phase = 'post_event'` and `approval_status = 'post_event_registered'`.
       (Verified against local D1 2026-09-04 — integration note above.)
 - [x] The registrant's `developer_profiles` row is upserted with submitted fields.
