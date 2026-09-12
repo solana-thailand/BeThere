@@ -619,6 +619,7 @@ pub async fn register_attendee(
         let bg_first_name = first_name.to_string();
         let bg_last_name = last_name.to_string();
         let bg_email = email.clone();
+        let bg_fingerprint = attendee_fingerprint.clone();
         let bg_claim_token = claim_token.clone();
         let bg_participation_type = participation_type_display.clone();
         let bg_now = now.clone();
@@ -688,7 +689,7 @@ pub async fn register_attendee(
                 )
                 .await
                 {
-                    tracing::warn!(%bg_email, error = %e, "bg_sync: contacts upsert failed");
+                    tracing::warn!(attendee_fingerprint = %bg_fingerprint, error = %e, "bg_sync: contacts upsert failed");
                 }
             }
 

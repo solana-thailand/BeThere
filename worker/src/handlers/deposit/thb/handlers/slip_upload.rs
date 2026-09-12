@@ -105,7 +105,7 @@ pub async fn upload_thb_slip_handler(
     tracing::info!(
         attendee_id = %body.attendee_id,
         event_id = %body.event_id,
-        uploader_email = %claims.email,
+        uploader_fingerprint = %state.log_fingerprint(&claims.email),
         "THB slip upload initiated"
     );
 

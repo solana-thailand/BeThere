@@ -25,7 +25,10 @@ pub async fn flush_cache(
     Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("flushing column map cache (requested by: {})", claims.email);
+    tracing::info!(
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
+        "flushing column map cache",
+    );
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     let kv = resolve_kv(&state);

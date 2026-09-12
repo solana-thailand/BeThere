@@ -73,6 +73,11 @@ pub async fn lookup_claim(
             quiz_status: QuizStatus::NotRequired, // walk-ins skip quiz
             total_checked_in: 0,                  // walk-ins don't contribute to sheet stats
             total_claimed: 0,
+            // Response field only, and the one `api_id` in the codebase that
+            // embeds a personal identifier: walk-ins have no attendee row, so
+            // their claim response is keyed by address. Every other `api_id` is
+            // an internal id, which is why eight log sites render it as
+            // `attendee_id`. Never log this one (Issue 070).
             api_id: format!("walkin:{}", walkin.email),
             event_id: event.id.clone(),
             deposit_enabled: event.deposit_enabled,

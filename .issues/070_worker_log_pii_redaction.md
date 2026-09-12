@@ -1,8 +1,9 @@
 # 070 — Worker log PII redaction
 
-**Status:** Code complete — every personal or durable identifier in the Worker
-log stream is a keyed fingerprint, and the source guard is enabled. Only the
-staging log inspection (step 6) remains.  
+**Status:** Verified — every personal or durable identifier in the Worker log
+stream is a keyed fingerprint, the source guard is enabled, and a runtime probe
+against a locally running Worker confirms the live log stream is clean. One
+residual is documented below and is outside the Worker's control.  
 **Priority:** P1 security/privacy  
 **Created:** 2026-09-12
 
@@ -52,10 +53,15 @@ can contain real field names and encourages copying PII into another system.
       narrow list of non-PII names if a false positive is demonstrated.
       *Enabled as `worker/tests/log_pii_guard.rs` now that the migration is
       complete.*
-- [ ] 6. Re-run the full Worker suite and inspect a staging request's logs
-      manually using only a disposable fixture.
-      *The five-gate suite is green. Staging log inspection is still pending
-      and needs a disposable fixture — the only open item on this issue.*
+- [x] 6. Re-run the full Worker suite and inspect a request's logs manually
+      using only a disposable fixture.
+      *Done as a local runtime probe rather than a staging deploy — see
+      "Completed slice 4". `scripts/verify/pii_log_probe.sh` drives 55 requests
+      with sentinel identifiers through `wrangler dev --local` and greps the
+      captured log; it found three classes of leak across 18 sites that the
+      source guard could not see, plus the request-path class. A follow-up
+      review of what the probe itself could not reach found a fourth class —
+      see "Completed slice 5". All fixed.*
 
 ### Completed slice — 2026-09-12
 
@@ -169,22 +175,170 @@ so a bug in the scanner cannot make the guard silently pass on everything.
 **Gates:** fmt, `check --workspace --all-targets`, `clippy -D warnings`,
 `test --workspace` (0 failed), and the wasm32 release build all pass.
 
+### Completed slice 4 — 2026-09-12 (runtime probe)
+
+**The runtime inspection was done locally, not on staging.** A local
+`wrangler dev --local` worker with a disposable `.dev.vars` (fake Google
+credentials, `GOOGLE_SERVICE_ACCOUNT_TOKEN_URI` pointed at a closed local port)
+is strictly stronger for this check than a staging deploy: it involves no real
+attendee data, mutates no deployed store, and lets every identifier in the run
+be a unique sentinel, so *any* hit in the captured log is a leak by
+construction. `scripts/verify/pii_log_probe.sh` is that harness — seeded local
+D1 fixture, 55 requests across the public, webhook, attendee, and staff/admin
+surfaces, then `--grep` over the captured log. The one outbound call that left
+the machine was a Helius DAS lookup with a fake API key for a fake wallet, which
+returned 401.
+
+**It found leaks that the source guard structurally could not.** The guard
+inspects tracing *field names* and blanks string literals, so three whole
+classes were invisible to it:
+
+| Class | Sites | Example |
+|---|---|---|
+| Identifier interpolated into the *message* | 8 | `"listing attendees (requested by: {})", claims.email` |
+| Field name absent from the forbidden list | 9 | `verifier = %claims.email`, `marker = %claims.email`, `developer_email = %developer_email`, `actor = %claims.email`, `uploader_email = %claims.email`, `%bg_email` |
+| Recorded with no sigil, so the `= %`/`= ?` check missed it | 1 | `claim_token = d1_attendee.claim_token.as_deref()…` — a raw capability token, the exact regression Issue 064 closed |
+
+All 18 are converted to keyed fingerprints, in `handlers/auth.rs` (x2),
+`handlers/adventure.rs` (x3), `handlers/attendee/{admin,list,read}.rs`,
+`handlers/ext.rs`, `db/campaigns/checkin.rs` (x2), `handlers/notifications.rs`,
+`handlers/register/signup.rs`, and the THB `slip_verify` / `slip_upload` /
+`refund` (x3) handlers. `on_event_checkin` now takes a precomputed
+`developer_fingerprint` rather than a `LogRedactor`, because it runs inside
+`ctx.wait_until` and cannot hold a borrow of the secret.
+
+**The request path was logging capability tokens.** `middleware/correlation.rs`
+recorded `path = %req.uri().path()` on every request, which put claim, quiz and
+adventure tokens plus wallet addresses back into the log stream that the rest of
+this issue had cleared. It now logs a redacted path. Redaction is *shape*-driven
+(UUID-shaped or base58-key-shaped segments become `{id}`) rather than a
+per-route table, so a new route that takes an identifier segment is covered the
+day it is added, while slugs and literal segments stay readable —
+`/api/claim/{id}`, `/api/wallet/{id}/nfts`, but
+`/api/public/event/solana-bangkok-deep-dive` unchanged. Five unit tests cover
+it. Nothing is lost diagnostically: the handler behind each of those routes
+already emits a keyed fingerprint of the value under the same `correlation_id`.
+
+**The guard was hardened so each class fails the suite from now on**
+(`worker/tests/log_pii_guard.rs`, now 5 tests):
+
+- `identifiers_are_not_interpolated_into_log_messages` scans tracing bodies with
+  literals *kept*, after stripping every `…fingerprint(<balanced>)` call, so an
+  identifier reaching the stream through a message or a plain argument is
+  flagged wherever it sits. This is the check that found the nine
+  unusually-named fields, and it does not need the field-name list to be
+  complete.
+- `request_paths_are_redacted_before_logging` forbids `uri().path()` inside any
+  tracing body and asserts the middleware still calls `redact_path`.
+- `renders_field` now accepts **any** `field = …`, not just `= %` / `= ?`, and
+  `claim_token` / `token` joined the forbidden names. The self-test gained the
+  sigil-less and message-interpolation cases, so a regression in either
+  direction fails.
+
+**Residual, and it is not fixable in this codebase.** The *platform* request log
+records the raw URL — locally the `[wrangler:info] GET /api/claim/<token>` lines,
+in production Cloudflare's request metadata. A capability token that travels in
+a path is therefore visible to anyone with access to Workers Logs, regardless of
+what the Worker itself logs. Options and a recommendation are in
+[Issue 071](071_capability_token_in_url_platform_logs.md); this issue does not
+close it and must not be reopened for it.
+
+**Verification result.** 55 requests, 54 of which reached the Worker; zero
+sentinel hits in the tracing output, with fingerprints present and stable across
+lines (`staff_fingerprint`, `claim_token_fingerprint`, `identity_fingerprint`,
+`subject_fingerprint`, `attendee_fingerprint`, `subscriber_fingerprint`,
+`name_fingerprint`, `wallet_fingerprint`). Gates: fmt, `check`, `clippy -D
+warnings`, `test --workspace` (631 passing, 0 failed), wasm32 release build.
+
+### Completed slice 5 — 2026-09-12 (the paths the probe could not reach)
+
+The slice 4 probe deliberately made Google credentials unusable, so every Sheets
+helper failed at the token fetch and **nothing past that point ever executed**.
+A review of what the probe was structurally blind to found a fourth leak class
+and two structural gaps in the guard itself.
+
+**An identifier written into an error message reaches the log stream from a
+different function.** `sheets::contacts::{increment_credit, decrement_credit,
+set_credit_refund_requested}` returned `"contact not found: {email_lower}"`, and
+four deposit-credit call sites log a failed mirror as `error = %e`
+(`hold_credit.rs`, `hold_admin.rs`, `hold_refund_request.rs` x2). The realistic
+trigger — an attendee who was never synced to the Contacts sheet holds a deposit
+— therefore put a raw address in the log next to the fingerprint that was
+supposed to replace it. No guard could see it: the field is `error`, the
+expression is `%e`, and the identifier is added ~300 lines away. The message is
+now `"contact not found in contacts sheet"`; the caller's fingerprint field
+already carries the identity.
+
+Two `AppError::NotFound(format!("no registration found for {} …", claims.email))`
+messages (`handlers/adventure.rs`, `handlers/register/my_registration.rs`) are
+fixed for the same reason even though they are 404s and `WorkerError` only logs
+5xx bodies: the address tells the requester nothing they do not know, and the
+latent leak is one variant reclassification away.
+
+**Two structural gaps in the guard, both closed:**
+
+- Every scan in `log_pii_guard.rs` extracts `tracing::<level>!(` bodies, so a
+  bare `info!(email = %claims.email, …)` reached through `use tracing::info`
+  would have been invisible to *all* of them. All 870 call sites are
+  path-qualified today; `tracing_macros_stay_path_qualified` keeps it that way,
+  which is what makes the other scans exhaustive rather than best-effort.
+- The scans cover `worker/src` only. `the_domain_crate_stays_log_free` asserts
+  the reason that scope is complete — `domain` has no logging and no `tracing`
+  dependency — so the day domain starts logging, the suite says to extend the
+  guards instead of silently leaving a crate uncovered.
+
+`error_messages_do_not_embed_identifiers` is the new leak-class guard. It flags
+an identifier in a `format!` that sits **inside** an error-constructing call
+(`map_err`, `ok_or_else`, `Err(`, `AppError::<Variant>(`, `.context`, `anyhow!`),
+matching capture names and argument expressions but never the literal prose, so
+`"D1 find_attendee_by_wallet bind: {e:?}"` stays legal. Span containment — not a
+backward text window — is what keeps `Err(e) => { … }` match arms and a
+`map_err(AppError::Internal)?` on the previous line out of scope. `mask_wallet`
+/ `mask_email` join `…fingerprint(` as recognized sanitizers, since a reviewed
+partial rendering in a user-facing message is a deliberate product decision.
+
+Both new guards were mutation-checked against a real file placed under
+`worker/src`: each flags its class, and `identifiers_are_fingerprinted_before_logging`
+demonstrably does **not** — which is the gap being closed.
+
+**One hazard found and left in place, deliberately.** `attendee_id = %api_id`
+appears at eight log sites on the assumption that an `api_id` is an internal
+identifier — and it is, except at `claim/mint/lookup.rs`, where a walk-in has no
+attendee row and its claim *response* is keyed `walkin:<email>`. That value is
+never logged today (walk-ins return from `lookup_claim` before any of the eight
+sites, and `virtual_checkin`/`execute_claim` take a store `Attendee`), and
+changing the field would change the claim API contract for no log-stream gain.
+A comment at the construction site records the invariant instead.
+
+Gates: fmt, `clippy --workspace --all-targets -D warnings`, `test --workspace`
+(634 passing, 0 failed), wasm32 release build.
+
 ## Acceptance criteria
 
 - [x] The source guard passes and raw PII identifiers no longer appear in
-      Worker tracing fields. *(`log_pii_guard`, 3 tests including a
-      self-test that the guard is not vacuous.)*
+      Worker tracing fields. *(`log_pii_guard`, 8 tests: fields, display names,
+      message interpolation, request paths, error messages, macro qualification,
+      domain scope, plus a self-test that the guard is not vacuous.)*
 - [x] Claim-token fingerprint behavior remains stable. *(Regression found and
       fixed in slice 2; covered by `claim_token_fingerprint_is_short_stable_and_one_way`.)*
 - [x] Administrative audit history still records the authorized actor and
       action correctly. *(No D1 audit payload was touched; only the general
       log stream changed.)*
-- [ ] Staging walk-in, profile, deposit, and claim error paths produce useful
-      redacted diagnostics.
-- [ ] No production data mutation or provider call is needed for validation.
+- [x] Walk-in, profile, deposit, and claim error paths produce useful redacted
+      diagnostics. *(Verified on a local runtime probe rather than staging —
+      slice 4. Both success and error paths were exercised; every line still
+      carries a correlation ID plus a stable fingerprint.)*
+- [x] No production data mutation or provider call is needed for validation.
+      *(The probe runs entirely against local D1/KV with fake credentials. The
+      one outbound call was a Helius DAS 401 for a fake wallet.)*
+
+Not covered by a local probe, and deliberately left as an operator check on the
+next deploy: that Cloudflare's own observability pipeline renders these lines the
+same way `tracing-wasm` does locally, and the platform URL residual above.
 
 ## References
 
 - [Issue 064](064_claim_token_log_redaction.md)
+- [Issue 071](071_capability_token_in_url_platform_logs.md) — the URL/platform-log residual
 - [Core readiness audit](066_core_services_readiness_audit.md)
 - [Operator handover](../docs/operator-handover.md)

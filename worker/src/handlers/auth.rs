@@ -143,14 +143,17 @@ pub async fn auth_callback(
             "/staff"
         };
         tracing::info!(
-            "staff login successful: {} (role={role}, redirect={dashboard})",
-            user_info.email,
+            identity_fingerprint = %state.log_fingerprint(&user_info.email),
+            role = %role,
+            redirect = %dashboard,
+            "staff login successful",
         );
         dashboard.to_string()
     } else {
         tracing::info!(
-            "attendee login successful: {} (role={role})",
-            user_info.email,
+            identity_fingerprint = %state.log_fingerprint(&user_info.email),
+            role = %role,
+            "attendee login successful",
         );
         "/".to_string()
     };

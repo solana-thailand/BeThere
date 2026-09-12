@@ -96,7 +96,7 @@ pub async fn verify_thb_slip_handler(
         attendee_id = %body.attendee_id,
         event_id = %event.id,
         approved = body.approved,
-        verifier = %claims.email,
+        verifier_fingerprint = %state.log_fingerprint(&claims.email),
         "THB deposit slip verified"
     );
 

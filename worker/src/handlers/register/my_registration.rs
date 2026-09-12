@@ -59,9 +59,10 @@ pub async fn my_registration(
         .iter()
         .find(|a| a.email.eq_ignore_ascii_case(&claims.email))
         .ok_or_else(|| {
+            // No email in the message: `WorkerError` logs error strings verbatim
+            // on any 5xx, and the requester already knows their own address.
             AppError::NotFound(format!(
-                "no registration found for {} at event '{slug}'",
-                claims.email
+                "no registration found for your account at event '{slug}'"
             ))
         })?;
 

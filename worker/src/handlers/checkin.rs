@@ -166,10 +166,18 @@ pub async fn check_in(
         let d1_clone = Arc::clone(d1);
         let event_id_clone = event.id.clone();
         let email_clone = attendee.email.clone();
+        // The campaign updater only logs the actor, so it takes the fingerprint
+        // (Issue 070) rather than a redactor it cannot hold across `wait_until`.
+        let fingerprint_clone = state.log_fingerprint(&attendee.email);
         if let Some(ctx) = &state.worker_ctx {
             ctx.wait_until(async move {
-                crate::db::campaigns::on_event_checkin(&d1_clone, &event_id_clone, &email_clone)
-                    .await;
+                crate::db::campaigns::on_event_checkin(
+                    &d1_clone,
+                    &event_id_clone,
+                    &email_clone,
+                    &fingerprint_clone,
+                )
+                .await;
             });
         }
     }

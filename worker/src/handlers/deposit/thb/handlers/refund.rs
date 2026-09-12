@@ -126,7 +126,7 @@ pub async fn mark_refund_handler(
     tracing::info!(
         attendee_id = %attendee_id,
         event_id = %event.id,
-        marker = %claims.email,
+        marker_fingerprint = %state.log_fingerprint(&claims.email),
         "THB refund marked complete"
     );
 
@@ -340,7 +340,7 @@ pub async fn batch_thb_refund_handler(
         event_id = %event.id,
         refunded,
         skipped,
-        marker = %claims.email,
+        marker_fingerprint = %state.log_fingerprint(&claims.email),
         "Batch THB refund completed"
     );
 
@@ -579,7 +579,7 @@ pub async fn mark_manual_refund_handler(
         %attendee_id,
         status = %body.refund_status,
         has_link = body.refund_link.is_some(),
-        marker = %claims.email,
+        marker_fingerprint = %state.log_fingerprint(&claims.email),
         "Manual refund status set"
     );
 

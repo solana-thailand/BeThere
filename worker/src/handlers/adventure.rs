@@ -45,7 +45,9 @@ pub async fn resolve_claim_token_from_d1(
     {
         tracing::info!(
             attendee_id = %attendee.api_id,
-            claim_token = d1_attendee.claim_token.as_deref().unwrap_or("(none)"),
+            claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(
+                d1_attendee.claim_token.as_deref().unwrap_or(""),
+            ),
             "resolved claim_token from D1 (Sheets had none)"
         );
         d1_attendee.claim_token.clone()
@@ -228,7 +230,10 @@ pub async fn get_admin_adventure(
     Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
-    tracing::info!("admin adventure config read by {}", claims.email);
+    tracing::info!(
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
+        "admin adventure config read",
+    );
 
     // S2: per-event access check (was resolve_event — cross-event read IDOR).
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
@@ -257,9 +262,9 @@ pub async fn put_admin_adventure(
     Json(body): Json<AdventureConfig>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        "admin adventure config update by {} (enabled={})",
-        claims.email,
-        body.enabled
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
+        enabled = body.enabled,
+        "admin adventure config update",
     );
 
     // S2: per-event access check (was resolve_event — cross-event write IDOR).
@@ -314,10 +319,10 @@ pub async fn quest_complete_checkin(
         .iter()
         .find(|a| a.email.eq_ignore_ascii_case(&claims.email))
         .ok_or_else(|| {
-            AppError::NotFound(format!(
-                "no registration found for {} at this event",
-                claims.email
-            ))
+            // The requester is the account in question, so naming the address
+            // adds nothing they do not know — and keeps it out of the error
+            // string, which `WorkerError` logs verbatim on any 5xx (Issue 070).
+            AppError::NotFound("no registration found for your account at this event".to_string())
         })?;
 
     // Already checked in — idempotent success, not an error: the frontend polls

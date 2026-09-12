@@ -383,7 +383,11 @@ pub async fn increment_credit(
     let (row_index, mut row_data) =
         find_contact_row(&email_lower, sheet_id, sheet_name, &access_token)
             .await?
-            .ok_or_else(|| format!("contact not found: {email_lower}"))?;
+            // No email in the error text: every caller logs this string as
+            // `error = %e` next to an identity fingerprint, so embedding the
+            // address here would put a raw identifier back in the log stream
+            // (Issue 070). The fingerprint already correlates the two.
+            .ok_or_else(|| "contact not found in contacts sheet".to_string())?;
 
     // 2. Determine which credit column to update
     let credit_col = match currency.to_lowercase().as_str() {
@@ -442,7 +446,11 @@ pub async fn decrement_credit(
     let (row_index, mut row_data) =
         find_contact_row(&email_lower, sheet_id, sheet_name, &access_token)
             .await?
-            .ok_or_else(|| format!("contact not found: {email_lower}"))?;
+            // No email in the error text: every caller logs this string as
+            // `error = %e` next to an identity fingerprint, so embedding the
+            // address here would put a raw identifier back in the log stream
+            // (Issue 070). The fingerprint already correlates the two.
+            .ok_or_else(|| "contact not found in contacts sheet".to_string())?;
 
     // 2. Determine which credit column to update
     let credit_col = match currency.to_lowercase().as_str() {
@@ -500,7 +508,11 @@ pub async fn set_credit_refund_requested(
     let (row_index, mut row_data) =
         find_contact_row(&email_lower, sheet_id, sheet_name, &access_token)
             .await?
-            .ok_or_else(|| format!("contact not found: {email_lower}"))?;
+            // No email in the error text: every caller logs this string as
+            // `error = %e` next to an identity fingerprint, so embedding the
+            // address here would put a raw identifier back in the log stream
+            // (Issue 070). The fingerprint already correlates the two.
+            .ok_or_else(|| "contact not found in contacts sheet".to_string())?;
 
     // 2. Set column N to "1" — find_contact_row pads to TOTAL_COLUMNS so the
     //    index is in bounds even for rows last written before this column
