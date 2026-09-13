@@ -261,20 +261,7 @@ fn Section(title: &'static str, rows: ReadSignal<Vec<Row>>, empty: &'static str)
 /// the reader parsing a date, which is what makes a mixed page scannable.
 #[component]
 fn DateChip(ms: i64, past: bool) -> impl IntoView {
-    let (day, month) = match ms > 0 {
-        false => (String::new(), String::new()),
-        true => {
-            let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
-            d.set_time(ms as f64);
-            let opts = js_sys::Object::new();
-            let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
-            let month = d
-                .to_locale_string("en-GB", &opts)
-                .as_string()
-                .unwrap_or_default();
-            (d.get_date().to_string(), month.to_uppercase())
-        }
-    };
+    let (day, month) = crate::utils::format_event_day_parts(ms);
     view! {
         <div class=match past {
             true => "dv-chip is-past",
