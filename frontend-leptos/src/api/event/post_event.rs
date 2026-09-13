@@ -25,6 +25,15 @@ pub struct PostEventRegisterBody {
     pub tech_stack: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub interests: Option<String>,
+    /// Free-form per-event answers, keyed by `field_key`.
+    ///
+    /// The Worker has accepted this since Plan 008 Phase 3; nothing sent it
+    /// until the post-event question set (.issues/087). Keys in the `post.`
+    /// namespace are stored against the event in `registration_responses` and
+    /// deliberately do **not** touch `developer_profiles` — see
+    /// `db::developers::is_event_scoped_field` (.issues/082).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_fields: Option<std::collections::HashMap<String, String>>,
 }
 
 /// Success response from post-event registration.
