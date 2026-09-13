@@ -60,11 +60,20 @@ pub struct D1EventRow {
     pub promptpay_id: Option<String>,
     pub escrow_address: Option<String>,
     pub organizer_wallet: Option<String>,
-    // u64 not i64 — Solana on-chain event IDs are derived from hashes and can
-    // exceed i64::MAX (e.g. 15159210065911600000 > 9223372036854775807).
-    // Typing as i64 caused serde_json deserialize failures on the live
-    // dashboard endpoint when an event's ID occupied the high u64 range.
+    // Legacy numeric column. **Do not read this for PDA derivation** — it
+    // arrives via `JSON.stringify`, so any value above 2^53 is already rounded
+    // by the time serde sees it, and a value above i64::MAX was stored as a
+    // SQLite REAL and lost its low digits on the way in (Issue 085).
+    //
+    // The stale example in the old comment here — 15159210065911600000 — was
+    // itself the corrupted form of a real event's id, which is how long this
+    // went unnoticed.
     pub on_chain_event_id: Option<u64>,
+    /// Exact u64, stored and read as TEXT (migration 0034). This is the value
+    /// `to_event_config` trusts; `on_chain_event_id` above is kept only so old
+    /// rows still parse before the repair script has run.
+    #[serde(default)]
+    pub on_chain_event_id_text: Option<String>,
     pub refund_deadline_hours: Option<i64>,
     pub max_refundable_deposits: Option<i64>,
     pub description: Option<String>,
@@ -136,6 +145,38 @@ fn parse_enum_column<T: serde::de::DeserializeOwned>(
 }
 
 impl D1EventRow {
+    /// The on-chain event id, taken from the exact TEXT column (Issue 085).
+    ///
+    /// The escrow PDA is derived from this value, so a rounded one silently
+    /// addresses an account that does not exist. The numeric column cannot be
+    /// trusted: it reaches Rust through `JSON.stringify`, which rounds anything
+    /// above 2^53, and a value above `i64::MAX` was already destroyed on write.
+    ///
+    /// Falling back to the numeric column keeps un-repaired rows working
+    /// exactly as badly as before rather than breaking them further, but a
+    /// value that cannot be exact is flagged so the corruption is visible in
+    /// the log instead of only in a failed transaction simulation.
+    fn exact_on_chain_event_id(&self) -> u64 {
+        if let Some(text) = self.on_chain_event_id_text.as_deref()
+            && !text.is_empty()
+            && let Ok(parsed) = text.parse::<u64>()
+        {
+            return parsed;
+        }
+
+        let numeric = self.on_chain_event_id.unwrap_or(0);
+        // 2^53 — above this, `JSON.stringify` has already rounded the value.
+        if numeric > 9_007_199_254_740_992 {
+            tracing::warn!(
+                event_id = %self.id.as_deref().unwrap_or("?"),
+                "on_chain_event_id read from the legacy numeric column and is \
+                 above 2^53, so it is rounded and the derived escrow PDA will \
+                 be wrong — run scripts/verify/onchain_event_id_audit.py (085)"
+            );
+        }
+        numeric
+    }
+
     /// Convert D1 row to domain EventConfig.
     /// Missing columns fall back to their pre-migration value via
     /// [`parse_enum_column`] / `unwrap_or_default`, so a row written before a
@@ -238,7 +279,7 @@ impl D1EventRow {
             escrow_address: self.escrow_address.clone().unwrap_or_default(),
             escrow_status,
             organizer_wallet: self.organizer_wallet.clone().unwrap_or_default(),
-            on_chain_event_id: self.on_chain_event_id.unwrap_or(0),
+            on_chain_event_id: self.exact_on_chain_event_id(),
             refund_deadline_hours: self.refund_deadline_hours.unwrap_or(168) as u32,
             max_refundable_deposits: self.max_refundable_deposits.unwrap_or(0) as u32,
             description: self.description.clone().unwrap_or_default(),
@@ -555,7 +596,7 @@ pub async fn upsert_event(
          nft_name_template, nft_symbol, nft_description_template, \
          merkle_tree, staff_emails, claim_base_url, \
          promptpay_id, escrow_address, organizer_wallet, \
-         on_chain_event_id, refund_deadline_hours, max_refundable_deposits, \
+         on_chain_event_id, on_chain_event_id_text, refund_deadline_hours, max_refundable_deposits, \
          description, visibility, \
          require_contact_info, require_photo_consent, \
          in_person_capacity, online_capacity, \
@@ -574,7 +615,7 @@ pub async fn upsert_event(
          ?, ?, ?, \
          ?, ?, ?, \
          ?, ?, ?, \
-         {on_chain_event_id}, {refund_deadline_hours}, {max_refundable_deposits}, \
+         {on_chain_event_id}, '{on_chain_event_id}', {refund_deadline_hours}, {max_refundable_deposits}, \
          ?, ?, \
          {require_contact_info}, {require_photo_consent}, \
          {in_person_capacity}, {online_capacity}, \
@@ -612,6 +653,7 @@ pub async fn upsert_event(
          escrow_address = excluded.escrow_address, \
          organizer_wallet = excluded.organizer_wallet, \
          on_chain_event_id = excluded.on_chain_event_id, \
+         on_chain_event_id_text = excluded.on_chain_event_id_text, \
          refund_deadline_hours = excluded.refund_deadline_hours, \
          max_refundable_deposits = excluded.max_refundable_deposits, \
          description = excluded.description, visibility = excluded.visibility, \

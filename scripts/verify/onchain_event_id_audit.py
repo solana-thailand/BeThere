@@ -36,9 +36,37 @@ import subprocess
 import sys
 
 ESCROW_PROGRAM = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T"
+# float64 holds integers exactly only up to 2**53; above it the JSON read path
+# has already rounded the value before Rust ever sees it.
+MAX_SAFE_INTEGER = 2**53
+I64_MAX = 2**63 - 1
 # float64 has a 53-bit significand; searching 4 ULPs either side is far more
 # than the rounding can move a value, and costs only a few thousand derivations.
 ULP_SEARCH_RADIUS = 4
+
+
+def derive_on_chain_event_id(event_id: str) -> int:
+    """FNV-1a 64-bit, mirroring `worker/src/handlers/deposit/mod.rs`.
+
+    The id is a pure function of the event's string id, so the true value is
+    always recomputable — the column is only a cache of this.
+    """
+    h = 0xCBF29CE484222325
+    for byte in event_id.encode():
+        h ^= byte
+        h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h or 1
+
+
+def derives_to(event_id_u64: int, organizer: str, escrow_address: str) -> bool:
+    """Whether `event_id_u64` produces the escrow PDA we already know about."""
+    from solders.pubkey import Pubkey
+
+    pda, _ = Pubkey.find_program_address(
+        [b"escrow", bytes(Pubkey.from_string(organizer)), struct.pack("<Q", event_id_u64)],
+        Pubkey.from_string(ESCROW_PROGRAM),
+    )
+    return str(pda) == escrow_address
 
 
 def query(db: str, sql: str) -> list[dict]:
@@ -73,54 +101,117 @@ def recover(stored: float, organizer: str, escrow_address: str) -> int | None:
     return None
 
 
+def execute(db: str, sql: str) -> None:
+    """Run a write against a remote D1 database."""
+    subprocess.run(
+        ["npx", "wrangler", "d1", "execute", db, "--remote", "--command", sql],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", required=True, help="D1 database name")
     parser.add_argument(
         "--recover",
         action="store_true",
-        help="Search for the true id of each corrupted row (slower)",
+        help="Report the true id of each corrupted row without writing",
+    )
+    parser.add_argument(
+        "--repair",
+        action="store_true",
+        help="Write the recovered id into on_chain_event_id_text (migration "
+        "0034). Refuses any value that does not derive to the stored "
+        "escrow_address.",
     )
     args = parser.parse_args()
 
+    # Migration 0034 may not have run yet. Detect it rather than failing with
+    # a SQL error the operator has to decode.
+    columns = {c["name"] for c in query(args.db, "PRAGMA table_info(events);")}
+    has_exact = "on_chain_event_id_text" in columns
+    if not has_exact:
+        print(
+            f"⚠️  {args.db}: migration 0034 has not been applied — the exact "
+            "column does not exist yet.\n"
+            "   Reporting what is stored; --repair needs the migration first.\n"
+        )
+
+    exact_select = (
+        "COALESCE(on_chain_event_id_text, '')" if has_exact else "''"
+    )
     rows = query(
         args.db,
         "SELECT id, typeof(on_chain_event_id) AS kind, "
         "CAST(on_chain_event_id AS TEXT) AS value, organizer_wallet, "
-        "escrow_address, escrow_status FROM events "
+        "escrow_address, escrow_status, "
+        f"{exact_select} AS exact FROM events "
         "WHERE on_chain_event_id IS NOT NULL AND on_chain_event_id != 0;",
     )
 
-    corrupted = [r for r in rows if r["kind"] != "integer"]
-    print(f"{args.db}: {len(rows)} event(s) with an on-chain id, "
-          f"{len(corrupted)} stored as REAL (corrupted)")
+    # Two independent defects, so two independent verdicts per row:
+    #   stored as REAL      → the write destroyed it (above i64::MAX)
+    #   above 2**53         → the read rounds it, even if the write was fine
+    # A row is healthy only when the exact TEXT column holds the true value.
+    print(f"{args.db}: {len(rows)} event(s) with an on-chain id\n")
 
-    if not corrupted:
-        print("✅ No corruption found.")
+    unhealthy = 0
+    for row in rows:
+        truth = derive_on_chain_event_id(row["id"])
+        stored_real = row["kind"] != "integer"
+        unsafe_read = truth > MAX_SAFE_INTEGER
+        exact_ok = row["exact"] == str(truth)
+
+        verified = None
+        if row["escrow_address"] and row["organizer_wallet"]:
+            verified = derives_to(truth, row["organizer_wallet"], row["escrow_address"])
+
+        healthy = exact_ok and verified is not False
+        if not healthy:
+            unhealthy += 1
+
+        mark = "✅" if healthy else "❌"
+        print(f"  {mark} {row['id']}  ({row['escrow_status']})")
+        print(f"       stored numeric  {row['value']}"
+              f"{'   [REAL — destroyed on write]' if stored_real else ''}")
+        print(f"       true (FNV-1a)   {truth}"
+              f"{'   [above 2**53 — rounded on read]' if unsafe_read else ''}")
+        print(f"       exact column    {row['exact'] or '(empty — run migration 0034)'}")
+        if verified is None:
+            print("       PDA check       skipped — no escrow address on record")
+        elif verified:
+            print("       PDA check       derives to the stored escrow_address ✓")
+        else:
+            print("       PDA check       ⚠️  does NOT derive to the stored address —"
+                  " the id was overridden, not derived; do NOT auto-repair")
+
+        if args.repair and not has_exact:
+            print("       repair          BLOCKED — apply migration 0034 first")
+        elif args.repair and not exact_ok:
+            if verified is False:
+                print("       repair          REFUSED — would not match the live escrow")
+                continue
+            execute(
+                args.db,
+                f"UPDATE events SET on_chain_event_id_text = '{truth}' "
+                f"WHERE id = '{row['id']}';",
+            )
+            print(f"       repair          ✅ wrote {truth}")
+            unhealthy -= 1
+        print()
+
+    if unhealthy == 0:
+        print("✅ Every id is exact and derives to its escrow.")
         return 0
 
-    exit_code = 1
-    for row in corrupted:
-        print(f"\n  event          {row['id']}")
-        print(f"  escrow_status  {row['escrow_status']}")
-        print(f"  stored value   {row['value']}  (REAL — low digits lost)")
-        print(f"  escrow_address {row['escrow_address']}")
-        if not args.recover:
-            continue
-        if not row["escrow_address"] or not row["organizer_wallet"]:
-            print("  recovery       IMPOSSIBLE — no escrow address to match against")
-            continue
-        found = recover(float(row["value"]), row["organizer_wallet"], row["escrow_address"])
-        if found is None:
-            print(f"  recovery       NOT FOUND within {ULP_SEARCH_RADIUS} ULP")
-        else:
-            print(f"  recovery       ✅ {found}  (derives to the stored address)")
-
     print(
-        "\n❌ Corrupted ids found. Every escrow tx builder derives the PDA from "
-        "this value, so deposit/refund/close are broken for these events."
+        f"❌ {unhealthy} event(s) unhealthy. Every escrow tx builder derives the "
+        "PDA from this value, so deposit/refund/close are broken for them.\n"
+        "   Re-run with --repair once migration 0034 has been applied."
     )
-    return exit_code
+    return 1
 
 
 if __name__ == "__main__":
