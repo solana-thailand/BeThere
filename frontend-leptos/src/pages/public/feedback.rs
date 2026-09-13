@@ -151,6 +151,21 @@ struct EventBlock {
     /// a textarea per event that most people leave blank is what makes a short
     /// form look like a long one.
     comment_open: RwSignal<bool>,
+    /// Whether the whole question set is showing.
+    ///
+    /// Only the first block opens by default. 123 of 206 people have exactly
+    /// one session and never see the difference; the 29 with four or more are
+    /// the regulars, and for them an expanded wall is the difference between a
+    /// form and a chore (`.issues/103`).
+    open: RwSignal<bool>,
+}
+
+/// Has this block been answered at all? Drives the progress line and the tick
+/// on a collapsed row.
+fn block_answered(block: &EventBlock) -> bool {
+    block.ratings.iter().any(|r| !r.get().trim().is_empty())
+        || !block.watched.get().trim().is_empty()
+        || !block.comment.get().trim().is_empty()
 }
 
 #[derive(Clone, PartialEq)]
@@ -248,6 +263,7 @@ pub fn Feedback() -> impl IntoView {
                 participation_type: e.participation_type,
                 watched: RwSignal::new(String::new()),
                 comment_open: RwSignal::new(false),
+                open: RwSignal::new(false),
                 ratings: [
                     RwSignal::new(String::new()),
                     RwSignal::new(String::new()),
@@ -258,9 +274,14 @@ pub fn Feedback() -> impl IntoView {
             })
             .collect();
 
-        match built.is_empty() {
-            true => set_state.set(PageState::NothingToDo),
-            false => {
+        match built.first() {
+            None => set_state.set(PageState::NothingToDo),
+            Some(first) => {
+                // The list arrives most-recent-first, so the one block that
+                // opens by default is the session they remember best. If they
+                // answer only that one, it is the most reliable answer they
+                // could have given.
+                first.open.set(true);
                 set_blocks.set(built);
                 set_state.set(PageState::Ready);
             }
@@ -343,6 +364,13 @@ pub fn Feedback() -> impl IntoView {
                 }.into_any(),
                 PageState::Ready | PageState::Submitting => {
                     let busy = state.get() == PageState::Submitting;
+                    // Defined out here: the `view!` macro cannot parse a
+                    // turbofish inside an attribute value.
+                    let newest = move || blocks.get().into_iter().next();
+                    let older = move || {
+                        let rest: Vec<EventBlock> = blocks.get().into_iter().skip(1).collect();
+                        rest
+                    };
                     view! {
                         <header class="card">
                             <h1>"ขอความเห็นจากงานที่คุณเข้าร่วม"</h1>
@@ -350,141 +378,26 @@ pub fn Feedback() -> impl IntoView {
                                 "ใช้เวลาประมาณ 2 นาที ข้ามข้อไหนก็ได้ "
                                 "คำตอบไปที่ทีมงานโดยตรง ไม่เปิดเผยชื่อในรายงาน"
                             </p>
+                            // Only shown to people with more than one session,
+                            // which is 83 of 206. For the other 123 a counter
+                            // reading "1 จาก 1" is noise.
+                            <Show when=move || { blocks.get().len() > 1 } fallback=|| ()>
+                                <p class="fb-progress">
+                                    {move || {
+                                        let all = blocks.get();
+                                        let done = all.iter().filter(|b| block_answered(b)).count();
+                                        format!("ตอบแล้ว {done} จาก {} งาน — ส่งได้เลยไม่ต้องครบ", all.len())
+                                    }}
+                                </p>
+                            </Show>
                         </header>
 
-                        <For
-                            each=move || blocks.get()
-                            key=|block| block.slug.clone()
-                            let:block
-                        >
-                            <section class="card fb-event">
-                                // Poster, date and venue before the questions —
-                                // the point of the block is that the reader
-                                // recognises the event before rating it. The
-                                // heading links to the event's own page for
-                                // anyone who needs more than a picture.
-                                <a class="fb-event-head" href=format!("/e/{}", block.slug)>
-                                    {match block.image.is_empty() {
-                                        // No frame at all rather than an empty
-                                        // one: six events have no poster, and a
-                                        // blank box identifies nothing.
-                                        true => view! { <div></div> }.into_any(),
-                                        false => view! {
-                                            <img class="fb-event-poster" src=block.image.clone() alt="Event poster" />
-                                        }.into_any(),
-                                    }}
-                                    <div class="fb-event-meta">
-                                        <h2>{block.name.clone()}</h2>
-                                        <p class="subtitle">
-                                            {
-                                                let when = crate::utils::format_event_day(block.event_start_ms);
-                                                [when, block.location.clone()]
-                                                    .into_iter()
-                                                    .filter(|part| !part.is_empty())
-                                                    .collect::<Vec<_>>()
-                                                    .join(" · ")
-                                            }
-                                        </p>
-                                    </div>
-                                </a>
-
-                                // Online only, and first: for someone who did
-                                // not watch, this is the only question they can
-                                // answer honestly, and it is the one DevRel
-                                // most wants answered (.issues/098).
-                                {
-                                    let watched = block.watched;
-                                    match block.participation_type == "online" {
-                                        false => view! { <div></div> }.into_any(),
-                                        true => view! {
-                                            <fieldset class="fb-options">
-                                                <legend class="dev-profile-label">
-                                                    "คุณได้ดูงานนี้ไหม"
-                                                </legend>
-                                                {WATCHED_OPTIONS.iter().map(|option| {
-                                                    let value = (*option).to_string();
-                                                    let selected = value.clone();
-                                                    let set_to = value.clone();
-                                                    view! {
-                                                        <button
-                                                            type="button"
-                                                            class=move || match watched.get() == selected {
-                                                                true => "fb-option is-selected",
-                                                                false => "fb-option",
-                                                            }
-                                                            aria-pressed=move || (watched.get() == value).to_string()
-                                                            on:click=move |_| watched.set(set_to.clone())
-                                                        >
-                                                            {*option}
-                                                        </button>
-                                                    }
-                                                }).collect_view()}
-                                            </fieldset>
-                                        }.into_any(),
-                                    }
-                                }
-
-                                {dimensions_for(&block.participation_type).iter().map(|index| {
-                                    let index = *index;
-                                    let label = DIMENSIONS[index].1;
-                                    let rating = block.ratings[index];
-                                    view! {
-                                        // One row per dimension: label left, three
-                                        // choices right. Four stacked fieldsets of
-                                        // radios read as a wall; the whole event is
-                                        // four taps.
-                                        <div class="fb-row">
-                                            <span class="fb-row-label">{label}</span>
-                                            <div class="fb-scale" role="group" aria-label=label>
-                                                {SCALE.iter().map(|option| {
-                                                    let value = (*option).to_string();
-                                                    let selected = value.clone();
-                                                    let set_to = value.clone();
-                                                    view! {
-                                                        <button
-                                                            type="button"
-                                                            class=move || match rating.get() == selected {
-                                                                true => "fb-choice is-selected",
-                                                                false => "fb-choice",
-                                                            }
-                                                            aria-pressed=move || (rating.get() == value).to_string()
-                                                            on:click=move |_| rating.set(set_to.clone())
-                                                        >
-                                                            {*option}
-                                                        </button>
-                                                    }
-                                                }).collect_view()}
-                                            </div>
-                                        </div>
-                                    }
-                                }).collect_view()}
-
-                                {
-                                    let open = block.comment_open;
-                                    let comment = block.comment;
-                                    move || match open.get() {
-                                        false => view! {
-                                            <button
-                                                type="button"
-                                                class="fb-add-comment"
-                                                on:click=move |_| open.set(true)
-                                            >
-                                                "+ เพิ่มข้อเสนอแนะ"
-                                            </button>
-                                        }.into_any(),
-                                        true => view! {
-                                            <textarea
-                                                class="dev-profile-input"
-                                                rows="3"
-                                                placeholder="ข้อเสนอแนะ (ไม่บังคับ)"
-                                                prop:value=move || comment.get()
-                                                on:input=move |ev| comment.set(event_target_value(&ev))
-                                            />
-                                        }.into_any(),
-                                    }
-                                }
-                            </section>
-                        </For>
+                        // The most recent session, open. Four taps, and the
+                        // person is already finished if they want to be.
+                        {move || match newest() {
+                            None => view! { <div></div> }.into_any(),
+                            Some(first) => view! { <EventQuestionBlock block=first /> }.into_any(),
+                        }}
 
                         <section class="card">
                             <label>
@@ -521,6 +434,16 @@ pub fn Feedback() -> impl IntoView {
                             </fieldset>
                         </section>
 
+                        // Everything older, collapsed. See `.issues/103`.
+                        <For
+                            each=older
+                            key=|block| block.slug.clone()
+                            let:block
+                        >
+                            <EventQuestionBlock block=block />
+                        </For>
+
+
                         <button class="btn btn-primary" prop:disabled=busy on:click=submit>
                             {move || match busy {
                                 true => "กำลังส่ง…",
@@ -531,5 +454,168 @@ pub fn Feedback() -> impl IntoView {
                 }
             }}
         </div>
+    }
+}
+
+/// One session's question set, collapsed unless it is the one being answered.
+#[component]
+fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
+    // Signals are `Copy`; the rest of the block is not. Clone once per closure
+    // that needs the data rather than threading references through the view.
+    let open = block.open;
+    let answered = block.clone();
+    view! {
+                        <section class=move || match block.open.get() {
+                            true => "card fb-event",
+                            // Collapsed blocks are a list, not a stack of cards:
+                            // eleven cards is a wall whatever is inside them.
+                            false => "card fb-event is-collapsed",
+                        }>
+                            // Poster, date and venue before the questions —
+                            // the point of the block is that the reader
+                            // recognises the event before rating it.
+                            //
+                            // A button, not a link to the event page. Nothing
+                            // on this form is persisted until submit, so a
+                            // navigation away from a half-filled block throws
+                            // the answers away — the header was one tap from
+                            // losing someone's work. Recognition is what the
+                            // poster, name, date and venue are for; the event
+                            // page adds nothing worth that risk.
+                            <button
+                                type="button"
+                                class="fb-event-head"
+                                aria-expanded=move || open.get().to_string()
+                                on:click=move |_| open.update(|v| *v = !*v)
+                            >
+                                {match block.image.is_empty() {
+                                    // No frame at all rather than an empty
+                                    // one: six events have no poster, and a
+                                    // blank box identifies nothing.
+                                    true => view! { <div></div> }.into_any(),
+                                    false => view! {
+                                        <img class="fb-event-poster" src=block.image.clone() alt="Event poster" />
+                                    }.into_any(),
+                                }}
+                                <div class="fb-event-meta">
+                                    <h2>{block.name.clone()}</h2>
+                                    <p class="subtitle">
+                                        {
+                                            let when = crate::utils::format_event_day(block.event_start_ms);
+                                            [when, block.location.clone()]
+                                                .into_iter()
+                                                .filter(|part| !part.is_empty())
+                                                .collect::<Vec<_>>()
+                                                .join(" · ")
+                                        }
+                                    </p>
+                                </div>
+                                // A tick on a collapsed row is the only way to
+                                // tell answered from skipped without opening it.
+                                {move || match (!open.get(), block_answered(&answered)) {
+                                    (true, true) => view! { <span class="fb-tick">"✓"</span> }.into_any(),
+                                    (true, false) => view! { <span class="fb-chevron">"+"</span> }.into_any(),
+                                    _ => view! { <div></div> }.into_any(),
+                                }}
+                            </button>
+
+                            <Show when=move || open.get() fallback=|| ()>
+                            // Online only, and first: for someone who did
+                            // not watch, this is the only question they can
+                            // answer honestly, and it is the one DevRel
+                            // most wants answered (.issues/098).
+                            {
+                                let watched = block.watched;
+                                match block.participation_type == "online" {
+                                    false => view! { <div></div> }.into_any(),
+                                    true => view! {
+                                        <fieldset class="fb-options">
+                                            <legend class="dev-profile-label">
+                                                "คุณได้ดูงานนี้ไหม"
+                                            </legend>
+                                            {WATCHED_OPTIONS.iter().map(|option| {
+                                                let value = (*option).to_string();
+                                                let selected = value.clone();
+                                                let set_to = value.clone();
+                                                view! {
+                                                    <button
+                                                        type="button"
+                                                        class=move || match watched.get() == selected {
+                                                            true => "fb-option is-selected",
+                                                            false => "fb-option",
+                                                        }
+                                                        aria-pressed=move || (watched.get() == value).to_string()
+                                                        on:click=move |_| watched.set(set_to.clone())
+                                                    >
+                                                        {*option}
+                                                    </button>
+                                                }
+                                            }).collect_view()}
+                                        </fieldset>
+                                    }.into_any(),
+                                }
+                            }
+
+                            {dimensions_for(&block.participation_type).iter().map(|index| {
+                                let index = *index;
+                                let label = DIMENSIONS[index].1;
+                                let rating = block.ratings[index];
+                                view! {
+                                    // One row per dimension: label left, three
+                                    // choices right. Four stacked fieldsets of
+                                    // radios read as a wall; the whole event is
+                                    // four taps.
+                                    <div class="fb-row">
+                                        <span class="fb-row-label">{label}</span>
+                                        <div class="fb-scale" role="group" aria-label=label>
+                                            {SCALE.iter().map(|option| {
+                                                let value = (*option).to_string();
+                                                let selected = value.clone();
+                                                let set_to = value.clone();
+                                                view! {
+                                                    <button
+                                                        type="button"
+                                                        class=move || match rating.get() == selected {
+                                                            true => "fb-choice is-selected",
+                                                            false => "fb-choice",
+                                                        }
+                                                        aria-pressed=move || (rating.get() == value).to_string()
+                                                        on:click=move |_| rating.set(set_to.clone())
+                                                    >
+                                                        {*option}
+                                                    </button>
+                                                }
+                                            }).collect_view()}
+                                        </div>
+                                    </div>
+                                }
+                            }).collect_view()}
+
+                            {
+                                let open = block.comment_open;
+                                let comment = block.comment;
+                                move || match open.get() {
+                                    false => view! {
+                                        <button
+                                            type="button"
+                                            class="fb-add-comment"
+                                            on:click=move |_| open.set(true)
+                                        >
+                                            "+ เพิ่มข้อเสนอแนะ"
+                                        </button>
+                                    }.into_any(),
+                                    true => view! {
+                                        <textarea
+                                            class="dev-profile-input"
+                                            rows="3"
+                                            placeholder="ข้อเสนอแนะ (ไม่บังคับ)"
+                                            prop:value=move || comment.get()
+                                            on:input=move |ev| comment.set(event_target_value(&ev))
+                                        />
+                                    }.into_any(),
+                                }
+                            }
+                            </Show>
+                        </section>
     }
 }
