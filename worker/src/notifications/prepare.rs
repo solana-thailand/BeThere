@@ -1,7 +1,9 @@
 //! Re-read eligibility and render immediately before transport.
 use super::{
     Notification, content,
-    policy::{NotificationKind, ReminderTiming, in_delivery_window, reminder_timing},
+    policy::{
+        DeliveryWindow, NotificationKind, ReminderTiming, in_delivery_window, reminder_timing,
+    },
 };
 use crate::db::d1_safe::safe_all_rows;
 use worker::{D1Database, d1::D1Type};
@@ -63,9 +65,16 @@ pub(super) async fn prepare(
     if kind == NotificationKind::Survey && !event.post_event_registration_accepting(now) {
         return Ok(Prepared::Cancel);
     }
-    let deposit =
-        crate::db::deposit_statuses::get_deposit_status(db, &job.event_id, &job.attendee_id)
-            .await?;
+    // Nothing sent after an event offers a deposit, so it does not pay for the
+    // read either — one D1 round trip per recipient on a whole-event send.
+    let pre_event = kind.delivery_window() == DeliveryWindow::BeforeEventEnds;
+    let deposit = match pre_event {
+        true => {
+            crate::db::deposit_statuses::get_deposit_status(db, &job.event_id, &job.attendee_id)
+                .await?
+        }
+        false => None,
+    };
     let online = a["participation_type"].as_str() == Some("online");
     if matches!(
         kind,
@@ -84,7 +93,8 @@ pub(super) async fn prepare(
             return Ok(Prepared::Cancel);
         }
     }
-    let needs_deposit = event.deposit_enabled
+    let needs_deposit = pre_event
+        && event.deposit_enabled
         && !online
         && !deposit.as_ref().is_some_and(|d| d.verified && !d.rejected);
     Ok(Prepared::Ready(content::render(&content::Render {
