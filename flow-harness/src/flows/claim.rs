@@ -215,83 +215,54 @@ impl Flow for ClaimFlow {
 
 // ── Pure helpers (staging-independent, unit-tested) ──────────────────────────
 
-/// Assert a `ClaimResponse` is well-formed: non-empty status, recognisable
-/// vocabulary.
+/// Assert the claim payload has the shape the production frontend consumes.
 ///
-/// The claim endpoint is a separate program; the harness does not pin its
-/// exact status enum (it may evolve with the NFT-mint path). The asserter
-/// accepts any non-empty status string from the known vocabulary and rejects
-/// empty/garbage payloads. This is the staging-independent payload of the
-/// flow — it validates the response *shape* regardless of where the response
-/// came from.
+/// Issue 088. This used to require a `status` field. `GET /api/claim/{token}`
+/// has never returned one — it returns `claimed`, `checked_in_at`,
+/// `nft_available`, `quiz_status` and ~17 more — so the flow failed against a
+/// perfectly healthy API. The Worker is the contract here, because the Leptos
+/// claim page is built on exactly these fields; inventing a `status` would have
+/// added API surface with no consumer.
 fn assert_response_shape(claim: &ClaimResponse) -> HarnessResult<()> {
-    if claim.status.is_empty() {
+    // A resolved claim always knows its own check-in state. An empty
+    // `checked_in_at` on a claimed badge means the payload is incoherent.
+    if claim.claimed && claim.checked_in_at.is_empty() {
         return Err(HarnessError::AssertionFailed {
             flow: FLOW_NAME,
-            reason: "claim response missing `status` field".to_string(),
+            reason: "claim reports claimed=true with an empty checked_in_at —                      a badge cannot be claimed without a check-in"
+                .to_string(),
         });
     }
-    if !is_recognised_status(&claim.status) {
+    if claim.claimed && claim.claimed_at.as_deref().unwrap_or("").is_empty() {
         return Err(HarnessError::AssertionFailed {
             flow: FLOW_NAME,
-            reason: format!(
-                "claim response `status` not in recognised vocabulary: {:?} \
-                 (known: eligible, pending, ready, claimed, already_claimed, expired, error)",
-                claim.status
-            ),
+            reason: "claim reports claimed=true with no claimed_at timestamp".to_string(),
         });
     }
     Ok(())
 }
 
 /// Assert the response describes a pre-claim state for a freshly-seeded
-/// attendee: `claimed == false` and status indicates eligibility.
+/// attendee: checked in, nothing claimed yet, and the event can actually mint.
 fn assert_pre_claim_state(claim: &ClaimResponse) -> HarnessResult<()> {
     if claim.claimed {
         return Err(HarnessError::AssertionFailed {
             flow: FLOW_NAME,
-            reason: format!(
-                "expected pre-claim state (claimed=false) for seeded attendee, \
-                 got claimed=true with status={:?}",
-                claim.status
-            ),
+            reason: "expected pre-claim state (claimed=false) for the seeded attendee".to_string(),
         });
     }
-    if !is_eligible_status(&claim.status) {
+    if claim.checked_in_at.is_empty() {
         return Err(HarnessError::AssertionFailed {
             flow: FLOW_NAME,
-            reason: format!(
-                "expected eligible pre-claim status (eligible/pending/ready), \
-                 got status={:?}",
-                claim.status
-            ),
+            reason: "seeded attendee is not checked in, so the claim is not yet                      reachable — re-run seed-staging.sh"
+                .to_string(),
         });
     }
+    // `nft_available` is deliberately *not* asserted: it reflects whether the
+    // environment has Crossmint configured, which is an environment fact rather
+    // than a claim-path regression. Asserting it would make the flow fail on a
+    // staging worker with no mint provider, which is not what this flow tests.
     Ok(())
-}
-
-/// Whether a status string is in the recognised claim vocabulary.
-///
-/// Kept permissive: the NFT-mint path may evolve its vocabulary, and the
-/// harness's job is to catch drift (empty/garbage), not to pin the enum. Add
-/// new known statuses here as the worker grows them.
-fn is_recognised_status(status: &str) -> bool {
-    matches!(
-        status,
-        "eligible"
-            | "pending"
-            | "ready"
-            | "claimed"
-            | "already_claimed"
-            | "expired"
-            | "error"
-            | "not_found"
-    )
-}
-
-/// Whether a status indicates the attendee is eligible to claim (pre-claim).
-fn is_eligible_status(status: &str) -> bool {
-    matches!(status, "eligible" | "pending" | "ready")
 }
 
 // ── Staging-live stub ────────────────────────────────────────────────────────
@@ -328,53 +299,30 @@ mod tests {
     // trait that powers `.from_str`) needs to be in scope here.
     use std::str::FromStr;
 
-    fn resp(status: &str, claimed: bool) -> ClaimResponse {
+    /// Build a claim payload in the shape the Worker actually returns.
+    fn resp(checked_in: bool, claimed: bool) -> ClaimResponse {
         ClaimResponse {
-            status: status.to_string(),
             claimed,
+            checked_in_at: match checked_in {
+                true => "2026-09-13T05:30:31.706+00:00".to_string(),
+                false => String::new(),
+            },
+            nft_available: true,
+            claimed_at: match claimed {
+                true => Some("2026-09-13T06:00:00.000+00:00".to_string()),
+                false => None,
+            },
             message: None,
         }
     }
 
     // ── assert_response_shape ────────────────────────────────────────────────
 
-    #[test]
-    fn response_shape_rejects_empty_status() {
-        let err = assert_response_shape(&resp("", false)).unwrap_err();
-        assert!(err.to_string().contains("missing `status`"), "{}", err);
-    }
-
-    #[test]
-    fn response_shape_rejects_unknown_status() {
-        let err = assert_response_shape(&resp("garbage_value", false)).unwrap_err();
-        assert!(
-            err.to_string().contains("not in recognised vocabulary"),
-            "{}",
-            err
-        );
-    }
-
-    #[test]
-    fn response_shape_accepts_known_statuses() {
-        for s in [
-            "eligible",
-            "pending",
-            "ready",
-            "claimed",
-            "already_claimed",
-            "expired",
-            "error",
-            "not_found",
-        ] {
-            assert!(assert_response_shape(&resp(s, false)).is_ok(), "status={s}");
-        }
-    }
-
     // ── assert_pre_claim_state ───────────────────────────────────────────────
 
     #[test]
     fn pre_claim_state_rejects_claimed_true() {
-        let err = assert_pre_claim_state(&resp("claimed", true)).unwrap_err();
+        let err = assert_pre_claim_state(&resp(true, true)).unwrap_err();
         assert!(
             err.to_string().contains("expected pre-claim state"),
             "{}",
@@ -382,61 +330,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn pre_claim_state_rejects_non_eligible_status() {
-        // Even with claimed=false, an "expired" or "error" status is not a
-        // pre-claim eligible state — the harness catches this drift.
-        let err = assert_pre_claim_state(&resp("expired", false)).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("expected eligible pre-claim status"),
-            "{}",
-            err
-        );
-
-        let err = assert_pre_claim_state(&resp("error", false)).unwrap_err();
-        assert!(
-            err.to_string()
-                .contains("expected eligible pre-claim status"),
-            "{}",
-            err
-        );
-    }
-
-    #[test]
-    fn pre_claim_state_accepts_eligible_statuses() {
-        for s in ["eligible", "pending", "ready"] {
-            assert!(
-                assert_pre_claim_state(&resp(s, false)).is_ok(),
-                "status={s}"
-            );
-        }
-    }
-
     // ── vocabulary helpers ───────────────────────────────────────────────────
-
-    #[test]
-    fn recognised_status_covers_known_set() {
-        assert!(is_recognised_status("eligible"));
-        assert!(is_recognised_status("claimed"));
-        assert!(is_recognised_status("already_claimed"));
-        assert!(is_recognised_status("error"));
-        assert!(!is_recognised_status(""));
-        assert!(!is_recognised_status("ELIGIBLE")); // case-sensitive by design
-        assert!(!is_recognised_status("random"));
-    }
-
-    #[test]
-    fn eligible_status_excludes_terminal_states() {
-        assert!(is_eligible_status("eligible"));
-        assert!(is_eligible_status("pending"));
-        assert!(is_eligible_status("ready"));
-        // Terminal / error states are not eligible.
-        assert!(!is_eligible_status("claimed"));
-        assert!(!is_eligible_status("already_claimed"));
-        assert!(!is_eligible_status("expired"));
-        assert!(!is_eligible_status("error"));
-    }
 
     // ── Config + flow metadata ───────────────────────────────────────────────
 
@@ -492,14 +386,46 @@ mod tests {
         assert!(without_msg.message.is_none());
     }
 
+    /// The real payload carries ~20 fields the harness does not model. Every
+    /// field is `default`, so a richer response must still deserialise — that
+    /// leniency is what keeps the harness from breaking on an unrelated API
+    /// addition.
     #[test]
-    fn response_default_fields_lenient() {
-        // The most minimal valid payload: just `status`. `claimed` defaults to
-        // false; `message` defaults to None.
-        let minimal: ClaimResponse =
-            serde_json::from_str(r#"{"status":"eligible"}"#).expect("deserialise minimal");
-        assert_eq!(minimal.status, "eligible");
-        assert!(!minimal.claimed);
-        assert!(minimal.message.is_none());
+    fn a_richer_worker_payload_still_deserialises() {
+        let real = r#"{"claimed":false,"checked_in_at":"2026-09-13T05:30:31.706+00:00",
+            "nft_available":true,"quiz_status":"none","total_checked_in":3,
+            "event":{"event_name":"x"},"locked_wallet":null}"#;
+        let parsed: ClaimResponse = serde_json::from_str(real).expect("deserialise real payload");
+        assert!(!parsed.claimed);
+        assert_eq!(parsed.checked_in_at, "2026-09-13T05:30:31.706+00:00");
+        assert!(parsed.nft_available);
+    }
+
+    /// Issue 088: the flow used to demand a `status` field the API has never
+    /// returned, so it failed against a healthy Worker.
+    #[test]
+    fn a_payload_without_status_is_accepted() {
+        let parsed: ClaimResponse = serde_json::from_str(
+            r#"{"claimed":false,"checked_in_at":"2026-09-13T05:30:31.706+00:00"}"#,
+        )
+        .expect("deserialise");
+        assert_response_shape(&parsed).expect("no status field is not an error");
+    }
+
+    #[test]
+    fn a_claimed_badge_without_a_check_in_is_incoherent() {
+        let bad = ClaimResponse {
+            claimed: true,
+            checked_in_at: String::new(),
+            nft_available: true,
+            claimed_at: Some("2026-09-13T06:00:00.000+00:00".to_string()),
+            message: None,
+        };
+        let err = assert_response_shape(&bad).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("cannot be claimed without a check-in"),
+            "{err}"
+        );
     }
 }
