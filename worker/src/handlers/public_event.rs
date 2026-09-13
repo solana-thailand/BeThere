@@ -56,6 +56,12 @@ pub async fn list_public_events(
                     "tagline": e.tagline,
                     "location": e.location,
                     "nft_image_url": e.nft_image_url,
+                    // The past-events payload below has always carried this and
+                    // the upcoming one never did, so the landing page's only
+                    // event card fell through to `nft_image_url` — a generic
+                    // `badge-hd.svg` — for events that have a real poster in R2
+                    // (`.issues/094`).
+                    "poster_url": e.poster_url,
                     "created_at": e.created_at,
                     "in_person_capacity": e.in_person_capacity,
                     "online_capacity": e.online_capacity,

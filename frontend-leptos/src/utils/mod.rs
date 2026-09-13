@@ -286,6 +286,27 @@ pub fn is_retrospective(participation_type: &str) -> bool {
         .eq_ignore_ascii_case("retrospective")
 }
 
+/// Format an epoch-millisecond instant as a short local date — `13 Sep 2026`.
+///
+/// The landing card formats its own date inline with `js_sys::Date` and also
+/// handles `time_tba`; this is the date-only half, for surfaces that are
+/// recalling an event that has already happened, where the start time is not
+/// the useful part and "Time TBA" can no longer be true.
+pub fn format_event_day(ms: i64) -> String {
+    if ms <= 0 {
+        return String::new();
+    }
+    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+    d.set_time(ms as f64);
+    let opts = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(&opts, &"year".into(), &"numeric".into());
+    let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
+    let _ = js_sys::Reflect::set(&opts, &"day".into(), &"numeric".into());
+    d.to_locale_string("en-GB", &opts)
+        .as_string()
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

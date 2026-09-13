@@ -21,6 +21,14 @@ struct PublicEventItem {
     location: String,
     #[serde(default)]
     nft_image_url: String,
+    /// Marketing poster, served from R2 as `/api/storage/posters/{event_id}`.
+    ///
+    /// First tier of the same fallback `event_hero` and the past-events card
+    /// use. Without it this card showed `nft_image_url` — which for every event
+    /// so far is the generic `badge-hd.svg` — so the one upcoming event on the
+    /// landing page was unrecognisable (`.issues/094`).
+    #[serde(default)]
+    poster_url: String,
 }
 
 #[derive(Clone, Deserialize, Default)]
@@ -149,12 +157,19 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                                     view! { <span class="landing-inline-icon"><Icon icon=IconName::TicketFree class="icon-xs"/>" Free entry"</span> }.into_any()
                                 };
 
-                                let badge_img = if !evt.nft_image_url.is_empty() {
+                                // Poster first, badge second — the same order
+                                // `event_hero` and `past_events` already use.
+                                let (image_url, image_alt) = if !evt.poster_url.is_empty() {
+                                    (evt.poster_url.clone(), "Event poster")
+                                } else {
+                                    (evt.nft_image_url.clone(), "Event badge")
+                                };
+                                let badge_img = if !image_url.is_empty() {
                                     view! {
                                         <div class="landing-event-badge-img">
                                             <img
-                                                src=evt.nft_image_url.clone()
-                                                alt="Event badge"
+                                                src=image_url
+                                                alt=image_alt
                                             />
                                         </div>
                                     }.into_any()
