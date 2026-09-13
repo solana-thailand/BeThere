@@ -47,12 +47,24 @@ use crate::runner::Runner;
 /// let mut runner = Runner::new(ctx, client, results_root);
 /// flows::register_default(&mut runner);
 /// ```
+/// Read a fixture identifier from the environment, falling back to the seeded
+/// default.
+///
+/// Issue 084: only `deposit` and `auth` used to read the environment, so
+/// `FLOW_HARNESS_EVENT_ID` moved one flow and left the other four pointed at
+/// the literal `flow-test-event`. A run against a named fixture therefore
+/// exercised two different events at once and could never go green.
+pub(crate) fn fixture_value(variable: &str, default: String) -> String {
+    std::env::var(variable).unwrap_or(default)
+}
+
 pub fn register_default(runner: &mut Runner) {
     runner.register(DepositFlow::from_env());
-    runner.register(RefundPreEventEndFlow::new());
-    runner.register(RefundPostEventEndCheckedInFlow::new());
-    runner.register(RefundNoShowDeadlineFlow::new());
-    runner.register(ClaimFlow::new());
+    // All five read the same fixture identifiers — see `fixture_value`.
+    runner.register(RefundPreEventEndFlow::from_env());
+    runner.register(RefundPostEventEndCheckedInFlow::from_env());
+    runner.register(RefundNoShowDeadlineFlow::from_env());
+    runner.register(ClaimFlow::from_env());
     // AuthFlow::from_env picks up the optional session cookie from
     // FLOW_HARNESS_ATTENDEE_SESSION at registration time. CLI callers should
     // call ONLY register_default — do not register AuthFlow a second time
@@ -66,12 +78,12 @@ pub fn register_default(runner: &mut Runner) {
 pub fn register_named(runner: &mut Runner, name: &str) -> Result<(), String> {
     match name {
         "deposit" => runner.register(DepositFlow::from_env()),
-        "refund-pre-event-end" => runner.register(RefundPreEventEndFlow::new()),
+        "refund-pre-event-end" => runner.register(RefundPreEventEndFlow::from_env()),
         "refund-post-event-end-checked-in" => {
-            runner.register(RefundPostEventEndCheckedInFlow::new())
+            runner.register(RefundPostEventEndCheckedInFlow::from_env())
         }
-        "refund-no-show-deadline" => runner.register(RefundNoShowDeadlineFlow::new()),
-        "claim" => runner.register(ClaimFlow::new()),
+        "refund-no-show-deadline" => runner.register(RefundNoShowDeadlineFlow::from_env()),
+        "claim" => runner.register(ClaimFlow::from_env()),
         "auth" => runner.register(AuthFlow::from_env()),
         other => {
             return Err(format!(
@@ -81,4 +93,36 @@ pub fn register_named(runner: &mut Runner, name: &str) -> Result<(), String> {
         }
     };
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::fixture_value;
+
+    #[test]
+    fn fixture_value_uses_override_or_default() {
+        assert_eq!(
+            fixture_value("FLOW_HARNESS_TEST_FIXTURE_VALUE", "default".to_string()),
+            "default"
+        );
+    }
+
+    /// Every flow must read the same two variables, or a named fixture splits
+    /// the suite across two events again (Issue 084).
+    #[test]
+    fn every_flow_reads_the_shared_fixture_identifiers() {
+        let source = include_str!("mod.rs");
+        let default_block = source
+            .split("pub fn register_default")
+            .nth(1)
+            .expect("register_default exists")
+            .split("pub fn register_named")
+            .next()
+            .expect("the function body ends");
+        assert!(
+            !default_block.contains("::new()"),
+            "register_default still constructs a flow with hardcoded fixture \
+             defaults; use ::from_env() so the whole suite targets one event"
+        );
+    }
 }

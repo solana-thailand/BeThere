@@ -51,10 +51,22 @@ use crate::runner::Flow;
 /// Flow name recorded in `summary.json`.
 const FLOW_NAME: &str = "claim";
 
-/// Default claim token used when `seed-staging.sh` does not produce a
-/// deterministic one. This is a placeholder so the wiring is testable offline;
-/// the real run resolves the token via [`ClaimFlow::resolve_claim_token`].
-const DEFAULT_CLAIM_TOKEN: &str = "flow-test-claim-token";
+/// Default claim token, matching what `seed-staging.sh` writes for the default
+/// fixture (`${EVENT_ID}-claim-token-1` with `EVENT_ID=flow-test-event`).
+///
+/// Issue 084: this used to be the bare literal `flow-test-claim-token`, which
+/// the seed script has never written. The claim flow therefore always looked up
+/// a token that did not exist — and on staging, where `PLATFORM_SHEET_ID` is
+/// empty, that D1 miss surfaces as a 500 through the Sheets fallback, which
+/// reads like a server fault and is not one.
+const DEFAULT_CLAIM_TOKEN: &str = "flow-test-event-claim-token-1";
+
+/// The token `seed-staging.sh` writes for a given fixture event.
+///
+/// Keep in step with `CLAIM_TOKEN="${EVENT_ID}-claim-token-1"` in that script.
+fn seeded_claim_token(event_id: &str) -> String {
+    format!("{event_id}-claim-token-1")
+}
 
 /// Configuration for [`ClaimFlow`].
 #[derive(Debug, Clone)]
@@ -102,6 +114,28 @@ impl ClaimFlow {
     }
 
     /// Create a claim flow with a custom config.
+    /// Build from the environment so this flow targets the same fixture as the
+    /// rest of the suite (Issue 084).
+    ///
+    /// `FLOW_HARNESS_CLAIM_TOKEN` overrides explicitly; otherwise the token is
+    /// derived from the event id using the seed script's convention, so naming
+    /// a fixture is enough and the two can no longer drift apart silently.
+    #[must_use]
+    pub fn from_env() -> Self {
+        use super::fixture_value;
+        let defaults = ClaimConfig::default();
+        let event_id = fixture_value("FLOW_HARNESS_EVENT_ID", defaults.event_id.clone());
+        let claim_token = fixture_value("FLOW_HARNESS_CLAIM_TOKEN", seeded_claim_token(&event_id));
+        Self {
+            config: ClaimConfig {
+                attendee_id: fixture_value("FLOW_HARNESS_ATTENDEE_ID", defaults.attendee_id),
+                event_id,
+                claim_token,
+                ..defaults
+            },
+        }
+    }
+
     #[must_use]
     pub fn with_config(config: ClaimConfig) -> Self {
         Self { config }
@@ -313,13 +347,23 @@ mod tests {
     #[test]
     fn response_shape_rejects_unknown_status() {
         let err = assert_response_shape(&resp("garbage_value", false)).unwrap_err();
-        assert!(err.to_string().contains("not in recognised vocabulary"), "{}", err);
+        assert!(
+            err.to_string().contains("not in recognised vocabulary"),
+            "{}",
+            err
+        );
     }
 
     #[test]
     fn response_shape_accepts_known_statuses() {
         for s in [
-            "eligible", "pending", "ready", "claimed", "already_claimed", "expired", "error",
+            "eligible",
+            "pending",
+            "ready",
+            "claimed",
+            "already_claimed",
+            "expired",
+            "error",
             "not_found",
         ] {
             assert!(assert_response_shape(&resp(s, false)).is_ok(), "status={s}");
@@ -331,7 +375,11 @@ mod tests {
     #[test]
     fn pre_claim_state_rejects_claimed_true() {
         let err = assert_pre_claim_state(&resp("claimed", true)).unwrap_err();
-        assert!(err.to_string().contains("expected pre-claim state"), "{}", err);
+        assert!(
+            err.to_string().contains("expected pre-claim state"),
+            "{}",
+            err
+        );
     }
 
     #[test]
@@ -339,16 +387,29 @@ mod tests {
         // Even with claimed=false, an "expired" or "error" status is not a
         // pre-claim eligible state — the harness catches this drift.
         let err = assert_pre_claim_state(&resp("expired", false)).unwrap_err();
-        assert!(err.to_string().contains("expected eligible pre-claim status"), "{}", err);
+        assert!(
+            err.to_string()
+                .contains("expected eligible pre-claim status"),
+            "{}",
+            err
+        );
 
         let err = assert_pre_claim_state(&resp("error", false)).unwrap_err();
-        assert!(err.to_string().contains("expected eligible pre-claim status"), "{}", err);
+        assert!(
+            err.to_string()
+                .contains("expected eligible pre-claim status"),
+            "{}",
+            err
+        );
     }
 
     #[test]
     fn pre_claim_state_accepts_eligible_statuses() {
         for s in ["eligible", "pending", "ready"] {
-            assert!(assert_pre_claim_state(&resp(s, false)).is_ok(), "status={s}");
+            assert!(
+                assert_pre_claim_state(&resp(s, false)).is_ok(),
+                "status={s}"
+            );
         }
     }
 
@@ -385,7 +446,10 @@ mod tests {
         assert_eq!(c.attendee_id, "flow-test-attendee-1");
         assert_eq!(c.event_id, "flow-test-event");
         assert_eq!(c.claim_token, DEFAULT_CLAIM_TOKEN);
-        assert!(!c.attempt_mint, "default must not attempt the mint (staging-gated)");
+        assert!(
+            !c.attempt_mint,
+            "default must not attempt the mint (staging-gated)"
+        );
     }
 
     #[tokio::test]

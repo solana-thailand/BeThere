@@ -130,6 +130,23 @@ impl RefundNoShowDeadlineFlow {
         }
     }
 
+    /// Build from the environment so every flow targets the *same* fixture.
+    ///
+    /// Issue 084: this flow used to be registered with hardcoded defaults, so a
+    /// run against a named fixture split across two events and never passed.
+    #[must_use]
+    pub fn from_env() -> Self {
+        use super::fixture_value;
+        let defaults = RefundNoShowDeadlineConfig::default();
+        Self {
+            config: RefundNoShowDeadlineConfig {
+                attendee_id: fixture_value("FLOW_HARNESS_ATTENDEE_ID", defaults.attendee_id),
+                event_id: fixture_value("FLOW_HARNESS_EVENT_ID", defaults.event_id),
+                ..defaults
+            },
+        }
+    }
+
     #[must_use]
     pub fn with_config(config: RefundNoShowDeadlineConfig) -> Self {
         Self { config }
@@ -426,10 +443,13 @@ impl RefundNoShowDeadlineConfig {
             ));
         }
         if checked_in {
-            return Err("attendee is checked_in; the no-show flow requires checked_in=false. \
+            return Err(
+                "attendee is checked_in; the no-show flow requires checked_in=false. \
                  The seeded flow-test-attendee-1 is checked-in by default; this flow \
                  forces the no-show branch via force_no_show_for_verdict=true (default). \
-                 If you set force_no_show_for_verdict=false, target a non-checked-in attendee.".to_string());
+                 If you set force_no_show_for_verdict=false, target a non-checked-in attendee."
+                    .to_string(),
+            );
         }
         Ok(())
     }
@@ -582,7 +602,9 @@ mod tests {
         // Defensive: if the corrected gate is wrongly enabled past deadline,
         // the detector fails loudly.
         let err = assert_divergence_observable(true, true, DEADLINE + 1).unwrap_err();
-        assert!(err.to_string().contains("corrected gate should be DISABLED"));
+        assert!(err
+            .to_string()
+            .contains("corrected gate should be DISABLED"));
     }
 
     #[test]
@@ -593,7 +615,8 @@ mod tests {
         // it is not lost.
         let err = assert_divergence_observable(false, false, DEADLINE + 1).unwrap_err();
         assert!(
-            err.to_string().contains("remove the legacy gate computation"),
+            err.to_string()
+                .contains("remove the legacy gate computation"),
             "detector must guide the part-2 transition: {err}"
         );
     }
@@ -722,7 +745,13 @@ mod tests {
         // Pin the bug: the legacy gate is purely a function of (event_end,
         // now). It returns the same value regardless of deadline or
         // checked_in. This is the property that makes #19 a divergence.
-        for now in [EVENT_END - 1, EVENT_END, DEADLINE - 1, DEADLINE, DEADLINE + 1] {
+        for now in [
+            EVENT_END - 1,
+            EVENT_END,
+            DEADLINE - 1,
+            DEADLINE,
+            DEADLINE + 1,
+        ] {
             let v = legacy_gate_verdict_at(EVENT_END, now);
             assert_eq!(
                 v,

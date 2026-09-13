@@ -98,6 +98,23 @@ impl RefundPostEventEndCheckedInFlow {
         }
     }
 
+    /// Build from the environment so every flow targets the *same* fixture.
+    ///
+    /// Issue 084: this flow used to be registered with hardcoded defaults, so a
+    /// run against a named fixture split across two events and never passed.
+    #[must_use]
+    pub fn from_env() -> Self {
+        use super::fixture_value;
+        let defaults = RefundPostEventEndCheckedInConfig::default();
+        Self {
+            config: RefundPostEventEndCheckedInConfig {
+                attendee_id: fixture_value("FLOW_HARNESS_ATTENDEE_ID", defaults.attendee_id),
+                event_id: fixture_value("FLOW_HARNESS_EVENT_ID", defaults.event_id),
+                ..defaults
+            },
+        }
+    }
+
     #[must_use]
     pub fn with_config(config: RefundPostEventEndCheckedInConfig) -> Self {
         Self { config }
@@ -287,10 +304,13 @@ impl RefundPostEventEndCheckedInConfig {
             ));
         }
         if !checked_in {
-            return Err("attendee is not checked_in; this flow requires checked_in=true. \
+            return Err(
+                "attendee is not checked_in; this flow requires checked_in=true. \
                  This is a seed bug (seed-staging.sh marks flow-test-attendee-1 \
                  as checked-in) — re-run worker/scripts/seed-staging.sh, or use \
-                 the refund_no_show_deadline flow for a non-checked-in attendee.".to_string());
+                 the refund_no_show_deadline flow for a non-checked-in attendee."
+                    .to_string(),
+            );
         }
         if now_ms < event_end_ms {
             return Err(format!(
@@ -377,15 +397,15 @@ mod tests {
 
     #[test]
     fn preconditions_hold_rejects_missing_event_end() {
-        let err =
-            RefundPostEventEndCheckedInConfig::preconditions_hold(0, true, 999).unwrap_err();
+        let err = RefundPostEventEndCheckedInConfig::preconditions_hold(0, true, 999).unwrap_err();
         assert!(err.contains("missing/zero"), "{err}");
     }
 
     #[test]
     fn preconditions_hold_rejects_non_checked_in() {
-        let err = RefundPostEventEndCheckedInConfig::preconditions_hold(EVENT_END, false, EVENT_END)
-            .unwrap_err();
+        let err =
+            RefundPostEventEndCheckedInConfig::preconditions_hold(EVENT_END, false, EVENT_END)
+                .unwrap_err();
         assert!(err.contains("not checked_in"), "{err}");
         assert!(err.contains("seed-staging.sh"), "{err}");
     }
@@ -401,14 +421,24 @@ mod tests {
     #[test]
     fn preconditions_hold_accepts_valid_horizon() {
         // At event_end (boundary): `now >= event_end` holds.
-        assert!(RefundPostEventEndCheckedInConfig::preconditions_hold(EVENT_END, true, EVENT_END)
-            .is_ok());
+        assert!(
+            RefundPostEventEndCheckedInConfig::preconditions_hold(EVENT_END, true, EVENT_END)
+                .is_ok()
+        );
         // After event_end.
-        assert!(RefundPostEventEndCheckedInConfig::preconditions_hold(EVENT_END, true, EVENT_END + 1)
-            .is_ok());
+        assert!(RefundPostEventEndCheckedInConfig::preconditions_hold(
+            EVENT_END,
+            true,
+            EVENT_END + 1
+        )
+        .is_ok());
         // Way past the deadline — still OK for checked-in.
-        assert!(RefundPostEventEndCheckedInConfig::preconditions_hold(EVENT_END, true, DEADLINE + 1)
-            .is_ok());
+        assert!(RefundPostEventEndCheckedInConfig::preconditions_hold(
+            EVENT_END,
+            true,
+            DEADLINE + 1
+        )
+        .is_ok());
     }
 
     #[test]
@@ -432,7 +462,13 @@ mod tests {
         // past event_end, the corrected gate (enabled) and the predicted
         // outcome (Allowed) agree across the horizon — including past the
         // no-show deadline, which would block a non-checked-in attendee.
-        for now in [EVENT_END, DEADLINE - 1, DEADLINE, DEADLINE + 1, i64::MAX / 2] {
+        for now in [
+            EVENT_END,
+            DEADLINE - 1,
+            DEADLINE,
+            DEADLINE + 1,
+            i64::MAX / 2,
+        ] {
             let outcome = expected_outcome(EVENT_END, DEADLINE, true, now);
             let gate = gate_verdict_at(EVENT_END, DEADLINE, true, now);
             assert_eq!(outcome, RefundOutcome::Allowed, "now={now}");
