@@ -230,3 +230,33 @@ right there and is exactly the thing that must not be involved.
 - `.issues/080` — the survey kind and its delivery window.
 - `.issues/087` — the four questions the form asks.
 - `.issues/090` — the release that made all of it live.
+
+## Follow-up: the unverified link is now tested, not probed
+
+The deploy note above recorded one gap — the inbox payload's
+`action_url: /feedback` could not be checked against production, because
+`GET /api/my-notifications` needs a Google session.
+
+The right answer to "I cannot probe this" was not to probe harder. The decision
+lived inside `list_for_attendee`, which takes a live `D1Database` and therefore
+could not be unit-tested at all; the survey's destination was covered only on
+the **email** path (`content.rs`). Two code paths that must agree, one of them
+untested, is the shape of `.issues/086`.
+
+`inbox_action(kind, deposit_needed, attendee_id, event_id, label)` is now a pure
+function, and three tests cover it:
+
+- `survey_inbox_button_points_at_the_combined_feedback_page` — `/feedback`, even
+  with `deposit_needed = true`, so an unpaid deposit cannot hijack a post-event
+  message.
+- `every_other_kind_keeps_its_own_destination` — ticket vs deposit, and that a
+  `DepositConfirmed` row goes to the ticket while `deposit_needed` is still
+  true, which makes the match-arm order load-bearing and asserted.
+- `action_urls_encode_their_ids` — `att/1` reaches the path as `att%2F1`.
+
+A/B: reverting the arm to `/events/x/post-event-register` fails the first test
+(`left: "/events/x/post-event-register", right: "/feedback"`); restored to green.
+Worker suite 287 passing, up from 284.
+
+`Action::PostEventForm` was renamed `Action::Feedback` — the variant named the
+destination it no longer has.

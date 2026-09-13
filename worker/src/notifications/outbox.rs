@@ -62,33 +62,9 @@ pub async fn list_for_attendee(
             deposit_verified,
             &deposit_status,
         );
-        let attendee_path = urlencoding::encode(&attendee_id);
-        let event_query = urlencoding::encode(&event_id);
-        // Mirrors `content::render`: the survey asks its questions on the
-        // post-event form, and an outstanding deposit cannot divert a message
-        // about an event that has already happened.
-        let action = match kind {
-            NotificationKind::Survey => Action::PostEventForm,
-            NotificationKind::DepositConfirmed => Action::Ticket,
-            _ if deposit_needed => Action::Deposit,
-            _ => Action::Ticket,
-        };
         let event_slug = text(&row, "slug")?;
-        let (action_url, action_label) = match action {
-            // `/feedback`, not the single-event form: a person with three
-            // outstanding surveys should answer them on one page rather than
-            // follow three links (`.issues/091`). The per-event route stays
-            // live for the QR codes printed on the recap posters.
-            Action::PostEventForm => ("/feedback".to_string(), action_label.to_string()),
-            Action::Deposit => (
-                format!("/deposit/{attendee_path}?event_id={event_query}"),
-                "Complete deposit".to_string(),
-            ),
-            Action::Ticket => (
-                format!("/ticket/{attendee_path}?event_id={event_query}"),
-                action_label.to_string(),
-            ),
-        };
+        let (action_url, action_label) =
+            inbox_action(kind, deposit_needed, &attendee_id, &event_id, action_label);
         items.push(InboxNotification {
             id,
             kind: kind.as_str().to_string(),
@@ -157,7 +133,50 @@ pub async fn mark_all_read(db: &D1Database, email: &str) -> Result<(), String> {
 enum Action {
     Ticket,
     Deposit,
-    PostEventForm,
+    Feedback,
+}
+
+/// Where an inbox row's button sends the reader, and what it says.
+///
+/// Pulled out of `list_for_attendee` so it can be tested: that function needs a
+/// live `D1Database`, so for as long as this decision lived inside it the only
+/// coverage of the survey's destination was the *email* renderer's test in
+/// `content.rs`. The two are separate code paths that have to agree, which is
+/// exactly the shape of defect `.issues/086` and the `duplicated-state-transition-paths`
+/// note are about.
+fn inbox_action(
+    kind: NotificationKind,
+    deposit_needed: bool,
+    attendee_id: &str,
+    event_id: &str,
+    action_label: &'static str,
+) -> (String, String) {
+    // Mirrors `content::render`: the survey asks its questions elsewhere, and an
+    // outstanding deposit cannot divert a message about an event that has
+    // already happened.
+    let action = match kind {
+        NotificationKind::Survey => Action::Feedback,
+        NotificationKind::DepositConfirmed => Action::Ticket,
+        _ if deposit_needed => Action::Deposit,
+        _ => Action::Ticket,
+    };
+    let attendee_path = urlencoding::encode(attendee_id);
+    let event_query = urlencoding::encode(event_id);
+    match action {
+        // `/feedback`, not the single-event form: a person with three
+        // outstanding surveys should answer them on one page rather than follow
+        // three links (`.issues/091`). The per-event route stays live for the QR
+        // codes printed on the recap posters, but no notification points at it.
+        Action::Feedback => ("/feedback".to_string(), action_label.to_string()),
+        Action::Deposit => (
+            format!("/deposit/{attendee_path}?event_id={event_query}"),
+            "Complete deposit".to_string(),
+        ),
+        Action::Ticket => (
+            format!("/ticket/{attendee_path}?event_id={event_query}"),
+            action_label.to_string(),
+        ),
+    }
 }
 
 fn presentation(kind: NotificationKind, event: &str) -> (&'static str, String, &'static str) {
@@ -214,7 +233,7 @@ pub(super) async fn run_sql(db: &D1Database, sql: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{NotificationKind, needs_deposit, presentation};
+    use super::{NotificationKind, inbox_action, needs_deposit, presentation};
 
     /// The kind used to arrive as a string with a catch-all arm, so a `survey`
     /// row would have been shown to the attendee as "Registration saved".
@@ -238,5 +257,52 @@ mod tests {
         assert!(!needs_deposit(true, "in_person", true, "none"));
         assert!(!needs_deposit(true, "in_person", false, "held_as_credit"));
         assert!(!needs_deposit(false, "in_person", false, "none"));
+    }
+
+    /// The survey's inbox button must reach the combined page, and must never
+    /// reach the single-event form — that route still exists for the recap QR
+    /// codes, and one message per event attended is the thing `/feedback` was
+    /// built to stop (`.issues/091`).
+    #[test]
+    fn survey_inbox_button_points_at_the_combined_feedback_page() {
+        let (url, label) = inbox_action(
+            NotificationKind::Survey,
+            true, // an unpaid deposit must not hijack a post-event message
+            "att-1",
+            "evt-1",
+            "Share your feedback",
+        );
+        assert_eq!(url, "/feedback");
+        assert_eq!(label, "Share your feedback");
+    }
+
+    /// The same decision the email renderer makes, asserted on the inbox path so
+    /// the two cannot drift apart silently.
+    #[test]
+    fn every_other_kind_keeps_its_own_destination() {
+        let ticket = inbox_action(NotificationKind::Reminder, false, "att-1", "evt-1", "View");
+        assert!(ticket.0.starts_with("/ticket/att-1?event_id=evt-1"));
+
+        let deposit = inbox_action(NotificationKind::Reminder, true, "att-1", "evt-1", "View");
+        assert!(deposit.0.starts_with("/deposit/att-1?event_id=evt-1"));
+        assert_eq!(deposit.1, "Complete deposit");
+
+        // A confirmed deposit goes to the ticket even while `deposit_needed`
+        // is still true — the arm order in `inbox_action` is load-bearing.
+        let confirmed = inbox_action(
+            NotificationKind::DepositConfirmed,
+            true,
+            "att-1",
+            "evt-1",
+            "View",
+        );
+        assert!(confirmed.0.starts_with("/ticket/"));
+    }
+
+    /// Ids reach the URL escaped, not raw.
+    #[test]
+    fn action_urls_encode_their_ids() {
+        let (url, _) = inbox_action(NotificationKind::Reminder, false, "att/1", "evt 1", "View");
+        assert_eq!(url, "/ticket/att%2F1?event_id=evt%201");
     }
 }
