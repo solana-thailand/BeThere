@@ -111,10 +111,24 @@ pub fn Discover() -> impl IntoView {
             );
         }
 
-        // Signed out is a normal state here, not an error: the upcoming list is
-        // public and still worth showing on its own.
-        if let Ok(rows) = crate::api::api_get_json::<Vec<MyRegistration>>("/my-registrations").await
+        // Signed out is a normal state here, and the API layer disagrees:
+        // every helper in `api/mod.rs` calls `redirect_to_login_expired()` on a
+        // 401, so `api_get_json` bounced a logged-out visitor to /login before
+        // this function could treat the error as "no personal sections". The
+        // low-level `fetch::get` does not redirect — the same escape the
+        // landing page's own registrations list uses (`.issues/099`).
+        let origin = web_sys::window()
+            .and_then(|w| w.location().origin().ok())
+            .unwrap_or_default();
+        let regs_url = format!("{origin}/api/my-registrations");
+        if let Ok(resp) = crate::api::fetch::get(&regs_url, &[]).await
+            && resp.status() == 200
+            && let Ok(body) = crate::api::fetch::response_json::<
+                crate::api::ApiResponse<Vec<MyRegistration>>,
+            >(&resp)
+            .await
         {
+            let rows = body.data.unwrap_or_default();
             let (past, current): (Vec<_>, Vec<_>) = rows
                 .into_iter()
                 .map(|r| {
