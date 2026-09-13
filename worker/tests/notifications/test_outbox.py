@@ -211,6 +211,30 @@ class OutboxTests(unittest.TestCase):
         self.db.execute(query('inbox_read_all'), ('a@example.com',))
         self.assertIsNone(self.db.execute("SELECT read_at FROM notification_outbox WHERE id=?", (registration,)).fetchone()['read_at'])
 
+    def test_inbox_is_visible_to_every_status_past_pending(self):
+        """`approval_status` is a progression, not a set of alternatives.
+
+        PendingApproval -> Approved -> Invited -> CheckedIn. The view used to
+        pin `= 'approved'`, so anyone scanned at the door — the furthest-along
+        state there is — saw an empty inbox. In production that was exactly half
+        the eligible rows (.issues/095).
+        """
+        for status in ('approved', 'invited', 'checked_in'):
+            with self.subTest(status=status):
+                attendee = 'att-' + status
+                self.register(attendee=attendee)
+                self.db.execute('UPDATE attendees SET approval_status=? WHERE id=?', (status, attendee))
+                visible = self.db.execute(
+                    'SELECT COUNT(*) FROM notification_inbox_visible WHERE attendee_id=?',
+                    (attendee,)).fetchone()[0]
+                self.assertGreater(visible, 0, f'{status} must see their inbox')
+
+        self.register(attendee='att-pending')
+        self.db.execute("UPDATE attendees SET approval_status='pending_approval' WHERE id='att-pending'")
+        pending = self.db.execute(
+            "SELECT COUNT(*) FROM notification_inbox_visible WHERE attendee_id='att-pending'").fetchone()[0]
+        self.assertEqual(pending, 0, 'a pending registration is the one state that stays out')
+
     def test_inbox_uses_current_deposit_and_participation_state(self):
         self.register()
         self.db.execute("UPDATE events SET deposit_enabled=1 WHERE id='event-a'")
