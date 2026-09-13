@@ -81,6 +81,16 @@ const ALLOWED_INTERPOLATIONS: &[AllowedInterpolation] = &[
                  bound; `&'static str` admits only compile-time literals.",
     },
     AllowedInterpolation {
+        file: "src/db/events.rs",
+        placeholders: &["PUBLIC_EVENT_COLUMNS"],
+        reason: "A column list is a set of identifiers, which SQLite cannot bind. \
+                 It is a `const &'static str` with no parameters, so there is no \
+                 call site that could put a value into it. Shared by both public \
+                 event listings so the two cannot select different columns — \
+                 which is exactly how `poster_url` went missing from one of them \
+                 (.issues/095).",
+    },
+    AllowedInterpolation {
         file: "src/db/attendees/reads.rs",
         placeholders: &["column"],
         reason: "`count_by_status(column: &'static str)` — identifier; the type \

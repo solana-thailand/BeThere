@@ -459,17 +459,14 @@ pub async fn set_post_event_registration(
 /// `poster_url` (Phase 2 cards prefer the marketing poster over the NFT badge
 /// image, matching the dedicated event page hero).
 pub async fn list_past_events_raw(db: &D1Database) -> Result<Vec<serde_json::Value>, String> {
-    use event_checkin_domain::models::event::*;
+    let sql = format!(
+        "SELECT {PUBLIC_EVENT_COLUMNS} FROM events \
+         WHERE status = 'completed' AND recap_published = 1 \
+         AND visibility = 'public' \
+         ORDER BY event_end_ms DESC"
+    );
 
-    let sql = "SELECT id, name, slug, status, event_format, event_start_ms, event_end_ms, \
-               time_tba, deposit_enabled, tagline, location, nft_image_url, poster_url, \
-               created_at, in_person_capacity, online_capacity, visibility \
-               FROM events \
-               WHERE status = 'completed' AND recap_published = 1 \
-               AND visibility = 'public' \
-               ORDER BY event_end_ms DESC";
-
-    let stmt = db.prepare(sql);
+    let stmt = db.prepare(&sql);
     let raw_result = JsFuture::from(
         stmt.inner()
             .all()
@@ -486,80 +483,9 @@ pub async fn list_past_events_raw(db: &D1Database) -> Result<Vec<serde_json::Val
         .map(|s| s.as_string().unwrap_or_default())
         .unwrap_or_default();
 
-    // Parse into a relaxed row shape (mirror of PublicEventRow with poster_url).
-    #[derive(serde::Deserialize, Default)]
-    #[serde(default)]
-    struct PastEventRow {
-        id: Option<String>,
-        name: Option<String>,
-        slug: Option<String>,
-        status: Option<String>,
-        event_format: Option<String>,
-        event_start_ms: Option<i64>,
-        event_end_ms: Option<i64>,
-        time_tba: Option<i64>,
-        deposit_enabled: Option<i64>,
-        tagline: Option<String>,
-        location: Option<String>,
-        nft_image_url: Option<String>,
-        poster_url: Option<String>,
-        created_at: Option<String>,
-        in_person_capacity: Option<i64>,
-        online_capacity: Option<i64>,
-        visibility: Option<String>,
-    }
+    let rows: Vec<PublicEventRow> = serde_json::from_str(&json_str).unwrap_or_default();
 
-    let rows: Vec<PastEventRow> = serde_json::from_str(&json_str).unwrap_or_default();
-
-    Ok(rows
-        .into_iter()
-        .map(|r| {
-            let status = parse_enum_column(
-                r.id.as_deref().unwrap_or("<unknown>"),
-                "status",
-                r.status.as_deref(),
-                EventStatus::Draft,
-                EventStatus::Draft,
-            );
-            let event_format = parse_enum_column(
-                r.id.as_deref().unwrap_or("<unknown>"),
-                "event_format",
-                r.event_format.as_deref(),
-                EventFormat::InPerson,
-                EventFormat::InPerson,
-            );
-            let visibility = parse_enum_column(
-                r.id.as_deref().unwrap_or("<unknown>"),
-                "visibility",
-                r.visibility.as_deref(),
-                // NULL predates migration 0016; those events were all public.
-                EventVisibility::Public,
-                // This listing is the landing page's source — a corrupt
-                // visibility must not put a private event on it.
-                EventVisibility::Private,
-            );
-
-            serde_json::json!({
-                "id": r.id.unwrap_or_default(),
-                "name": r.name.unwrap_or_default(),
-                "slug": r.slug.unwrap_or_default(),
-                "status": status.as_str(),
-                "event_start_ms": r.event_start_ms.unwrap_or(0),
-                "event_end_ms": r.event_end_ms.unwrap_or(0),
-                "time_tba": r.time_tba.unwrap_or(0) == 1,
-                "deposit_enabled": r.deposit_enabled.unwrap_or(0) != 0,
-                "event_format": event_format.as_str(),
-                "tagline": r.tagline.unwrap_or_default(),
-                "location": r.location.unwrap_or_default(),
-                "nft_image_url": r.nft_image_url.unwrap_or_default(),
-                "poster_url": r.poster_url.unwrap_or_default(),
-                "created_at": r.created_at.unwrap_or_default(),
-                "in_person_capacity": r.in_person_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
-                "online_capacity": r.online_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
-                "visibility": visibility.as_str(),
-            })
-        })
-        .collect())
+    Ok(rows.iter().map(public_event_json).collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -971,9 +897,18 @@ pub async fn list_event_meta_page(
     })
 }
 
-/// Raw column subset for public event listings.
-/// Avoids `results::<D1EventRow>()` which can panic on nullable columns
-/// when deserialized via the workers-rs serde bridge.
+/// The row shape behind both public event listings.
+///
+/// Raw column subset rather than `results::<D1EventRow>()`, which can panic on
+/// nullable columns through the workers-rs serde bridge.
+///
+/// One struct, one column list, one payload builder — because there used to be
+/// two of each. `list_past_events_raw` selected and emitted `poster_url` and
+/// `list_public_events_raw` did not, so the landing page's only event card fell
+/// through to the generic badge image for events that had a real poster
+/// (`.issues/094`). Adding the field to one of the two copies is what that
+/// defect looks like from the inside; sharing the shape is what stops a third
+/// listing re-introducing it.
 #[derive(serde::Deserialize)]
 struct PublicEventRow {
     id: Option<String>,
@@ -988,26 +923,77 @@ struct PublicEventRow {
     tagline: Option<String>,
     location: Option<String>,
     nft_image_url: Option<String>,
+    poster_url: Option<String>,
     created_at: Option<String>,
     in_person_capacity: Option<i64>,
     online_capacity: Option<i64>,
     visibility: Option<String>,
 }
 
+/// The columns both listings select. Kept next to the struct that receives them.
+const PUBLIC_EVENT_COLUMNS: &str = "id, name, slug, status, event_format, event_start_ms, \
+     event_end_ms, time_tba, deposit_enabled, tagline, location, nft_image_url, poster_url, \
+     created_at, in_person_capacity, online_capacity, visibility";
+
+/// The payload both listings emit.
+fn public_event_json(r: &PublicEventRow) -> serde_json::Value {
+    use event_checkin_domain::models::event::*;
+
+    let id = r.id.as_deref().unwrap_or("<unknown>");
+    let status = parse_enum_column(
+        id,
+        "status",
+        r.status.as_deref(),
+        EventStatus::Draft,
+        EventStatus::Draft,
+    );
+    let event_format = parse_enum_column(
+        id,
+        "event_format",
+        r.event_format.as_deref(),
+        EventFormat::InPerson,
+        EventFormat::InPerson,
+    );
+    let visibility = parse_enum_column(
+        id,
+        "visibility",
+        r.visibility.as_deref(),
+        // NULL predates migration 0016; those events were all public.
+        EventVisibility::Public,
+        // These listings are public surfaces — a corrupt visibility must not
+        // put a private event on one.
+        EventVisibility::Private,
+    );
+    serde_json::json!({
+        "id": r.id.clone().unwrap_or_default(),
+        "name": r.name.clone().unwrap_or_default(),
+        "slug": r.slug.clone().unwrap_or_default(),
+        "status": status.as_str(),
+        "event_start_ms": r.event_start_ms.unwrap_or(0),
+        "event_end_ms": r.event_end_ms.unwrap_or(0),
+        "time_tba": r.time_tba.unwrap_or(0) == 1,
+        "deposit_enabled": r.deposit_enabled.unwrap_or(0) != 0,
+        "event_format": event_format.as_str(),
+        "tagline": r.tagline.clone().unwrap_or_default(),
+        "location": r.location.clone().unwrap_or_default(),
+        "nft_image_url": r.nft_image_url.clone().unwrap_or_default(),
+        "poster_url": r.poster_url.clone().unwrap_or_default(),
+        "created_at": r.created_at.clone().unwrap_or_default(),
+        "in_person_capacity": r.in_person_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
+        "online_capacity": r.online_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
+        "visibility": visibility.as_str(),
+    })
+}
+
 /// List public events from D1 using raw JSON deserialization.
 /// Bypasses `results::<T>()` to avoid workers-rs serde panics on nullable columns.
 pub async fn list_public_events_raw(db: &D1Database) -> Result<Vec<serde_json::Value>, String> {
-    use event_checkin_domain::models::event::*;
-
-    let sql = "SELECT id, name, slug, status, event_format, event_start_ms, event_end_ms, \
-               time_tba, deposit_enabled, tagline, location, nft_image_url, \
-               created_at, in_person_capacity, online_capacity, visibility \
-               FROM events ORDER BY created_at DESC";
+    let sql = format!("SELECT {PUBLIC_EVENT_COLUMNS} FROM events ORDER BY created_at DESC");
 
     // Bypass workers-rs D1Result::results() which uses serde_wasm_bindgen::from_value
     // with .unwrap() — panics on nullable columns or type mismatches.
     // Instead, use .all() on the inner JsValue, then stringify and parse via serde_json.
-    let stmt = db.prepare(sql);
+    let stmt = db.prepare(&sql);
     let raw_result = JsFuture::from(
         stmt.inner()
             .all()
@@ -1027,54 +1013,7 @@ pub async fn list_public_events_raw(db: &D1Database) -> Result<Vec<serde_json::V
 
     let rows: Vec<PublicEventRow> = serde_json::from_str(&json_str).unwrap_or_default();
 
-    Ok(rows
-        .into_iter()
-        .map(|r| {
-            let status = parse_enum_column(
-                r.id.as_deref().unwrap_or("<unknown>"),
-                "status",
-                r.status.as_deref(),
-                EventStatus::Draft,
-                EventStatus::Draft,
-            );
-            let event_format = parse_enum_column(
-                r.id.as_deref().unwrap_or("<unknown>"),
-                "event_format",
-                r.event_format.as_deref(),
-                EventFormat::InPerson,
-                EventFormat::InPerson,
-            );
-            let visibility = parse_enum_column(
-                r.id.as_deref().unwrap_or("<unknown>"),
-                "visibility",
-                r.visibility.as_deref(),
-                // NULL predates migration 0016; those events were all public.
-                EventVisibility::Public,
-                // This listing is the landing page's source — a corrupt
-                // visibility must not put a private event on it.
-                EventVisibility::Private,
-            );
-
-            serde_json::json!({
-                "id": r.id.unwrap_or_default(),
-                "name": r.name.unwrap_or_default(),
-                "slug": r.slug.unwrap_or_default(),
-                "status": status.as_str(),
-                "event_start_ms": r.event_start_ms.unwrap_or(0),
-                "event_end_ms": r.event_end_ms.unwrap_or(0),
-                "time_tba": r.time_tba.unwrap_or(0) == 1,
-                "deposit_enabled": r.deposit_enabled.unwrap_or(0) != 0,
-                "event_format": event_format.as_str(),
-                "tagline": r.tagline.unwrap_or_default(),
-                "location": r.location.unwrap_or_default(),
-                "nft_image_url": r.nft_image_url.unwrap_or_default(),
-                "created_at": r.created_at.unwrap_or_default(),
-                "in_person_capacity": r.in_person_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
-                "online_capacity": r.online_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
-                "visibility": visibility.as_str(),
-            })
-        })
-        .collect())
+    Ok(rows.iter().map(public_event_json).collect())
 }
 
 /// Check whether an organization has any non-archived events.
