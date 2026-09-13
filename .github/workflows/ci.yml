@@ -327,6 +327,24 @@ jobs:
       - name: Install blake3 (wrangler-compatible asset hashing)
         run: python3 -m pip install --quiet blake3
 
+      - name: Event invariant rules self-test
+        # Issue 089. Nearly every defect found on 2026-09-13 was two columns
+        # contradicting each other with nothing checking — and two of them were
+        # found by people outside the team reading our database.
+        #
+        # CI verifies the *auditor*, not a live database: staging is
+        # deliberately full of harness fixtures in contradictory states, and
+        # production findings are often intentional organizer choices, so
+        # pointing the gate at either would make it permanently red and
+        # therefore unread. Each rule is instead exercised both ways against an
+        # in-memory fixture — it must fire on a violating row and stay silent
+        # on a clean one. A rule that can only ever pass is not a rule
+        # (.issues/072).
+        #
+        # Run the audit itself against real data by hand:
+        #   python3 scripts/verify/event_invariants_audit.py --db bethere-db
+        run: python3 scripts/verify/event_invariants_audit.py --self-test
+
       - name: Deploy fallback unit tests
         # MIME mapping (a wrong Content-Type took the frontend down on
         # 2026-07-26) and metadata binding completeness against the real
