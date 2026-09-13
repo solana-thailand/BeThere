@@ -185,13 +185,21 @@ Worker then served an `event_end_ms` with `now >= event_end`.
 ### Still not green
 
 `deposit` against a *freshly initialized* escrow fails with
-`Transaction simulation failed: ... Provided owner is not allowed` — an SPL
-ownership problem in the deposit/vault path, distinct from everything above.
-The same flow **passes** against the older `flow-deposit-20260913` fixture, so
-it is specific to a newly initialized vault and not to the release.
+`Transaction simulation failed: ... Provided owner is not allowed`.
 
-That is the remaining work before the gate can go green. Until then production
-deploys still need `--force --reason`.
+**Root-caused 2026-09-13: this is `.issues/085`, not a vault problem.** The
+event's `on_chain_event_id` is a u64 above `i64::MAX`, so SQLite stored it as a
+REAL and lost the low digits. Every tx builder derives the escrow PDA from that
+id, so the deposit addresses a PDA that was never created — hence `IllegalOwner`
+after 195 compute units, at account validation.
+
+It is not "specific to a newly initialized vault": it depends only on whether
+that event's id happened to land above `i64::MAX`, which is roughly a coin
+flip. `flow-test-event` passes because its id is `5055890856068877793`, below
+the boundary.
+
+So the gate cannot go green until `.issues/085` is fixed and the fixture's id
+is repaired. Until then production deploys still need `--force --reason`.
 
 ### Noticed, not fixed
 
