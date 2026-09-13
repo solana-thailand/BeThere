@@ -45,7 +45,7 @@ pub fn Login() -> impl IntoView {
         let target = wallet_next
             .clone()
             .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| "/".to_string());
+            .unwrap_or_else(|| "/discover".to_string());
         if let Some(win) = web_sys::window() {
             let _ = win.location().set_href(&target);
         }
@@ -63,34 +63,31 @@ pub fn Login() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match crate::api::get_me().await {
                 Ok(me) => {
-                    let has_next = next_for_redirect.as_deref().is_some_and(|n| !n.is_empty());
                     let target = next_for_redirect
                         .filter(|n| !n.is_empty())
                         .unwrap_or_else(|| match me.role.as_str() {
                             "super_admin" | "organizer" => "/admin".to_string(),
                             "staff" => "/staff".to_string(),
-                            _ => "/".to_string(),
+                            // Not the landing page: it is a pitch, and someone
+                            // who just signed in has read it (`.issues/105`).
+                            _ => "/discover".to_string(),
                         });
                     log::info!(
                         "[login] already authenticated via cookie (role={}), redirecting to {target}",
                         me.role
                     );
 
-                    if me.role == "attendee"
-                        && !has_next
-                        && let Ok(resp) = crate::api::fetch::get("/api/my-registrations", &[]).await
-                        && resp.status() == 200
-                        && let Ok(data) =
-                            crate::api::fetch::response_json::<serde_json::Value>(&resp).await
-                        && let Some(regs) = data["data"].as_array()
-                        && let Some(latest) = regs.first()
-                        && let Some(url) = latest["next_step"]["url"].as_str()
-                        && !url.is_empty()
-                    {
-                        log::info!("[login] redirecting attendee to latest registration: {url}");
-                        nav(url, Default::default());
-                        return;
-                    }
+                    // The deep link that used to live here sent an attendee
+                    // to `regs.first()`, described in its own log line as "the
+                    // latest registration". `my_registrations.sql` orders
+                    // `event_start_ms ASC`, so `.first()` is the **oldest** one
+                    // — a repeat attendee landed on the ticket for an event from
+                    // April (`.issues/105`).
+                    //
+                    // `/discover` is what that heuristic was reaching for and
+                    // gets right: every registration, soonest first for what is
+                    // still to come, most recent first for what is done, with
+                    // the same next-step links on each row.
 
                     nav(&target, Default::default());
                 }
