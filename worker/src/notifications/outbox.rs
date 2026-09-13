@@ -202,9 +202,12 @@ fn presentation(kind: NotificationKind, event: &str) -> (&'static str, String, &
             format!("Your payment slip for {event} needs attention."),
             "Review deposit",
         ),
+        // Event-agnostic for the same reason as the mail: one row now stands
+        // for every session this person attended (migration 0038), and the
+        // event it is filed under is whichever enrolled them first.
         NotificationKind::Survey => (
-            "How was the event?",
-            format!("Four quick questions about {event}."),
+            "How were the sessions?",
+            "A few quick questions about the sessions you attended.".to_string(),
             "Answer the questions",
         ),
     }
