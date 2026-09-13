@@ -157,7 +157,11 @@ pub async fn my_registrations(
             .map_err(AppError::Internal)?;
         let mut list = Vec::new();
         for meta in &index.events {
-            if matches!(meta.status, EventStatus::Completed | EventStatus::Archived) {
+            // Issue 086: keep completed events — they are the attendee's
+            // history, and a checked-in attendee can still claim from one.
+            // Only 'archived' (hidden/soft-deleted) is excluded, matching
+            // `sql/my_registrations.sql`.
+            if matches!(meta.status, EventStatus::Archived) {
                 continue;
             }
             if let Ok(Some(config)) = crate::event_store::get_event_config(kv_store, &meta.id).await

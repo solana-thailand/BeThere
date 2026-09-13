@@ -12,5 +12,10 @@ FROM attendees a
 JOIN events e ON e.id=a.event_id
 LEFT JOIN deposit_statuses d ON d.event_id=a.event_id AND d.attendee_id=a.id
 WHERE LOWER(a.email)=LOWER(?1)
-  AND e.status NOT IN ('completed','archived')
+  -- Issue 086: a registration *history* must include events that have
+  -- already happened. Excluding 'completed' hid every past registration
+  -- the moment an organizer marked an event finished, and the profile
+  -- page then claimed the attendee had never registered for anything.
+  -- 'archived' stays excluded — that is the hidden/soft-deleted state.
+  AND e.status <> 'archived'
 ORDER BY e.event_start_ms ASC,e.id ASC
