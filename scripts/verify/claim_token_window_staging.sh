@@ -11,12 +11,23 @@
 # exercises the real HTTP path.
 #
 # It asserts three things in order:
-#   1. a fresh check-in resolves            (200)  — the window does not over-block
-#   2. the same token backdated past the TTL 404s  — the window actually applies
-#   3. restoring the timestamp resolves again (200) — the change was the cause
+#   1. a fresh check-in resolves — the window does not over-block
+#   2. the same token backdated past the TTL becomes INDISTINGUISHABLE from a
+#      token that never existed — the window applies, and leaks no oracle
+#   3. restoring the timestamp resolves again — the change was the cause
 #
 # Step 2 is the one that matters. Without it a completely disabled window still
 # passes step 1, which is the failure mode this script exists to catch.
+#
+# Step 2 deliberately compares against a control request for a random unknown
+# token rather than asserting a hard-coded 404. The security property Issue 071
+# claims is that an expired token is not distinguishable from a typo, and that
+# is a statement about two responses being equal, not about a status code. The
+# codes legitimately differ per environment: production resolves a D1 miss
+# through the Google Sheets fallback and 404s, while staging has an empty
+# PLATFORM_SHEET_ID, so the same miss surfaces as a 500. Asserting 404 fails on
+# staging for a reason that has nothing to do with the window - and asserting
+# only the status code would miss a body that named the expiry.
 #
 # STAGING ONLY. It mutates `checked_in_at` for one attendee and restores it on
 # exit, including on failure and on Ctrl-C. Never point it at production.
@@ -46,6 +57,14 @@ d1() {
 # HTTP status of a claim lookup. Non-mutating: GET never mints.
 claim_status() {
     curl -s -o /dev/null -w '%{http_code}' "$BASE_URL/api/claim/$1"
+}
+
+# Status and body together, so an oracle hiding in the body is caught too.
+claim_response() {
+    local body status
+    body=$(curl -s -w '\n%{http_code}' "$BASE_URL/api/claim/$1")
+    status=$(echo "$body" | tail -n1)
+    echo "$status|$(echo "$body" | sed '$d')"
 }
 
 # shellcheck disable=SC2317,SC2329  # invoked via trap, not statically reachable
@@ -100,13 +119,28 @@ backdated="$(date -u -v-400d '+%Y-%m-%dT%H:%M:%S.000+00:00' 2>/dev/null \
 info "backdating checked_in_at to $backdated"
 d1 "UPDATE attendees SET checked_in_at = '$backdated' WHERE id = '$ATTENDEE_ID';" > /dev/null
 
-code=$(claim_status "$TOKEN")
-case "$code" in
-    404) pass "backdated check-in is refused as not-found (HTTP $code)" ;;
-    200) fail "backdated check-in still resolves (HTTP $code) — THE WINDOW IS NOT APPLIED"
+# Control: a token that never existed. Whatever this environment does for an
+# unknown token is exactly what an expired token must do.
+control=$(claim_response "unknown-control-$RANDOM$RANDOM")
+expired=$(claim_response "$TOKEN")
+control_code=${control%%|*}
+expired_code=${expired%%|*}
+info "unknown-token control responds HTTP $control_code"
+
+case "$expired_code" in
+    200) fail "backdated check-in still resolves (HTTP $expired_code) — THE WINDOW IS NOT APPLIED"
          info "check CLAIM_TOKEN_TTL_SECS in [env.staging.vars]; wrangler vars do not inherit"
-         info "also check the stored timestamp parses as RFC 3339 — the parser fails OPEN" ;;
-    *)   fail "backdated check-in returned HTTP $code, expected 404" ;;
+         info "also check the stored timestamp parses as RFC 3339 — the parser fails OPEN"
+         info "a seed writing SQLite datetime('now') reproduces exactly this" ;;
+    *)
+        case "$expired" in
+            "$control") pass "expired token is byte-identical to an unknown token (HTTP $expired_code) — no oracle" ;;
+            *) fail "expired token is DISTINGUISHABLE from an unknown token"
+               info "expired: $expired_code | control: $control_code"
+               info "an attacker can tell a real-but-expired token from a typo"
+               info "expired body: $(echo "${expired#*|}" | head -c 200)"
+               info "control body: $(echo "${control#*|}" | head -c 200)" ;;
+        esac ;;
 esac
 
 # 3 — restoring must undo it, proving the timestamp was the cause and not some
