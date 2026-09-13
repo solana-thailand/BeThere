@@ -73,14 +73,13 @@ pub async fn list_for_attendee(
             _ if deposit_needed => Action::Deposit,
             _ => Action::Ticket,
         };
+        let event_slug = text(&row, "slug")?;
         let (action_url, action_label) = match action {
-            Action::PostEventForm => (
-                format!(
-                    "/events/{}/post-event-register",
-                    urlencoding::encode(&text(&row, "slug")?)
-                ),
-                action_label.to_string(),
-            ),
+            // `/feedback`, not the single-event form: a person with three
+            // outstanding surveys should answer them on one page rather than
+            // follow three links (`.issues/091`). The per-event route stays
+            // live for the QR codes printed on the recap posters.
+            Action::PostEventForm => ("/feedback".to_string(), action_label.to_string()),
             Action::Deposit => (
                 format!("/deposit/{attendee_path}?event_id={event_query}"),
                 "Complete deposit".to_string(),
@@ -94,6 +93,7 @@ pub async fn list_for_attendee(
             id,
             kind: kind.as_str().to_string(),
             event_name,
+            event_slug,
             title: title.into(),
             body,
             action_url,

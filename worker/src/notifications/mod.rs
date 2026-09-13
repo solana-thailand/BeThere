@@ -38,6 +38,14 @@ pub struct InboxNotification {
     pub id: i64,
     pub kind: String,
     pub event_name: String,
+    /// The event's public slug.
+    ///
+    /// Already present in `action_url`, but only as one path segment among
+    /// several. The combined feedback page groups its question blocks by event
+    /// and posts one submission per slug, and parsing a slug back out of a URL
+    /// it happens to know the shape of is the kind of coupling that breaks the
+    /// day the URL changes.
+    pub event_slug: String,
     pub title: String,
     pub body: String,
     pub action_url: String,

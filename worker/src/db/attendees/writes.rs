@@ -94,6 +94,14 @@ struct AttendeeIdRow {
 /// real pre-event registration (an in-person attendee filling in the lead form
 /// afterwards); refreshing their consent and contact details is right, demoting
 /// them to a `retrospective` `post_event_registered` lead is not.
+///
+/// Contact fields update **only when the submission carries one**. The handler
+/// collapses an absent or blank field to `""`, so a plain
+/// `contact_channel = excluded.contact_channel` erases the Telegram handle of
+/// an attendee who filled this form to answer a survey and nothing else. That
+/// never bit anyone because the endpoint had no callers (0 `retrospective`
+/// rows in production), but the combined feedback page is exactly a form that
+/// submits no contact details — see `.issues/091`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn upsert_post_event_attendee(
     db: &D1Database,
@@ -113,8 +121,8 @@ pub(crate) async fn upsert_post_event_attendee(
          VALUES (?1, ?2, ?3, ?4, 'post_event_registered', ?5, ?6, ?7, ?8, datetime('now'), 'post_event', datetime('now'), datetime('now')) \
          ON CONFLICT (event_id, LOWER(email)) WHERE participation_type <> 'walkin' DO UPDATE SET \
          name = excluded.name, \
-         contact_channel = excluded.contact_channel, \
-         contact_handle = excluded.contact_handle, \
+         contact_channel = COALESCE(NULLIF(excluded.contact_channel, ''), attendees.contact_channel), \
+         contact_handle = COALESCE(NULLIF(excluded.contact_handle, ''), attendees.contact_handle), \
          consent_marketing = excluded.consent_marketing, \
          consent_marketing_at = excluded.consent_marketing_at, \
          updated_at = datetime('now') \

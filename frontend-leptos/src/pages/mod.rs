@@ -36,4 +36,4 @@ pub mod ticket;
 pub use event_summary::EventSummary;
 pub use nfc_checkin::NfcCheckin;
 pub use pr_pack::PrPack;
-pub use public::{EventRecap, PastEvents, PostEventRegister};
+pub use public::{EventRecap, Feedback, PastEvents, PostEventRegister};
