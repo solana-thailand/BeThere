@@ -224,12 +224,7 @@ pub fn event_refund_window_open(
     refund_deadline_ms: i64,
     checked_in: bool,
 ) -> bool {
-    refund_window_open_at(
-        event_end_ms,
-        refund_deadline_ms,
-        checked_in,
-        now_ms(),
-    )
+    refund_window_open_at(event_end_ms, refund_deadline_ms, checked_in, now_ms())
 }
 
 /// Pure refund-window predicate shared by the UI wrapper and boundary tests.
@@ -284,7 +279,6 @@ pub fn format_duration_label(hours: u32) -> String {
         format!("{hours}h")
     }
 }
-
 
 /// Format remaining seconds into a compact countdown string.
 /// Shows days/hours/minutes if > 1 day, hours/minutes/seconds if < 1 day,
@@ -419,9 +413,19 @@ mod tests {
 
     #[test]
     fn refund_window_matches_on_chain_boundaries() {
-        assert!(!refund_window_open_at(EVENT_END, DEADLINE, false, EVENT_END - 1));
+        assert!(!refund_window_open_at(
+            EVENT_END,
+            DEADLINE,
+            false,
+            EVENT_END - 1
+        ));
         assert!(refund_window_open_at(EVENT_END, DEADLINE, false, EVENT_END));
-        assert!(refund_window_open_at(EVENT_END, DEADLINE, false, DEADLINE - 1));
+        assert!(refund_window_open_at(
+            EVENT_END,
+            DEADLINE,
+            false,
+            DEADLINE - 1
+        ));
         assert!(!refund_window_open_at(EVENT_END, DEADLINE, false, DEADLINE));
         assert!(refund_window_open_at(EVENT_END, DEADLINE, true, DEADLINE));
     }

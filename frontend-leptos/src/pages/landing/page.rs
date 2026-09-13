@@ -6,7 +6,7 @@ use leptos_router::components::A;
 use crate::components::is_admin_role;
 use crate::icons::{Icon, IconName};
 
-use super::auth::{trigger_landing_oauth, trigger_landing_signout, AuthState};
+use super::auth::{AuthState, trigger_landing_oauth, trigger_landing_signout};
 use super::registrations::MyRegistrations;
 use super::upcoming::UpcomingEvents;
 use super::waitlist::WaitlistForm;

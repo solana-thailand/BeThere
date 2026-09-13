@@ -281,7 +281,9 @@ pub fn is_in_person(participation_type: &str) -> bool {
 /// online registration. Keep this separate from `is_in_person` so callers do
 /// not accidentally classify it as online by negation.
 pub fn is_retrospective(participation_type: &str) -> bool {
-    participation_type.trim().eq_ignore_ascii_case("retrospective")
+    participation_type
+        .trim()
+        .eq_ignore_ascii_case("retrospective")
 }
 
 #[cfg(test)]
