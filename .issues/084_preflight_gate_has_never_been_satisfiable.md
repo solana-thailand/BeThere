@@ -211,3 +211,60 @@ worth committing it or shipping entries somewhere durable.
 `flow-harness` is not a workspace member, so CI's `cargo fmt --check` does not
 cover it; six files carry pre-existing drift, reverted out of this change to
 keep the diff honest. Same blind spot as `frontend-leptos` (`.issues/083`).
+
+
+---
+
+## After the `.issues/085` fix — 2026-09-13
+
+With the exact-id fix deployed and a clean two-phase fixture
+(`flow-085-verify`), the suite went from **1/6 to 3/6**:
+
+```
+✓ deposit                              (a real 10 USDC on-chain deposit)
+✓ refund_pre_event_end
+✗ refund_post_event_end_checked_in     RefundNotYetAllowed(1) from the program
+✗ refund_no_show_deadline              expected RefundDeadlinePassed(19), got RefundNotYetAllowed
+✓ auth
+✗ claim                                claim response missing `status` field
+```
+
+`deposit` passing is the headline: that was the `IllegalOwner` failure this
+whole issue started from, and it was `.issues/085` all along.
+
+### The remaining refund failures are an on-chain horizon problem
+
+`--advance-past-end` moves `event_end` in **D1 and KV**. It cannot move it
+**on-chain**: `EventEscrow` stores its own `event_end`, written at
+`initialize_event_escrow` and immutable thereafter. The refund instruction
+checks *that* value, not the Worker's — correctly, since on-chain state is the
+authority.
+
+So the fixture ends up internally inconsistent: the Worker believes the event is
+over, the escrow does not, and the program returns `RefundNotYetAllowed(1)`.
+
+**The two constraints are only satisfiable by making the window short.**
+`EventEndInPast` forces `event_end` into the future at init; the refund flows
+need the real clock past it. There is no way to advance the chain, so the seed
+has to pick an `event_end` the wall clock will cross on its own:
+
+```
+event_end = now + ~2 minutes     # future enough to initialize, brief enough to wait out
+```
+
+Then: seed → initialize escrow → deposit → **wait out the window** → run the
+suite. `--advance-past-end` remains useful for D1/KV-only flows but must not be
+relied on for anything the program validates.
+
+This was not visible before, because the deposit never got far enough to expose
+it.
+
+### Not attempted
+
+The rework above needs another on-chain deposit, and the harness attendee wallet
+is back to **0 USDC** (the passing deposit spent the last 10). Blocked on the
+Circle faucet captcha again.
+
+`claim` is unrelated to any of this — the Worker does not return a `status`
+field on the claim payload. Harness expectation vs. current API; one of the two
+is stale and it needs a decision, not a fixture.
