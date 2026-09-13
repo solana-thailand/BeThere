@@ -1,16 +1,16 @@
-# 080 — The notification pipeline cancels every post-event send by design
+# 080 — The notification pipeline cancelled every post-event send by design
 
-**Status:** open
+**Status:** fixed 2026-09-13, not yet deployed
 **Found:** 2026-09-13, answering the DevRel `BETHERE-ASKS.md` item 4
-**Severity:** medium (a whole class of message is unreachable; no data at risk)
+**Severity:** medium (a whole class of message was unreachable; no data at risk)
 
-## What
+## What it was
 
-`notifications::prepare` re-reads eligibility immediately before transport and
-cancels the job if the event is over:
+`notifications::prepare` re-read eligibility immediately before transport and
+cancelled the job if the event was over:
 
 ```rust
-// worker/src/notifications/prepare.rs:26-31
+// worker/src/notifications/prepare.rs:26-31 (before)
 if event.status != EventStatus::Active
     || (event.event_end_ms > 0 && event.event_end_ms <= now)
 {
@@ -18,83 +18,114 @@ if event.status != EventStatus::Active
 }
 ```
 
-Every notification kind goes through this. So **no message can ever be
-delivered after an event ends**, regardless of kind, enrolment or scheduling.
+Every kind went through it, so **no message could ever be delivered after an
+event ended**, regardless of kind, enrolment or scheduling.
 
-## Why it matters now
+The rule was correct for the kinds that existed — `reminder`,
+`deposit_confirmed`, `deposit_rejected` are all pre-event. The mistake was that
+a per-kind property had been encoded as a pipeline invariant.
 
-DevRel want to send a post-event satisfaction survey and have evidence the
-manual alternative does not work: two Google Forms, lists cut for 55 onsite and
-96 online people, ready for weeks, **zero responses**. Their conclusion —
-proximity beats intent — is the same insight that made the deposit hold work.
+### It was in two places, not one
 
-`.issues/068` and the post-event registration endpoint already give us the
-retrospective plumbing. The outbox is the natural carrier for "the event you
-attended has a two-question survey". This gate is what stops it, and it is
-invisible from outside the Worker: the job would be enqueued, marked cancelled,
-and nobody would be told why.
+The original write-up named only `prepare.rs`. `sql/cancel.sql` carried the same
+rule independently (`e.event_end_ms > unixepoch() * 1000`) as a bulk sweep that
+runs *before* any job is claimed, so fixing the dispatcher alone would have left
+post-event jobs cancelled in SQL before `prepare` ever saw them — the failure
+mode in `.issues/086` and in the `duplicated-state-transition-paths` note.
 
-## Why the gate exists
+## The fix
 
-It is correct for the kinds that exist today. `reminder`, `deposit_confirmed`
-and `deposit_rejected` are all pre-event or during-event; delivering a "your
-event is tomorrow" mail after the event would be worse than not sending. The
-mistake is that the rule is applied to the *pipeline* rather than to the
-*kind*.
+The window is now a property of the kind, and the kind is a type.
 
-## Proposed fix
+- `policy::NotificationKind` — the five kinds as an enum, parsed once at the
+  edge. `policy::DeliveryWindow` — `BeforeEventEnds` or `AfterEventEnds`.
+- `policy::in_delivery_window` — one pure decision, unit-tested in both
+  directions over an event's lifetime. `Completed` counts as ended whatever
+  `event_end_ms` says; `event_end_ms == 0` means no end was ever recorded, so
+  such an event never becomes post-event.
+- `prepare` asks for the kind's window instead of applying one rule to all.
+  Pre-event behaviour is byte-for-byte what it was.
+- `cancel.sql` partitions the same way. The kind list there is a copy of
+  `delivery_window`, so `cancel_sql_covers_every_pre_event_kind` reads the
+  literals back out of the `.sql` file and compares them to the enum — it fails
+  if either side moves.
 
-Move the liveness rule from `prepare` into the per-kind policy:
+`survey` is the first `AfterEventEnds` kind, which is what makes the model
+testable rather than speculative:
 
-1. Give each kind a delivery window — `PreEvent` (current behaviour) or
-   `PostEvent`.
-2. `prepare` keeps cancelling `PreEvent` kinds on a finished event, and stops
-   cancelling `PostEvent` ones.
-3. A `PostEvent` kind should additionally require what a pre-event kind does
-   not: the recipient actually attended (`attendees.checked_in_at` non-null),
-   so a survey does not go to no-shows.
-4. Keep the enrolment join as-is — `notification_enrollments` is already keyed
-   per (attendee, event), so a single event can be targeted without touching
-   the others.
+- **Enqueued** by a trigger on `post_event_registration_open` flipping to 1 —
+  the organizer action that makes the questions answerable at all — and only
+  for enrolled attendees with a non-null `checked_in_at`. A no-show is not
+  asked how the event went.
+- **Rendered** pointing at `/events/{slug}/post-event-register`, the form that
+  carries DevRel's four questions (`.issues/087`). Not the ticket, not a
+  deposit that can no longer be paid, and no "add to calendar" for a date that
+  has passed.
+- **Re-checked at send time** against `post_event_registration_accepting` — the
+  same helper the public recap CTA uses — so a form the organizer closes, or
+  whose deadline lapses, does not leave a message inviting people into a 410.
+- **Withdrawn from the inbox** by the same condition in
+  `notification_inbox_visible`.
 
-Do not fix this by special-casing a `survey` string in `prepare`; the defect is
-that a per-kind property was encoded as a pipeline invariant, and the next kind
-would hit it again.
+Migration `0035_notification_delivery_window.sql` rebuilds `notification_outbox`
+(SQLite cannot alter a CHECK) and recreates the view and all seven triggers that
+name the table. They are dropped first: with `legacy_alter_table` off SQLite
+reparses the whole schema during `ALTER TABLE ... RENAME` and fails on a trigger
+that references a momentarily-absent table.
 
-## This is not the only thing blocking a send
+## Other stringly-typed kind matches this turned up
 
-Worth stating together so nobody fixes this one and expects mail to move.
-Production has the pipeline switched off at three independent points, all in
-`worker/wrangler.toml`:
+Both had a catch-all arm, so a `survey` row would have been shown to the person
+under another kind's wording:
 
-1. `NOTIFICATIONS_ENABLED = "0"` — `dispatch()` returns immediately
-   (`notifications/mod.rs:48`). Set in prod **and** staging.
-2. `NOTIFICATION_FROM = ""` — `Sender::from_env` rejects it as not a plausible
-   email, so no job is taken even when enabled.
-3. The `[[send_email]]` binding named `EMAIL` is commented out, with the reason
-   in the file: *"Enable after onboarding a sender domain to Cloudflare Email
-   Sending."*
+- `notifications::outbox::presentation` — `_ =>` fell through to "Registration
+  saved". Now exhaustive over the enum, with a test asserting no two kinds share
+  a title.
+- `frontend-leptos` organizer notifications table — `_=>"Notification"`.
 
-(3) is not a code change — it needs a verified sender domain on the Cloudflare
-account. `notification_enrollments` and `notification_outbox` both have **0
-rows** in prod; nothing has ever been enqueued, so there is no backlog waiting
-to fire when this is switched on.
+`content::render` also lost its vestigial `Result`: it could only fail on an
+unknown kind string, which is now unrepresentable.
 
-Sequencing: the sender domain unblocks pre-event sends (DevRel's 27 September
-logistics message would pass `prepare` — that event is Active and in the
-future). This issue is what additionally unblocks the survey.
+## Verified
 
-## Verification
+- `cargo clippy --workspace --all-targets -- -D warnings`, `cargo fmt --check`,
+  full workspace + worker suites, frontend wasm32 clippy + tests, worker wasm32
+  release build — all clean.
+- **A/B, not just green.** Restoring the old `cancel.sql` makes
+  `test_finishing_an_event_retires_pre_event_jobs_but_not_the_survey` fail
+  (`'cancelled' != 'pending'`); adding `'survey'` to the SQL kind list makes
+  `cancel_sql_covers_every_pre_event_kind` fail. Both restored to green after.
+- Four new SQL-behaviour tests in `worker/tests/notifications/test_outbox.py`
+  (25 total), which execute every production migration against SQLite — so 0035
+  is exercised by CI on every run.
 
-A test that enqueues a `PostEvent`-window kind for an event whose
-`event_end_ms` is in the past and asserts `Prepared::Ready`, alongside the
-existing behaviour for a `reminder` on the same event asserting
-`Prepared::Cancel`. Both directions — a fix that makes everything deliverable
-has removed the guard rather than scoped it.
+## Still blocking an actual send — none of it code
+
+Unchanged by this fix, and all in `worker/wrangler.toml`:
+
+1. `NOTIFICATIONS_ENABLED = "0"` — `dispatch()` returns immediately. Set in prod
+   **and** staging.
+2. `NOTIFICATION_FROM = ""` — `Sender::from_env` rejects it, so no job is taken
+   even when enabled.
+3. The `[[send_email]]` binding `EMAIL` is commented out: *"Enable after
+   onboarding a sender domain to Cloudflare Email Sending."*
+
+(3) needs a verified sender domain on the Cloudflare account — **owner action**.
+`notification_enrollments` and `notification_outbox` both have 0 rows in prod, so
+there is no backlog waiting to fire when it is switched on.
+
+## Known gaps
+
+- The enqueue trigger is `AFTER UPDATE OF post_event_registration_open` only.
+  There is no INSERT counterpart because the flag can only be set on a Completed
+  event and events are not created Completed — but an import that wrote a
+  Completed event with the flag already on would not enqueue.
+- Question wording on the form is still ours, not DevRel's (`.issues/087`).
+- Nothing surfaces the answers to an organizer yet.
 
 ## Related
 
-- `.issues/068_retrospective_learning_hub.md` — the retrospective flow this
-  would carry.
+- `.issues/087` — the four questions the survey links to.
+- `.issues/083` — the admin control that opens the form, and now the send.
+- `.issues/068` — the retrospective flow this carries.
 - DevRel `reports/phase-2/BETHERE-REPLY.md` items 2 and 4.
-- `.issues/079` — filed from the same review.

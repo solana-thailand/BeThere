@@ -93,7 +93,7 @@ pub fn NotificationPanel(event_id: String) -> impl IntoView {
                                 let name=item.recipient_name.unwrap_or_default();
                                 let email=item.recipient_email.unwrap_or_default();
                                 let status=match item.status.as_str(){"uncertain"=>"Needs review","pending"=>"Queued","accepted"=>"Accepted","sending"=>"Sending","failed"=>"Failed","cancelled"=>"Cancelled",_=>"Unknown"};
-                                let kind=match item.kind.as_str(){"registration"=>"Registration","reminder"=>"Event reminder","deposit_confirmed"=>"Deposit confirmed","deposit_rejected"=>"Slip rejected",_=>"Notification"};
+                                let kind=match item.kind.as_str(){"registration"=>"Registration","reminder"=>"Event reminder","deposit_confirmed"=>"Deposit confirmed","deposit_rejected"=>"Slip rejected","survey"=>"Post-event survey",_=>"Notification"};
                                 view! {<tr>
                                     <td><span>{name}</span><br/><span>{email}</span></td><td>{kind}</td><td>{status}<br/><small>{item.error_code.unwrap_or_default()}</small></td><td>{item.attempts}</td>
                                     <td>{if can_retry {view!{<button class="btn btn-outline btn-sm" disabled=move ||busy.get() on:click=move |_|{

@@ -225,6 +225,59 @@ class OutboxTests(unittest.TestCase):
         row = self.db.execute(query('inbox_list'), ('a@example.com', 2**53-1)).fetchone()
         self.assertEqual(row['participation_type'], 'online')
 
+    def complete(self, event='event-a', until=None):
+        """Finish the event and open the post-event form the survey asks through."""
+        self.db.execute("UPDATE events SET status='completed',event_end_ms=? WHERE id=?",
+                        ((self.now-3600)*1000, event))
+        self.db.execute("UPDATE events SET post_event_registration_open=1,post_event_registration_until_ms=? WHERE id=?",
+                        (until, event))
+
+    def visible_kinds(self, email='a@example.com'):
+        return [row['kind'] for row in self.db.execute(query('inbox_list'), (email, 2**53-1)).fetchall()]
+
+    def test_survey_is_only_enqueued_for_people_who_were_there(self):
+        self.register()                    # enrolled and checked in
+        self.register('b')                 # enrolled, never turned up
+        self.register('c', enroll=False)   # checked in but never enrolled
+        self.db.execute("UPDATE attendees SET checked_in_at='now' WHERE id IN ('a','c')")
+        self.complete()
+        self.assertEqual([j['attendee_id'] for j in self.jobs() if j['kind']=='survey'], ['a'])
+        # Re-opening a form that is already open must not ask the same person twice.
+        self.db.execute("UPDATE events SET post_event_registration_open=1 WHERE id='event-a'")
+        self.assertEqual(len([j for j in self.jobs() if j['kind']=='survey']), 1)
+
+    def test_finishing_an_event_retires_pre_event_jobs_but_not_the_survey(self):
+        """.issues/080 — the cancel sweep used to retire every kind once the
+        event was over, which is why no message could ever be sent afterwards."""
+        self.register()
+        self.db.execute("UPDATE attendees SET checked_in_at='now' WHERE id='a'")
+        self.complete()
+        self.db.execute(query('cancel'))
+        states = {j['kind']: j['status'] for j in self.jobs()}
+        self.assertEqual(states['registration'], 'cancelled')
+        self.assertEqual(states['reminder'], 'cancelled')
+        self.assertEqual(states['survey'], 'pending')
+        self.assertEqual(self.db.execute(query('claim')).fetchone()['kind'], 'survey')
+
+    def test_cancel_retires_a_survey_once_its_event_is_no_longer_addressable(self):
+        self.register()
+        self.db.execute("UPDATE attendees SET checked_in_at='now' WHERE id='a'")
+        self.complete()
+        self.db.execute("UPDATE events SET status='archived' WHERE id='event-a'")
+        self.db.execute(query('cancel'))
+        self.assertTrue(all(j['status']=='cancelled' for j in self.jobs()))
+
+    def test_survey_leaves_the_inbox_when_the_form_stops_accepting(self):
+        self.register()
+        self.db.execute("UPDATE attendees SET checked_in_at='now' WHERE id='a'")
+        self.complete()
+        self.assertIn('survey', self.visible_kinds())
+        self.db.execute("UPDATE events SET post_event_registration_until_ms=? WHERE id='event-a'",
+                        ((self.now-60)*1000,))
+        self.assertNotIn('survey', self.visible_kinds())
+        self.db.execute("UPDATE events SET post_event_registration_until_ms=NULL,post_event_registration_open=0 WHERE id='event-a'")
+        self.assertNotIn('survey', self.visible_kinds())
+
     def test_my_registrations_is_one_indexed_user_scoped_query(self):
         self.register()
         self.register('b', 'event-b')
