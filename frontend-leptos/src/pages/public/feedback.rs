@@ -279,23 +279,23 @@ pub fn Feedback() -> impl IntoView {
     };
 
     view! {
-        <div class="container layout-col-center">
+        <div class="container fb-page">
             {move || match state.get() {
                 PageState::Loading => view! { <p class="card layout-col-center">"กำลังโหลด…"</p> }.into_any(),
                 PageState::NothingToDo => view! {
-                    <div class="card layout-col-center">
+                    <div class="card fb-notice">
                         <h1>"ไม่มีแบบสอบถามค้างอยู่"</h1>
                         <p>"ขอบคุณครับ — ตอนนี้ไม่มีงานที่รอความเห็นจากคุณ"</p>
                     </div>
                 }.into_any(),
                 PageState::Error(message) => view! {
-                    <div class="card layout-col-center">
+                    <div class="card fb-notice">
                         <h1>"ส่งไม่สำเร็จ"</h1>
                         <p>{message}</p>
                     </div>
                 }.into_any(),
                 PageState::Done(saved) => view! {
-                    <div class="card layout-col-center">
+                    <div class="card fb-notice">
                         <h1>"ขอบคุณครับ"</h1>
                         <p>{format!("บันทึกความเห็นของคุณแล้ว {saved} งาน")}</p>
                     </div>
@@ -434,22 +434,26 @@ pub fn Feedback() -> impl IntoView {
                                     on:input=move |ev| next_topics.set(event_target_value(&ev))
                                 />
                             </label>
-                            <fieldset>
+                            <fieldset class="fb-options">
                                 <legend class="dev-profile-label">
                                     "ซีรีส์ Solana in Latent Space (ออนไลน์ Part 1–6) — อยากให้จัดต่อในไตรมาสหน้าไหม?"
                                 </legend>
                                 {LATENT_SPACE_OPTIONS.iter().map(|option| {
                                     let value = (*option).to_string();
                                     let selected = value.clone();
+                                    let set_to = value.clone();
                                     view! {
-                                        <label>
-                                            <input
-                                                type="radio"
-                                                prop:checked=move || latent_space.get() == selected
-                                                on:change=move |_| latent_space.set(value.clone())
-                                            />
+                                        <button
+                                            type="button"
+                                            class=move || match latent_space.get() == selected {
+                                                true => "fb-option is-selected",
+                                                false => "fb-option",
+                                            }
+                                            aria-pressed=move || (latent_space.get() == value).to_string()
+                                            on:click=move |_| latent_space.set(set_to.clone())
+                                        >
                                             {*option}
-                                        </label>
+                                        </button>
                                     }
                                 }).collect_view()}
                             </fieldset>
