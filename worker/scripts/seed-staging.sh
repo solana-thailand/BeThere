@@ -7,6 +7,11 @@
 #   bash worker/scripts/seed-staging.sh           # Seed default fixture (INSERT OR REPLACE)
 #   bash worker/scripts/seed-staging.sh --event-id flow-deposit-20260912
 #                                                   # Seed a fresh named fixture
+#   bash worker/scripts/seed-staging.sh --event-id <id> --advance-past-end
+#                                                   # Phase 2: move a seeded
+#                                                   # fixture's event_end into
+#                                                   # the past so the refund
+#                                                   # flows are exercisable
 #   bash worker/scripts/seed-staging.sh --clean   # Wipe the test event rows first
 #   bash worker/scripts/seed-staging.sh --local   # Target local D1 (--local) instead of --remote
 #
@@ -25,11 +30,13 @@ cd "$(dirname "$0")/.."
 DB_NAME="bethere-db-staging"
 REMOTE_FLAG="--remote"
 CLEAN=0
+ADVANCE=0
 EVENT_ID="flow-test-event"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean) CLEAN=1; shift ;;
+        --advance-past-end) ADVANCE=1; shift ;;
         --local) REMOTE_FLAG="--local"; shift ;;
         --event-id)
             [[ $# -ge 2 ]] || { echo "--event-id requires a value" >&2; exit 2; }
@@ -39,6 +46,48 @@ while [[ $# -gt 0 ]]; do
         *) echo "Unknown arg: $1" >&2; exit 2 ;;
     esac
 done
+
+# ── Phase 2: advance an existing fixture past its own event_end ──────────────
+# Runs instead of a seed, not alongside one. The escrow must already exist —
+# `initialize_event_escrow` rejects a past event (`EventEndInPast`, 13), so the
+# fixture is born with `event_end` in the future and is moved afterwards.
+#
+# The KV resync is the load-bearing half. `resolve_event_or_fallback` reads KV
+# first and only falls back to D1 when the KV read *errors*, so a D1-only
+# update is silently masked by the cached `EventConfig` and the worker keeps
+# serving the old horizon — which reads exactly like the update not working.
+advance_past_end() {
+    local now_ms end_ms start_ms
+    now_ms=$(( $(date +%s) * 1000 ))
+    end_ms=$(( now_ms - 2 * 3600 * 1000 ))
+    start_ms=$(( now_ms - 5 * 3600 * 1000 ))
+
+    local existing
+    existing=$(read_sql_json "SELECT id FROM events WHERE id = '${EVENT_ID}' LIMIT 1;")
+    if ! printf '%s' "$existing" | grep -q '"id"'; then
+        echo "❌ ${EVENT_ID} does not exist — seed it first, then advance it." >&2
+        exit 2
+    fi
+
+    echo "⏩ Advancing ${EVENT_ID} past event_end (end=${end_ms}, now-2h)..."
+    run_sql "UPDATE events SET event_start_ms = ${start_ms}, event_end_ms = ${end_ms}, updated_at = datetime('now') WHERE id = '${EVENT_ID}';"
+
+    local base="${STAGING_BASE_URL:-https://bethere-staging.solana-thailand.workers.dev}"
+    echo "🔄 Resyncing KV from D1 at ${base} ..."
+    if curl -fsS -X POST "${base}/api/events/reseed-kv" \
+        -H "Authorization: Bearer ${STAGING_DEV_TOKEN:-dev-token}" > /dev/null; then
+        echo "   ✅ KV resynced — the worker now serves the advanced horizon."
+    else
+        echo "   ⚠️  KV resync FAILED. The D1 row moved but the worker will keep" >&2
+        echo "      serving the cached horizon. Run this before trusting a harness run:" >&2
+        echo "      curl -X POST ${base}/api/events/reseed-kv -H 'Authorization: Bearer dev-token'" >&2
+        exit 1
+    fi
+
+    echo ""
+    echo "✅ ${EVENT_ID} advanced. The wall clock is now inside [event_end, refund_deadline)."
+    exit 0
+}
 
 # Event IDs are interpolated into D1 statements below. Restrict them to the
 # same slug-safe alphabet used by the event form so the operator cannot turn a
@@ -54,9 +103,23 @@ fi
 #   event_start = now - 1h        (registration/deposit is already open)
 #   event_end   = now + 4h        (deposit flow can assert the pre-end state)
 #   refund_deadline_hours = 6     → refund_deadline = event_end + 6h = now + 10h
-# The live harness advances through lifecycle-specific fixtures; this base seed
-# deliberately starts before event_end so a fresh deposit has a deterministic
-# `PreEventEnd` outcome.
+#
+# `event_end` MUST be in the future at seed time and this is not negotiable:
+# the on-chain program rejects `initialize_event_escrow` for a past event with
+# `EscrowError::EventEndInPast` (13). An escrow cannot be created for an event
+# that has already ended, so the fixture cannot be born past its own end.
+#
+# The refund flows need the opposite — a wall clock at or past `event_end`
+# (`flows/refund_no_show_deadline.rs` documents the horizon as
+# `event_end = now - 2h`). That horizon is reached by *advancing* the fixture
+# after its escrow and deposit exist, not by seeding it there:
+#
+#   1. bash worker/scripts/seed-staging.sh --event-id <id>   (end = now + 4h)
+#   2. initialize the escrow on-chain, then make the deposit
+#   3. bash worker/scripts/seed-staging.sh --event-id <id> --advance-past-end
+#
+# Step 3 is what makes the three refund flows exercisable. Skipping it is why
+# the §3.5 production gate had never gone green (.issues/084).
 NOW_MS=$(( $(date +%s) * 1000 ))
 EVENT_START_MS=$(( NOW_MS - 1 * 3600 * 1000 ))
 EVENT_END_MS=$(( NOW_MS + 4 * 3600 * 1000 ))
@@ -99,6 +162,14 @@ read_sql_json () {
     # to refuse destructive reseeding of an initialized escrow fixture.
     npx wrangler d1 execute "$DB_NAME" --env staging $REMOTE_FLAG --json --command "$1"
 }
+
+# Phase 2 runs instead of a seed — dispatch once the SQL helpers above exist.
+# It deliberately runs *before* the escrow guard below: advancing an event whose
+# escrow is already initialized is exactly the supported case, whereas reseeding
+# one is what the guard refuses.
+if [ "$ADVANCE" -eq 1 ]; then
+    advance_past_end
+fi
 
 echo "🌱 Seeding staging D1 ($DB_NAME, $REMOTE_FLAG)..."
 

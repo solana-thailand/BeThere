@@ -97,6 +97,23 @@ impl RefundPreEventEndFlow {
         }
     }
 
+    /// Build from the environment so every flow targets the *same* fixture.
+    ///
+    /// Issue 084: this flow used to be registered with hardcoded defaults, so a
+    /// run against a named fixture split across two events and never passed.
+    #[must_use]
+    pub fn from_env() -> Self {
+        use super::fixture_value;
+        let defaults = RefundPreEventEndConfig::default();
+        Self {
+            config: RefundPreEventEndConfig {
+                attendee_id: fixture_value("FLOW_HARNESS_ATTENDEE_ID", defaults.attendee_id),
+                event_id: fixture_value("FLOW_HARNESS_EVENT_ID", defaults.event_id),
+                ..defaults
+            },
+        }
+    }
+
     #[must_use]
     pub fn with_config(config: RefundPreEventEndConfig) -> Self {
         Self { config }
@@ -176,10 +193,9 @@ impl Flow for RefundPreEventEndFlow {
 
         // Belt-and-braces: the explicit preconditions check produces a more
         // actionable error than `outcome_is` alone when the seed is wrong.
-        if let Err(reason) = RefundPreEventEndConfig::preconditions_hold(
-            status.event_end_ms,
-            assertion_now,
-        ) {
+        if let Err(reason) =
+            RefundPreEventEndConfig::preconditions_hold(status.event_end_ms, assertion_now)
+        {
             return Err(HarnessError::AssertionFailed {
                 flow: FLOW_NAME,
                 reason,
@@ -413,7 +429,11 @@ mod tests {
                 let now = EVENT_END - delta;
                 let outcome = expected_outcome(EVENT_END, DEADLINE, checked_in, now);
                 let gate = gate_verdict_at(EVENT_END, DEADLINE, checked_in, now);
-                assert_eq!(outcome, RefundOutcome::PreEventEnd, "checked_in={checked_in}, now={now}");
+                assert_eq!(
+                    outcome,
+                    RefundOutcome::PreEventEnd,
+                    "checked_in={checked_in}, now={now}"
+                );
                 assert!(!gate, "checked_in={checked_in}, now={now}");
             }
         }
@@ -431,5 +451,4 @@ mod tests {
         // is strictly less, so this is actually a valid pre-end horizon).
         assert!(RefundPreEventEndConfig::preconditions_hold(event_end, pinned).is_ok());
     }
-
 }
