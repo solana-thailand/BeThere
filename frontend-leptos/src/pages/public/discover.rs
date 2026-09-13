@@ -89,6 +89,9 @@ pub fn Discover() -> impl IntoView {
     let (mine_now, set_mine_now) = signal(Vec::<Row>::new());
     let (mine_past, set_mine_past) = signal(Vec::<Row>::new());
     let (loaded, set_loaded) = signal(false);
+    // Drives the sign-in prompt. A signed-out visitor sees only the public list
+    // and has no way to know the page has two more sections for them.
+    let (signed_in, set_signed_in) = signal(false);
 
     leptos::task::spawn_local(async move {
         let now_ms = js_sys::Date::now() as i64;
@@ -128,6 +131,7 @@ pub fn Discover() -> impl IntoView {
             >(&resp)
             .await
         {
+            set_signed_in.set(true);
             let rows = body.data.unwrap_or_default();
             let (past, current): (Vec<_>, Vec<_>) = rows
                 .into_iter()
@@ -169,10 +173,29 @@ pub fn Discover() -> impl IntoView {
 
     view! {
         <div class="container dv-page">
+            // There is no shared site header — the landing page builds its own
+            // inline — so this page would otherwise render with no way back and
+            // no way in. A wordmark and a sign-in link is the minimum that makes
+            // it stand on its own (`.issues/100`).
+            <nav class="dv-nav">
+                <a class="dv-brand" href="/">"BeThere"</a>
+                <Show when=move || loaded.get() && !signed_in.get() fallback=|| ()>
+                    <a class="btn btn-outline btn-sm" href="/login?next=/discover">
+                        "เข้าสู่ระบบ"
+                    </a>
+                </Show>
+            </nav>
+
             <header class="dv-head">
                 <h1>"ค้นพบอีเวนต์"</h1>
                 <p class="subtitle">"ดูงานที่กำลังจะมาถึง และงานที่คุณลงทะเบียนไว้"</p>
             </header>
+
+            <Show when=move || loaded.get() && !signed_in.get() fallback=|| ()>
+                <p class="dv-signin-hint">
+                    "เข้าสู่ระบบเพื่อดูงานที่คุณลงทะเบียนไว้ และงานที่ผ่านมา"
+                </p>
+            </Show>
 
             <Show when=move || loaded.get() fallback=|| view! { <p class="page-loading">"กำลังโหลด…"</p> }>
                 <Section title="เร็ว ๆ นี้" rows=upcoming empty="ยังไม่มีงานที่เปิดรับอยู่ตอนนี้" />
