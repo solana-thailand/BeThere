@@ -12,4 +12,4 @@ pub mod types;
 mod tests;
 
 // Re-export level data and game types for convenient access.
-pub use levels::{default_levels, test_level, AdventureConfig, AdventureProgress};
+pub use levels::{AdventureConfig, AdventureProgress, default_levels, test_level};

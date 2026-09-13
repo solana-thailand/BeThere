@@ -132,9 +132,10 @@ pub fn user_friendly_message(error: &WalletError) -> String {
     if error.is_simulation_failure() {
         let base = "Transaction simulation failed.".to_string();
         if let Some(logs) = &error.logs
-            && logs.iter().any(|l| l.contains("insufficient")) {
-                return format!("{base} You may not have enough tokens for this transaction.");
-            }
+            && logs.iter().any(|l| l.contains("insufficient"))
+        {
+            return format!("{base} You may not have enough tokens for this transaction.");
+        }
         return format!("{base} This may be temporary — please try again in a few seconds.");
     }
 

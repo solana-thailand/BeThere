@@ -1,5 +1,6 @@
 //! Deposit, refund, and bank info write operations.
 
+use crate::sheets::a1;
 use event_checkin_domain::models::attendee::ColumnMapping;
 use worker::KvStore;
 
@@ -25,6 +26,7 @@ pub async fn write_bank_info(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     // Skip if nothing to write
     if bank_account.is_none() && bank_name.is_none() && account_name.is_none() {
         return Ok(());
@@ -39,21 +41,21 @@ pub async fn write_bank_info(
     if let Some(val) = bank_account {
         let col = mapping.column_letter(CK::BankAccount);
         data.push(ValueRange {
-            range: format!("{sheet_name}!{col}{row_index}"),
+            range: format!("{sheet_ref}!{col}{row_index}"),
             values: vec![vec![val.to_string()]],
         });
     }
     if let Some(val) = bank_name {
         let col = mapping.column_letter(CK::BankName);
         data.push(ValueRange {
-            range: format!("{sheet_name}!{col}{row_index}"),
+            range: format!("{sheet_ref}!{col}{row_index}"),
             values: vec![vec![val.to_string()]],
         });
     }
     if let Some(val) = account_name {
         let col = mapping.column_letter(CK::AccountName);
         data.push(ValueRange {
-            range: format!("{sheet_name}!{col}{row_index}"),
+            range: format!("{sheet_ref}!{col}{row_index}"),
             values: vec![vec![val.to_string()]],
         });
     }
@@ -155,6 +157,7 @@ pub async fn update_deposit_method(
     attendee_api_id: &str,
     method: &str,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
     // Find the attendee row by api_id
@@ -173,7 +176,7 @@ pub async fn update_deposit_method(
     let col = mapping.column_letter(CK::DepositMethod);
 
     let data = vec![ValueRange {
-        range: format!("{sheet_name}!{col}{row_index}"),
+        range: format!("{sheet_ref}!{col}{row_index}"),
         values: vec![vec![method.to_string()]],
     }];
 
@@ -207,6 +210,7 @@ pub async fn write_refund_status(
     attendee_api_id: &str,
     status: &str,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     // Invalidate column map cache to ensure fresh header mapping
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
 
@@ -234,7 +238,7 @@ pub async fn write_refund_status(
     );
 
     let data = vec![ValueRange {
-        range: format!("{sheet_name}!{col}{row_index}"),
+        range: format!("{sheet_ref}!{col}{row_index}"),
         values: vec![vec![status.to_string()]],
     }];
 
@@ -269,6 +273,7 @@ pub async fn write_refund_status_batch(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     if updates.is_empty() {
         return Ok(());
     }
@@ -281,7 +286,7 @@ pub async fn write_refund_status_batch(
     let data: Vec<ValueRange> = updates
         .iter()
         .map(|(row_index, status)| ValueRange {
-            range: format!("{sheet_name}!{col}{row_index}"),
+            range: format!("{sheet_ref}!{col}{row_index}"),
             values: vec![vec![status.clone()]],
         })
         .collect();
@@ -314,6 +319,7 @@ pub async fn write_refund_link(
     attendee_api_id: &str,
     link: &str,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     // Invalidate column map cache to ensure fresh header mapping
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
 
@@ -341,7 +347,7 @@ pub async fn write_refund_link(
     );
 
     let data = vec![ValueRange {
-        range: format!("{sheet_name}!{col}{row_index}"),
+        range: format!("{sheet_ref}!{col}{row_index}"),
         values: vec![vec![link.to_string()]],
     }];
 

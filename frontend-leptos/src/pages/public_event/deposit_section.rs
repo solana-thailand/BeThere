@@ -6,7 +6,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
     let is_online_only = data.event_format == crate::api::EventFormat::Online;
     let is_hybrid = data.event_format == crate::api::EventFormat::Hybrid;
     let has_deposit =
-        data.deposit_enabled && (data.deposit_amount_usdc > 0.0 || data.deposit_amount_thb > 0.0);
+        data.deposit_enabled && (data.deposit_amount_usdc > 0 || data.deposit_amount_thb > 0);
 
     if !has_deposit || is_online_only {
         return ().into_any();
@@ -17,15 +17,15 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
         escrow_status == "closed" || escrow_status == "cancelled" || escrow_status == "deactivated";
 
     let usdc_display = format_usdc(data.deposit_amount_usdc);
-    let thb_display = if data.deposit_amount_thb > 0.0 {
-        Some(format_thb(data.deposit_amount_thb))
+    let thb_display = if data.deposit_amount_thb > 0 {
+        Some(data.deposit_amount_thb.to_string())
     } else {
         None
     };
     let refund_label = format_refund_deadline(data.refund_deadline_hours);
 
-    let show_usdc = data.deposit_amount_usdc > 0.0 && !escrow_closed;
-    let show_thb = data.deposit_amount_thb > 0.0;
+    let show_usdc = data.deposit_amount_usdc > 0 && !escrow_closed;
+    let show_thb = data.deposit_amount_thb > 0;
 
     view! {
         <div class="pe-card pe-deposit-card">
@@ -63,7 +63,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                             </div>
                         </div>
                     }.into_any()
-                } else if data.deposit_amount_usdc > 0.0 && escrow_closed {
+                } else if data.deposit_amount_usdc > 0 && escrow_closed {
                     let usdc = usdc_display.clone();
                     view! {
                         <div class="pe-method-card pe-method-card--solana" style="opacity: 0.6;">

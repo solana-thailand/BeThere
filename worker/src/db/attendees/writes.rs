@@ -20,6 +20,7 @@ pub(crate) async fn upsert_attendee(
     contact_handle: &str,
     consent_marketing: Option<bool>,
     claim_token: Option<&str>,
+    notify_verified_email: bool,
 ) -> Result<(), String> {
     let cm = consent_marketing.unwrap_or(false);
     let stmt = db.prepare(
@@ -37,24 +38,38 @@ pub(crate) async fn upsert_attendee(
          claim_token = COALESCE(attendees.claim_token, excluded.claim_token), \
          updated_at = datetime('now')",
     );
-    stmt.bind_refs(&[
-        D1Type::Text(id),
-        D1Type::Text(event_id),
-        D1Type::Text(email),
-        D1Type::Text(name),
-        D1Type::Text(approval_status),
-        D1Type::Text(participation_type),
-        D1Type::Text(contact_channel),
-        D1Type::Text(contact_handle),
-        D1Type::Integer(if cm { 1 } else { 0 }),
-        D1Type::Text(claim_token.unwrap_or("")),
-    ])
-    .map_err(|e| format!("D1 upsert_attendee bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 upsert_attendee run: {e:?}"))?;
+    let attendee = stmt
+        .bind_refs(&[
+            D1Type::Text(id),
+            D1Type::Text(event_id),
+            D1Type::Text(email),
+            D1Type::Text(name),
+            D1Type::Text(approval_status),
+            D1Type::Text(participation_type),
+            D1Type::Text(contact_channel),
+            D1Type::Text(contact_handle),
+            D1Type::Integer(if cm { 1 } else { 0 }),
+            D1Type::Text(claim_token.unwrap_or("")),
+        ])
+        .map_err(|e| format!("D1 upsert_attendee bind: {e:?}"))?;
+    let mut statements = vec![attendee];
+    if notify_verified_email {
+        statements.push(db.prepare(
+            "INSERT OR IGNORE INTO notification_enrollments(attendee_id,event_id) VALUES (?1,?2)"
+        ).bind_refs(&[D1Type::Text(id),D1Type::Text(event_id)])
+         .map_err(|e| format!("notification enrollment bind: {e:?}"))?);
+    }
+    db.batch(statements)
+        .await
+        .map_err(|e| format!("D1 registration batch: {e:?}"))?;
 
     Ok(())
+}
+
+/// One `RETURNING id` row from [`upsert_post_event_attendee`].
+#[derive(serde::Deserialize)]
+struct AttendeeIdRow {
+    id: String,
 }
 
 /// Insert a post-event registration attendee row (Plan 008 — Phase 3).
@@ -64,6 +79,21 @@ pub(crate) async fn upsert_attendee(
 /// post-event registrants are leads, not attendees. They're naturally excluded
 /// from capacity / check-in queries that filter on `approval_status = 'approved'`
 /// or `registration_phase = 'pre_event'`.
+///
+/// Returns the id of the row that now holds the registration — `id` for a fresh
+/// insert, the pre-existing row's id when the submission was a repeat.
+///
+/// The conflict target is the partial unique index
+/// `idx_attendees_unique_event_email (event_id, LOWER(email)) WHERE
+/// participation_type <> 'walkin'`, **not** `id`: the caller mints a fresh
+/// `Uuid::now_v7()` per request, so an `ON CONFLICT (id)` clause can never fire
+/// and a repeat submission would abort on the unique index instead of updating.
+///
+/// The `DO UPDATE` set deliberately omits `approval_status`,
+/// `participation_type` and `registration_phase`. The conflicting row may be a
+/// real pre-event registration (an in-person attendee filling in the lead form
+/// afterwards); refreshing their consent and contact details is right, demoting
+/// them to a `retrospective` `post_event_registered` lead is not.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn upsert_post_event_attendee(
     db: &D1Database,
@@ -75,37 +105,43 @@ pub(crate) async fn upsert_post_event_attendee(
     contact_channel: &str,
     contact_handle: &str,
     consent_marketing: Option<bool>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let cm = consent_marketing.unwrap_or(false);
     let stmt = db.prepare(
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
          contact_channel, contact_handle, consent_marketing, consent_marketing_at, registration_phase, created_at, updated_at) \
          VALUES (?1, ?2, ?3, ?4, 'post_event_registered', ?5, ?6, ?7, ?8, datetime('now'), 'post_event', datetime('now'), datetime('now')) \
-         ON CONFLICT (id) DO UPDATE SET \
+         ON CONFLICT (event_id, LOWER(email)) WHERE participation_type <> 'walkin' DO UPDATE SET \
          name = excluded.name, \
-         participation_type = excluded.participation_type, \
          contact_channel = excluded.contact_channel, \
          contact_handle = excluded.contact_handle, \
          consent_marketing = excluded.consent_marketing, \
          consent_marketing_at = excluded.consent_marketing_at, \
-         updated_at = datetime('now')",
+         updated_at = datetime('now') \
+         RETURNING id",
     );
-    stmt.bind_refs(&[
-        D1Type::Text(id),
-        D1Type::Text(event_id),
-        D1Type::Text(email),
-        D1Type::Text(name),
-        D1Type::Text(participation_type),
-        D1Type::Text(contact_channel),
-        D1Type::Text(contact_handle),
-        D1Type::Integer(if cm { 1 } else { 0 }),
-    ])
-    .map_err(|e| format!("D1 upsert_post_event_attendee bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 upsert_post_event_attendee run: {e:?}"))?;
+    let rows = stmt
+        .bind_refs(&[
+            D1Type::Text(id),
+            D1Type::Text(event_id),
+            D1Type::Text(email),
+            D1Type::Text(name),
+            D1Type::Text(participation_type),
+            D1Type::Text(contact_channel),
+            D1Type::Text(contact_handle),
+            D1Type::Integer(if cm { 1 } else { 0 }),
+        ])
+        .map_err(|e| format!("D1 upsert_post_event_attendee bind: {e:?}"))?
+        .all()
+        .await
+        .map_err(|e| format!("D1 upsert_post_event_attendee run: {e:?}"))?
+        .results::<AttendeeIdRow>()
+        .map_err(|e| format!("D1 upsert_post_event_attendee deserialize: {e:?}"))?;
 
-    Ok(())
+    rows.into_iter()
+        .next()
+        .map(|row| row.id)
+        .ok_or_else(|| "D1 upsert_post_event_attendee: no row returned".to_string())
 }
 
 /// Write check-in data to D1 (dual-write alongside Sheets).
@@ -159,16 +195,27 @@ pub(crate) async fn claim_attendee(
          updated_at = datetime('now') \
          WHERE claim_token = ?4",
     );
-    stmt.bind_refs(&[
-        D1Type::Text(claimed_at),
-        D1Type::Text(claim_asset_id),
-        D1Type::Text(claim_signature),
-        D1Type::Text(claim_token),
-    ])
-    .map_err(|e| format!("D1 claim_attendee bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 claim_attendee run: {e:?}"))?;
+    let result = stmt
+        .bind_refs(&[
+            D1Type::Text(claimed_at),
+            D1Type::Text(claim_asset_id),
+            D1Type::Text(claim_signature),
+            D1Type::Text(claim_token),
+        ])
+        .map_err(|e| format!("D1 claim_attendee bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 claim_attendee run: {e:?}"))?;
+
+    let changes = result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|meta| meta.changes)
+        .unwrap_or(0);
+    if changes == 0 {
+        return Err("D1 claim_attendee updated no attendee row".to_string());
+    }
 
     Ok(())
 }

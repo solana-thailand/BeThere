@@ -229,11 +229,14 @@ shape that `create` still accepted, so the form would tell the organizer one
 thing and the server do another. `validate_campaign_id` is therefore enforced on
 **both** paths, which also closes a pre-existing SQL-injection vector on an
 authenticated admin endpoint.
-**Not fixed, and still open:** the same interpolation applies to `title`,
-`description`, `completion_criteria`, `reward_type` and `reward_config` in
-`create_campaign`/`update_campaign`, and to ids across the rest of
-`db/campaigns.rs`. That is a module-wide parameter-binding refactor, out of
-scope here — tracked as a follow-up, not silently absorbed.
+**Not fixed here, and tracked as a follow-up:** the same interpolation applied
+to `title`, `description`, `completion_criteria`, `reward_type` and
+`reward_config` in `create_campaign`/`update_campaign`, and to ids across the
+rest of `db/campaigns.rs`. That module-wide parameter-binding refactor was out
+of scope here.
+**Resolved since:** the free-text columns were bound in `a3a5c64` and the
+audit was widened across `worker/src/db` — see `.plans/020_sql_parameter_binding.md`.
+The residual id/email predicates are that plan's open Phase 2.
 
 **Frontend** (`api/campaign.rs`, `pages/campaigns_page.rs`, `style.css`)
 - `api::campaign_exists(id)` over the generic `api_get_json<T>`; the id is

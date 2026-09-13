@@ -39,7 +39,7 @@ pub async fn my_registration(
 
     let config = crate::event_store::resolve_event_by_slug(kv, slug, state.d1.as_deref())
         .await
-        .map_err(AppError::NotFound)?;
+        .map_err(AppError::from)?;
 
     // Fetch attendees and find by email (case-insensitive)
     let attendees = sheets::get_attendees_for_event(
@@ -59,9 +59,10 @@ pub async fn my_registration(
         .iter()
         .find(|a| a.email.eq_ignore_ascii_case(&claims.email))
         .ok_or_else(|| {
+            // No email in the message: `WorkerError` logs error strings verbatim
+            // on any 5xx, and the requester already knows their own address.
             AppError::NotFound(format!(
-                "no registration found for {} at event '{slug}'",
-                claims.email
+                "no registration found for your account at event '{slug}'"
             ))
         })?;
 
@@ -96,7 +97,7 @@ pub async fn my_registration(
     );
 
     tracing::info!(
-        email = %claims.email,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         slug = %slug,
         attendee_id = %attendee.api_id,
         "my-registration lookup successful"
@@ -124,8 +125,25 @@ pub async fn my_registrations(
     let kv = state.events_kv.as_ref();
     let d1 = state.d1.as_deref();
 
+    // Production has D1 as its source of truth. Resolve only this user's rows
+    // in one indexed join instead of loading every active event and its full
+    // attendee list. The legacy KV/Sheets path below remains as a failover for
+    // environments without D1.
+    if let Some(db) = d1 {
+        let results = my_registrations_from_d1(db, &claims.email, &state)
+            .await
+            .map_err(AppError::Internal)?;
+        tracing::info!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            count = results.len(),
+            source = "d1",
+            "my-registrations lookup complete"
+        );
+        return Ok(ApiOk::new(results));
+    }
+
     // Build list of (event_id, event_name, event_slug, event_start_ms, EventConfig)
-    // from KV index → D1 fallback
+    // from the legacy KV index. D1 returned above.
     let event_list: Vec<(
         String,
         String,
@@ -154,25 +172,6 @@ pub async fn my_registrations(
             }
         }
         list
-    } else if let Some(db) = d1 {
-        // D1 fallback: list all events
-        let rows = crate::db::events::list_events(db)
-            .await
-            .map_err(AppError::Internal)?;
-        rows.into_iter()
-            .filter(|r| {
-                let status = r.status.as_deref().unwrap_or("");
-                status != "completed" && status != "archived"
-            })
-            .map(|r| {
-                let config = r.to_event_config();
-                let id = config.id.clone();
-                let name = config.name.clone();
-                let slug = config.slug.clone();
-                let start_ms = config.event_start_ms;
-                (id, name, slug, start_ms, config)
-            })
-            .collect()
     } else {
         return Err(AppError::Internal("neither KV nor D1 configured".to_string()).into());
     };
@@ -289,12 +288,88 @@ pub async fn my_registrations(
         .collect();
 
     tracing::info!(
-        email = %claims.email,
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         count = results.len(),
         "my-registrations lookup complete"
     );
 
     Ok(ApiOk::new(results))
+}
+
+#[derive(serde::Deserialize)]
+struct RegistrationSnapshot {
+    event_id: String,
+    event_name: String,
+    event_slug: String,
+    event_start_ms: i64,
+    event_format: String,
+    attendee_id: String,
+    name: String,
+    participation_type: String,
+    claim_token: Option<String>,
+    checked_in: i64,
+    claimed: i64,
+    deposit_exists: i64,
+    deposit_verified: i64,
+    real_deposit: i64,
+}
+
+async fn my_registrations_from_d1(
+    db: &worker::D1Database,
+    email: &str,
+    state: &AppState,
+) -> Result<Vec<MyRegistrationsItem>, String> {
+    let stmt = db
+        .prepare(include_str!("../sql/my_registrations.sql"))
+        .bind_refs(&[worker::d1::D1Type::Text(email)])
+        .map_err(|e| format!("D1 my-registrations bind: {e:?}"))?;
+    crate::db::d1_safe::safe_all_rows(&stmt)
+        .await?
+        .into_iter()
+        .map(|value| {
+            let row: RegistrationSnapshot = serde_json::from_value(value)
+                .map_err(|e| format!("D1 my-registrations row: {e}"))?;
+            let format = serde_json::from_value::<EventFormat>(serde_json::Value::String(
+                row.event_format.clone(),
+            ))
+            .unwrap_or_default();
+            let is_claimed = row.claimed != 0;
+            let is_checked_in = row.checked_in != 0;
+            let next_step = build_next_step_from_presence(
+                &format,
+                &row.event_id,
+                &row.attendee_id,
+                row.claim_token.as_deref().unwrap_or(""),
+                state,
+                row.real_deposit != 0,
+                &row.participation_type,
+                is_checked_in,
+                is_claimed,
+            );
+            let status = if is_claimed {
+                "nft claimed"
+            } else if is_checked_in {
+                "checked in"
+            } else if row.deposit_verified != 0 {
+                "deposit confirmed"
+            } else if row.deposit_exists != 0 {
+                "deposit pending"
+            } else {
+                "registered"
+            };
+            Ok(MyRegistrationsItem {
+                event_id: row.event_id,
+                event_name: row.event_name,
+                event_slug: row.event_slug,
+                event_start_ms: row.event_start_ms,
+                attendee_id: row.attendee_id,
+                name: row.name,
+                participation_type: row.participation_type,
+                status: status.into(),
+                next_step,
+            })
+        })
+        .collect()
 }
 
 /// Build the next_step response based on event format, deposit, and check-in status.
@@ -314,6 +389,39 @@ pub(super) fn build_next_step(
     claim_token: &str,
     state: &AppState,
     deposit: Option<&event_checkin_domain::models::deposit::DepositStatus>,
+    participation_type: &str,
+    is_checked_in: bool,
+    is_claimed: bool,
+) -> NextStep {
+    let real_deposit = deposit.is_some_and(|d| {
+        d.verified
+            || !matches!(
+                d.method,
+                event_checkin_domain::models::deposit::DepositMethod::Usdc
+            )
+            || d.tx_signature.as_deref().is_some_and(|t| !t.is_empty())
+    });
+    build_next_step_from_presence(
+        format,
+        event_id,
+        api_id,
+        claim_token,
+        state,
+        real_deposit,
+        participation_type,
+        is_checked_in,
+        is_claimed,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn build_next_step_from_presence(
+    format: &EventFormat,
+    event_id: &str,
+    api_id: &str,
+    claim_token: &str,
+    state: &AppState,
+    real_deposit: bool,
     participation_type: &str,
     is_checked_in: bool,
     is_claimed: bool,
@@ -351,14 +459,6 @@ pub(super) fn build_next_step(
         // pending record). Treat it as "no deposit" so the attendee is sent
         // back to the deposit page to retry, not to the ticket page.
         // Real deposits (verified, or carrying a tx_signature) count.
-        let real_deposit = deposit.is_some_and(|d| {
-            d.verified
-                || !matches!(
-                    d.method,
-                    event_checkin_domain::models::deposit::DepositMethod::Usdc
-                )
-                || d.tx_signature.as_deref().is_some_and(|t| !t.is_empty())
-        });
         if real_deposit {
             // Deposit exists (verified or pending with a TX) — show ticket page
             NextStep {

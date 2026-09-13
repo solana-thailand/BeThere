@@ -112,7 +112,10 @@ pub async fn mark_refund_handler(
         .into());
     }
 
-    // Mirror the settled state into KV (D1 already flipped by the CAS above).
+    // Reflect the settled state on the in-memory record — it feeds the Sheets
+    // write and the response below. D1 was already flipped by the CAS; the save
+    // persists the non-settlement columns (and the whole struct on the KV
+    // fallback path, where there is no CAS).
     thb_deposit.refunded = true;
     thb_deposit.refunded_at = Some(now.clone());
     thb_deposit.refund_proof_url = Some(refund_proof_url.clone());
@@ -123,7 +126,7 @@ pub async fn mark_refund_handler(
     tracing::info!(
         attendee_id = %attendee_id,
         event_id = %event.id,
-        marker = %claims.email,
+        marker_fingerprint = %state.log_fingerprint(&claims.email),
         "THB refund marked complete"
     );
 
@@ -321,7 +324,9 @@ pub async fn batch_thb_refund_handler(
             skipped += 1;
             continue;
         }
-        // Mirror into KV (D1 already flipped by the CAS above).
+        // Reflect on the in-memory record for the Sheets write below. D1 was
+        // already flipped by the CAS; the save persists the non-settlement
+        // columns (and the whole struct on the KV fallback path).
         dep.refunded = true;
         dep.refunded_at = Some(now.clone());
         event_store::save_thb_deposit(kv, &dep, d1)
@@ -335,7 +340,7 @@ pub async fn batch_thb_refund_handler(
         event_id = %event.id,
         refunded,
         skipped,
-        marker = %claims.email,
+        marker_fingerprint = %state.log_fingerprint(&claims.email),
         "Batch THB refund completed"
     );
 
@@ -574,7 +579,7 @@ pub async fn mark_manual_refund_handler(
         %attendee_id,
         status = %body.refund_status,
         has_link = body.refund_link.is_some(),
-        marker = %claims.email,
+        marker_fingerprint = %state.log_fingerprint(&claims.email),
         "Manual refund status set"
     );
 

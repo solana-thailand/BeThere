@@ -8,7 +8,7 @@
 use serde::Deserialize;
 
 use super::fetch::get as http_get;
-use super::{ApiResponse, ApiError, api_base, response_json, response_text};
+use super::{ApiError, ApiResponse, api_base, response_json, response_text};
 
 /// One event in an ordered series (playlist position).
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -67,17 +67,18 @@ pub async fn get_event_series(event_id: &str) -> Result<Option<EventSeries>, Api
             correlation_id: None,
         });
         return Err(ApiError {
-            message: body.error.unwrap_or_else(|| format!("HTTP {}", response.status())),
+            message: body
+                .error
+                .unwrap_or_else(|| format!("HTTP {}", response.status())),
             status: response.status(),
         });
     }
 
     let json = response_text(&response).await?;
-    let wrapper: ApiResponse<EventSeries> =
-        serde_json::from_str(&json).map_err(|e| ApiError {
-            message: format!("Failed to parse event series: {e}"),
-            status: 0,
-        })?;
+    let wrapper: ApiResponse<EventSeries> = serde_json::from_str(&json).map_err(|e| ApiError {
+        message: format!("Failed to parse event series: {e}"),
+        status: 0,
+    })?;
 
     wrapper.data.map(Some).ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or_else(|| "No data".to_string()),

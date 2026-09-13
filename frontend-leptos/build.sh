@@ -9,6 +9,12 @@
 
 set -euo pipefail
 
+# Trunk reads NO_COLOR as a boolean option. Some shells and agent runtimes use
+# the conventional NO_COLOR=1 form, which Trunk 0.21 rejects before building.
+if [[ -n "${NO_COLOR:-}" && "${NO_COLOR}" != "true" && "${NO_COLOR}" != "false" ]]; then
+    export NO_COLOR=true
+fi
+
 cleanup_html() {
     echo "🧹 Cleaning trunk live-reload script from dist/index.html..."
     python3 << 'PY'
@@ -68,8 +74,11 @@ build() {
     # Trunk only copies JS files directly referenced by #[wasm_bindgen(module = "...")].
     # lazy_assets.js is imported by scanner.js/clipboard.js but not by Rust directly,
     # so trunk skips it. Copy manually to avoid module resolution failures at runtime.
-    SNIPPET_DIR="$(ls -d dist/snippets/event-checkin-frontend-*/js 2>/dev/null | head -1)"
-    if [[ -n "$SNIPPET_DIR" && -f js/lazy_assets.js ]]; then
+    # An unmatched glob expands to the literal pattern, so test the directory
+    # itself rather than the string being non-empty.
+    SNIPPET_DIRS=(dist/snippets/event-checkin-frontend-*/js)
+    SNIPPET_DIR="${SNIPPET_DIRS[0]}"
+    if [[ -d "$SNIPPET_DIR" && -f js/lazy_assets.js ]]; then
         cp js/lazy_assets.js "$SNIPPET_DIR/lazy_assets.js"
         echo "📋 Copied js/lazy_assets.js → $SNIPPET_DIR/lazy_assets.js"
     else
@@ -88,7 +97,7 @@ if [[ "${1:-}" == "--watch" ]]; then
     echo ""
     ~/.cargo/bin/cargo-watch \
         -w src \
-        -w style.css \
+        -w styles \
         -w index.html \
         -s 'bash build.sh'
 else

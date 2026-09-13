@@ -282,20 +282,89 @@ leaf-creation), already caveated in `docs/sources.md` §3 — not an error.
 
 **Two things to fix in `scripts/make_pitch_deck.py` before submission:**
 
-- [ ] **5.6a Regenerate the measured numbers** so the deck stops understating
-      (`250+` → `489`, and the per-suite counts above).
+- [x] **5.6a Regenerate the measured numbers** so the deck stops understating.
+      Done 2026-09-04 — but the target was `567+`, not `489`; see §5.7.
 - [ ] **5.6b Decide the deposit framing** — the deck says "$5 USDC deposit"
       (lines ~538, 643, 867, 877, 974); production is THB 500 settled on Solana.
       Also `("Deposits Verified", "0")` at line ~1425 is simply stale: the real
       figures are 47 verified, 64 on-chain deposit signatures, 18 on-chain
       refunds. The *numbers* are settled fact; how to frame baht-vs-USDC to an
-      investor is a positioning call and therefore yours.
+      investor is a positioning call and therefore yours. **The "Deposits Verified 0
+      is stale" half of this item was wrong — see §5.7.**
 
 **Why I did not just do it:** `.plans/002` sets a non-negotiable — *"every change
 to the deck must be rebuilt and visually confirmed."* I can regenerate the
 `.pptx` but cannot visually confirm it, so applying these unverified would break
 the very discipline that makes the deck trustworthy. Both items are one command
 plus one look.
+
+### 5.7 Applying §5.6a — and two corrections to §5.6 (2026-09-04)
+
+**The drift checker was measuring the wrong program.** Before any deck number
+could be trusted, `scripts/measure_metrics.py` had to be fixed:
+`collect_program_size()` globbed `*.so` under `target/deploy/` and picked the
+**newest by mtime**. The cargo target dir is shared across projects (CLAUDE.md),
+so that directory also holds `afterswap_policy.so`, `hedge_program.so` and
+`stocksie.so` — and `afterswap_policy.so`, rebuilt 2026-09-01, had become the
+newest. The checker was reporting **47,088 B**, another project's program, as
+BeThere's, and would have written it into the deck. Now matched by name
+(`ESCROW_SO_STEM`), and `bethere_escrow.so` reports **89,856 B — matches the
+deck** again, exactly as §5.6 claimed before the artifact went stale.
+
+**The §5.6 test table was itself stale.** Re-measured 2026-09-04:
+
+| Metric | Deck said | §5.6 measured (08-21) | Measured now |
+|---|---|---|---|
+| On-chain SVM | 54 | 65 | **65** |
+| Domain | 73 | 125 | **168** |
+| Worker | 123 | 299 | **334** |
+| **Executed & passing** | **250+** | 489 | **567** |
+| Frontend (static, not executed) | 147 | — | **181** |
+| Static total across stack | 397 | — | **748** |
+
+So the deck understated by **2.3x**, not 2x, and §5.6a's target of `489` was
+already 78 tests behind by the time it was written.
+
+**What changed in `scripts/make_pitch_deck.py`:** the five hard-coded `250+`
+literals (two slide stats, one repo card, two speaker notes) now read from a
+single `TESTS_PASSING = "567+"` constant at the top of the file, alongside
+`PROGRAM_SIZE`, `LOC_FRONTEND` and `LOC_ESCROW`. Scattering checkable numbers
+through 2,800 lines is why they went stale; there is now one place to change.
+
+Two further understatements found while doing it — same direction, same cause:
+
+| Claim | Deck said | `wc -l` over `src/**/*.rs` |
+|---|---|---|
+| Frontend LOC | 38.6K | **50.3K** |
+| `bethere-escrow` LOC | 6.2K | **7.8K** |
+
+`scripts/measure_metrics.py`'s `DECK_*` constants were updated to match, so the
+checker's steady state is now clean. The only two remaining non-matches are the
+intended ones: `fee_per_cnft_usd` (documented model choice, `docs/sources.md` §3)
+and `checkin_latency_ms` (needs a deployed edge probe). Previously *every* suite
+reported permanent DRIFT, which trains a reader to ignore the checker.
+
+**Correction to §5.6b: `("Deposits Verified", "0")` is not stale.** That tile is
+on slide 7, `slide_07_dashboard`, titled *"IslandDAO V4 · Centerpiece — Live
+Aggregate Dashboard, the room watches itself"*, subtitled *"Project
+/dashboard/live on the big screen. Polls D1 every 2.5s."* All five tiles read
+`0`/`$0`, including Registered and Checked-In. They are the **pre-event starting
+state of a live demo that counts up in the room**, not a claim about production
+totals. Setting Deposits Verified to 47 while Registered stayed 0 would have made
+the slide incoherent. Filling all five with prod aggregates is possible but
+changes the slide from a live-demo mock into a stats slide — a positioning
+choice, so left alone. §5.6b's numbers (47 verified, 64 on-chain deposit
+signatures, 18 refunds) remain correct as facts; only their claimed *location* in
+the deck was wrong.
+
+This is the same failure mode §3 records: asserting from a partial read. The
+line was flagged from a grep hit without reading the enclosing function.
+
+**Still not done:** the rebuilt `.deliverables/bethere-pitch.pptx` (17 slides,
+125,344 B) was verified by reading its shape text back out with `python-pptx` —
+`567+` on slides 7 and 13, `50.3K LOC` / `7.8K LOC` / `88 KB` on slide 7,
+`567+ tests` on 17. That is a text check, **not** the visual confirmation
+`.plans/002` requires. One look at the deck closes the DoD item.
 
 ---
 
@@ -348,8 +417,11 @@ checkbox is blocked on a decision, not on engineering.
 - [x] §5.5 payment-rail framing corrected against the prod dataset.
 - [x] §5.6 deck drift measured via `scripts/measure_metrics.py`; deck understates
       total tests by ~2× (250+ claimed vs 489 measured).
-- [ ] §5.6a/§5.6b deck regenerated and visually confirmed. *Blocked on a human
-      look, per `.plans/002`'s non-negotiable.*
+- [~] §5.6a applied and the deck regenerated (2026-09-04, §5.7); §5.6b's
+      baht-vs-USDC framing is still the founder's call. **Visual confirmation of
+      the rebuilt `.pptx` is still outstanding**, per `.plans/002`'s
+      non-negotiable — the text was verified by reading the shapes back out of
+      the file, which is not the same as looking at the slides.
 - [ ] §4.2 building-in-public decided (A or B). *Prepared with costs; the call
       is the founder's. Not marked complete on a recommendation alone.*
 - [ ] §5 eligibility answered by the organizers. **Still blocking** — none of the

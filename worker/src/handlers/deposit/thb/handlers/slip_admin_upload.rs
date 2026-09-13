@@ -96,7 +96,7 @@ pub async fn admin_upload_thb_slip_handler(
     tracing::info!(
         attendee_id = %body.attendee_id,
         event_id = %body.event_id,
-        admin_email = %claims.email,
+        admin_fingerprint = %state.log_fingerprint(&claims.email),
         auto_verify = body.auto_verify,
         "admin slip upload initiated"
     );
@@ -492,7 +492,7 @@ pub async fn admin_upload_thb_slip_handler(
         event_id = %event.id,
         amount_thb = event.deposit_amount_thb,
         verified,
-        admin_email = %claims.email,
+        admin_fingerprint = %state.log_fingerprint(&claims.email),
         "admin slip upload completed"
     );
 

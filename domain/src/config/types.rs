@@ -88,6 +88,19 @@ impl SolanaConfig {
             self.api_key
         )
     }
+
+    /// Whether the hosted Crossmint mint path can accept a claim.
+    ///
+    /// Helius credentials are used only for RPC/DAS reads. They must never be
+    /// used as a proxy for NFT mint readiness: the mint executor requires a
+    /// Crossmint API key, collection, and a recognized cluster host.
+    pub fn crossmint_minting_configured(&self) -> bool {
+        matches!(
+            self.crossmint_host.trim_end_matches('/'),
+            "staging.crossmint.com" | "www.crossmint.com"
+        ) && !self.crossmint_api_key.trim().is_empty()
+            && !self.crossmint_collection_id.trim().is_empty()
+    }
 }
 
 impl fmt::Debug for SolanaConfig {
@@ -99,6 +112,32 @@ impl fmt::Debug for SolanaConfig {
             .field("crossmint_api_key", &"***REDACTED***")
             .field("crossmint_collection_id", &self.crossmint_collection_id)
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod solana_config_tests {
+    use super::SolanaConfig;
+
+    fn config(host: &str, crossmint_key: &str, collection: &str) -> SolanaConfig {
+        SolanaConfig {
+            rpc_url: "https://devnet.helius-rpc.com".to_string(),
+            api_key: "helius-read-key".to_string(),
+            crossmint_host: host.to_string(),
+            crossmint_api_key: crossmint_key.to_string(),
+            crossmint_collection_id: collection.to_string(),
+        }
+    }
+
+    #[test]
+    fn mint_readiness_uses_crossmint_not_helius_credentials() {
+        assert!(!config("staging.crossmint.com", "", "collection").crossmint_minting_configured());
+        assert!(!config("staging.crossmint.com", "key", "").crossmint_minting_configured());
+        assert!(!config("crossmint.invalid", "key", "collection").crossmint_minting_configured());
+        assert!(config("www.crossmint.com", "key", "collection").crossmint_minting_configured());
+        assert!(
+            config("staging.crossmint.com/", "key", "collection").crossmint_minting_configured()
+        );
     }
 }
 
@@ -222,6 +261,12 @@ pub struct AppConfig {
     /// Slack incoming-webhook URL for server-error (5xx) alerts. Empty disables
     /// alerting (the middleware becomes a no-op). Best-effort, fire-and-forget.
     pub slack_webhook_url: String,
+    // ---- Capability tokens ----
+    /// Seconds after check-in that a claim/quiz/adventure capability token stays
+    /// usable (Issue 071). Claim tokens travel in the URL path, so Cloudflare's
+    /// platform request log records them; this bounds the replay window that
+    /// exposure opens. `0` disables the check. Set via `CLAIM_TOKEN_TTL_SECS`.
+    pub claim_token_ttl_secs: i64,
 }
 
 impl fmt::Debug for AppConfig {

@@ -90,12 +90,10 @@ pub fn EventSummary() -> impl IntoView {
         });
     });
 
-    let is_loading = move || {
-        matches!(load_state.get(), SummaryLoadState::Loading) && data.get().is_none()
-    };
-    let is_hard_failure = move || {
-        matches!(load_state.get(), SummaryLoadState::Failed(_)) && data.get().is_none()
-    };
+    let is_loading =
+        move || matches!(load_state.get(), SummaryLoadState::Loading) && data.get().is_none();
+    let is_hard_failure =
+        move || matches!(load_state.get(), SummaryLoadState::Failed(_)) && data.get().is_none();
 
     view! {
         <Title text="Event Summary — BeThere" />

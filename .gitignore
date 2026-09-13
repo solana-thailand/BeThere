@@ -1,5 +1,8 @@
 # Rust
 /target/
+/target-harness/
+/target-frontend-check/
+/target-escrow/
 debug/
 *.pdb
 
@@ -79,6 +82,9 @@ scripts/.metrics.json
 !.dev.vars.example
 target
 
+# cargo-heal local account, metering, and trajectory state
+/.heal/
+
 # Claude Code personal overrides (project settings.json stays tracked)
 .claude/settings.local.json
 
@@ -87,3 +93,9 @@ target
 rustc-ice-*.txt
 # Bare Solana program-id-named binaries accidentally dropped at repo root
 /C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T
+
+# Prod data exports (never commit)
+/exports/
+
+# pnpm store (parked Wrangler 4.131.1 review — never commit, see .issues/069)
+.pnpm-store/

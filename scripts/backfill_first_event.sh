@@ -173,7 +173,10 @@ d1_connected=$(echo "$health" | json_get "['d1']['connected']")
 if [[ "$health_status" == "ok" && "$d1_connected" == "True" ]]; then
   pass "worker healthy at $BASE_URL (status=ok, d1.connected=true)"
 else
-  fail "worker not healthy — is `bash deploy.sh dev --remote` running?"
+  # Backticks MUST stay escaped: unescaped inside a double-quoted string they
+  # are command substitution, and this one ran `bash deploy.sh dev --remote`
+  # every time the health check failed (and blanked the message). Issue #065.
+  fail "worker not healthy — is \`bash deploy.sh dev --remote\` running?"
   echo "   status=$health_status d1.connected=$d1_connected"
   echo "   Response: $(echo "$health" | head -c 200)"
   exit 1

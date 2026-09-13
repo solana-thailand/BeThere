@@ -1,8 +1,8 @@
+use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_query_map;
 use serde::{Deserialize, Serialize};
-use crate::icons::{Icon, IconName};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NfcCheckinResult {
@@ -45,7 +45,8 @@ pub fn NfcCheckin() -> impl IntoView {
             let supported = js_sys::Reflect::has(&win, &"NDEFReader".into()).unwrap_or(false);
             nfc_supported.set(supported);
             if supported {
-                let _ = js_sys::eval(r#"
+                let _ = js_sys::eval(
+                    r#"
                     if ('NDEFReader' in window) {
                         try {
                             const ndef = new NDEFReader();
@@ -54,7 +55,8 @@ pub fn NfcCheckin() -> impl IntoView {
                             }).catch(e => console.log("WebNFC info:", e));
                         } catch(e) {}
                     }
-                "#);
+                "#,
+                );
             }
         }
     });
@@ -70,7 +72,8 @@ pub fn NfcCheckin() -> impl IntoView {
                 "event_slug": slug,
                 "nonce": nonce,
                 "timestamp": js_sys::Date::now()
-            }).to_string();
+            })
+            .to_string();
 
             // NFC tap check-in is not implemented server-side yet. Only report
             // success on a genuine verified server response — never fabricate a
@@ -79,9 +82,13 @@ pub fn NfcCheckin() -> impl IntoView {
                 "/api/checkin/nfc/verify",
                 &[("Content-Type", "application/json")],
                 Some(body_str),
-            ).await {
+            )
+            .await
+            {
                 Ok(resp) if resp.status() == 200 => {
-                    if let Ok(wrapper) = crate::api::fetch::response_json::<ApiWrapper<NfcCheckinResult>>(&resp).await
+                    if let Ok(wrapper) =
+                        crate::api::fetch::response_json::<ApiWrapper<NfcCheckinResult>>(&resp)
+                            .await
                         && let Some(res) = wrapper.data
                         && res.success
                         && res.tx_signature.is_some()
@@ -90,12 +97,18 @@ pub fn NfcCheckin() -> impl IntoView {
                         tx_sig.set(res.tx_signature);
                     } else {
                         status.set("error".to_string());
-                        error_msg.set(Some("NFC check-in isn't available yet. Please use QR check-in at the desk.".to_string()));
+                        error_msg.set(Some(
+                            "NFC check-in isn't available yet. Please use QR check-in at the desk."
+                                .to_string(),
+                        ));
                     }
                 }
                 _ => {
                     status.set("error".to_string());
-                    error_msg.set(Some("NFC check-in isn't available yet. Please use QR check-in at the desk.".to_string()));
+                    error_msg.set(Some(
+                        "NFC check-in isn't available yet. Please use QR check-in at the desk."
+                            .to_string(),
+                    ));
                 }
             }
         });

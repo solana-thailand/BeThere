@@ -36,8 +36,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signer::keypair::Keypair;
 use solana_sdk::signer::Signer;
+use solana_sdk::signer::keypair::Keypair;
 use url::Url;
 
 use crate::error::{HarnessError, HarnessResult};
@@ -124,6 +124,19 @@ impl StagingContext {
             std::env::var("FLOW_HARNESS_WORKER_URL").ok().as_deref(),
         )?;
 
+        let missing = missing_required_env(&[
+            "FLOW_HARNESS_ORGANIZER",
+            "FLOW_HARNESS_ATTENDEE_WALLET",
+            "FLOW_HARNESS_PAYER_KEYPAIR",
+            "FLOW_HARNESS_DEPOSIT_MINT",
+        ]);
+        if !missing.is_empty() {
+            return Err(HarnessError::Config(format!(
+                "missing required live fixture input(s): {}. See flow-harness/README.md for the staging setup.",
+                missing.join(", ")
+            )));
+        }
+
         let event_id_str = std::env::var("FLOW_HARNESS_EVENT_ID")
             .unwrap_or_else(|_| DEFAULT_EVENT_ID_STR.to_string());
 
@@ -132,11 +145,11 @@ impl StagingContext {
             .map(|s| s.parse::<u64>())
             .transpose()
             .map_err(|e| HarnessError::Config(format!("FLOW_HARNESS_EVENT_ID_ON_CHAIN: {e}")))?
-            // Default mirrors the worker's string→u64 mapping for the seeded
-            // test event. The worker is the SSOT; this default exists so a
-            // freshly-seeded staging env works with zero env setup. Override
-            // via env when the worker's mapping differs.
-            .unwrap_or(1);
+            // Mirrors the Worker's stable FNV-1a mapping. Keeping this pure
+            // helper in the harness lets a fresh named fixture run without a
+            // manually copied on-chain ID, while an explicit env override
+            // remains available for a deliberately custom ID.
+            .unwrap_or_else(|| derive_on_chain_event_id(&event_id_str));
 
         let organizer = read_pubkey_env("FLOW_HARNESS_ORGANIZER")?;
         let attendee_wallet = read_pubkey_env("FLOW_HARNESS_ATTENDEE_WALLET")?;
@@ -144,14 +157,25 @@ impl StagingContext {
             .unwrap_or_else(|_| DEFAULT_ATTENDEE_EMAIL.to_string());
 
         let payer = load_payer_keypair()?;
+        if payer.pubkey() != attendee_wallet {
+            return Err(HarnessError::Config(format!(
+                "FLOW_HARNESS_PAYER_KEYPAIR pubkey ({}) must equal \
+                 FLOW_HARNESS_ATTENDEE_WALLET ({attendee_wallet}); worker deposit/refund \
+                 transactions require the attendee as fee payer and signer",
+                payer.pubkey()
+            )));
+        }
         let escrow_program_id = read_pubkey_env("FLOW_HARNESS_ESCROW_PROGRAM_ID")
             .unwrap_or_else(|_| pubkey_from_str(ESCROW_PROGRAM_ID));
         let deposit_mint = read_pubkey_env("FLOW_HARNESS_DEPOSIT_MINT")?;
         let rpc_url = {
             let raw = std::env::var("FLOW_HARNESS_RPC_URL")
                 .unwrap_or_else(|_| DEFAULT_RPC_URL.to_string());
-            Url::parse(&raw).map_err(|e| HarnessError::Config(format!("FLOW_HARNESS_RPC_URL: {e}")))?
+            Url::parse(&raw)
+                .map_err(|e| HarnessError::Config(format!("FLOW_HARNESS_RPC_URL: {e}")))?
         };
+
+        validate_live_target(&worker_url, &rpc_url)?;
 
         Ok(Self {
             worker_url,
@@ -245,15 +269,57 @@ impl StagingContext {
 
     /// Worker-side URL for a deposit-status fetch.
     pub fn deposit_status_url(&self, attendee_id: &str) -> HarnessResult<Url> {
-        join_path(
+        let mut url = join_path(
             &self.worker_url,
             &format!("/api/deposit/status/{attendee_id}"),
-        )
+        )?;
+        // The Worker permits an omitted event id for legacy UI callers, but a
+        // harness fixture must never rely on that fallback: several staging
+        // events may coexist and the wrong one can produce a plausible empty
+        // status. Keep every named-fixture read bound to its exact event.
+        url.query_pairs_mut()
+            .append_pair("event_id", &self.event_id_str);
+        Ok(url)
     }
 
     /// Worker-side URL for the USDC deposit (Solana Pay URL) endpoint.
     pub fn deposit_usdc_url(&self) -> HarnessResult<Url> {
         join_path(&self.worker_url, "/api/deposit/usdc")
+    }
+
+    /// Worker-side Solana Pay callback URL. `POST /api/deposit/usdc` creates a
+    /// pending deposit and returns this URL in `solana_pay_url`; the wallet then
+    /// fetches this endpoint to obtain the unsigned transaction.
+    pub fn deposit_usdc_tx_url(
+        &self,
+        attendee_id: &str,
+        wallet: &str,
+    ) -> HarnessResult<Url> {
+        let mut url = join_path(&self.worker_url, "/api/deposit/usdc/tx")?;
+        url.query_pairs_mut()
+            .append_pair("event_id", &self.event_id_str)
+            .append_pair("attendee_id", attendee_id)
+            .append_pair("wallet", wallet);
+        Ok(url)
+    }
+
+    /// Worker-side URL that discovers and verifies a submitted USDC deposit.
+    ///
+    /// A signed transaction alone does not mutate the Worker-side record: the
+    /// confirmation route binds the on-chain attendee-deposit PDA back to the
+    /// staging attendee after its transaction has landed.
+    pub fn confirm_deposit_url(&self, attendee_id: &str) -> HarnessResult<Url> {
+        let mut url = join_path(&self.worker_url, "/api/deposit/usdc/confirm")?;
+        url.query_pairs_mut()
+            .append_pair("event_id", &self.event_id_str)
+            .append_pair("attendee_id", attendee_id);
+        Ok(url)
+    }
+
+    /// Worker-side authenticated endpoint that records a wallet-submitted
+    /// deposit signature before the Worker verifies it asynchronously.
+    pub fn deposit_webhook_url(&self) -> HarnessResult<Url> {
+        join_path(&self.worker_url, "/api/deposit/usdc/webhook")
     }
 
     /// Worker-side URL for the paired refund + close endpoint.
@@ -268,7 +334,18 @@ impl StagingContext {
 
     /// Worker-side URL for the auth session probe (plan 006 baseline).
     pub fn auth_session_url(&self) -> HarnessResult<Url> {
-        join_path(&self.worker_url, "/api/auth/session")
+        join_path(&self.worker_url, "/api/auth/me")
+    }
+
+    /// SIWS challenge endpoint used by the harness to create its own staging
+    /// session from the funded attendee keypair.
+    pub fn auth_wallet_nonce_url(&self) -> HarnessResult<Url> {
+        join_path(&self.worker_url, "/api/auth/wallet/nonce")
+    }
+
+    /// SIWS verification endpoint used after signing the server challenge.
+    pub fn auth_wallet_verify_url(&self) -> HarnessResult<Url> {
+        join_path(&self.worker_url, "/api/auth/wallet/verify")
     }
 
     /// Sanity check: the two event-id fields must refer to the same event.
@@ -295,6 +372,30 @@ impl StagingContext {
         // on the SDK version, so deref to be safe across versions.
         self.payer.as_ref().pubkey()
     }
+}
+
+/// Fail closed before loading or submitting any live transaction against a
+/// production-looking Worker or a non-devnet RPC endpoint.
+fn validate_live_target(worker_url: &Url, rpc_url: &Url) -> HarnessResult<()> {
+    let worker_host = worker_url.host_str().unwrap_or_default();
+    if !worker_host.contains("staging") && !is_loopback_host(worker_host) {
+        return Err(HarnessError::Config(format!(
+            "refusing non-staging worker host '{worker_host}'; the flow harness mutates test state"
+        )));
+    }
+
+    let rpc = rpc_url.as_str().to_ascii_lowercase();
+    if !rpc.contains("devnet") && !is_loopback_host(rpc_url.host_str().unwrap_or_default()) {
+        return Err(HarnessError::Config(format!(
+            "refusing RPC without an explicit devnet marker: {rpc_url}"
+        )));
+    }
+
+    Ok(())
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    matches!(host, "localhost" | "127.0.0.1" | "::1")
 }
 
 // Hand-rolled Debug to avoid leaking the payer secret key in log output.
@@ -338,6 +439,25 @@ fn read_pubkey_env(name: &str) -> HarnessResult<Pubkey> {
         HarnessError::Config(format!("{name} not set (expected a base58 Solana pubkey)"))
     })?;
     pubkey_from_str_result(&raw, name)
+}
+
+fn missing_required_env(names: &[&str]) -> Vec<String> {
+    missing_required_env_with(names, |name| {
+        std::env::var(name)
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false)
+    })
+}
+
+fn missing_required_env_with<F>(names: &[&str], is_set: F) -> Vec<String>
+where
+    F: Fn(&str) -> bool,
+{
+    names
+        .iter()
+        .filter(|name| !is_set(name))
+        .map(|name| (*name).to_string())
+        .collect()
 }
 
 fn pubkey_from_str(s: &str) -> Pubkey {
@@ -403,6 +523,20 @@ fn join_path(base: &Url, path: &str) -> HarnessResult<Url> {
         .map_err(|e| HarnessError::Config(format!("join '{path}' to {}: {e}", base)))
 }
 
+/// Mirror `worker::handlers::deposit::derive_on_chain_event_id` exactly.
+///
+/// This mapping is part of the public on-chain PDA identity, so it must remain
+/// stable. A fixture can explicitly supply a non-zero `on_chain_event_id`, but
+/// new standard events use this deterministic fallback in both components.
+fn derive_on_chain_event_id(event_id: &str) -> u64 {
+    let mut hash: u64 = 0xcbf29ce484222325;
+    for byte in event_id.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x100000001b3);
+    }
+    if hash == 0 { 1 } else { hash }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -428,6 +562,14 @@ mod tests {
         let (b, bump_b) = c.event_escrow_pda();
         assert_eq!(a, b);
         assert_eq!(bump_a, bump_b);
+    }
+
+    #[test]
+    fn default_on_chain_id_matches_worker_fixture_mapping() {
+        assert_eq!(
+            derive_on_chain_event_id("flow-test-event"),
+            5_055_890_856_068_877_793
+        );
     }
 
     #[test]
@@ -472,12 +614,42 @@ mod tests {
     }
 
     #[test]
+    fn missing_required_env_preserves_order_and_ignores_present_values() {
+        let missing =
+            missing_required_env_with(&["first", "second", "third"], |name| name == "first");
+        assert_eq!(missing, vec!["second".to_string(), "third".to_string()]);
+    }
+
+    #[test]
+    fn live_target_accepts_staging_and_devnet() {
+        let worker = Url::parse("https://bethere-staging.example.workers.dev").unwrap();
+        let rpc = Url::parse("https://devnet.helius-rpc.com/?api-key=test").unwrap();
+        assert!(validate_live_target(&worker, &rpc).is_ok());
+    }
+
+    #[test]
+    fn live_target_rejects_production_worker() {
+        let worker = Url::parse("https://bethere.example.workers.dev").unwrap();
+        let rpc = Url::parse(DEFAULT_RPC_URL).unwrap();
+        let err = validate_live_target(&worker, &rpc).unwrap_err();
+        assert!(err.to_string().contains("non-staging worker"));
+    }
+
+    #[test]
+    fn live_target_rejects_non_devnet_rpc() {
+        let worker = Url::parse("https://bethere-staging.example.workers.dev").unwrap();
+        let rpc = Url::parse("https://api.mainnet-beta.solana.com").unwrap();
+        let err = validate_live_target(&worker, &rpc).unwrap_err();
+        assert!(err.to_string().contains("explicit devnet marker"));
+    }
+
+    #[test]
     fn deposit_status_url_is_well_formed() {
         let c = ctx(1);
         let url = c.deposit_status_url("abc").unwrap();
         assert_eq!(
             url.as_str(),
-            "https://staging.example.workers.dev/api/deposit/status/abc"
+            "https://staging.example.workers.dev/api/deposit/status/abc?event_id=flow-test-event"
         );
     }
 

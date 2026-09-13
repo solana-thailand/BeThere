@@ -196,6 +196,25 @@ pub async fn confirm_escrow_init_handler(
         && !event.escrow_address.is_empty()
         && event.escrow_address == escrow_address;
 
+    // Already `Initialized`, but at a DIFFERENT address (the organizer wallet or
+    // on-chain event id changed under us) — or with no address recorded at all.
+    // The transition allowlist rejects `Initialized → Initialized`, deliberately:
+    // silently repointing a live escrow would strand every deposit already held
+    // at the old address. Without this branch the request fell through to
+    // `update_event` and surfaced as a 500 "failed to persist escrow state",
+    // which tells the organizer nothing about what to do. Fail closed, but say
+    // why and how to recover.
+    if event.escrow_status == EscrowStatus::Initialized && !already_persisted {
+        return Err(AppError::Validation(format!(
+            "event already has an initialized escrow at {current} and cannot be              repointed to {escrow_address} — deposits held at the old address would              be stranded. Wind the existing escrow down first              (Initialized → Deactivated → Closed → None), then re-initialize.",
+            current = match event.escrow_address.is_empty() {
+                true => "(no address recorded)",
+                false => &event.escrow_address,
+            }
+        ))
+        .into());
+    }
+
     if !already_persisted {
         let update_req = UpdateEventRequest {
             escrow_address: Some(escrow_address.clone()),
@@ -461,7 +480,7 @@ pub async fn rollover_deposit_tx_handler(
         // DEV_MODE bypass: skip Google Sheets lookup, trust JWT claims
         tracing::info!(
             attendee_id = %body.attendee_id,
-            email = %claims.email,
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
             "DEV_MODE: skipping sheet lookup for rollover, using claims email"
         );
         Attendee {
@@ -512,8 +531,8 @@ pub async fn rollover_deposit_tx_handler(
 
     if !source_attendee.email.eq_ignore_ascii_case(&claims.email) {
         tracing::warn!(
-            claims_email = %claims.email,
-            attendee_email = %source_attendee.email,
+            claims_fingerprint = %state.log_fingerprint(&claims.email),
+            attendee_fingerprint = %state.log_fingerprint(&source_attendee.email),
             attendee_id = %body.attendee_id,
             "rollover deposit rejected: email mismatch"
         );

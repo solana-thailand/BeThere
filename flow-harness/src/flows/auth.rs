@@ -10,7 +10,7 @@
 //! alternative authentication path alongside the existing Google OAuth flow.
 //! SIWS must not regress the existing Google-auth behaviour. This flow
 //! establishes the **baseline** against which that claim is verified: it
-//! asserts the worker's `GET /api/auth/session` endpoint reports the expected
+//! asserts the worker's `GET /api/auth/me` endpoint reports the expected
 //! shape for both the logged-out and logged-in cases.
 //!
 //! Concretely, this flow exercises two sub-paths:
@@ -19,8 +19,9 @@
 //!     returns `AuthSessionResponse { authenticated: false, email: None }`.
 //!     This is the state a fresh user sees before any login.
 //!  2. **Logged-in (authenticated)**: a request carrying a valid session
-//!     cookie returns `authenticated: true` and the seeded attendee's email.
-//!     This is the state after Google OAuth completes.
+//!     cookie returns `authenticated: true` and its expected identity. This is
+//!     `wallet:<pubkey>` for the harness's SIWS session, or an email when an
+//!     explicit browser-session override is supplied.
 //!
 //! When plan 006 ships SIWS, the logged-in sub-path will additionally cover
 //! SIWS-issued sessions; the shape contract must not change. The harness pins
@@ -43,12 +44,9 @@
 //!
 //! ## Session cookie resolution
 //!
-//! The logged-in sub-path requires a valid session cookie. The harness does
-//! not mint one itself — that would duplicate the OAuth flow under test.
-//! Instead, the cookie is supplied via `FLOW_HARNESS_ATTENDEE_SESSION` (the
-//! same cookie a browser would carry after a real Google login). When absent,
-//! the logged-in sub-path is skipped (not failed) with a clear reason in
-//! `summary.json`; the logged-out sub-path still runs unconditionally.
+//! The CLI creates an ephemeral SIWS session from the dedicated staging
+//! keypair when no `FLOW_HARNESS_ATTENDEE_SESSION` override is supplied. This
+//! exercises both the authenticated and unauthenticated branches every run.
 
 use crate::client::{AuthSessionResponse, WorkerClient};
 use crate::context::StagingContext;
@@ -61,13 +59,12 @@ const FLOW_NAME: &str = "auth";
 /// Configuration for [`AuthFlow`].
 #[derive(Debug, Clone)]
 pub struct AuthConfig {
-    /// The email the logged-in sub-path expects to see in the session
-    /// response. Defaults to the seeded attendee's email
-    /// (`flow-test-attendee-1@staging.local`).
+    /// Optional expected identity for an explicitly supplied session cookie.
+    /// A normal auto-created SIWS session is expected to be
+    /// `wallet:<attendee pubkey>` instead.
     pub expected_email: String,
-    /// A valid session cookie value for the logged-in sub-path. When `None`,
-    /// the logged-in sub-path is skipped (not failed). Supplied at runtime
-    /// via `FLOW_HARNESS_ATTENDEE_SESSION`.
+    /// A valid externally supplied session cookie. When absent the client has
+    /// an auto-created SIWS session.
     pub session_cookie: Option<String>,
 }
 
@@ -80,7 +77,7 @@ impl Default for AuthConfig {
     }
 }
 
-/// Auth flow: assert the `GET /api/auth/session` contract for both the
+/// Auth flow: assert the `GET /api/auth/me` contract for both the
 /// logged-out and logged-in states, establishing the SIWS regression baseline.
 #[derive(Debug, Clone)]
 pub struct AuthFlow {
@@ -152,32 +149,19 @@ impl Flow for AuthFlow {
 
         // ── Sub-path 2: logged-in (authenticated) ────────────────────────────
         //
-        // When a valid session cookie is supplied, the response must report
-        // `authenticated: true` and the seeded attendee's email. Without a
-        // cookie, this sub-path is skipped — the harness does not mint
-        // sessions itself (that would duplicate the OAuth flow under test).
-        match &self.config.session_cookie {
-            None => {
-                // Skip, not fail. The runner records the outcome below via
-                // a sentinel return; the caller (runner) does not
-                // short-circuit on `Skipped` — we surface it as a flow
-                // outcome instead. Since the trait returns `HarnessResult`,
-                // we encode the skip as an `Ok(())` with a side log: the
-                // logged-out sub-path passing is sufficient for the baseline.
-                eprintln!(
-                    "[{FLOW_NAME}] logged-in sub-path skipped: \
-                     FLOW_HARNESS_ATTENDEE_SESSION not set"
-                );
-            }
-            Some(cookie) => {
-                // `with_auth_cookie` is the public builder; `clone()` copies
-                // the baseline cookie (if any) and we overwrite it with the
-                // logged-in probe's cookie.
-                let authed_client = client.clone().with_auth_cookie(cookie.clone());
-                let logged_in = authed_client.probe_auth_session(ctx).await?;
-                assert_logged_in_shape(&logged_in, &self.config.expected_email)?;
-            }
+        if !client.has_auth_cookie() {
+            return Err(HarnessError::AssertionFailed {
+                flow: FLOW_NAME,
+                reason: "live client is missing its authenticated attendee session".to_string(),
+            });
         }
+        let expected_identity = if self.config.session_cookie.is_some() {
+            self.config.expected_email.clone()
+        } else {
+            format!("wallet:{}", ctx.payer_pubkey())
+        };
+        let logged_in = client.probe_auth_session(ctx).await?;
+        assert_logged_in_shape(&logged_in, &expected_identity)?;
 
         Ok(())
     }

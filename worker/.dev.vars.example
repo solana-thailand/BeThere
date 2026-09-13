@@ -26,7 +26,10 @@ SUPER_ADMIN_EMAILS = "admin@example.com"
 HELIUS_API_KEY = "your-helius-api-key"
 # HELIUS_RPC_URL is optional — defaults to https://devnet.helius-rpc.com
 
-# ── NFT (Optional) ───────────────────────────────
-# NFT_COLLECTION_MINT = ""
-# NFT_METADATA_URI = ""
-# NFT_IMAGE_URL = ""
+# ── NFT minting (Optional; Crossmint) ──────────────
+# Crossmint host selects the mint cluster: staging.crossmint.com = devnet,
+# www.crossmint.com = mainnet-beta. Leave the API key and collection empty to
+# disable claim minting locally.
+# CROSSMINT_HOST = "staging.crossmint.com"
+# CROSSMINT_API_KEY = ""
+# CROSSMINT_COLLECTION_ID = ""

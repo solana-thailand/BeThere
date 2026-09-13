@@ -63,9 +63,7 @@ pub fn Login() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match crate::api::get_me().await {
                 Ok(me) => {
-                    let has_next = next_for_redirect
-                        .as_deref()
-                        .is_some_and(|n| !n.is_empty());
+                    let has_next = next_for_redirect.as_deref().is_some_and(|n| !n.is_empty());
                     let target = next_for_redirect
                         .filter(|n| !n.is_empty())
                         .unwrap_or_else(|| match me.role.as_str() {
@@ -78,18 +76,21 @@ pub fn Login() -> impl IntoView {
                         me.role
                     );
 
-                    if me.role == "attendee" && !has_next
+                    if me.role == "attendee"
+                        && !has_next
                         && let Ok(resp) = crate::api::fetch::get("/api/my-registrations", &[]).await
-                            && resp.status() == 200
-                                && let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
-                                    && let Some(regs) = data["data"].as_array()
-                                        && let Some(latest) = regs.first()
-                                            && let Some(url) = latest["next_step"]["url"].as_str()
-                                                && !url.is_empty() {
-                                                    log::info!("[login] redirecting attendee to latest registration: {url}");
-                                                    nav(url, Default::default());
-                                                    return;
-                                                }
+                        && resp.status() == 200
+                        && let Ok(data) =
+                            crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+                        && let Some(regs) = data["data"].as_array()
+                        && let Some(latest) = regs.first()
+                        && let Some(url) = latest["next_step"]["url"].as_str()
+                        && !url.is_empty()
+                    {
+                        log::info!("[login] redirecting attendee to latest registration: {url}");
+                        nav(url, Default::default());
+                        return;
+                    }
 
                     nav(&target, Default::default());
                 }

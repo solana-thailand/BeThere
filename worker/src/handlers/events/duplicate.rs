@@ -64,7 +64,7 @@ pub async fn duplicate_event(
 
     tracing::info!(
         source_id = %source_id,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         override_sheet_id = !body.new_sheet_id.trim().is_empty(),
         override_name = !body.new_name.trim().is_empty(),
         "duplicate event requested",
@@ -142,8 +142,7 @@ pub async fn duplicate_event(
     // Carry the NFT name template only when it adapts to the new event; reset a
     // fixed literal so the duplicate can't inherit the source event's number
     // (see carried_name_template).
-    let (new_name_template, warn_template_reset) =
-        carried_name_template(&source.nft_name_template);
+    let (new_name_template, warn_template_reset) = carried_name_template(&source.nft_name_template);
     if warn_template_reset {
         warnings.push(
             "NFT name template was reset — the source used a fixed title; set a new one so the badge shows this event's name.".to_string(),
@@ -257,7 +256,7 @@ pub async fn duplicate_event(
         source_id = %source_id,
         new_event_id = %new_config.id,
         new_event_name = %new_config.name,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         warning_count = warnings.len(),
         "event duplicated",
     );

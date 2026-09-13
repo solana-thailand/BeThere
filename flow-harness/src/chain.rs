@@ -45,6 +45,16 @@ const B64: base64::engine::general_purpose::GeneralPurpose = base64::engine::gen
 /// How many times to poll `getSignatureStatuses` before giving up (≈ the
 /// blockhash validity window at ~1s between polls).
 const CONFIRM_POLLS: usize = 45;
+/// Bound every RPC operation so a provider outage produces a harness result
+/// instead of leaving the deployment gate waiting indefinitely.
+const RPC_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15);
+
+fn rpc_client() -> HarnessResult<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(RPC_TIMEOUT)
+        .build()
+        .map_err(HarnessError::from)
+}
 
 // ── Transaction signing (pure, offline-tested) ───────────────────────────────
 
@@ -159,6 +169,10 @@ pub struct AttendeeDepositView {
 const ATTENDEE_DEPOSIT_DISCRIMINATOR: u8 = 2;
 /// Minimum serialized length of an `AttendeeDeposit` account (disc + struct).
 const ATTENDEE_DEPOSIT_MIN_LEN: usize = 96;
+/// Only schema version these offsets are valid for (`state.rs: DEPOSIT_VERSION`).
+/// The program rejects anything else with `DepositVersionMismatch`; a future v2
+/// may move fields, so decoding one with v1 offsets would yield plausible junk.
+const ATTENDEE_DEPOSIT_VERSION: u8 = 1;
 
 /// Decode the fixed-offset fields of an `AttendeeDeposit` account.
 pub fn decode_attendee_deposit(data: &[u8]) -> HarnessResult<AttendeeDepositView> {
@@ -172,6 +186,12 @@ pub fn decode_attendee_deposit(data: &[u8]) -> HarnessResult<AttendeeDepositView
         return Err(HarnessError::Solana(format!(
             "AttendeeDeposit discriminator = {}, expected {ATTENDEE_DEPOSIT_DISCRIMINATOR}",
             data[0]
+        )));
+    }
+    if data[1] != ATTENDEE_DEPOSIT_VERSION {
+        return Err(HarnessError::Solana(format!(
+            "AttendeeDeposit version = {}, expected {ATTENDEE_DEPOSIT_VERSION}",
+            data[1]
         )));
     }
     let amount = u64::from_le_bytes(data[66..74].try_into().expect("8 bytes"));
@@ -190,7 +210,7 @@ pub fn decode_attendee_deposit(data: &[u8]) -> HarnessResult<AttendeeDepositView
 /// [`EscrowCode`]; RPC/transport problems surface as [`HarnessError::Solana`].
 pub async fn submit_tx(ctx: &StagingContext, tx_b64: &str) -> HarnessResult<Signature> {
     let (signed_b64, sig) = sign_worker_tx(tx_b64, &ctx.payer)?;
-    let http = reqwest::Client::new();
+    let http = rpc_client()?;
     let resp = rpc_call(
         &http,
         ctx.rpc_url.as_str(),
@@ -213,7 +233,7 @@ pub async fn fetch_account(
     ctx: &StagingContext,
     pubkey: &Pubkey,
 ) -> HarnessResult<Option<FetchedAccount>> {
-    let http = reqwest::Client::new();
+    let http = rpc_client()?;
     let resp = rpc_call(
         &http,
         ctx.rpc_url.as_str(),
@@ -228,6 +248,36 @@ pub async fn fetch_account(
         return Err(parse_rpc_error(err));
     }
     parse_account_value(&resp["result"]["value"])
+}
+
+/// Return the newest successful transaction touching `address` on the
+/// configured Devnet RPC. Used only to recover a harness run interrupted after
+/// submission but before its signature was recorded by the Worker.
+pub async fn latest_signature_for_address(
+    ctx: &StagingContext,
+    address: &Pubkey,
+) -> HarnessResult<Option<String>> {
+    let http = rpc_client()?;
+    let resp = rpc_call(
+        &http,
+        ctx.rpc_url.as_str(),
+        "getSignaturesForAddress",
+        json!([address.to_string(), { "limit": 5 }]),
+    )
+    .await?;
+    if let Some(err) = resp.get("error") {
+        return Err(parse_rpc_error(err));
+    }
+    Ok(resp["result"].as_array().and_then(|entries| {
+        entries.iter().find_map(|entry| {
+            entry
+                .get("err")
+                .filter(|err| err.is_null())
+                .and_then(|_| entry.get("signature"))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
+    }))
 }
 
 /// Poll `getSignatureStatuses` until the signature is confirmed/finalized, the
@@ -426,6 +476,17 @@ mod tests {
     fn decode_attendee_deposit_rejects_wrong_discriminator() {
         let mut data = vec![0u8; ATTENDEE_DEPOSIT_MIN_LEN];
         data[0] = 1; // EventEscrow's discriminator, not AttendeeDeposit's
+        assert!(matches!(
+            decode_attendee_deposit(&data),
+            Err(HarnessError::Solana(_))
+        ));
+    }
+
+    #[test]
+    fn decode_attendee_deposit_rejects_unknown_version() {
+        let mut data = vec![0u8; ATTENDEE_DEPOSIT_MIN_LEN];
+        data[0] = ATTENDEE_DEPOSIT_DISCRIMINATOR;
+        data[1] = 2; // a v2 account may not share these offsets
         assert!(matches!(
             decode_attendee_deposit(&data),
             Err(HarnessError::Solana(_))

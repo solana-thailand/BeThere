@@ -4,9 +4,7 @@
 //! parser is pinned against files an organizer actually produced rather than
 //! against a shape invented for the test.
 
-use event_checkin_domain::models::rundown::{
-    RundownError, parse_ontime_csv, to_agenda_text,
-};
+use event_checkin_domain::models::rundown::{RundownError, parse_ontime_csv, to_agenda_text};
 
 const APR: &str = include_str!("../../ontime/solana-dev-thailand-26apr.csv");
 const BKK: &str = include_str!("../../ontime/road-to-mainnet-3-bangkok.csv");
@@ -36,7 +34,13 @@ fn parses_the_committed_bangkok_export() {
 fn drops_run_of_show_columns() {
     let sessions = parse_ontime_csv(APR).unwrap();
     let agenda = to_agenda_text(&sessions);
-    for leaked in ["Registration desk opens", "Deep dive session", "grey", "load-next", "count-down"] {
+    for leaked in [
+        "Registration desk opens",
+        "Deep dive session",
+        "grey",
+        "load-next",
+        "count-down",
+    ] {
         assert!(!agenda.contains(leaked), "operator field leaked: {leaked}");
     }
 }
@@ -159,7 +163,11 @@ fn all_rows_skipped_reports_no_sessions() {
 
 #[test]
 fn errors_render_a_usable_message() {
-    assert!(RundownError::MissingTitleColumn.to_string().contains("Title"));
+    assert!(
+        RundownError::MissingTitleColumn
+            .to_string()
+            .contains("Title")
+    );
     assert!(!RundownError::Empty.to_string().is_empty());
 }
 

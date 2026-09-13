@@ -58,15 +58,19 @@ pub(crate) async fn finalize_claim_lock(
     signature: &str,
     claimed_at: &str,
 ) -> Result<(), String> {
+    // `expires_at` is NOT NULL, so finalization moves it out to the 90-day
+    // retention horizon rather than nulling it; see `claim::finalized_expires_at`.
+    let expires_at = crate::claim::finalized_expires_at();
     let stmt = db.prepare(
         "UPDATE claim_locks \
-         SET asset_id = ?1, signature = ?2, claimed_at = ?3, expires_at = NULL \
-         WHERE event_id = ?4 AND token = ?5",
+         SET asset_id = ?1, signature = ?2, claimed_at = ?3, expires_at = ?4 \
+         WHERE event_id = ?5 AND token = ?6",
     );
     stmt.bind_refs(&[
         D1Type::Text(asset_id),
         D1Type::Text(signature),
         D1Type::Text(claimed_at),
+        D1Type::Text(&expires_at),
         D1Type::Text(event_id),
         D1Type::Text(token),
     ])

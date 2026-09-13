@@ -50,24 +50,34 @@ from typing import Optional
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ESCROW_DIR = REPO_ROOT / "bethere-escrow"
 KANI_FILE = ESCROW_DIR / "src" / "kani.rs"
+# The cargo target dir is shared across projects (see CLAUDE.md), so
+# `target/deploy/` also holds unrelated programs — afterswap_policy, hedge_program,
+# stocksie. Selecting the newest .so by mtime therefore reported *another
+# project's* program size as BeThere's. Match the artifact by name instead.
+ESCROW_SO_STEM = "bethere_escrow"
 SCRIPTS_DIR = REPO_ROOT / "scripts"
 JSON_OUT = SCRIPTS_DIR / ".metrics.json"
 
 # Deck claims (from scripts/make_pitch_deck.py + README + docs/presentation_materials.md)
 DECK_PROGRAM_BYTES = 89_856
 DECK_PROGRAM_KIB = 88
-# The deck says "250+" = executed & passing Rust tests (54 on-chain + 73 domain
-# + 123 worker). It is INTENTIONALLY conservative: it does NOT claim the 147
-# un-executed frontend Leptos specs as passing. The static total (397) is not on
+# The deck says "567+" = executed & passing Rust tests (65 on-chain + 168 domain
+# + 334 worker). It is INTENTIONALLY conservative: it does NOT claim the 181
+# un-executed frontend Leptos specs as passing. The static total (748) is not on
 # any slide — it is tracked here only as the theoretical ceiling if CI later
 # runs `wasm-pack test --headless`.
-DECK_TEST_TOTAL_EXECUTED = 250  # what the deck asserts as "250+"
-DECK_TEST_TOTAL_STATIC = 397  # theoretical max incl. 147 un-executed frontend specs
-DECK_TESTS_DOMAIN = 73
-DECK_TESTS_WORKER = 123
-DECK_TESTS_FRONTEND = 147
-DECK_TESTS_ONCHAIN = 54
-DECK_KANI_PROOFS = 16
+#
+# Updated 2026-09-04 (`.plans/018` §5.6a). The prior values — 250/397/73/123/147/54,
+# set when the deck was written — had drifted so far that this checker reported
+# permanent DRIFT on every suite, which trains the reader to ignore it. These now
+# mirror `TESTS_PASSING` in `scripts/make_pitch_deck.py`; change both together.
+DECK_TEST_TOTAL_EXECUTED = 567  # what the deck asserts as "567+"
+DECK_TEST_TOTAL_STATIC = 748  # theoretical max incl. 181 un-executed frontend specs
+DECK_TESTS_DOMAIN = 168
+DECK_TESTS_WORKER = 334
+DECK_TESTS_FRONTEND = 181
+DECK_TESTS_ONCHAIN = 65
+DECK_KANI_PROOFS = 17  # 2026-09-04: was 16; the deck itself makes no Kani claim
 DECK_TX_USD = 0.00087
 DECK_CNFT_USD = 0.001
 DECK_LATENCY_MS = 500
@@ -140,7 +150,7 @@ def run(
 
 
 def find_so_artifacts() -> list[Path]:
-    """Locate any previously built .so artifacts under known deploy dirs."""
+    """Locate previously built `bethere_escrow.so` artifacts under known deploy dirs."""
     candidates: list[Path] = []
     search_roots = [
         ESCROW_DIR / "target" / "deploy",
@@ -152,7 +162,9 @@ def find_so_artifacts() -> list[Path]:
         if not root.exists():
             continue
         # Use Python glob, not external fd, so the script is self-contained.
-        candidates.extend(sorted(root.rglob("*.so")))
+        # Match on the artifact name: a shared target dir holds other projects'
+        # programs, and any of them can be newer than ours.
+        candidates.extend(sorted(root.rglob(f"{ESCROW_SO_STEM}.so")))
     # De-duplicate while preserving order
     seen = set()
     out = []

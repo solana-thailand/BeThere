@@ -5,6 +5,7 @@
 
 use base64::Engine;
 use js_sys::{ArrayBuffer, Object, Reflect, Uint8Array};
+use sha2::{Digest, Sha256};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
@@ -240,13 +241,115 @@ pub(crate) async fn sha256_digest(data: &[u8]) -> Result<Vec<u8>, String> {
     let data_arr = Uint8Array::new_with_length(data.len() as u32);
     data_arr.copy_from(data);
 
-    let digest_buf = subtle_call(
-        "digest",
-        &[JsValue::from_str("SHA-256"), data_arr.into()],
-    )
-    .await?;
+    let digest_buf =
+        subtle_call("digest", &[JsValue::from_str("SHA-256"), data_arr.into()]).await?;
 
     js_buffer_to_vec(&digest_buf)
+}
+
+/// Return a stable, one-way correlation value suitable for logs.
+pub(crate) fn claim_token_fingerprint(token: &str) -> String {
+    short_fingerprint(&Sha256::digest(token.as_bytes()))
+}
+
+/// Return a keyed correlation value suitable for identifiers in logs.
+///
+/// Emails and wallet addresses have much lower entropy than capability tokens.
+/// Include a deployment secret so a person who can read logs cannot build a
+/// public hash table to recover the identifier. Rotating the secret deliberately
+/// starts a new correlation window.
+pub(crate) fn identity_fingerprint(identifier: &str, secret: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"bethere:log-identity:v1:");
+    digest.update(secret.as_bytes());
+    digest.update([0]);
+    digest.update(identifier.as_bytes());
+    short_fingerprint(&digest.finalize())
+}
+
+/// Mints one-way, keyed correlation values for the Worker log stream.
+///
+/// Construct it once in a handler that already holds `AppState`, then pass it
+/// down into stateless helpers such as the deposit RPC parsers. Those helpers
+/// need to emit correlatable identifiers, but threading the raw deployment
+/// secret through a pure parser's signature would spread the secret into code
+/// that has no other reason to hold it — and into its unit tests.
+#[derive(Clone, Copy)]
+pub(crate) struct LogRedactor<'a> {
+    secret: &'a str,
+}
+
+impl<'a> LogRedactor<'a> {
+    /// Build a redactor from the deployment secret (`config.jwt_secret`).
+    pub(crate) fn new(secret: &'a str) -> Self {
+        Self { secret }
+    }
+
+    /// Fingerprint one identifier — email, wallet address, or TX signature.
+    pub(crate) fn fingerprint(&self, identifier: &str) -> String {
+        identity_fingerprint(identifier, self.secret)
+    }
+}
+
+fn short_fingerprint(digest: &[u8]) -> String {
+    let mut fingerprint = String::with_capacity(16);
+    for byte in &digest[..8] {
+        use std::fmt::Write;
+        write!(&mut fingerprint, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    fingerprint
+}
+
+#[cfg(test)]
+mod fingerprint_tests {
+    use super::{LogRedactor, claim_token_fingerprint, identity_fingerprint};
+
+    #[test]
+    fn claim_token_fingerprint_is_short_stable_and_one_way() {
+        let first = claim_token_fingerprint("claim-token-a");
+        assert_eq!(first.len(), 16);
+        assert_eq!(first, claim_token_fingerprint("claim-token-a"));
+        assert_ne!(first, claim_token_fingerprint("claim-token-b"));
+        assert!(!first.contains("claim-token-a"));
+    }
+
+    #[test]
+    fn identity_fingerprint_is_keyed_and_stable() {
+        let first = identity_fingerprint("person@example.test", "test-log-secret");
+        assert_eq!(first.len(), 16);
+        assert_eq!(
+            first,
+            identity_fingerprint("person@example.test", "test-log-secret")
+        );
+        assert_ne!(
+            first,
+            identity_fingerprint("other@example.test", "test-log-secret")
+        );
+        assert_ne!(
+            first,
+            identity_fingerprint("person@example.test", "rotated-log-secret")
+        );
+        assert!(!first.contains("person@example.test"));
+    }
+
+    #[test]
+    fn log_redactor_matches_the_keyed_helper_and_stays_keyed() {
+        let redactor = LogRedactor::new("test-log-secret");
+        let wallet = "AqdrF1bMEayzZC72R7SxsC2KFqybT5rHPYswkFWe5Mkn";
+
+        // Callers that hold the secret directly and callers that were handed a
+        // redactor must produce the same value, or log lines emitted from the
+        // two styles could not be correlated with each other.
+        assert_eq!(
+            redactor.fingerprint(wallet),
+            identity_fingerprint(wallet, "test-log-secret")
+        );
+        assert_ne!(
+            redactor.fingerprint(wallet),
+            LogRedactor::new("rotated-log-secret").fingerprint(wallet)
+        );
+        assert!(!redactor.fingerprint(wallet).contains(wallet));
+    }
 }
 
 /// Compute HMAC-SHA256 of the given data using the provided key.
@@ -316,9 +419,23 @@ const JWT_HEADER_B64: &str = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
 ///
 /// This replaces `jsonwebtoken::encode` from the Axum build.
 pub async fn create_jwt(email: &str, sub: &str, secret: &str) -> Result<String, String> {
-    let claims = Claims::new(email.to_string(), sub.to_string());
+    sign_session_claims(&Claims::new(email.to_string(), sub.to_string()), secret).await
+}
+
+/// Only call after validating the provider's email-verification assertion.
+pub async fn create_verified_email_jwt(
+    email: &str,
+    sub: &str,
+    secret: &str,
+) -> Result<String, String> {
+    let mut claims = Claims::new(email.to_string(), sub.to_string());
+    claims.email_verified = true;
+    sign_session_claims(&claims, secret).await
+}
+
+async fn sign_session_claims(claims: &Claims, secret: &str) -> Result<String, String> {
     let payload_bytes =
-        serde_json::to_vec(&claims).map_err(|e| format!("failed to serialize JWT claims: {e}"))?;
+        serde_json::to_vec(claims).map_err(|e| format!("failed to serialize JWT claims: {e}"))?;
     let payload_b64 = base64_url_encode(&payload_bytes);
 
     let sign_input = format!("{JWT_HEADER_B64}.{payload_b64}");

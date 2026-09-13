@@ -67,16 +67,24 @@ if [ "${1:-}" = "--seed" ]; then
     info "Seeding test data for read validation..."
 
     # Insert test event
-    npx wrangler d1 execute "$D1_DB" --remote --command \
+    if npx wrangler d1 execute "$D1_DB" --remote --command \
         "INSERT INTO events (id, name, slug, status, event_format, event_start_ms, event_end_ms)
          VALUES ('${TEST_EVENT_ID}', 'D1 Validation Event', 'd1-validation', 'active', 'in_person', 1777170600000, 1777183200000)
-         ON CONFLICT (id) DO UPDATE SET name = excluded.name" 2>&1 | grep -q "success" && pass "Test event seeded" || fail "Failed to seed event"
+         ON CONFLICT (id) DO UPDATE SET name = excluded.name" 2>&1 | grep -q "success"; then
+        pass "Test event seeded"
+    else
+        fail "Failed to seed event"
+    fi
 
     # Insert test attendee with claim token
-    npx wrangler d1 execute "$D1_DB" --remote --command \
+    if npx wrangler d1 execute "$D1_DB" --remote --command \
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, claim_token, checked_in_at, checked_in_by)
          VALUES ('${TEST_ATTENDEE_ID}', '${TEST_EVENT_ID}', '${TEST_EMAIL}', 'D1 Test User', 'approved', 'in_person', 'd1-val-token-001', datetime('now'), 'validation@script.dev')
-         ON CONFLICT (id) DO UPDATE SET claim_token = excluded.claim_token, checked_in_at = excluded.checked_in_at" 2>&1 | grep -q "success" && pass "Test attendee seeded with claim token" || fail "Failed to seed attendee"
+         ON CONFLICT (id) DO UPDATE SET claim_token = excluded.claim_token, checked_in_at = excluded.checked_in_at" 2>&1 | grep -q "success"; then
+        pass "Test attendee seeded with claim token"
+    else
+        fail "Failed to seed attendee"
+    fi
 
     # Verify seed
     echo ""
@@ -95,10 +103,18 @@ fi
 if [ "${1:-}" = "--clean" ]; then
     echo ""
     info "Cleaning test data..."
-    npx wrangler d1 execute "$D1_DB" --remote --command \
-        "DELETE FROM attendees WHERE id = '${TEST_ATTENDEE_ID}'" 2>&1 | grep -q "success" && pass "Test attendee removed" || fail "Failed to remove attendee"
-    npx wrangler d1 execute "$D1_DB" --remote --command \
-        "DELETE FROM events WHERE id = '${TEST_EVENT_ID}'" 2>&1 | grep -q "success" && pass "Test event removed" || fail "Failed to remove event"
+    if npx wrangler d1 execute "$D1_DB" --remote --command \
+        "DELETE FROM attendees WHERE id = '${TEST_ATTENDEE_ID}'" 2>&1 | grep -q "success"; then
+        pass "Test attendee removed"
+    else
+        fail "Failed to remove attendee"
+    fi
+    if npx wrangler d1 execute "$D1_DB" --remote --command \
+        "DELETE FROM events WHERE id = '${TEST_EVENT_ID}'" 2>&1 | grep -q "success"; then
+        pass "Test event removed"
+    else
+        fail "Failed to remove event"
+    fi
 fi
 
 # ─── 4. D1 Query Validation ────────────────────────────────────

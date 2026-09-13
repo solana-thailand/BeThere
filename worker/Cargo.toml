@@ -37,6 +37,9 @@ base64 = "0.22"
 # `md5` PutOptions field; we must provide a real digest or R2 rejects it).
 md-5 = "0.10"
 
+# One-way, fixed-size correlation IDs for capability values in logs.
+sha2 = "0.10"
+
 # URL encoding — WASM-compatible
 urlencoding = "2"
 

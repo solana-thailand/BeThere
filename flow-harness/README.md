@@ -11,18 +11,24 @@ The harness is the safety mechanism for plans **006 (SIWS)** and **007 (Dioxus m
 | Layer | State |
 | --- | --- |
 | **Two-path refund predicate** (`assertions.rs`) | ✅ Done + fully unit-tested (offline) |
-| **PDA derivation** (`context.rs`) | ✅ Done + unit-tested against real program id + seeds |
+| **PDA derivation + live target guards** (`context.rs`) | ✅ Done + unit-tested; rejects production/non-devnet targets and mismatched attendee signer |
 | **Typed HTTP client + error parsing** (`client.rs`) | ✅ Done; error-envelope parsing unit-tested |
 | **Runner + `summary.json` + `.last-green`** (`runner.rs`) | ✅ Done + unit-tested with no-op flows |
 | **CLI entry** (`main.rs`) | ✅ Done |
-| **Flow `run` bodies — HTTP execution** | ⏳ Staging-gated (`// TODO(staging-live):`) |
-| **Transaction signing/submission** | ⏳ Staging-gated (stubs return `HarnessError::Config`) |
-| **On-chain PDA existence assertion** (deposit) | ⏳ Staging-gated |
-| **Refund attempt + revert assertion** | ⏳ Staging-gated |
-| **Claim mint path** | ⏳ Staging-gated (`attempt_mint=false` default) |
-| **§3.5 preflight gate** (`worker/scripts/preflight.sh`) | ❌ Not started (blocked on staging live) |
+| **Flow `run` bodies — HTTP execution** | ✅ Wired; auto-authenticates with SIWS from the dedicated staging keypair |
+| **Transaction signing/submission** | ✅ Wired and offline-tested; live run requires a capped devnet payer |
+| **On-chain PDA existence assertion** (deposit) | ✅ Wired |
+| **Refund attempt + revert assertion** | ✅ Wired |
+| **Claim mint path** | Deliberately off by default (`attempt_mint=false`); enable only with configured staging NFT provider |
+| **§3.5 preflight gate** (`worker/scripts/preflight.sh`) | ✅ Implemented and default-on for production; fresh live green sentinel still required |
 
-**What "staging-gated" means:** the flow scaffolding, configuration, preconditions, and the regression assertions are all real and `cargo test`-able offline. Only the HTTP/TX *execution* inside `run` bodies requires staging-live. Each such call-site is marked `// TODO(staging-live):` and fails fast with `HarnessError::Config` until §3.1 is provisioned.
+**What remains:** staging is deployed and the HTTP/on-chain seams are wired.
+The operator must provision a dedicated funded devnet payer, attendee wallet,
+mint, and an **active, initialized** organizer/event fixture. The harness
+creates its own short-lived SIWS attendee session; a browser cookie is not
+required. See `docs/flow_harness_fixture_strategy.md` before re-seeding: an
+initialized escrow is immutable and must never be overwritten by a fixture
+refresh.
 
 ---
 
@@ -31,14 +37,18 @@ The harness is the safety mechanism for plans **006 (SIWS)** and **007 (Dioxus m
 This is documented in `docs/escrow_contract_surface.md` §3–§4. Summary:
 
 - **On-chain truth** (`bethere-escrow/src/instructions/refund.rs#L72-85`): a refund succeeds iff `clock >= event_end` AND (`checked_in` OR `clock < refund_deadline`).
-- **Legacy frontend gate** (`event_refund_window_open`): checks only `now >= event_end` — ignores `refund_deadline` and `checked_in`.
-- **Result:** a no-show past `refund_deadline` sees an enabled "Request Refund" CTA, clicks it, signs, and the TX reverts with `RefundDeadlinePassed` (code 19).
+- **Former frontend gate:** only checked `now >= event_end`, so a no-show past
+  `refund_deadline` could see an enabled CTA and submit a transaction that
+  reverts with `RefundDeadlinePassed` (code 19).
 
-Fix #19 has two parts:
-1. **Expose the data** — `DepositStatusResponse.refund_deadline_ms` + `.checked_in`. ✅ Landed in `domain`.
-2. **Replace the gate predicate.** ⏳ Pending.
+Fix #19 is complete:
+1. **Expose the data** — `DepositStatusResponse.refund_deadline_ms` + `.checked_in`. ✅
+2. **Use the two-path predicate** in the frontend, including a single captured
+   clock value at the boundary. ✅
 
-The harness's `refund_no_show_deadline` flow is the regression test for this. It pins the corrected predicate (`refund_cta_enabled`), encodes the legacy predicate (`legacy_gate_verdict_at`), and asserts the two **disagree** at the post-deadline point — i.e. the divergence is detectable. Once part 2 ships, the divergence assertion is relaxed to check the corrected gate alone (the test `divergence_assertion_transitions_when_part_2_ships` documents the transition).
+The harness's `refund_no_show_deadline` flow preserves the historic regression
+case and asserts the corrected predicate (`refund_cta_enabled`) is disabled
+after the no-show deadline.
 
 ---
 
@@ -102,8 +112,14 @@ Runs the staging-independent suites: the refund-window truth table, PDA derivati
 
 Prerequisites (from Plan 005 §3.1):
 
-1. Staging worker deployed: `bash worker/deploy.sh staging`
-2. Staging D1 seeded: `bash worker/scripts/seed-staging.sh`
+1. Staging worker deployed (only when Worker code has changed): `bash worker/deploy.sh staging`
+2. Staging D1 seeded with a fresh active fixture: `bash worker/scripts/seed-staging.sh --event-id flow-deposit-YYYYMMDD`
+3. The fixture's escrow initialized from Manage Events → Edit → Escrow Management
+   using the Devnet organizer wallet.
+
+The CLI fails closed unless the Worker hostname contains `staging` (or is
+loopback), the RPC URL explicitly contains `devnet` (or is loopback), and the
+payer keypair pubkey equals `FLOW_HARNESS_ATTENDEE_WALLET`.
 
 Then:
 
@@ -114,10 +130,23 @@ export FLOW_HARNESS_ORGANIZER=<base58>
 export FLOW_HARNESS_ATTENDEE_WALLET=<base58>
 export FLOW_HARNESS_DEPOSIT_MINT=<base8 devnet USDC>
 export FLOW_HARNESS_RPC_URL=https://devnet.helius-rpc.com/?api-key=<key>
-# Optional: enables the auth flow's logged-in sub-path
-export FLOW_HARNESS_ATTENDEE_SESSION="session=eyJ..."
 cargo run --release -- --worker https://bethere-staging.solana-thailand.workers.dev
 ```
+
+For a focused diagnosis without refreshing the full-suite production gate:
+
+```sh
+cargo run -- --flow deposit
+```
+
+Accepted names are `deposit`, `refund-pre-event-end`,
+`refund-post-event-end-checked-in`, `refund-no-show-deadline`, `claim`, and
+`auth`. A focused run writes its `summary.json` but never touches `.last-green`.
+
+To exercise the authenticated confirmation route for an already verified
+fixture without sending another transfer, add
+`FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT=1`. This is useful after changing SIWS,
+identity middleware, or deposit recovery.
 
 ---
 
@@ -132,10 +161,12 @@ cargo run --release -- --worker https://bethere-staging.solana-thailand.workers.
 | `FLOW_HARNESS_RPC_URL` | yes (live) | Helius devnet RPC for TX submission |
 | `FLOW_HARNESS_WORKER_URL` | no | Staging URL (default: `https://bethere-staging.solana-thailand.workers.dev`) |
 | `FLOW_HARNESS_EVENT_ID` | no | Worker-side event id (default: `flow-test-event`) |
-| `FLOW_HARNESS_EVENT_ID_ON_CHAIN` | no | On-chain `u64` event id (default: `1`) |
+| `FLOW_HARNESS_ATTENDEE_ID` | no | Attendee record for the selected fixture (default: `flow-test-attendee-1`) |
+| `FLOW_HARNESS_EVENT_ID_ON_CHAIN` | no | On-chain `u64` event id; defaults to the Worker's deterministic mapping of `FLOW_HARNESS_EVENT_ID` |
 | `FLOW_HARNESS_ESCROW_PROGRAM_ID` | no | Override the deployed program id |
 | `FLOW_HARNESS_ATTENDEE_EMAIL` | no | Override the seeded attendee email |
-| `FLOW_HARNESS_ATTENDEE_SESSION` | no | Session cookie; enables the auth flow's logged-in sub-path |
+| `FLOW_HARNESS_ATTENDEE_SESSION` | no | Explicit session-cookie override; otherwise the harness creates a SIWS session |
+| `FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT` | no | `1` additionally probes authenticated confirmation for an already verified deposit |
 
 ---
 
@@ -171,11 +202,11 @@ flow-harness/results/
 
 | Plan 005 section | Status |
 | --- | --- |
-| §3.1 Staging worker env | Scaffolded (wrangler.toml `[env.staging]`, deploy.sh, seed-staging.sh) — pending your provisioning |
+| §3.1 Staging worker env | ✅ Deployed and isolated; fixture wallet/session provisioning remains |
 | §3.2 Contract surface audit | ✅ Done (`docs/escrow_contract_surface.md`) |
 | §3.3 LiteSVM / quasar-svm tests | ✅ Superseded by `bethere-escrow/src/tests/refund.rs` |
-| §3.4 E2E harness | **This crate** — skeleton done; staging-live wiring pending |
-| §3.5 Preflight gate | Not started (blocked on staging live) |
+| §3.4 E2E harness | **This crate** — wired; 132 offline tests pass; first full live green pending fixture inputs |
+| §3.5 Preflight gate | ✅ Default-on for production; bypass requires audited `--force --reason` |
 
 ---
 
@@ -184,6 +215,7 @@ flow-harness/results/
 1. Create `src/flows/<name>.rs` implementing the `Flow` trait.
 2. Add a config struct with defaults aligned to `seed-staging.sh`.
 3. Put pure logic (preconditions, outcome prediction, gate verdict) in standalone functions with `#[cfg(test)]` truth-table tests.
-4. Mark every HTTP/TX call-site with `// TODO(staging-live):` and fail fast with `HarnessError::Config` until staging is live.
+4. Put external calls behind explicit fixture/config validation and keep pure
+   response/invariant logic unit-testable.
 5. Register the flow in `src/flows/mod.rs::register_default` (respect dependency order — the summary records flows in registration order).
 6. Add the flow to the table in this README.

@@ -29,7 +29,10 @@ pub async fn list_attendees(
     Extension(claims): Extension<Claims>,
     Query(query): Query<AttendeesQuery>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("listing attendees (requested by: {})", claims.email);
+    tracing::info!(
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
+        "listing attendees",
+    );
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     tracing::info!(event_id = %event.id, "STEP 1: event resolved");

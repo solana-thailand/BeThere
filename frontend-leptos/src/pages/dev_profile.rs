@@ -7,9 +7,7 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use wasm_bindgen::prelude::*;
 
-use crate::api::{
-    self, DeveloperProfile, UpdateProfileBody, INTEREST_OPTIONS, ROLE_OPTIONS,
-};
+use crate::api::{self, DeveloperProfile, INTEREST_OPTIONS, ROLE_OPTIONS, UpdateProfileBody};
 use crate::icons::{Icon, IconName};
 
 // ---------------------------------------------------------------------------
@@ -79,12 +77,18 @@ pub fn DevProfile() -> impl IntoView {
         // 1) Is the widget configured?
         let configured_name = match crate::api::fetch::get("/api/auth/telegram/config", &[]).await {
             Ok(resp) => match crate::api::fetch::response_text(&resp).await {
-                Ok(text) => {
-                    serde_json::from_str::<serde_json::Value>(&text)
-                        .ok()
-                        .filter(|v| v.get("configured").and_then(|c| c.as_bool()).unwrap_or(false))
-                        .and_then(|v| v.get("bot_username").and_then(|u| u.as_str()).map(String::from))
-                }
+                Ok(text) => serde_json::from_str::<serde_json::Value>(&text)
+                    .ok()
+                    .filter(|v| {
+                        v.get("configured")
+                            .and_then(|c| c.as_bool())
+                            .unwrap_or(false)
+                    })
+                    .and_then(|v| {
+                        v.get("bot_username")
+                            .and_then(|u| u.as_str())
+                            .map(String::from)
+                    }),
                 Err(e) => {
                     log::warn!("[telegram] config read failed: {}", e.message);
                     None
@@ -136,9 +140,7 @@ pub fn DevProfile() -> impl IntoView {
             params.get("error").map(|err| {
                 let msg = match err.as_str() {
                     "github_denied" => "GitHub authorization was cancelled.".to_string(),
-                    "github_state_expired" => {
-                        "GitHub link expired — please try again.".to_string()
-                    }
+                    "github_state_expired" => "GitHub link expired — please try again.".to_string(),
                     "github_no_code" | "github_no_state" | "github_invalid_state" => {
                         "GitHub link failed (invalid response). Please try again.".to_string()
                     }
@@ -154,9 +156,7 @@ pub fn DevProfile() -> impl IntoView {
                     "telegram_bad_signature" | "telegram_invalid" => {
                         "Telegram verification failed. Please try again.".to_string()
                     }
-                    "telegram_expired" => {
-                        "Telegram login expired — please try again.".to_string()
-                    }
+                    "telegram_expired" => "Telegram login expired — please try again.".to_string(),
                     "telegram_save_failed" | "telegram_unconfigured" => {
                         "Could not save your Telegram link. Please try again.".to_string()
                     }
@@ -188,8 +188,7 @@ pub fn DevProfile() -> impl IntoView {
             match crate::api::get_me().await {
                 Ok(_) => {}
                 Err(_) => {
-                    let _ =
-                        web_sys::window().map(|w| w.location().set_href("/login"));
+                    let _ = web_sys::window().map(|w| w.location().set_href("/login"));
                     return;
                 }
             }
@@ -275,7 +274,9 @@ pub fn DevProfile() -> impl IntoView {
             "discord_handle" => profile.discord_handle = Some(value),
             "twitter_handle" => profile.twitter_handle = Some(value),
             "telegram_handle" => profile.telegram_handle = Some(value),
-            "primary_role" => profile.primary_role = if value.is_empty() { None } else { Some(value) },
+            "primary_role" => {
+                profile.primary_role = if value.is_empty() { None } else { Some(value) }
+            }
             "learning_goals" => profile.learning_goals = value,
             "company_org" => profile.company_org = value,
             "location_city" => profile.location_city = value,

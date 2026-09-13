@@ -1,6 +1,6 @@
 use super::capacity_indicator::capacity_indicator;
-use super::details_card::details_card;
 use super::deposit_section::deposit_section;
+use super::details_card::details_card;
 use super::event_hero::event_hero;
 use super::registered_state::registered_state;
 use super::registration_form::registration_form;
@@ -81,11 +81,14 @@ pub fn PublicEvent() -> impl IntoView {
                             log::info!("[public_event] body length: {}", body.len());
                             match serde_json::from_str::<PublicEventResponse>(&body) {
                                 Ok(api_resp) => {
-                                    log::info!("[public_event] parsed OK, success={}", api_resp.success);
+                                    log::info!(
+                                        "[public_event] parsed OK, success={}",
+                                        api_resp.success
+                                    );
                                     if api_resp.success {
                                         if let Some(data) = api_resp.data {
-                                            let is_completed =
-                                                data.status == "completed" || data.status == "Completed";
+                                            let is_completed = data.status == "completed"
+                                                || data.status == "Completed";
                                             let start_ms = data.event_start_ms;
                                             let name = data.name.clone();
                                             set_event_name.set(name);
@@ -95,7 +98,8 @@ pub fn PublicEvent() -> impl IntoView {
                                             // Start countdown if event is in the future
                                             let now_ms = js_sys::Date::now() as i64;
                                             if !is_completed && start_ms > now_ms {
-                                                set_countdown.set(format_countdown(start_ms - now_ms));
+                                                set_countdown
+                                                    .set(format_countdown(start_ms - now_ms));
 
                                                 if let Ok(handle) = set_interval_with_handle(
                                                     move || {
@@ -104,7 +108,8 @@ pub fn PublicEvent() -> impl IntoView {
                                                         if remaining <= 0 {
                                                             set_countdown.set(String::new());
                                                         } else {
-                                                            set_countdown.set(format_countdown(remaining));
+                                                            set_countdown
+                                                                .set(format_countdown(remaining));
                                                         }
                                                     },
                                                     std::time::Duration::from_secs(1),
@@ -119,7 +124,9 @@ pub fn PublicEvent() -> impl IntoView {
                                         }
                                     } else {
                                         set_state.set(PublicEventState::Error(
-                                            api_resp.error.unwrap_or_else(|| "Unknown error".to_string()),
+                                            api_resp
+                                                .error
+                                                .unwrap_or_else(|| "Unknown error".to_string()),
                                         ));
                                     }
                                 }
@@ -133,13 +140,17 @@ pub fn PublicEvent() -> impl IntoView {
                         }
                         Err(e) => {
                             log::error!("[public_event] body read error: {e}");
-                            set_state.set(PublicEventState::Error("Failed to read response".to_string()));
+                            set_state.set(PublicEventState::Error(
+                                "Failed to read response".to_string(),
+                            ));
                         }
                     }
                 }
                 Err(e) => {
                     log::error!("[public_event] fetch error: {e}");
-                    set_state.set(PublicEventState::Error(format!("Failed to fetch event: {e}")));
+                    set_state.set(PublicEventState::Error(format!(
+                        "Failed to fetch event: {e}"
+                    )));
                 }
             }
         });
@@ -168,12 +179,18 @@ pub fn PublicEvent() -> impl IntoView {
                             if !email.is_empty() {
                                 log::info!("[public_event] user signed in: {email}");
                                 set_wallet_only.set(
-                                    api_resp.get("data").and_then(|d| d.get("wallet_only"))
-                                        .and_then(|v| v.as_bool()).unwrap_or(false),
+                                    api_resp
+                                        .get("data")
+                                        .and_then(|d| d.get("wallet_only"))
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false),
                                 );
                                 set_wallet_addr.set(
-                                    api_resp.get("data").and_then(|d| d.get("wallet_address"))
-                                        .and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                    api_resp
+                                        .get("data")
+                                        .and_then(|d| d.get("wallet_address"))
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| s.to_string()),
                                 );
                                 set_auth_state.set(AuthState::SignedIn(email));
                             } else {
@@ -226,8 +243,10 @@ pub fn PublicEvent() -> impl IntoView {
                                     );
                                     set_reg_lookup.set(RegistrationLookup::NotRegistered);
                                 } else if resp.status() == 200 {
-                                    if let Ok(body) = crate::api::fetch::response_text(&resp).await {
-                                        match serde_json::from_str::<MyRegistrationResponse>(&body) {
+                                    if let Ok(body) = crate::api::fetch::response_text(&resp).await
+                                    {
+                                        match serde_json::from_str::<MyRegistrationResponse>(&body)
+                                        {
                                             Ok(api_resp) => {
                                                 if let Some(data) = api_resp.data {
                                                     log::info!(
@@ -236,14 +255,16 @@ pub fn PublicEvent() -> impl IntoView {
                                                     set_reg_lookup
                                                         .set(RegistrationLookup::Registered(data));
                                                 } else {
-                                                    set_reg_lookup.set(RegistrationLookup::NotRegistered);
+                                                    set_reg_lookup
+                                                        .set(RegistrationLookup::NotRegistered);
                                                 }
                                             }
                                             Err(e) => {
                                                 log::warn!(
                                                     "[public_event] my-registration parse error: {e}"
                                                 );
-                                                set_reg_lookup.set(RegistrationLookup::NotRegistered);
+                                                set_reg_lookup
+                                                    .set(RegistrationLookup::NotRegistered);
                                             }
                                         }
                                     } else {
@@ -262,9 +283,8 @@ pub fn PublicEvent() -> impl IntoView {
                             }
                             Err(e) => {
                                 log::warn!("[public_event] my-registration fetch error: {e}");
-                                set_reg_lookup.set(RegistrationLookup::Error(format!(
-                                    "Fetch error: {e}"
-                                )));
+                                set_reg_lookup
+                                    .set(RegistrationLookup::Error(format!("Fetch error: {e}")));
                             }
                         }
                     });
@@ -442,18 +462,21 @@ fn render_loaded_event(
     wallet_addr: ReadSignal<Option<String>>,
     credit_thb: ReadSignal<u64>,
 ) -> AnyView {
+    if data.status.eq_ignore_ascii_case("completed") {
+        return completed_event_gateway(data, countdown, event_completed);
+    }
+
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
     let has_link = !data.link.is_empty();
-    let has_deposit = data.deposit_enabled
-        && (data.deposit_amount_usdc > 0.0 || data.deposit_amount_thb > 0.0);
+    let has_deposit =
+        data.deposit_enabled && (data.deposit_amount_usdc > 0 || data.deposit_amount_thb > 0);
     let is_hybrid = data.event_format == crate::api::EventFormat::Hybrid;
     let is_online_only = data.event_format == crate::api::EventFormat::Online;
 
     let escrow_status = data.escrow_status.as_deref().unwrap_or("");
-    let escrow_closed = escrow_status == "closed"
-        || escrow_status == "cancelled"
-        || escrow_status == "deactivated";
+    let escrow_closed =
+        escrow_status == "closed" || escrow_status == "cancelled" || escrow_status == "deactivated";
 
     let name = data.name.clone();
     let tagline = data.tagline.clone();
@@ -464,22 +487,20 @@ fn render_loaded_event(
     let community_links = data.community_links.clone();
 
     // Deposit label for registration form checkbox
+    let thb = data.deposit_amount_thb;
     let deposit_label = if escrow_closed {
-        if data.deposit_amount_thb > 0.0 {
-            format!("{} Baht", format_thb(data.deposit_amount_thb))
+        if thb > 0 {
+            format!("{thb} Baht")
         } else {
             format_usdc(data.deposit_amount_usdc)
         }
-    } else if data.deposit_amount_usdc > 0.0 && data.deposit_amount_thb > 0.0 {
-        format!(
-            "{} (~{} Baht)",
-            format_usdc(data.deposit_amount_usdc),
-            format_thb(data.deposit_amount_thb)
-        )
-    } else if data.deposit_amount_usdc > 0.0 {
+    } else if data.deposit_amount_usdc > 0 && thb > 0 {
+        let usdc = format_usdc(data.deposit_amount_usdc);
+        format!("{usdc} (~{thb} Baht)")
+    } else if data.deposit_amount_usdc > 0 {
         format_usdc(data.deposit_amount_usdc)
     } else {
-        format_thb(data.deposit_amount_thb)
+        thb.to_string()
     };
 
     let show_reg_form = !event_completed.get();
@@ -509,7 +530,8 @@ fn render_loaded_event(
 
     // Dynamic form field values (Issue #049 Phase 2)
     // Key = field key, Value = serialized value (string for text/select, JSON array for multiselect)
-    let (dynamic_field_values, set_dynamic_field_values) = signal(std::collections::HashMap::<String, String>::new());
+    let (dynamic_field_values, set_dynamic_field_values) =
+        signal(std::collections::HashMap::<String, String>::new());
 
     let slug_for_signin = current_slug.clone();
     let slug_for_reg = data.slug.clone();
@@ -878,4 +900,88 @@ fn render_loaded_event(
         // Bottom spacer so the sticky mobile CTA never hides the last section.
         <div class="pe-sticky-spacer"></div>
     }.into_any()
+}
+
+/// Completed events deliberately use a different action surface from live
+/// events. Retrospective enrollment is a learning/community lead: it must not
+/// expose reservation, deposit, check-in, quiz, or NFT-claim controls.
+fn completed_event_gateway(
+    data: PublicEventData,
+    countdown: ReadSignal<String>,
+    event_completed: ReadSignal<bool>,
+) -> AnyView {
+    let name = data.name.clone();
+    let tagline = data.tagline.clone();
+    let description = data.description.clone();
+    let slug = data.slug.clone();
+    let archive_url = data.archive_url.clone();
+    let enrollment_open = data.post_event_registration_accepting;
+    let poster_url = data.poster_url.clone();
+    let nft_image_url = data.nft_image_url.clone();
+    let community_links = data.community_links.clone();
+
+    view! {
+        {event_hero(&poster_url, &nft_image_url)}
+
+        <div class="pe-name-block">
+            <h1 class="pe-name">{name}</h1>
+            {if !tagline.is_empty() {
+                view! { <p class="pe-tagline">{tagline}</p> }.into_any()
+            } else {
+                ().into_any()
+            }}
+        </div>
+
+        {details_card(&data, countdown, event_completed)}
+
+        <div class="pe-card">
+            <h2 class="pe-section-title">
+                <Icon icon=IconName::Party class="icon-md" />" This event has ended"
+            </h2>
+            <p class="pe-detail-secondary pe-mb-075">
+                "Explore the event archive and join the community to hear about future events."
+            </p>
+
+            <div class="pe-btn-row-center">
+                {if !archive_url.is_empty() {
+                    let href = archive_url.clone();
+                    view! {
+                        <a href=href target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
+                            <Icon icon=IconName::Link class="icon-sm" />" View the archive"
+                        </a>
+                    }.into_any()
+                } else {
+                    view! {
+                        <span class="pe-detail-secondary">"The event archive will be available soon."</span>
+                    }.into_any()
+                }}
+
+                {if enrollment_open {
+                    let href = format!("/events/{slug}/post-event-register");
+                    view! {
+                        <a href=href class="btn btn-primary btn-sm">" Join the community"</a>
+                    }.into_any()
+                } else {
+                    ().into_any()
+                }}
+            </div>
+        </div>
+
+        {if !description.is_empty() {
+            view! {
+                <div class="pe-card">
+                    <h2 class="pe-section-title">"About this Event"</h2>
+                    <p class="pe-description">{description}</p>
+                </div>
+            }.into_any()
+        } else {
+            ().into_any()
+        }}
+
+        {crate::pages::ticket::community_links::community_links_section(
+            community_links,
+            crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent,
+        )}
+    }
+    .into_any()
 }

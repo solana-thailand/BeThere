@@ -56,7 +56,7 @@ pub async fn sync_sheet_to_d1(
 ) -> Result<ApiOk<SheetSyncResponse>, crate::error::WorkerError> {
     tracing::info!(
         event_id = %event_id,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "sheet → D1 sync requested"
     );
 
@@ -191,7 +191,7 @@ pub async fn sync_sheet_to_d1(
             Err(e) => {
                 tracing::warn!(
                     attendee_id = %attendee.api_id,
-                    email = %email,
+                    attendee_fingerprint = %state.log_fingerprint(email),
                     error = %e,
                     "failed to sync attendee"
                 );

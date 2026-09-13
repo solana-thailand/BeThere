@@ -55,8 +55,7 @@ fn parse_jwt_payload(token: &str) -> Option<serde_json::Value> {
     let base64 = base64url_to_base64(payload);
 
     // Decode base64 using browser's atob (CSP-safe — no eval needed).
-    let decoded = window()
-        .and_then(|w| w.atob(&base64).ok())?;
+    let decoded = window().and_then(|w| w.atob(&base64).ok())?;
 
     serde_json::from_str(&decoded).ok()
 }

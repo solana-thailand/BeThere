@@ -159,9 +159,18 @@ fn format_block_time(ts: i64) -> String {
     }
 
     let month = match parsed.get_month() as u8 {
-        0 => "Jan", 1 => "Feb", 2 => "Mar", 3 => "Apr",
-        4 => "May", 5 => "Jun", 6 => "Jul", 7 => "Aug",
-        8 => "Sep", 9 => "Oct", 10 => "Nov", 11 => "Dec",
+        0 => "Jan",
+        1 => "Feb",
+        2 => "Mar",
+        3 => "Apr",
+        4 => "May",
+        5 => "Jun",
+        6 => "Jul",
+        7 => "Aug",
+        8 => "Sep",
+        9 => "Oct",
+        10 => "Nov",
+        11 => "Dec",
         _ => "???",
     };
     let day = parsed.get_date();
@@ -193,8 +202,10 @@ fn truncate_address(addr: &str) -> String {
     }
 }
 
-/// Format USDC lamports to human-readable string.
-fn format_usdc_amount(lamports: u64) -> String {
-    let usdc = lamports as f64 / 1_000_000.0;
-    format!("${usdc:.2}")
+/// Format an atomic USDC amount as a dollar string, e.g. `"$15.00"`.
+/// Numeric rendering comes from the canonical [`crate::utils::money::format_usdc`]
+/// so this panel can't drift from the dashboard tiles.
+fn format_usdc_amount(atomic_usdc: u64) -> String {
+    let usdc = crate::utils::money::format_usdc(atomic_usdc);
+    format!("${usdc}")
 }

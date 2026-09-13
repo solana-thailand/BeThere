@@ -17,7 +17,7 @@ pub async fn archive_event(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(event_id = %id, staff_email = %claims.email, "archive event requested");
+    tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "archive event requested");
 
     let kv = state.events_kv.as_ref();
 
@@ -89,7 +89,7 @@ pub async fn archive_event(
     // D1 dual-write
     crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
-    tracing::info!(event_id = %id, staff_email = %claims.email, "event archived");
+    tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "event archived");
 
     // Audit log
     if let Some(kv_ref) = kv {
@@ -135,7 +135,7 @@ pub async fn restore_event(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(event_id = %id, staff_email = %claims.email, "restore event requested");
+    tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "restore event requested");
 
     let kv = state.events_kv.as_ref();
 
@@ -203,7 +203,7 @@ pub async fn restore_event(
     config.updated_at = chrono::Utc::now().to_rfc3339();
     crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
-    tracing::info!(event_id = %id, staff_email = %claims.email, "event restored from archive");
+    tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "event restored from archive");
 
     // Audit log
     if let Some(kv_ref) = kv {
@@ -249,7 +249,7 @@ pub async fn hard_delete_event(
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     let force = params.get("force").map(|v| v == "true").unwrap_or(false);
-    tracing::info!(event_id = %id, staff_email = %claims.email, force, "hard delete event requested");
+    tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), force, "hard delete event requested");
 
     let kv = state.events_kv.as_ref();
 
@@ -342,7 +342,7 @@ pub async fn hard_delete_event(
         }
     }
 
-    tracing::info!(event_id = %id, staff_email = %claims.email, force, "event permanently deleted");
+    tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), force, "event permanently deleted");
 
     // Audit log — use global log since event KV entry is gone
     let action = if force {

@@ -40,6 +40,23 @@ DIVIDER = RGBColor(0x2A, 0x30, 0x3C)
 FONT = "Helvetica Neue"
 FONT_MONO = "Menlo"
 
+# ---------- Measured claims (single source of truth) ----------
+# Keep these in sync with `python3 scripts/measure_metrics.py`, which reproduces
+# every one of them on demand and flags drift against this file. Any figure a
+# judge could check belongs here, not inline in a slide.
+#
+# Last re-measured 2026-09-04:
+#   65 on-chain (bethere-escrow) + 168 domain + 334 worker = 567 executed & passing.
+#   The 181 frontend-leptos specs are deliberately NOT counted: this script does
+#   not invoke a wasm runtime, so they are static annotations, not executions.
+#   The deck previously said "250+", understating the executed total by >2x.
+TESTS_PASSING = "567+"
+PROGRAM_SIZE = "88 KB"  # 89,856 B — target/deploy/bethere_escrow.so
+# LOC = `wc -l` over *.rs under each crate's src/ (measured 2026-09-04). The
+# prior 38.6K / 6.2K figures predate a year of work and understated both.
+LOC_FRONTEND = "50.3K LOC"
+LOC_ESCROW = "7.8K LOC"
+
 # Slide dimensions (16:9)
 SLIDE_W = Inches(13.333)
 SLIDE_H = Inches(7.5)
@@ -1090,7 +1107,7 @@ def slide_05_architecture(prs) -> None:
             [
                 "Landing · Scanner · Admin · Claim",
                 "Camera QR + wallet adapter",
-                "38.6K LOC · compiles to wasm32",
+                f"{LOC_FRONTEND} · compiles to wasm32",
             ],
             GREEN,
         ),
@@ -1108,9 +1125,9 @@ def slide_05_architecture(prs) -> None:
             "CHAIN",
             "Solana Program",
             [
-                "bethere-escrow · 6.2K LOC",
+                f"bethere-escrow · {LOC_ESCROW}",
                 "PDA escrow · transfer_checked()",
-                "88 KB optimized · devnet-deployed",
+                f"{PROGRAM_SIZE} optimized · devnet-deployed",
             ],
             ACCENT_AMBER,
         ),
@@ -1211,8 +1228,8 @@ def slide_05_architecture(prs) -> None:
 
     # Stats
     stats = [
-        ("88 KB", "on-chain program (optimized)"),
-        ("250+", "tests across the stack"),
+        (PROGRAM_SIZE, "on-chain program (optimized)"),
+        (TESTS_PASSING, "tests across the stack"),
         ("< 500ms", "check-in latency at the edge"),
     ]
     sy = Inches(4.3)
@@ -2048,7 +2065,7 @@ def slide_11_whats_built(prs) -> None:
     top_stats = [
         ("10", "phases complete", PURPLE),
         ("25+", "production features", GREEN),
-        ("250+", "tests passing", ACCENT_BLUE),
+        (TESTS_PASSING, "tests passing", ACCENT_BLUE),
         ("100%", "Rust codebase", ACCENT_AMBER),
     ]
     sx = Inches(0.6)
@@ -2458,7 +2475,7 @@ def slide_14_qa(prs) -> None:
         (
             "REPO",
             "github.com/solana-thailand/BeThere",
-            "100% Rust · open source\n250+ tests · devnet-deployed",
+            f"100% Rust · open source\n{TESTS_PASSING} tests · devnet-deployed",
         ),
         (
             "NEXT",
@@ -2700,7 +2717,7 @@ SLIDE_NOTES = [
     "refundable deposits, on-chain credentials. Critically: Kickback tried this on Ethereum "
     "and died from gas costs. Solana makes it work.",
     # 13 — What's Built
-    "This isn't a whitepaper. 10 phases complete, 25+ production features, 250+ tests "
+    f"This isn't a whitepaper. 10 phases complete, 25+ production features, {TESTS_PASSING} tests "
     "passing, 100% Rust. Everything you saw in the demo is live on devnet today.",
     # 14 — Section break: The Road Ahead
     "[Pacing pause.] So where does BeThere go from here?",
@@ -2714,7 +2731,7 @@ SLIDE_NOTES = [
     "Solscan links for event creation, deposits, check-ins, refunds, and badge mints. "
     "Verify them yourself right now.",
     # 17 — QA / CTA
-    "Thank you. The repo is 100% Rust and open source — 250+ tests, devnet-deployed. "
+    f"Thank you. The repo is 100% Rust and open source — {TESTS_PASSING} tests, devnet-deployed. "
     "Questions, demos, partnerships — let's talk. Direct them to the dashboard projected "
     "at the door.",
 ]

@@ -161,6 +161,47 @@ pub async fn balance(
     Ok(bal)
 }
 
+/// One `(organization_id, currency)` bucket of a single email's credit.
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+pub struct CreditBucket {
+    #[serde(default)]
+    pub organization_id: String,
+    #[serde(default)]
+    pub currency: String,
+    #[serde(default)]
+    pub balance: i64,
+}
+
+/// Every bucket in which one email still holds credit, across **all** orgs and
+/// currencies. Only positive buckets are returned — the money still owed to them.
+///
+/// The ledger is org-scoped so Org A's credit can never be spent at Org B, but
+/// two paths are inherently org-blind: the attendee's own balance display and
+/// the "return my held credit" exit, both of which hang off the *contact* and
+/// carry no event (hence no org) context. Both used to hard-code
+/// `organization_id = ""`, which is only correct while every event's org is
+/// empty — the moment an organizer fills the Events tab's Org ID column, the
+/// held credit becomes invisible to the balance chip and, far worse, invisible
+/// to the payout reversal, so the organizer pays the cash out and the attendee
+/// keeps spendable credit. Enumerate instead of guessing (plan 022 §6).
+pub async fn positive_balances(db: &D1Database, email: &str) -> Result<Vec<CreditBucket>, String> {
+    let email_lc = email.to_lowercase();
+    let sql = "SELECT organization_id, currency, COALESCE(SUM(delta), 0) AS balance \
+               FROM credit_ledger WHERE email = ?1 \
+               GROUP BY organization_id, currency \
+               HAVING SUM(delta) > 0 \
+               ORDER BY organization_id, currency";
+    let stmt = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(&email_lc)])
+        .map_err(|e| format!("D1 credit_ledger positive_balances bind: {e:?}"))?;
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|v| serde_json::from_value::<CreditBucket>(v).ok())
+        .collect())
+}
+
 /// One row of the org-partitioned liability report.
 #[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
 pub struct OrgLiability {
@@ -265,6 +306,8 @@ pub async fn remove_return(db: &D1Database, event_id: &str, email: &str) -> Resu
 /// all-zero report is healthy; any nonzero count is a money-integrity alarm.
 #[derive(Debug, Default, Clone)]
 pub struct ReconcileReport {
+    /// Legacy THB statuses safely reclassified to `credit_thb` during this run.
+    pub applies_repaired: usize,
     /// Held deposits (`held_as_credit=1, refunded=0`) with NO matching ledger
     /// `hold` entry — credit that was converted but never recorded. This is the
     /// exact 2026-08-14 loss signature.
@@ -273,11 +316,27 @@ pub struct ReconcileReport {
     /// over-spend the atomic `try_spend` guard should make impossible; nonzero
     /// means an invariant broke.
     pub negative_balances: i64,
+    /// Deposits settled BOTH ways (`held_as_credit=1 AND refunded=1`) — the
+    /// attendee got the cash back *and* keeps spendable credit. The two settle
+    /// paths are mutually exclusive by CAS, so nonzero means the CAS was
+    /// bypassed (or a row was hand-edited) and money left twice.
+    pub double_settled: i64,
+    /// Ledger `hold` entries whose deposit is no longer held as credit — credit
+    /// standing against nothing. `orphan_holds` catches the loss direction
+    /// (deposit held, credit missing); this catches the creation direction.
+    pub phantom_holds: i64,
+    /// Applied credit whose verified attendee-facing deposit projection is
+    /// missing or inconsistent.
+    pub incomplete_applies: i64,
 }
 
 impl ReconcileReport {
     pub fn is_clean(&self) -> bool {
-        self.orphan_holds == 0 && self.negative_balances == 0
+        self.orphan_holds == 0
+            && self.negative_balances == 0
+            && self.double_settled == 0
+            && self.phantom_holds == 0
+            && self.incomplete_applies == 0
     }
 }
 
@@ -291,10 +350,41 @@ async fn count_query(db: &D1Database, sql: &str) -> Result<i64, String> {
         .unwrap_or(0))
 }
 
-/// Reconcile the ledger against deposit truth. Two cheap COUNT queries — safe to
-/// run daily from the cron. Callers alert (Slack) on a non-clean report so a
+/// Reconcile the ledger against deposit truth. Four cheap COUNT queries — safe
+/// to run daily from the cron. Callers alert (Slack) on a non-clean report so a
 /// silent credit loss surfaces within a day instead of at the next event.
+///
+/// The checks cover both directions of the money: credit that should exist and
+/// does not (`orphan_holds`), and credit that exists and should not
+/// (`phantom_holds`, `double_settled`, `negative_balances`). Only the first was
+/// checked originally, which left every over-payment path silent.
 pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
+    // Before the atomic coverage workflow, credit-backed THB registrations were
+    // written with method='thb'. Repair only an exact ledger + marker + amount
+    // match, and refuse any attendee/event that also has a cash deposit row.
+    let repaired = db
+        .prepare(
+            "UPDATE deposit_statuses AS s SET method='credit_thb',currency='THB',verified=1,refundable=0,rejected=0 \
+             WHERE s.method='thb' AND EXISTS( \
+               SELECT 1 FROM attendees a JOIN credit_ledger l \
+                 ON l.event_id=a.event_id AND l.email=LOWER(a.email) AND l.reason='apply' \
+               JOIN thb_deposits d ON d.event_id=a.event_id AND d.attendee_id=a.id \
+                 AND d.slip_url='ROLLING_CREDIT_AUTO_APPLIED' AND d.verified=1 \
+               WHERE a.id=s.attendee_id AND a.event_id=s.event_id AND l.currency='thb' \
+                 AND l.delta=-s.amount AND d.amount_thb=s.amount) \
+             AND NOT EXISTS(SELECT 1 FROM thb_deposits cash WHERE cash.event_id=s.event_id \
+               AND cash.attendee_id=s.attendee_id \
+               AND COALESCE(cash.slip_url,'')<>'ROLLING_CREDIT_AUTO_APPLIED')",
+        )
+        .run()
+        .await
+        .map_err(|e| format!("D1 credit apply projection repair: {e:?}"))?;
+    let applies_repaired = repaired
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|meta| meta.changes)
+        .unwrap_or(0);
     let orphan_holds = count_query(
         db,
         "SELECT COUNT(*) AS n FROM thb_deposits d \
@@ -311,8 +401,44 @@ pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
              GROUP BY email, organization_id, currency HAVING SUM(delta) < 0)",
     )
     .await?;
+    let double_settled = count_query(
+        db,
+        "SELECT COUNT(*) AS n FROM thb_deposits \
+         WHERE held_as_credit = 1 AND refunded = 1",
+    )
+    .await?;
+    // A `hold` entry is keyed `deposit_id = event_id || ':' || attendee_id` by
+    // both hold writers, so the join back to deposit truth is exact.
+    let phantom_holds = count_query(
+        db,
+        "SELECT COUNT(*) AS n FROM credit_ledger l \
+         WHERE l.reason = 'hold' AND l.deposit_id IS NOT NULL \
+           AND NOT EXISTS (SELECT 1 FROM thb_deposits d \
+                           WHERE d.held_as_credit = 1 \
+                             AND d.event_id || ':' || d.attendee_id = l.deposit_id)",
+    )
+    .await?;
+    let incomplete_applies = count_query(
+        db,
+        "SELECT COUNT(*) AS n FROM credit_ledger l \
+         JOIN attendees a ON a.event_id=l.event_id AND LOWER(a.email)=l.email \
+         WHERE l.reason='apply' AND ( \
+           NOT EXISTS(SELECT 1 FROM deposit_statuses s \
+             WHERE s.event_id=l.event_id AND s.attendee_id=a.id \
+               AND s.method='credit_'||l.currency AND s.amount=-l.delta \
+               AND s.verified=1 AND s.refundable=0) \
+           OR (l.currency='thb' AND NOT EXISTS(SELECT 1 FROM thb_deposits d \
+             WHERE d.event_id=l.event_id AND d.attendee_id=a.id \
+               AND d.slip_url='ROLLING_CREDIT_AUTO_APPLIED' \
+               AND d.amount_thb=-l.delta AND d.verified=1)))",
+    )
+    .await?;
     Ok(ReconcileReport {
+        applies_repaired,
         orphan_holds,
         negative_balances,
+        double_settled,
+        phantom_holds,
+        incomplete_applies,
     })
 }

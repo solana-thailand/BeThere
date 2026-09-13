@@ -112,6 +112,12 @@ WHERE lower(email) = ?2 AND deposit_credit_thb >= ?1` and consume only when
 `meta().changes > 0` (mirrors `try_settle_hold_credit`); spend via that CAS FIRST,
 then best-effort mirror the decrement to the Sheet for display.
 
+> **RESOLVED (superseded).** The prerequisite PR described below was built: the
+> append-only, org-scoped `credit_ledger` table (migration `0028`) is now the
+> source of truth, and `try_spend` is the single-statement CAS this finding asked
+> for. The `contacts.deposit_credit_*` columns and `update_deposit_credit` are
+> gone. Left here as the record of why the obvious fix was the wrong one.
+
 **Why this was flagged, not auto-applied — CONFIRMED blocker:** the D1 credit
 columns exist but are **never written in production**. The only writer,
 `db::contacts::update_deposit_credit`, has **zero callers**; every real credit

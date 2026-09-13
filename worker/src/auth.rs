@@ -7,11 +7,11 @@
 use axum::{
     extract::{Request, State},
     middleware::Next,
-    response::{IntoResponse, Json},
+    response::IntoResponse,
 };
 
-use event_checkin_domain::models::api::ApiResponse;
 use event_checkin_domain::models::auth::{Claims, GoogleUserInfo, TokenRequest};
+use event_checkin_domain::models::error::AppError;
 
 use crate::crypto;
 use crate::http;
@@ -148,7 +148,18 @@ pub async fn handle_callback(code: &str, state: &AppState) -> Result<GoogleUserI
     // Fetch user info using the access token
     let user_info = http::fetch_user_info(&token_response.access_token).await?;
 
+    validate_google_identity(&user_info)?;
     Ok(user_info)
+}
+
+fn validate_google_identity(user: &GoogleUserInfo) -> Result<(), String> {
+    if !user.verified_email
+        || user.id.trim().is_empty()
+        || !event_checkin_domain::validation::is_plausible_email(&user.email)
+    {
+        return Err("Google did not provide a verified email identity".into());
+    }
+    Ok(())
 }
 
 /// Check if a given email is authorized to access the platform.
@@ -322,16 +333,10 @@ pub async fn require_auth(
         Ok(claims) => claims,
         Err(e) => {
             tracing::debug!(path = %path, error = %e, "auth middleware rejected request");
-            return (
-                axum::http::StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::<()> {
-                    success: false,
-                    data: None,
-                    error: Some(e),
-                    correlation_id: None,
-                }),
-            )
-                .into_response();
+            // Issue 078: go through `WorkerError` rather than hand-rolling the
+            // body, so this rejection gets the same caller-facing redaction as
+            // every other error path instead of drifting from it.
+            return crate::error::WorkerError(AppError::Unauthorized(e)).into_response();
         }
     };
 
@@ -339,17 +344,14 @@ pub async fn require_auth(
     //   1. Global sources (env var list + Google Sheet staff tab)
     //   2. Per-event assignments (organizer_emails / staff_emails in event registry)
     if !is_staff(&claims.email, &state).await {
-        tracing::warn!(email = %claims.email, "non-staff user attempted access");
-        return (
-            axum::http::StatusCode::FORBIDDEN,
-            Json(ApiResponse::<()> {
-                success: false,
-                data: None,
-                error: Some("user is not in staff allowlist".to_string()),
-                correlation_id: None,
-            }),
-        )
-            .into_response();
+        tracing::warn!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            "non-staff user attempted access"
+        );
+        return crate::error::WorkerError(AppError::Forbidden(
+            "user is not in staff allowlist".to_string(),
+        ))
+        .into_response();
     }
 
     // Inject claims into request extensions for downstream handlers
@@ -384,16 +386,7 @@ pub async fn require_identity(
         Ok(claims) => claims,
         Err(e) => {
             tracing::debug!(path = %path, error = %e, "identity middleware rejected request");
-            return (
-                axum::http::StatusCode::UNAUTHORIZED,
-                Json(ApiResponse::<()> {
-                    success: false,
-                    data: None,
-                    error: Some(e),
-                    correlation_id: None,
-                }),
-            )
-                .into_response();
+            return crate::error::WorkerError(AppError::Unauthorized(e)).into_response();
         }
     };
 
@@ -459,7 +452,10 @@ pub(crate) async fn verify_token(
 
     // VULN-011: Check JWT blacklist (logged-out tokens)
     if is_token_blacklisted(token, state).await {
-        tracing::debug!(email = %claims.email, "rejected blacklisted JWT");
+        tracing::debug!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            "rejected blacklisted JWT"
+        );
         return Err("token has been revoked".to_string());
     }
 
@@ -534,7 +530,10 @@ pub async fn require_org_access(
     }
     if let Some(db) = state.d1.as_deref()
         && let Ok(Some(org)) = crate::db::organizations::get_org_config(db, organization_id).await
-        && org.owner_emails.iter().any(|e| e.eq_ignore_ascii_case(email))
+        && org
+            .owner_emails
+            .iter()
+            .any(|e| e.eq_ignore_ascii_case(email))
     {
         return Ok(());
     }
@@ -677,6 +676,7 @@ mod tests {
             telegram_bot_token: String::new(),
             telegram_bot_username: String::new(),
             slack_webhook_url: String::new(),
+            claim_token_ttl_secs: crate::claim::DEFAULT_CLAIM_TOKEN_TTL_SECS,
             staff_emails: [
                 "admin@example.com".to_string(),
                 "staff@example.com".to_string(),
@@ -725,6 +725,10 @@ mod tests {
             r2: None,
             r2_raw: None,
             event_do: None,
+            auth_rate_limiter: None,
+            claim_rate_limiter: None,
+            deposit_rate_limiter: None,
+            webhook_rate_limiter: None,
             webhook_secret: String::new(),
             worker_ctx: None,
         }
@@ -781,5 +785,24 @@ mod tests {
         assert!(!is_public_route("/auth/me"));
         assert!(!is_public_route("/staff"));
         assert!(!is_public_route("/admin"));
+    }
+}
+
+#[cfg(test)]
+mod google_identity_tests {
+    use super::*;
+
+    #[test]
+    fn google_email_verification_is_required() {
+        let mut user: GoogleUserInfo =
+            serde_json::from_str(r#"{"id":"google-subject","email":"user@example.com"}"#).unwrap();
+        assert!(validate_google_identity(&user).is_err());
+        user.verified_email = true;
+        assert!(validate_google_identity(&user).is_ok());
+        user.email = "wallet:attacker".into();
+        assert!(validate_google_identity(&user).is_err());
+        user.email = "user@example.com".into();
+        user.id.clear();
+        assert!(validate_google_identity(&user).is_err());
     }
 }

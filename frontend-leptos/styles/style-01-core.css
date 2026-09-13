@@ -1,0 +1,985 @@
+/* ===== Reset & Base ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg-primary: #12152a;
+    --bg-secondary: #171b33;
+    --bg-tertiary: #1f2547;
+    --bg-card: #1a1f3b;
+    --bg-hover: #232a52;
+    --text-primary: #e9e4d3;
+    --text-secondary: #9ba0b4;
+    --text-muted: #7a7f96;
+    --accent: #ff5c39;
+    --accent-hover: #ff7b5c;
+    --accent-bg: rgba(255, 92, 57, 0.08);
+    --accent-border: rgba(255, 92, 57, 0.25);
+    --success: #2fbf71;
+    --success-bright: #4fd68a;
+    --success-bg: rgba(47, 191, 113, 0.12);
+    --success-border: rgba(47, 191, 113, 0.3);
+    --warning: #f59e0b;
+    --warning-bg: rgba(245, 158, 11, 0.12);
+    --warning-border: rgba(245, 158, 11, 0.3);
+    --danger: #e5484d;
+    --danger-bright: #f0666b;
+    --danger-bg: rgba(229, 72, 77, 0.12);
+    --danger-border: rgba(229, 72, 77, 0.3);
+    --info: #3b82f6;
+    --info-bright: #60a5fa;
+    --info-bg: rgba(59, 130, 246, 0.12);
+    --info-border: rgba(59, 130, 246, 0.3);
+    --success-hover: #26a35f;
+    --success-btn: #1f7a4d;
+    --success-btn-hover: #196541;
+    --danger-hover: #c93a3f;
+    --danger-btn: #a82e32;
+    --danger-btn-hover: #8f2529;
+    --text-primary-inverse: #1a1a1a;
+    --bg-google-hover: #f5f5f5;
+    --solana: #9945ff;
+    --border: #2a3052;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --text-heading: #f4f0e4;
+    --bg-void: #0b0d1c;
+    --border-hover: #343b63;
+    /* Night Edition paper tokens — tickets, badges, stamped receipts */
+    --paper: #ede7d6;
+    --paper-ink: #1e2447;
+    --paper-dim: #ddd7c2;
+    --accent-purple: #ffab4d;
+    --accent-light: #ffa184;
+    --warning-bright: #eab308;
+    --warning-dark: #d97706;
+    --code-bg: #0d1117;
+    --code-text: #c9d1d9;
+    --color-x-brand: #1da1f2;
+    --solana-green: #14f195;
+    --header-height: 80px;
+    /* Typography scale tokens */
+    --text-xs: 0.7rem;
+    --text-sm: 0.8rem;
+}
+
+html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+}
+
+/* Scroll-margin for anchored sections so sticky nav doesn't cover them */
+#features,
+#how-it-works,
+#organizers {
+    scroll-margin-top: var(--header-height);
+}
+
+body {
+    font-family:
+        "Inter",
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        "Helvetica Neue",
+        Arial,
+        sans-serif;
+    background:
+        radial-gradient(rgba(233, 228, 211, 0.035) 1px, transparent 1px),
+        linear-gradient(170deg, #12152a 0%, #131834 40%, #101326 100%);
+    background-size:
+        5px 5px,
+        auto;
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+}
+
+/* ===== Layout ===== */
+.container {
+    max-width: 480px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.center-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    max-width: 100vw;
+    overflow-x: hidden;
+    padding: 1.5rem;
+    position: relative;
+}
+
+/* Subtle ambient glow behind the center content */
+.center-page::before {
+    content: "";
+    position: absolute;
+    top: -10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    max-width: 100vw;
+    height: 600px;
+    background: radial-gradient(
+        circle,
+        rgba(255, 92, 57, 0.06) 0%,
+        transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+
+.center-page > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* ===== Public Event — Latent Space Background =====
+   Scoped to .pe-bg-anim (only the /e/{slug} page).
+   A bold, cinematic "latent space" / nebula aesthetic: a multi-channel
+   nebula mesh, four drifting intertwined color blobs (indigo / magenta /
+   teal / violet), a slow colorful aurora sweep, and a twinkling starfield.
+   All purely decorative — layered behind content (z-index: 0) and animated
+   with transform/opacity for GPU-friendly compositing.
+   Palette: indigo #ff5c39, magenta #ec4899, teal #06b6d4, violet #8b5cf6,
+   solana #9945ff. */
+.pe-bg-anim {
+    overflow: hidden;
+}
+
+/* The decorative background layer sits behind everything.
+   Override the global `.center-page > * { z-index: 1 }` rule. */
+.pe-bg-anim > .pe-bg-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    /* Refinement pass: dial the whole decorative nebula WAY back so content
+       breathes (impeccable-style restraint). A single uniform dim keeps a hint
+       of colored ambience without the busy "look at me" animation. */
+    opacity: 0.28;
+}
+
+/* Nebula mesh base: a large multi-stop radial gradient that slowly breathes
+   and shifts hue, giving the "embedding cloud" foundation. */
+.pe-bg-nebula {
+    position: absolute;
+    inset: -20%;
+    background:
+        radial-gradient(
+            circle at 25% 30%,
+            rgba(255, 92, 57, 0.28) 0%,
+            transparent 45%
+        ),
+        radial-gradient(
+            circle at 75% 70%,
+            rgba(139, 92, 246, 0.26) 0%,
+            transparent 45%
+        ),
+        radial-gradient(
+            circle at 60% 20%,
+            rgba(236, 72, 153, 0.18) 0%,
+            transparent 40%
+        ),
+        radial-gradient(
+            circle at 30% 80%,
+            rgba(6, 182, 212, 0.16) 0%,
+            transparent 40%
+        );
+    filter: blur(30px);
+    animation: pe-nebula-shift 30s ease-in-out infinite alternate;
+    will-change: transform, opacity;
+}
+
+/* Drifting color blobs — each on its own slow, swirling path so the motion
+   feels fluid and intertwined (like t-SNE / UMAP clusters drifting). */
+.pe-bg-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.55;
+    will-change: transform, opacity;
+}
+
+.pe-bg-orb-1 {
+    width: 520px;
+    height: 520px;
+    top: -15%;
+    left: -10%;
+    background: radial-gradient(
+        circle,
+        rgba(255, 92, 57, 0.7),
+        transparent 70%
+    );
+    animation: pe-orb-float-1 18s ease-in-out infinite;
+}
+
+.pe-bg-orb-2 {
+    width: 460px;
+    height: 460px;
+    bottom: -15%;
+    right: -12%;
+    background: radial-gradient(
+        circle,
+        rgba(236, 72, 153, 0.5),
+        transparent 70%
+    );
+    animation: pe-orb-float-2 22s ease-in-out infinite;
+}
+
+.pe-bg-orb-3 {
+    width: 400px;
+    height: 400px;
+    top: 40%;
+    left: 50%;
+    background: radial-gradient(
+        circle,
+        rgba(6, 182, 212, 0.42),
+        transparent 70%
+    );
+    animation: pe-orb-float-3 26s ease-in-out infinite;
+}
+
+.pe-bg-orb-4 {
+    width: 380px;
+    height: 380px;
+    top: 10%;
+    right: 5%;
+    background: radial-gradient(
+        circle,
+        rgba(139, 92, 246, 0.5),
+        transparent 70%
+    );
+    animation: pe-orb-float-4 24s ease-in-out infinite;
+}
+
+/* Slow, full-bleed colorful aurora sweep using a rotated conic gradient. */
+.pe-bg-aurora {
+    position: absolute;
+    inset: -25%;
+    background: conic-gradient(
+        from 0deg,
+        rgba(255, 92, 57, 0) 0deg,
+        rgba(255, 92, 57, 0.1) 60deg,
+        rgba(236, 72, 153, 0.12) 140deg,
+        rgba(6, 182, 212, 0.1) 220deg,
+        rgba(139, 92, 246, 0.1) 300deg,
+        rgba(255, 92, 57, 0) 360deg
+    );
+    filter: blur(50px);
+    /* Refinement: calmer aurora sweep (0.7 -> 0.3) so it's ambient, not a show. */
+    opacity: 0.3;
+    animation: pe-aurora-spin 42s linear infinite;
+    will-change: transform;
+}
+
+/* Twinkling starfield / dust layer — small scattered points built from
+   layered radial gradients on a tiled background, gently pulsing. */
+.pe-bg-stars {
+    position: absolute;
+    inset: 0;
+    background-image:
+        radial-gradient(
+            1.5px 1.5px at 25px 40px,
+            rgba(255, 255, 255, 0.9),
+            transparent
+        ),
+        radial-gradient(
+            1px 1px at 80px 120px,
+            rgba(196, 181, 253, 0.8),
+            transparent
+        ),
+        radial-gradient(
+            1.5px 1.5px at 140px 70px,
+            rgba(255, 255, 255, 0.7),
+            transparent
+        ),
+        radial-gradient(
+            1px 1px at 190px 160px,
+            rgba(165, 243, 252, 0.7),
+            transparent
+        ),
+        radial-gradient(
+            1px 1px at 50px 200px,
+            rgba(255, 255, 255, 0.6),
+            transparent
+        ),
+        radial-gradient(
+            1.5px 1.5px at 170px 30px,
+            rgba(244, 114, 182, 0.6),
+            transparent
+        );
+    background-repeat: repeat;
+    background-size: 220px 220px;
+    /* Refinement: drop the twinkling starfield entirely — it read as the most
+       "gimmicky" layer. Kept in the DOM but hidden so it's trivially reversible. */
+    display: none;
+    opacity: 0.5;
+    animation: pe-twinkle 5s ease-in-out infinite alternate;
+    will-change: opacity;
+}
+
+@keyframes pe-nebula-shift {
+    0% {
+        transform: translate(0, 0) scale(1) rotate(0deg);
+    }
+    100% {
+        transform: translate(3%, -2%) scale(1.08) rotate(8deg);
+    }
+}
+
+@keyframes pe-orb-float-1 {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+    33% {
+        transform: translate(50px, 70px) scale(1.1);
+    }
+    66% {
+        transform: translate(-30px, 35px) scale(0.95);
+    }
+}
+
+@keyframes pe-orb-float-2 {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+    33% {
+        transform: translate(-60px, -50px) scale(1.08);
+    }
+    66% {
+        transform: translate(40px, -25px) scale(0.9);
+    }
+}
+
+@keyframes pe-orb-float-3 {
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.4;
+    }
+    50% {
+        transform: translate(-40%, -58%) scale(1.14);
+        opacity: 0.58;
+    }
+}
+
+@keyframes pe-orb-float-4 {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.45;
+    }
+    50% {
+        transform: translate(-45px, 50px) scale(1.12);
+        opacity: 0.6;
+    }
+}
+
+@keyframes pe-aurora-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes pe-twinkle {
+    0% {
+        opacity: 0.3;
+    }
+    100% {
+        opacity: 0.6;
+    }
+}
+
+/* Accessibility: respect reduced-motion preference — freeze all motion. */
+@media (prefers-reduced-motion: reduce) {
+    .pe-bg-nebula,
+    .pe-bg-orb,
+    .pe-bg-aurora,
+    .pe-bg-stars {
+        animation: none;
+    }
+}
+
+/* Mobile: smaller blobs + lighter blur to keep compositing cheap,
+   and dim the starfield slightly to save fill rate. */
+@media (max-width: 480px) {
+    .pe-bg-orb {
+        filter: blur(42px);
+    }
+    .pe-bg-orb-1 {
+        width: 340px;
+        height: 340px;
+    }
+    .pe-bg-orb-2 {
+        width: 300px;
+        height: 300px;
+    }
+    .pe-bg-orb-3 {
+        width: 260px;
+        height: 260px;
+    }
+    .pe-bg-orb-4 {
+        width: 250px;
+        height: 250px;
+    }
+    .pe-bg-nebula {
+        filter: blur(22px);
+    }
+    .pe-bg-aurora {
+        filter: blur(36px);
+    }
+    .pe-bg-stars {
+        opacity: 0.4;
+        background-size: 180px 180px;
+    }
+}
+
+/* ===== Typography ===== */
+h1 {
+    font-size: clamp(1.75rem, 5vw, 2.75rem);
+    font-weight: 700;
+    color: var(--text-heading);
+    margin-bottom: 0.5rem;
+}
+
+h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    margin-bottom: 0.75rem;
+}
+
+h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.subtitle {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+    line-height: 1.6;
+    text-align: center;
+}
+
+/* ===== SVG Icon System ===== */
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+.icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.icon-xs {
+    width: 0.75em;
+    height: 0.75em;
+}
+.icon-sm {
+    width: 0.875em;
+    height: 0.875em;
+}
+.icon-md {
+    width: 1.25em;
+    height: 1.25em;
+}
+.icon-lg {
+    width: 1.5em;
+    height: 1.5em;
+}
+.icon-xl {
+    width: 2em;
+    height: 2em;
+}
+.icon-2xl {
+    width: 2.5em;
+    height: 2.5em;
+}
+.icon-success {
+    color: var(--success);
+}
+.icon-warning {
+    color: var(--warning);
+}
+.icon-danger {
+    color: var(--danger);
+}
+.icon-info {
+    color: var(--info);
+}
+.icon-muted {
+    color: var(--text-muted);
+}
+
+/* ===== Logo ===== */
+.logo {
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+/* Brand gradient text for the BeThere logo */
+.brand-logo {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    background: linear-gradient(135deg, #ff7b5c 0%, #ff5c39 40%, #ffab4d 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.brand-logo-sub {
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: -0.25rem;
+    margin-bottom: 1rem;
+}
+
+/* ===== Buttons ===== */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.7rem 1.25rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background 0.2s,
+        transform 0.15s,
+        box-shadow 0.2s,
+        opacity 0.15s;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn:active {
+    transform: scale(0.97) translateY(0);
+    opacity: 0.9;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-google {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1.75rem;
+    background: var(--text-heading);
+    color: var(--text-primary-inverse);
+    border: none;
+    border-radius: var(--radius);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    position: relative;
+    box-shadow:
+        0 2px 16px rgba(0, 0, 0, 0.2),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+    transition:
+        background 0.2s,
+        transform 0.15s,
+        box-shadow 0.2s;
+}
+
+.btn-google:hover {
+    background: var(--bg-google-hover);
+    transform: translateY(-1px);
+    box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.btn-google:active {
+    transform: scale(0.98) translateY(0);
+    box-shadow:
+        0 1px 8px rgba(0, 0, 0, 0.2),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #ff5c39 0%, #ff7b5c 100%);
+    color: var(--text-heading);
+    box-shadow: 0 2px 12px rgba(255, 92, 57, 0.25);
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #ff7b5c 0%, #ffa184 100%);
+    box-shadow: 0 4px 20px rgba(255, 92, 57, 0.35);
+}
+
+.btn-success {
+    background: var(--success-btn);
+    color: var(--text-heading);
+}
+
+.btn-success:hover {
+    background: var(--success-btn-hover);
+}
+
+.btn-danger {
+    background: var(--danger-btn);
+    color: var(--text-heading);
+}
+
+.btn-danger:hover {
+    background: var(--danger-btn-hover);
+}
+
+.btn-outline {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.btn-outline:hover {
+    background: var(--bg-hover);
+}
+
+.btn-sm {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+.btn-xs {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
+.btn-block {
+    width: 100%;
+}
+
+/* ===== Cards ===== */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s,
+        transform 0.15s;
+}
+
+.card:hover {
+    border-color: var(--border-hover);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    transform: translateY(-1px);
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Finance icon accents (kept for admin/status SVG icons) */
+
+/* ===== Stats ===== */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: linear-gradient(
+        135deg,
+        rgba(30, 30, 30, 0.95) 0%,
+        rgba(26, 26, 26, 0.98) 100%
+    );
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+    text-align: center;
+    transition:
+        border-color 0.3s,
+        box-shadow 0.3s;
+}
+
+.stat-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.stat-card.success {
+    border-color: rgba(34, 197, 94, 0.25);
+    background: linear-gradient(
+        135deg,
+        rgba(34, 197, 94, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+}
+
+.stat-card.warning {
+    border-color: rgba(245, 158, 11, 0.25);
+    background: linear-gradient(
+        135deg,
+        rgba(245, 158, 11, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+}
+
+.stat-card.info {
+    border-color: rgba(59, 130, 246, 0.25);
+    background: linear-gradient(
+        135deg,
+        rgba(59, 130, 246, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+}
+
+.stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    line-height: 1.2;
+}
+
+.stat-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stat-card.success .stat-value {
+    color: var(--success);
+}
+
+.stat-card.warning .stat-value {
+    color: var(--warning);
+}
+
+.stat-card.info .stat-value {
+    color: var(--info);
+}
+
+/* ===== Progress Bar ===== */
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0.75rem 0;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+}
+
+/* ===== Header / Nav ===== */
+.header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    padding: 0.75rem 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-inner {
+    max-width: 800px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.header-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.header-logo {
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    background: linear-gradient(135deg, #ff7b5c 0%, #ff5c39 40%, #ffab4d 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    flex-shrink: 0;
+}
+
+.header-page-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.header-nav {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.header-nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.header-nav-link:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border);
+}
+
+.header-nav-label {
+    font-size: 0.8rem;
+}
+
+.header-user-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff5c39 0%, #ff7b5c 100%);
+    color: var(--text-heading);
+    font-size: 0.75rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    flex-shrink: 0;
+}
+
+.header-sign-out {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.header-sign-out-icon {
+    font-size: 0.9rem;
+}
+
+.header-sign-out-label {
+    font-size: 0.8rem;
+}
+
+/* Active nav link in header */
+nav a[aria-current="page"],
+nav a.active {
+    background: var(--accent);
+    color: var(--text-heading);
+    border-color: var(--accent);
+}
+
+/* ===== Tabs ===== */
+.tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1rem;
+}
+
+.tab {
+    flex: 1;
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition:
+        color 0.2s,
+        border-color 0.2s;
+}
+
+.tab:hover {
+    color: var(--text-primary);
+}
+
+.tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+

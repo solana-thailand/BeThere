@@ -3,7 +3,8 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
-use crate::icons::{wallet_icon_name, Icon, IconName};
+use crate::icons::{Icon, IconName, wallet_icon_name};
+use crate::utils::get_cluster;
 
 use super::components;
 use super::js_interop;
@@ -25,6 +26,14 @@ pub fn wallet_connected_view(
     let handle_send_deposit = handle_send_deposit.clone();
     let wallet_icon = wallet_icon_name(wallet_name);
     let pk_short = truncate_pk(public_key);
+    let cluster = get_cluster();
+    let network = format!("Solana {}", components::cluster_display_label(&cluster));
+    let refund_condition = match compute_refund_info(data) {
+        Some((deadline, _)) => format!(
+            "Eligible deposits can be claimed after the event; no-show claims close {deadline}. Final eligibility appears on the deposit receipt."
+        ),
+        None => "Eligible deposits can be claimed after the event. Final eligibility appears on the deposit receipt.".to_string(),
+    };
 
     view! {
         <div class="dep2-card">
@@ -44,9 +53,13 @@ pub fn wallet_connected_view(
                 </div>
                 <span class="dep2-wallet-bar-badge">"Connected"</span>
             </div>
-            <p class="hint-desc">
-                "Tap below to approve the transaction in your wallet."
-            </p>
+            {components::transaction_review(vec![
+                ("You authorize", format!("Deposit {usdc_fmt} USDC")),
+                ("Network", network),
+                ("Refund", refund_condition),
+                ("Network fee", "Paid in SOL by this connected wallet".to_string()),
+            ])}
+            <p class="hint-desc">"Review these details, then approve in your wallet."</p>
             <button
                 class="btn btn-success btn-block"
                 on:click=move |_| handle_send_deposit(wallet_name_send.clone(), pk_send.clone())
@@ -64,7 +77,7 @@ pub fn wallet_connected_view(
             </button>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 /// Awaiting confirmation — polling for TX.
@@ -115,14 +128,16 @@ pub fn awaiting_confirmation_view(
                     <span class="dep2-confirming-dot"></span>
                 </div>
                 <p>"Waiting for on-chain confirmation..."</p>
-                <p class="hint-xs">"Usually 5-15 seconds. Don't close this page."</p>
+                <p class="hint-xs">
+                    "Your payment signature is recorded. You may safely close this page and reopen the same deposit link; do not send another payment."
+                </p>
             </div>
             <div class="tx-hash-box-top">
                 {format!("TX: {}", sig_display)}
             </div>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 /// Deposit confirmed on-chain.
@@ -160,15 +175,16 @@ pub fn deposit_confirmed_view(
             <div class="dep2-receipt">
                 {
                     let status = &data_clone.status;
-                    
+
                     match status {
                         Some(s) if !s.refundable => view! {
                             <div class="dep2-receipt-row">
                                 <span class="dep2-receipt-label">"Status"</span>
                                 <span class="dep2-receipt-value">
-                                    <span class="badge badge-warning">
-                                        "Non-refundable (#" {s.deposit_order} ")"
-                                    </span>
+                                    <crate::components::StatusBadge
+                                        tone=crate::components::StatusTone::Blocked
+                                        label=format!("Non-refundable (#{})", s.deposit_order)
+                                    />
                                 </span>
                             </div>
                         }.into_any(),
@@ -176,9 +192,10 @@ pub fn deposit_confirmed_view(
                             <div class="dep2-receipt-row">
                                 <span class="dep2-receipt-label">"Status"</span>
                                 <span class="dep2-receipt-value">
-                                    <span class="badge badge-success">
-                                        "Refundable (#" {s.deposit_order} ")"
-                                    </span>
+                                    <crate::components::StatusBadge
+                                        tone=crate::components::StatusTone::Refundable
+                                        label=format!("Refundable (#{})", s.deposit_order)
+                                    />
                                 </span>
                             </div>
                         }.into_any(),

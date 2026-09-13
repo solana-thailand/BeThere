@@ -1,5 +1,6 @@
 //! Shared utility functions extracted from scanner and admin pages.
 
+pub mod money;
 pub mod promptpay;
 pub mod qr_gen;
 
@@ -19,7 +20,10 @@ thread_local! {
 /// Returns "devnet" as fallback if the fetch fails.
 pub async fn fetch_cluster() -> String {
     let window = web_sys::window().expect("no window");
-    let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
+    let origin = window
+        .location()
+        .origin()
+        .unwrap_or_else(|_| "http://localhost:8787".to_string());
     let url = format!("{origin}/api/health");
 
     let cluster = async {
@@ -39,11 +43,7 @@ pub async fn fetch_cluster() -> String {
 /// Get the cached cluster, or "devnet" as fallback.
 /// Call `fetch_cluster()` first (in `spawn_local`) before using this.
 pub fn get_cluster() -> String {
-    CACHED_CLUSTER.with(|c| {
-        c.borrow()
-            .clone()
-            .unwrap_or_else(|| "devnet".to_string())
-    })
+    CACHED_CLUSTER.with(|c| c.borrow().clone().unwrap_or_else(|| "devnet".to_string()))
 }
 
 /// Build a cluster-aware Solscan transaction URL.
@@ -133,6 +133,13 @@ pub fn get_participation_badge(participation_type: &str) -> ParticipationBadge {
         return ParticipationBadge {
             label: "Online".to_string(),
             css_class: "badge-warning",
+        };
+    }
+
+    if lower == "retrospective" {
+        return ParticipationBadge {
+            label: "Retrospective".to_string(),
+            css_class: "badge-neutral",
         };
     }
 
@@ -247,8 +254,7 @@ pub fn capitalize_name(name: &str) -> String {
             match chars.next() {
                 None => String::new(),
                 Some(first) => {
-                    first.to_uppercase().collect::<String>()
-                        + &chars.as_str().to_lowercase()
+                    first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
                 }
             }
         })
@@ -269,6 +275,13 @@ pub fn is_in_person(participation_type: &str) -> bool {
         return true;
     }
     lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person")
+}
+
+/// Retrospective enrollment is a post-event learning lead, never a live
+/// online registration. Keep this separate from `is_in_person` so callers do
+/// not accidentally classify it as online by negation.
+pub fn is_retrospective(participation_type: &str) -> bool {
+    participation_type.trim().eq_ignore_ascii_case("retrospective")
 }
 
 #[cfg(test)]
@@ -308,6 +321,15 @@ mod tests {
         let badge = get_participation_badge("Virtual");
         assert_eq!(badge.label, "Online");
         assert_eq!(badge.css_class, "badge-warning");
+    }
+
+    #[test]
+    fn retrospective_is_not_a_live_online_registration() {
+        let badge = get_participation_badge("retrospective");
+        assert_eq!(badge.label, "Retrospective");
+        assert!(!is_in_person("retrospective"));
+        assert!(is_retrospective("retrospective"));
+        assert!(!is_retrospective("online"));
     }
 
     #[test]

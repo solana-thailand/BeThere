@@ -31,16 +31,19 @@ use crate::icons::{Icon, IconName};
 ///    adds a binding to the glue, so bumping `BUILD_TAG` below yields a NEW glue
 ///    content hash that was never uploaded (and so never poisoned). See the
 ///    2026-07-26 octet-stream incident.
-#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function __bethere_build_tag() { return '2026-07-26-1'; }")]
+#[wasm_bindgen::prelude::wasm_bindgen(
+    inline_js = "export function __bethere_build_tag() { return '2026-07-26-1'; }"
+)]
 extern "C" {
     fn __bethere_build_tag() -> String;
 }
 use crate::pages::{
-    admin::Admin, adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
+    EventRecap, NfcCheckin, PastEvents, PostEventRegister, admin::Admin,
+    adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
     dev_profile::DevProfile, event_summary::EventSummary, landing::Landing, login::Login,
     pr_pack::PrPack, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
-    ticket::page::Ticket, EventRecap, NfcCheckin, PastEvents, PostEventRegister,
+    ticket::page::Ticket,
 };
 
 /// Main application component.

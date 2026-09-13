@@ -5,14 +5,20 @@
 
 use wasm_bindgen_futures::JsFuture;
 use worker::D1Database;
+use worker::d1::D1Type;
 
 /// Insert a blacklisted token hash into D1.
 /// `expires_at` is a Unix timestamp in seconds.
 pub async fn insert(db: &D1Database, token_hash: &str, expires_at: u64) -> Result<(), String> {
+    // `expires_at` is a `u64` second-precision timestamp; it stays interpolated
+    // because `D1Type::Integer` is `i32`-only and a typed integer cannot inject.
     let sql = format!(
-        "INSERT OR IGNORE INTO jwt_blacklist (token_hash, expires_at) VALUES ('{token_hash}', {expires_at})"
+        "INSERT OR IGNORE INTO jwt_blacklist (token_hash, expires_at) VALUES (?, {expires_at})"
     );
-    db.exec(&sql)
+    db.prepare(&sql)
+        .bind_refs(&[D1Type::Text(token_hash)])
+        .map_err(|e| format!("D1 jwt_blacklist insert bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 jwt_blacklist insert: {e:?}"))?;
     Ok(())
@@ -20,10 +26,11 @@ pub async fn insert(db: &D1Database, token_hash: &str, expires_at: u64) -> Resul
 
 /// Check if a token hash exists in the blacklist and hasn't expired.
 pub async fn exists(db: &D1Database, token_hash: &str) -> Result<bool, String> {
-    let sql = format!(
-        "SELECT 1 AS found FROM jwt_blacklist WHERE token_hash = '{token_hash}' AND expires_at > unixepoch() LIMIT 1"
-    );
-    let bound = db.prepare(&sql);
+    let sql = "SELECT 1 AS found FROM jwt_blacklist WHERE token_hash = ? AND expires_at > unixepoch() LIMIT 1";
+    let bound = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(token_hash)])
+        .map_err(|e| format!("D1 jwt_blacklist exists bind: {e:?}"))?;
 
     // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
     let raw_first = JsFuture::from(

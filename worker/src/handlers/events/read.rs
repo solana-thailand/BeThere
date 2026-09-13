@@ -20,7 +20,7 @@ pub async fn get_event(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!(event_id = %id, staff_email = %claims.email, "get event requested");
+    tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "get event requested");
 
     let config = crate::event_store::resolve_event_or_fallback(
         state.events_kv.as_ref(),
@@ -30,8 +30,8 @@ pub async fn get_event(
     )
     .await
     .map_err(|e| {
-        tracing::error!(event_id = %id, error = %e, "failed to get event");
-        AppError::Internal(format!("failed to read event: {e}"))
+        tracing::warn!(event_id = %id, error = %e, "failed to get event");
+        AppError::from(e)
     })?;
 
     // Access check: non-super_admin must be assigned to this event
@@ -43,7 +43,7 @@ pub async fn get_event(
 
     if !is_super_admin && !crate::event_store::has_event_access(&config, &claims.email) {
         tracing::warn!(
-            staff_email = %claims.email,
+            staff_fingerprint = %state.log_fingerprint(&claims.email),
             event_id = %config.id,
             event_name = %config.name,
             "get event denied: no access",

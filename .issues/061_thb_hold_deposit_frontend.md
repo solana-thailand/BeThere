@@ -3,6 +3,18 @@
 > Wire the existing THB hold-deposit / rolling-credit backend to attendee + admin UI.
 > Continuation of Issue #032 (Rolling Deposit Credit) — backend already shipped, frontend missing.
 
+## Status: ✅ COMPLETE (2026-09-04)
+
+All three phases shipped on `feature/sql_binding_phase2`. Phase 1 (attendee hold card +
+credit chip), Phase 2 (Held tab, admin hold-on-behalf, liability chip, per-row credit
+badges), Phase 3 (credit-return request + admin clear). The one open design question in §8
+(could a THB attendee wrongly see the USDC rollover card?) was verified against the handler
+and answered no — see §8 item 3.
+
+**Not yet verified in a browser** — the frontend has no component-render tests, so the chip,
+the badge placement and the `--hold` / `--credit-refund` card styling still want one manual
+pass on a real ticket + admin page (owner-gated: needs a deployed build).
+
 ---
 
 ## 1. Summary
@@ -105,14 +117,20 @@ Hold gets a confirm step because cash stays with the organizer. Refund stays the
 - [x] `frontend-leptos/src/pages/ticket/in_person_view.rs` — insert `<HoldDepositCard />` in the
       deposit-action branch when: `dep.verified && !dep.refunded && is_checked_in && method == Thb`
       (passes `already_held=dep.held_as_credit` so reload mounts in `AlreadyHeld`)
-- [ ] (Optional polish) Credit chip on ticket page that fetches `get_credit_balance()` on mount
-      when `is_checked_in` — shows "Deposit Credit: 500 THB" if balance > 0.
+- [x] **Credit chip on ticket page** — `pages/ticket/credit_chip.rs` (`CreditBalanceChip`)
+      fetches `get_credit_balance()` on mount, gated on `is_checked_in`, and renders the
+      balance above the deposit action cards ("Deposit Credit — 500 THB / Auto-applied to
+      your next registration"). Renders **nothing** when the balance is zero or the read
+      fails, so attendees without credit see no change and a broken read never implies zero.
+      The shared `credit_balance_label()` helper scales USDC out of its 6-decimal smallest
+      unit (`15_000_000` → `15.00 USDC`) and is reused by `HoldDepositCard`'s `Confirmed`
+      arm, which previously printed the raw integer. 4 native unit tests cover the helper.
 
 **Backend hardening landed alongside Phase 1 (commit `b5ee048`):** the double-credit gap in
 `hold_deposit_handler` is resolved via a distinct `held_as_credit` flag on `ThbDeposit`
 (migration `0022`) + settle-before-increment ordering + USDC rejection. See §8 item 0 (resolved).
 
-### Phase 2 — Admin side (status visibility) — PARTIAL (Held tab + admin hold shipped; credit columns remain)
+### Phase 2 — Admin side (status visibility) ✅ DONE (Held tab, admin hold, liability chip, per-row credit badges)
 
 - [x] **Admin "Held as Credit" sub-tab** — `GET /api/refund/held` + 4th tab in `admin_deposit.rs`,
       filters on `held_as_credit = true`, mirrors the Refunded tab (commits this session).
@@ -122,8 +140,22 @@ Hold gets a confirm step because cash stays with the organizer. Refund stays the
       admin's); preserves all attendee-handler invariants (settle-before-increment, idempotency
       guards, THB-only by construction). Closes the "I talked to an attendee, how do I record it?"
       operational gap that motivated this session.
-- [ ] Admin attendee/contacts view — add `credit_thb` / `credit_usdc` columns (literal option (a);
-      requires a contact-credit join on `list_attendees` — performance design decision pending)
+- [x] **Admin attendee row credit visibility** — delivered as option (a), as a per-row **badge**
+      rather than a table column (the admin roster is a card list, not a table). `list_attendees`
+      annotates every row from the credit ledger with **two batch queries, not an N+1**:
+      `thb_balances_by_email(org)` → `credit_thb`, and `emails_applied_credit(event)` →
+      `used_credit` (`worker/src/handlers/attendee/list.rs`). Both are best-effort: a D1 failure
+      degrades to an unannotated list rather than failing the roster. The frontend renders a
+      `฿{credit_thb} credit` badge plus a `Credit ✓` deposit badge for attendees who got in by
+      spending credit, and gates the "Apply Credit" action on `credit_thb > 0`
+      (`pages/admin.rs`). **Performance decision (2026-09-04):** annotate in the handler with two
+      grouped aggregates over `credit_ledger` — not a correlated subquery per attendee in the
+      list SQL, and not a separate endpoint (which would have cost a second round-trip and left
+      the badge to pop in after paint).
+      **`credit_usdc` deliberately not surfaced:** no write path creates USDC ledger credit
+      (the attendee hold handler rejects the USDC arm; USDC rollover is an atomic on-chain
+      transfer that never touches the ledger), so a USDC column would be permanently empty UI.
+      Revisit only if a USDC credit write path is ever added.
 - [x] **Liability header chip** — `GET /api/deposit/credit-liability` (admin) returns
       `{total_thb, total_usdc, contact_count}` from one D1 `SUM`/`COUNT` round-trip over
       `contacts`; the chip renders at the top of `AdminDeposits` when any balance is non-zero
@@ -226,9 +258,11 @@ around L236-L290. Current branch order:
    ever happens (Issue #029).
 2. **No exit path until Phase 3** — without D3, "hold forever" feels like a trap. Phase 3 should
    land in the same release window as Phase 1/2 even if minimal.
-3. **USDC `RolloverActionCard` only checks `rollover_target_event` presence** — if backend ever
-   returns a target for THB attendees, the USDC card would wrongly render. Confirm backend
-   only sets `rollover_target_event` for USDC deposits.
+3. ~~**USDC `RolloverActionCard` only checks `rollover_target_event` presence** — if backend ever
+   returns a target for THB attendees, the USDC card would wrongly render.~~ **CONFIRMED SAFE**
+   (2026-09-04) — `worker/src/handlers/attendee/read.rs` computes the target behind
+   `is_usdc_verified = d.verified && d.method == DepositMethod::Usdc`, so a THB attendee always
+   gets `rollover_target_event: null` and the card never mounts. No code change needed.
 
 ---
 

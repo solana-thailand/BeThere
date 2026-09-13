@@ -9,6 +9,41 @@ use super::schema::{
 };
 
 // ---------------------------------------------------------------------------
+// Resolution errors
+// ---------------------------------------------------------------------------
+
+/// Why an event could not be resolved.
+///
+/// Split from a plain `String` so callers can distinguish "this event does not
+/// exist" (404) from "the store is broken" (500). Every handler used to map the
+/// string to `AppError::Internal`, so asking for a non-existent event returned a
+/// 500 that looked like an outage.
+#[derive(Debug)]
+pub enum ResolveError {
+    /// No event matches the requested id/slug, or no active event exists.
+    NotFound(String),
+    /// KV or D1 read/parse failure.
+    Backend(String),
+}
+
+impl std::fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotFound(msg) | Self::Backend(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
+impl From<ResolveError> for event_checkin_domain::models::error::AppError {
+    fn from(e: ResolveError) -> Self {
+        match e {
+            ResolveError::NotFound(msg) => Self::NotFound(msg),
+            ResolveError::Backend(msg) => Self::Internal(msg),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Event index
 // ---------------------------------------------------------------------------
 
@@ -122,16 +157,25 @@ pub async fn get_active_event(kv: &KvStore) -> Result<Option<EventConfig>, Strin
 ///
 /// Falls back to the first active event if `event_id` is empty or "default".
 /// Returns an error if no matching event is found.
-pub async fn resolve_event(kv: &KvStore, event_id: Option<&str>) -> Result<EventConfig, String> {
+pub async fn resolve_event(
+    kv: &KvStore,
+    event_id: Option<&str>,
+) -> Result<EventConfig, ResolveError> {
     match event_id {
         Some(id) if !id.is_empty() => get_event_config(kv, id)
-            .await?
-            .ok_or_else(|| format!("event '{id}' not found")),
+            .await
+            .map_err(ResolveError::Backend)?
+            .ok_or_else(|| ResolveError::NotFound(format!("event '{id}' not found"))),
         _ => {
             // Fall back to first active event
             get_active_event(kv)
-                .await?
-                .ok_or_else(|| "no active event found — create an event first".to_string())
+                .await
+                .map_err(ResolveError::Backend)?
+                .ok_or_else(|| {
+                    ResolveError::NotFound(
+                        "no active event found — create an event first".to_string(),
+                    )
+                })
         }
     }
 }
@@ -147,7 +191,7 @@ pub async fn resolve_event_or_fallback(
     event_id: Option<&str>,
     global: &event_checkin_domain::config::AppConfig,
     d1: Option<&worker::D1Database>,
-) -> Result<EventConfig, String> {
+) -> Result<EventConfig, ResolveError> {
     match events_kv {
         Some(kv) => {
             let result = resolve_event(kv, event_id).await;
@@ -161,7 +205,9 @@ pub async fn resolve_event_or_fallback(
                     );
                     // KV miss — try D1 before giving up
                     if let Some(db) = d1 {
-                        let d1_result = resolve_event_from_d1(db, event_id).await;
+                        let d1_result = resolve_event_from_d1(db, event_id)
+                            .await
+                            .map_err(ResolveError::Backend);
                         if let Some(config) = d1_result? {
                             tracing::info!(
                                 event_id = %config.id,
@@ -244,14 +290,19 @@ async fn resolve_event_from_d1(
 ///
 /// 1. If `events_kv` is `Some` → scan KV index for slug → load full config
 /// 2. If KV miss or unavailable → try D1 `get_event_by_slug`
+///
+/// The [`ResolveError`] split matters the same way it does for
+/// [`resolve_event`]: a KV or D1 outage is not "no such event". Collapsing both
+/// into one string made every caller answer 404 for a backend failure, which
+/// tells the visitor the event does not exist and hides the incident.
 pub async fn resolve_event_by_slug(
     events_kv: Option<&KvStore>,
     slug: &str,
     d1: Option<&worker::D1Database>,
-) -> Result<EventConfig, String> {
+) -> Result<EventConfig, ResolveError> {
     // Try KV first
     if let Some(kv) = events_kv {
-        let index = get_event_index(kv).await?;
+        let index = get_event_index(kv).await.map_err(ResolveError::Backend)?;
         if let Some(meta) = index.events.iter().find(|e| e.slug == slug)
             && let Ok(Some(config)) = get_event_config(kv, &meta.id).await
         {
@@ -261,13 +312,15 @@ pub async fn resolve_event_by_slug(
 
     // D1 fallback
     if let Some(db) = d1
-        && let Some(row) = crate::db::events::get_event_by_slug(db, slug).await?
+        && let Some(row) = crate::db::events::get_event_by_slug(db, slug)
+            .await
+            .map_err(ResolveError::Backend)?
     {
         tracing::info!(%slug, event_id = %row.id.clone().unwrap_or_default(), "resolved event by slug from D1");
         return Ok(row.to_event_config());
     }
 
-    Err(format!("event '{slug}' not found"))
+    Err(ResolveError::NotFound(format!("event '{slug}' not found")))
 }
 
 // ---------------------------------------------------------------------------

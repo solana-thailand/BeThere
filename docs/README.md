@@ -12,6 +12,7 @@
 | [Architecture](architecture.md) | System overview: worker + Leptos WASM + D1/KV/DO + Sheets + Solana — **the map** |
 | [Protocol POC Requirements](protocol_poc_requirements.md) | Formal "shall" requirements for every instruction, account, and flow — **the spec** |
 | [Solana Protocol Architecture](solana_protocol_architecture.md) | Mermaid diagrams and visual flows for the entire protocol — **the diagrams** |
+| [Operator Handover](operator-handover.md) | Current deployed state, safe commands, release gates, rollback, and next work — **start here when taking over operations** |
 
 ---
 
@@ -60,9 +61,12 @@
 | [Gradual Deploy Runbook](gradual_deploy_runbook.md) | Step-by-step deployment guide |
 | [Staging Deploy Runbook](staging_deploy_runbook.md) | Staging deploy + verification |
 | [Mainnet Readiness Runbook](mainnet_readiness_runbook.md) | What must be green before mainnet USDC |
+| [Web Verification Runbook](web-verification-runbook.md) | Verify deployed UI and core flows by risk level without accidental production writes |
+| [Operator Handover](operator-handover.md) | Continue development or operate releases without the original developer/assistant |
 | [Mainnet Deployment Checklist](mainnet_deployment_checklist.md) | Ordered mainnet cutover steps |
 | [Mainnet Canary Mitigation Runbook](mainnet_canary_mitigation_runbook.md) | Canary + rollback for the no-native-%-canary edge deploy |
 | [Events Management](events_management.md) | How events are managed in the system |
+| [Attendee Notifications](notifications.md) | Email outbox, reminders, organizer delivery history, and sender activation |
 | [Campaigns Guide](campaigns_guide.md) | Multi-event series setup, attendee rewards, and UX gaps |
 | [Sheet Setup](sheet_setup.md) | Google Sheets structure + service-account setup |
 | [Business Flows — Event Page](business_flows_event_page.md) | UX and business flows for the event page |

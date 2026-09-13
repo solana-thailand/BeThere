@@ -2,6 +2,7 @@ pub mod adventure;
 pub mod attendee;
 pub mod auth;
 pub mod campaigns;
+pub mod capacity;
 pub mod checkin;
 pub mod claim;
 pub mod community;
@@ -14,6 +15,7 @@ pub mod events;
 pub mod ext;
 pub mod health;
 pub mod metadata;
+pub mod notifications;
 pub mod orgs;
 pub mod privacy;
 pub mod profile;
@@ -81,12 +83,18 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/wallet/nonce", post(auth::wallet_nonce))
         .route("/auth/wallet/verify", post(auth::wallet_verify))
         // Social account linking (public callback for GitHub, auth-guarded for others)
-        .route("/auth/github/callback", get(social_link::github_link_callback))
+        .route(
+            "/auth/github/callback",
+            get(social_link::github_link_callback),
+        )
         // Public Telegram widget config (is it enabled + which bot username)
         .route("/auth/telegram/config", get(social_link::telegram_config))
         // Public Telegram redirect-flow callback — identity via signed state,
         // not a cookie (survives the cross-site redirect back from Telegram).
-        .route("/auth/telegram/callback", get(social_link::telegram_callback))
+        .route(
+            "/auth/telegram/callback",
+            get(social_link::telegram_callback),
+        )
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Public routes — no auth middleware required.
@@ -172,6 +180,15 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/wallet/leaderboard", get(wallet::get_leaderboard))
         .route("/wallet/{address}/nfts", get(wallet::get_wallet_nfts))
         .merge(public_no_store);
+
+    let attendee_no_store = Router::new()
+        .route("/my-notifications", get(notifications::my_list))
+        .route(
+            "/my-notifications/read-all",
+            post(notifications::my_read_all),
+        )
+        .route("/my-notifications/{id}/read", post(notifications::my_read))
+        .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Attendee-authenticated routes — require JWT identity but NOT staff status.
     // Used for endpoints where a verified email is enough (registration, my-registration).
@@ -268,6 +285,7 @@ pub fn routes(state: AppState) -> Router<()> {
             "/campaigns/{id}/claim-reward",
             post(campaigns::claim_campaign_reward),
         )
+        .merge(attendee_no_store)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_identity,
@@ -277,6 +295,7 @@ pub fn routes(state: AppState) -> Router<()> {
     // 2.5s during the demo and must never surface a stale snapshot.
     let protected_no_store = Router::new()
         .route("/dashboard/live", get(dashboard::live_dashboard))
+        .route("/events/{id}/notifications", get(notifications::list))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Protected routes — require staff auth
@@ -337,6 +356,7 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/events/migrate", post(events::migrate_quiz))
         .route("/events/seed", post(events::seed_event))
         .route("/events/reseed-kv", post(events::reseed_kv_from_d1))
+        .route("/events/readiness", get(events::get_readiness))
         .route("/events/{id}/sync-sheet", post(events::sync_sheet_to_d1))
         .route(
             "/events/{id}",
@@ -364,6 +384,10 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // PR pack generator (Plan 008 — Phase 4): deterministic marketing copy.
         .route("/events/{id}/pr-pack", get(events::get_pr_pack))
+        .route(
+            "/events/{id}/notifications/retry",
+            post(notifications::retry),
+        )
         // Post-event registration toggle (Plan 008 — Phase 3): organizer opens/closes
         // lead capture + optional deadline for a completed event.
         .route(
@@ -523,10 +547,7 @@ pub fn routes(state: AppState) -> Router<()> {
         // Slug availability probe — must precede nothing in particular (axum
         // matches the literal `exists` segment ahead of a bare `{id}` route),
         // but is kept adjacent to the campaign CRUD block for legibility.
-        .route(
-            "/campaigns/{id}/exists",
-            get(campaigns::campaign_id_exists),
-        )
+        .route("/campaigns/{id}/exists", get(campaigns::campaign_id_exists))
         .route(
             "/campaigns/{id}",
             get(campaigns::get_campaign)

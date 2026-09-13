@@ -45,14 +45,14 @@ pub async fn resolve_event_with_access(
         state.d1.as_deref(),
     )
     .await
-    .map_err(AppError::Internal)?;
+    .map_err(AppError::from)?;
 
     if let Err(e) = crate::auth::check_event_access(&claims.email, state, &event).await {
         tracing::warn!(
-            "access denied: {} has no access to event '{}' ({})",
-            claims.email,
-            event.name,
-            event.id,
+            staff_fingerprint = %state.log_fingerprint(&claims.email),
+            event_id = %event.id,
+            event_name = %event.name,
+            "access denied: actor has no access to event",
         );
         return Err(AppError::Forbidden(e));
     }
@@ -72,7 +72,7 @@ pub async fn resolve_event(
         state.d1.as_deref(),
     )
     .await
-    .map_err(AppError::Internal)
+    .map_err(AppError::from)
 }
 
 /// Helper to get the KV store from state (events_kv or quiz_kv fallback).

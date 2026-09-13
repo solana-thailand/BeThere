@@ -156,7 +156,7 @@ pub fn Ticket() -> impl IntoView {
             match api::get_public_ticket(&attendee_id, event_id.as_deref()).await {
                 Ok(data) => {
                     log::info!(
-                        "[ticket] loaded ticket for {} (event: {})" ,
+                        "[ticket] loaded ticket for {} (event: {})",
                         data.attendee.name,
                         data.event_name
                     );
@@ -169,13 +169,10 @@ pub fn Ticket() -> impl IntoView {
                     let msg = e.message.to_lowercase();
                     if msg.contains("not found") {
                         set_state.set(TicketState::NotFound(
-                            "Attendee not found. Check your ticket link and try again."
-                                .to_string(),
+                            "Attendee not found. Check your ticket link and try again.".to_string(),
                         ));
                     } else {
-                        set_state.set(TicketState::Error(format!(
-                            "Failed to load ticket: {e}"
-                        )));
+                        set_state.set(TicketState::Error(format!("Failed to load ticket: {e}")));
                     }
                 }
             }
@@ -248,10 +245,14 @@ pub fn Ticket() -> impl IntoView {
                                     log::info!("[ticket] polling stopped — state resolved");
                                     set_polling_active.set(false);
                                 }
-                                Some(PollingTier::AwaitingCheckIn) if tier == PollingTier::AwaitingDeposit => {
+                                Some(PollingTier::AwaitingCheckIn)
+                                    if tier == PollingTier::AwaitingDeposit =>
+                                {
                                     // Tier upgrade: Tier 1 → Tier 2
                                     // Restart the effect to pick up new interval
-                                    log::info!("[ticket] deposit verified — switching to check-in polling");
+                                    log::info!(
+                                        "[ticket] deposit verified — switching to check-in polling"
+                                    );
                                     set_polling_active.set(false);
                                     set_polling_active.set(true);
                                 }
@@ -280,7 +281,10 @@ pub fn Ticket() -> impl IntoView {
         let timeout_id = match tier {
             PollingTier::AwaitingDeposit => {
                 let timeout_cb = Closure::<dyn Fn()>::new(move || {
-                    log::info!("[ticket] tier 1 polling expired after {}s", POLL_TIER1_MAX_MS / 1000);
+                    log::info!(
+                        "[ticket] tier 1 polling expired after {}s",
+                        POLL_TIER1_MAX_MS / 1000
+                    );
                     set_polling_active.set(false);
                     set_polling_expired.set(true);
                 });
@@ -350,17 +354,13 @@ pub fn Ticket() -> impl IntoView {
     };
 
     // Reactive memos for fullscreen QR overlay
-    let fullscreen_name: Memo<String> = Memo::new(move |_| {
-        match state.get() {
-            TicketState::Found(d) => utils::escape_html(&d.attendee.name),
-            _ => String::new(),
-        }
+    let fullscreen_name: Memo<String> = Memo::new(move |_| match state.get() {
+        TicketState::Found(d) => utils::escape_html(&d.attendee.name),
+        _ => String::new(),
     });
-    let fullscreen_qr_image: Memo<String> = Memo::new(move |_| {
-        match state.get() {
-            TicketState::Found(d) => d.qr_image.unwrap_or_default(),
-            _ => String::new(),
-        }
+    let fullscreen_qr_image: Memo<String> = Memo::new(move |_| match state.get() {
+        TicketState::Found(d) => d.qr_image.unwrap_or_default(),
+        _ => String::new(),
     });
 
     view! {

@@ -12,6 +12,7 @@ use axum::{
 };
 use uuid::Uuid;
 
+use event_checkin_domain::models::attendee::ParticipationType;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::EventStatus;
@@ -60,7 +61,7 @@ pub async fn register_post_event(
     let kv = state.events_kv.as_ref();
     let config = crate::event_store::resolve_event_by_slug(kv, slug, state.d1.as_deref())
         .await
-        .map_err(AppError::NotFound)?;
+        .map_err(AppError::from)?;
     let event_id = config.id.clone();
 
     // 3. Validate lifecycle: must be Completed (active events use normal reg).
@@ -80,15 +81,17 @@ pub async fn register_post_event(
         .into());
     }
 
-    // 5. Validate the deadline (if set) has not passed.
-    if let Some(until) = config.post_event_registration_until_ms {
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        if now_ms >= until {
-            return Err(AppError::Gone(
-                "post-event registration for this event has closed".to_string(),
-            )
-            .into());
-        }
+    // 5. Validate the deadline (if set) has not passed. Shares the comparison
+    //    with the public recap payload's CTA gate via
+    //    `EventConfig::post_event_registration_deadline_passed`, so the form
+    //    cannot disappear while this endpoint still accepts, or vice versa.
+    //    The two branches stay separate because the codes differ: never opened
+    //    is a 409, opened-then-lapsed is a 410.
+    if config.post_event_registration_deadline_passed(chrono::Utc::now().timestamp_millis()) {
+        return Err(AppError::Gone(
+            "post-event registration for this event has closed".to_string(),
+        )
+        .into());
     }
 
     let contact_channel = body
@@ -103,8 +106,9 @@ pub async fn register_post_event(
         .filter(|v| !v.is_empty());
 
     // 6. Write to D1 (source of truth). Post-event registrants are leads, not
-    //    attendees: `post_event_registered` status + `online` placeholder keeps
-    //    them out of capacity / check-in / claim queries without a separate table.
+    //    live attendees: the dedicated `retrospective` participation type and
+    //    `post_event_registered` status keep them out of capacity, check-in,
+    //    claim, and live-online reporting.
     if let Some(ref d1) = state.d1 {
         let api_id = Uuid::now_v7().to_string();
 
@@ -114,7 +118,7 @@ pub async fn register_post_event(
             &event_id,
             &email,
             name,
-            "online", // placeholder — not used for capacity
+            ParticipationType::Retrospective.as_str(),
             contact_channel.unwrap_or(""),
             contact_handle.unwrap_or(""),
             body.consent_marketing,
@@ -133,11 +137,18 @@ pub async fn register_post_event(
 
         let (attendee_result, contact_result) = futures_util::join!(attendee_fut, contact_fut);
 
-        if let Err(e) = attendee_result {
-            tracing::warn!(%api_id, %email, error = %e, "D1 post-event attendee upsert failed (non-fatal)");
-        }
+        // The attendee row *is* the lead. Unlike normal registration — where
+        // Google Sheets is the primary store and D1 a mirror — this endpoint has
+        // no other destination, so a failed write means the lead is gone.
+        // Answering "Thanks!" then would be a lie, and the visitor would never
+        // know to retry.
+        let attendee_id = attendee_result.map_err(|e| {
+            tracing::error!(%api_id, attendee_fingerprint = %state.log_fingerprint(&email), %event_id, error = %e, "D1 post-event attendee upsert failed");
+            AppError::Internal("could not save your registration — please try again".to_string())
+        })?;
+
         if let Err(e) = contact_result {
-            tracing::warn!(%email, error = %e, "D1 post-event contact upsert failed (non-fatal)");
+            tracing::warn!(attendee_fingerprint = %state.log_fingerprint(&email), error = %e, "D1 post-event contact upsert failed (non-fatal)");
         }
 
         // Developer profile + registration responses (the primary value of lead capture).
@@ -166,18 +177,24 @@ pub async fn register_post_event(
             event_id: &event_id,
             contact_channel: contact_channel.unwrap_or(""),
             contact_handle: contact_handle.unwrap_or(""),
-            participation_type: "online",
+            participation_type: ParticipationType::Retrospective.as_str(),
             consent_given: body.consent_given.unwrap_or(false),
             photo_consent_given: false,
             consent_marketing: body.consent_marketing.unwrap_or(false),
             profile_fields,
+            redactor: state.log_redactor(),
         })
         .await;
 
-        tracing::info!(%email, %event_id, %api_id, "post-event registration captured");
+        tracing::info!(
+            attendee_fingerprint = %state.log_fingerprint(&email),
+            %event_id,
+            %attendee_id,
+            "post-event registration captured"
+        );
 
         return Ok(ApiOk::new(serde_json::json!({
-            "attendee_id": api_id,
+            "attendee_id": attendee_id,
             "message": "Thanks! We'll notify you about future events.",
         })));
     }

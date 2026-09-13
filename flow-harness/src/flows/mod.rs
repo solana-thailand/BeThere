@@ -48,7 +48,7 @@ use crate::runner::Runner;
 /// flows::register_default(&mut runner);
 /// ```
 pub fn register_default(runner: &mut Runner) {
-    runner.register(DepositFlow::new());
+    runner.register(DepositFlow::from_env());
     runner.register(RefundPreEventEndFlow::new());
     runner.register(RefundPostEventEndCheckedInFlow::new());
     runner.register(RefundNoShowDeadlineFlow::new());
@@ -58,4 +58,27 @@ pub fn register_default(runner: &mut Runner) {
     // call ONLY register_default — do not register AuthFlow a second time
     // (doing so yields a duplicate auth row in summary.json).
     runner.register(AuthFlow::from_env());
+}
+
+/// Register one named flow for focused staging diagnosis. This is deliberately
+/// separate from [`register_default`]: focused runs never qualify a production
+/// preflight gate and therefore must not replace the full-suite green signal.
+pub fn register_named(runner: &mut Runner, name: &str) -> Result<(), String> {
+    match name {
+        "deposit" => runner.register(DepositFlow::from_env()),
+        "refund-pre-event-end" => runner.register(RefundPreEventEndFlow::new()),
+        "refund-post-event-end-checked-in" => {
+            runner.register(RefundPostEventEndCheckedInFlow::new())
+        }
+        "refund-no-show-deadline" => runner.register(RefundNoShowDeadlineFlow::new()),
+        "claim" => runner.register(ClaimFlow::new()),
+        "auth" => runner.register(AuthFlow::from_env()),
+        other => {
+            return Err(format!(
+                "unknown flow '{other}'; expected deposit, refund-pre-event-end, \
+                 refund-post-event-end-checked-in, refund-no-show-deadline, claim, or auth"
+            ));
+        }
+    };
+    Ok(())
 }

@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
-use worker::{Bucket, Context, D1Database, Env, KvStore, ObjectNamespace};
+use worker::{Bucket, Context, D1Database, Env, KvStore, ObjectNamespace, RateLimiter};
 
 // JsCast for converting the raw R2 binding handle to `js_sys::Object`.
 use wasm_bindgen::JsCast;
@@ -25,6 +25,10 @@ struct CachedBindings {
     /// object (no options) to bypass that bug. See `storage::get_bytes`.
     r2_raw: Option<js_sys::Object>,
     event_do: Option<ObjectNamespace>,
+    auth_rate_limiter: Option<Arc<RateLimiter>>,
+    claim_rate_limiter: Option<Arc<RateLimiter>>,
+    deposit_rate_limiter: Option<Arc<RateLimiter>>,
+    webhook_rate_limiter: Option<Arc<RateLimiter>>,
 }
 
 static CACHED_BINDINGS: OnceLock<CachedBindings> = OnceLock::new();
@@ -66,7 +70,7 @@ pub struct AppState {
     /// Wrapped in `Arc` because `D1Database` is not `Clone`.
     pub d1: Option<Arc<D1Database>>,
     /// Shared secret for validating webhook `Authorization: Bearer <token>` header.
-    /// If empty, webhook auth validation is skipped (backward compatible).
+    /// Webhook handlers fail closed when this is empty.
     pub webhook_secret: String,
     /// Workers fetch-event context — used for `wait_until()` to detach background
     /// tasks (e.g. Google Sheets sync) so the HTTP response returns immediately.
@@ -82,9 +86,21 @@ pub struct AppState {
     /// Durable Object namespace for ACID event writes (Issue #050).
     /// `None` if the `EVENT_DO` binding is not configured.
     pub event_do: Option<ObjectNamespace>,
+    pub auth_rate_limiter: Option<Arc<RateLimiter>>,
+    pub claim_rate_limiter: Option<Arc<RateLimiter>>,
+    pub deposit_rate_limiter: Option<Arc<RateLimiter>>,
+    pub webhook_rate_limiter: Option<Arc<RateLimiter>>,
 }
 
 impl AppState {
+    /// The capability-token replay window for this request (Issue 071).
+    ///
+    /// One place turns configuration into a policy, so the window cannot drift
+    /// between the claim, quiz and adventure paths.
+    pub(crate) fn claim_token_policy(&self) -> crate::claim::ClaimTokenPolicy {
+        crate::claim::ClaimTokenPolicy::enforced(self.config.claim_token_ttl_secs)
+    }
+
     /// Build `AppConfig` from Workers environment (called once, cached globally).
     ///
     /// Reads 22+ env vars, creates 2 `HashSet`s, and performs string
@@ -100,11 +116,12 @@ impl AppState {
             .or_else(|_| get_var(env, "GOOGLE_REDIRECT_URI"))
             .unwrap_or_else(|_| format!("{server_url}/api/auth/callback"));
 
-        let redirect_uri = if raw_redirect_uri.contains("localhost") && server_url.contains("workers.dev") {
-            format!("{server_url}/api/auth/callback")
-        } else {
-            raw_redirect_uri
-        };
+        let redirect_uri =
+            if raw_redirect_uri.contains("localhost") && server_url.contains("workers.dev") {
+                format!("{server_url}/api/auth/callback")
+            } else {
+                raw_redirect_uri
+            };
 
         let google_oauth = GoogleOAuthConfig {
             client_id: get_secret(env, "GOOGLE_CLIENT_ID").unwrap_or_default(),
@@ -241,7 +258,9 @@ impl AppState {
 
         if dev_mode {
             // Refuse DEV_MODE on live production domain only
-            let is_live_production = google_oauth.redirect_uri.contains("bethere.solana-thailand.workers.dev")
+            let is_live_production = google_oauth
+                .redirect_uri
+                .contains("bethere.solana-thailand.workers.dev")
                 && !google_oauth.redirect_uri.contains("staging");
             if is_live_production {
                 return Err(
@@ -249,8 +268,15 @@ impl AppState {
                         .to_string(),
                 );
             }
+            // The impersonated account is a fingerprint like every other
+            // identifier in the log stream (Issue 070). `build_config` runs
+            // before `AppConfig` exists, so the secret is read directly here;
+            // the fallback matches the one `jwt_secret` itself uses below, so
+            // the value still correlates with the rest of the stream.
+            let log_secret = get_secret(env, "JWT_SECRET")
+                .unwrap_or_else(|_| "bethere_dev_jwt_secret_2026".to_string());
             tracing::warn!(
-                email = %dev_email,
+                identity_fingerprint = %crate::crypto::identity_fingerprint(&dev_email, &log_secret),
                 "⚠️  DEV_MODE enabled — JWT verification bypassed, accepting \"dev-token\" as valid"
             );
         }
@@ -279,6 +305,14 @@ impl AppState {
                 .or_else(|_| get_var(env, "TELEGRAM_BOT_USERNAME"))
                 .unwrap_or_default(),
             slack_webhook_url: get_secret(env, "SLACK_WEBHOOK_URL").unwrap_or_default(),
+            // Issue 071: bounds the replay window opened by carrying capability
+            // tokens in the URL path, where Cloudflare's request log records
+            // them. A non-numeric or absent value falls back to the default;
+            // an explicit `0` disables the check (operational kill switch).
+            claim_token_ttl_secs: get_var(env, "CLAIM_TOKEN_TTL_SECS")
+                .ok()
+                .and_then(|raw| raw.trim().parse::<i64>().ok())
+                .unwrap_or(crate::claim::DEFAULT_CLAIM_TOKEN_TTL_SECS),
         })
     }
 
@@ -323,6 +357,16 @@ impl AppState {
                     r2,
                     r2_raw,
                     event_do: env.durable_object("EVENT_DO").ok(),
+                    auth_rate_limiter: env.rate_limiter("AUTH_RATE_LIMITER").ok().map(Arc::new),
+                    claim_rate_limiter: env.rate_limiter("CLAIM_RATE_LIMITER").ok().map(Arc::new),
+                    deposit_rate_limiter: env
+                        .rate_limiter("DEPOSIT_RATE_LIMITER")
+                        .ok()
+                        .map(Arc::new),
+                    webhook_rate_limiter: env
+                        .rate_limiter("WEBHOOK_RATE_LIMITER")
+                        .ok()
+                        .map(Arc::new),
                 };
                 let _ = CACHED_BINDINGS.set(b);
                 CACHED_BINDINGS.get().unwrap()
@@ -335,6 +379,10 @@ impl AppState {
         let r2 = bindings.r2.clone();
         let r2_raw = bindings.r2_raw.clone();
         let event_do = bindings.event_do.clone();
+        let auth_rate_limiter = bindings.auth_rate_limiter.clone();
+        let claim_rate_limiter = bindings.claim_rate_limiter.clone();
+        let deposit_rate_limiter = bindings.deposit_rate_limiter.clone();
+        let webhook_rate_limiter = bindings.webhook_rate_limiter.clone();
 
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
         if webhook_secret.is_empty() {
@@ -362,6 +410,10 @@ impl AppState {
             r2,
             r2_raw,
             event_do,
+            auth_rate_limiter,
+            claim_rate_limiter,
+            deposit_rate_limiter,
+            webhook_rate_limiter,
             webhook_secret,
             worker_ctx: None,
         })
@@ -376,6 +428,25 @@ impl AppState {
     /// Check if a given email is in the staff emails allowlist.
     pub fn is_staff(&self, email: &str) -> bool {
         self.config.staff_emails.contains(&email.to_lowercase())
+    }
+
+    /// Mint a keyed, one-way correlation value for one identifier (Issue 070).
+    ///
+    /// Use this for every email, wallet address, or transaction signature that
+    /// would otherwise be written into the Worker log stream. Handlers hold
+    /// `AppState`, so this keeps the deployment secret at a single call site
+    /// instead of spelling out `config.jwt_secret` at each `tracing!` field.
+    pub(crate) fn log_fingerprint(&self, identifier: &str) -> String {
+        crate::crypto::identity_fingerprint(identifier, &self.config.jwt_secret)
+    }
+
+    /// Borrow a [`LogRedactor`] to hand down into stateless helpers.
+    ///
+    /// Prefer [`Self::log_fingerprint`] inside a handler. This exists for the
+    /// pure parsers and background tasks that must emit correlatable log fields
+    /// but have no reason to hold `AppState` — or the raw secret — themselves.
+    pub(crate) fn log_redactor(&self) -> crate::crypto::LogRedactor<'_> {
+        crate::crypto::LogRedactor::new(&self.config.jwt_secret)
     }
 }
 

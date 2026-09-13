@@ -117,7 +117,9 @@ pub async fn get_my_profile() -> Result<DeveloperProfile, ApiError> {
 
     if !response.ok() {
         let status = response.status();
-        let body = super::fetch::response_text(&response).await.unwrap_or_default();
+        let body = super::fetch::response_text(&response)
+            .await
+            .unwrap_or_default();
         return Err(ApiError {
             message: format!("Failed to get profile ({status}): {body}"),
             status,

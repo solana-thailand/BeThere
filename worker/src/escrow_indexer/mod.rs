@@ -401,7 +401,10 @@ mod tests {
             events: None,
         };
 
-        assert!(parse_helius_transaction(&tx).is_none());
+        assert!(
+            parse_helius_transaction(&tx, crate::crypto::LogRedactor::new("test-log-secret"))
+                .is_none()
+        );
     }
 
     #[test]
@@ -431,7 +434,9 @@ mod tests {
             events: None,
         };
 
-        let event = parse_helius_transaction(&tx).unwrap();
+        let event =
+            parse_helius_transaction(&tx, crate::crypto::LogRedactor::new("test-log-secret"))
+                .unwrap();
         assert_eq!(event.signature, "deposit_sig_123");
         assert_eq!(event.instruction, EscrowInstruction::Deposit);
         assert_eq!(event.escrow_address, "escrow_pda");
@@ -479,7 +484,9 @@ mod tests {
             events: None,
         };
 
-        let event = parse_helius_transaction(&tx).unwrap();
+        let event =
+            parse_helius_transaction(&tx, crate::crypto::LogRedactor::new("test-log-secret"))
+                .unwrap();
         assert_eq!(event.signature, "rollover_sig_456");
         assert_eq!(event.instruction, EscrowInstruction::RolloverDeposit);
         assert_eq!(event.escrow_address, "source_escrow_pda");

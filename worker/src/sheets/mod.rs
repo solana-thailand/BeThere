@@ -4,6 +4,7 @@
 //! `worker::Fetch` (via `crate::http`) and SubtleCrypto (via `crate::crypto`)
 //! instead of `reqwest` and the `rsa` crate.
 
+pub mod a1;
 pub mod bg_sync;
 pub mod contacts;
 pub mod events_tab;
@@ -341,7 +342,8 @@ pub async fn get_column_mapping(
 
     // 2. Read row 1 headers from Google Sheets
     let access_token = get_cached_access_token(state, kv).await?;
-    let range = format!("{sheet_name}!1:1");
+    let sheet_ref = a1::sheet_ref(sheet_name);
+    let range = format!("{sheet_ref}!1:1");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -418,8 +420,9 @@ async fn fetch_sheet_range_with_retry(
                 range = %initial_range,
                 "sheet range too wide, retrying with A2:Z"
             );
+            let sheet_ref = a1::sheet_ref(sheet_name);
             // Fallback 1: A2:Z (26 columns)
-            let fallback_range = format!("{sheet_name}!A2:Z");
+            let fallback_range = format!("{sheet_ref}!A2:Z");
             let fb_url = format!(
                 "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
                 urlencoding::encode(&fallback_range)
@@ -432,7 +435,7 @@ async fn fetch_sheet_range_with_retry(
                         "A2:Z also failed, retrying with A2:Q"
                     );
                     // Fallback 2: A2:Q (17 columns — covers through checked_in_by)
-                    let fb2_range = format!("{sheet_name}!A2:Q");
+                    let fb2_range = format!("{sheet_ref}!A2:Q");
                     let fb2_url = format!(
                         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
                         urlencoding::encode(&fb2_range)
@@ -518,7 +521,8 @@ async fn get_attendees_inner(
     let mapping = get_column_mapping(state, sheet_id, sheet_name, kv).await?;
 
     let last_col = mapping.last_column_letter();
-    let range = format!("{sheet_name}!A2:{last_col}");
+    let sheet_ref = a1::sheet_ref(sheet_name);
+    let range = format!("{sheet_ref}!A2:{last_col}");
 
     let value_range: ValueRange =
         fetch_sheet_range_with_retry(sheet_id, sheet_name, &range, &access_token).await?;
@@ -608,25 +612,35 @@ pub async fn get_attendee_by_claim_token(
 ) -> Result<Option<Attendee>, String> {
     // D1-first: try by claim_token index
     if let Some(ref d1) = state.d1 {
-        match crate::db::attendees::get_attendee_by_claim_token(d1, claim_token).await {
+        match crate::db::attendees::get_attendee_by_claim_token(
+            d1,
+            claim_token,
+            state.claim_token_policy(),
+        )
+        .await
+        {
             Ok(Some(attendee)) => {
-                tracing::debug!(claim_token = %claim_token, "D1 hit: attendee by claim_token");
+                tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 hit: attendee by claim_token");
                 return Ok(Some(attendee));
             }
             Ok(None) => {
-                tracing::debug!(claim_token = %claim_token, "D1 miss: attendee by claim_token, falling back to Sheets");
+                tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 miss: attendee by claim_token, falling back to Sheets");
             }
             Err(e) => {
-                tracing::warn!(claim_token = %claim_token, error = %e, "D1 error: attendee by claim_token, falling back to Sheets");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), error = %e, "D1 error: attendee by claim_token, falling back to Sheets");
             }
         }
     }
 
-    // Sheets fallback (no KV cache — Phase 2d)
+    // Sheets fallback (no KV cache — Phase 2d). The replay window applies here
+    // too: D1 is primary, but a D1 outage must not quietly restore an unbounded
+    // token lifetime (Issue 071).
     let attendees = get_attendees(state, sheet_id, sheet_name, kv).await?;
+    let policy = state.claim_token_policy();
     let attendee = attendees
         .into_iter()
-        .find(|a| a.claim_token.as_deref() == Some(claim_token));
+        .find(|a| a.claim_token.as_deref() == Some(claim_token))
+        .filter(|a| !policy.is_expired(a.checked_in_at.as_deref()));
     Ok(attendee)
 }
 
@@ -644,17 +658,24 @@ pub async fn get_attendee_with_claim_counts(
 ) -> Result<(Option<Attendee>, usize, usize), String> {
     // D1-first: single query by event_id
     if let (Some(d1), Some(eid)) = (&state.d1, event_id) {
-        match crate::db::attendees::get_attendee_with_claim_counts(d1, claim_token, eid).await {
+        match crate::db::attendees::get_attendee_with_claim_counts(
+            d1,
+            claim_token,
+            eid,
+            state.claim_token_policy(),
+        )
+        .await
+        {
             Ok((Some(attendee), checked_in, claimed)) => {
-                tracing::debug!(claim_token = %claim_token, "D1 hit: attendee with claim counts");
+                tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 hit: attendee with claim counts");
                 return Ok((Some(attendee), checked_in, claimed));
             }
             Ok((None, _checked_in, _claimed)) => {
-                tracing::debug!(claim_token = %claim_token, "D1 miss: attendee with claim counts, falling back to Sheets");
+                tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), "D1 miss: attendee with claim counts, falling back to Sheets");
                 // D1 returned counts but no attendee — still use counts from Sheets fallback
             }
             Err(e) => {
-                tracing::warn!(claim_token = %claim_token, error = %e, "D1 error: attendee with claim counts, falling back to Sheets");
+                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token), error = %e, "D1 error: attendee with claim counts, falling back to Sheets");
             }
         }
     }
@@ -675,7 +696,15 @@ pub async fn get_attendee_with_claim_counts(
             Some((token, a))
         })
         .collect();
-    let attendee = claim_map.get(claim_token).cloned();
+    // The replay window applies to the Sheets fallback too. An expired token
+    // makes the D1 branch above return `None`, which falls through to here — so
+    // without this filter the fallback would hand back the very attendee the
+    // window just withheld (Issue 071).
+    let policy = state.claim_token_policy();
+    let attendee = claim_map
+        .get(claim_token)
+        .cloned()
+        .filter(|a| !policy.is_expired(a.checked_in_at.as_deref()));
 
     Ok((attendee, total_checked_in, total_claimed))
 }
@@ -737,7 +766,8 @@ pub async fn get_staff_members(
 
     // Cache miss or no KV — fetch from Google Sheets
     let access_token = get_cached_access_token(state, kv).await?;
-    let range = format!("{staff_sheet_name}!A2:B");
+    let sheet_ref = a1::sheet_ref(staff_sheet_name);
+    let range = format!("{sheet_ref}!A2:B");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)

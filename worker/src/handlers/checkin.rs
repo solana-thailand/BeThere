@@ -53,7 +53,7 @@ pub async fn check_in(
     Path(id): Path<String>,
     Query(query): Query<CheckInQuery>,
 ) -> Result<ApiOk<CheckInResponse>, crate::error::WorkerError> {
-    tracing::info!(attendee_id = %id, staff_email = %claims.email, online = query.online, "check-in request");
+    tracing::info!(attendee_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), online = query.online, "check-in request");
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
@@ -90,16 +90,15 @@ pub async fn check_in(
             return Err(AppError::Validation(e.to_string()).into());
         }
     } else {
-        // Online check-in — still need approval and not already checked in
-        if attendee.is_checked_in() {
-            return Err(AppError::Validation("attendee is already checked in".to_string()).into());
-        }
-        if !attendee.is_approved() {
-            return Err(AppError::Validation(format!(
-                "attendee is not approved (status: {})",
-                attendee.approval_status
-            ))
-            .into());
+        // Online check-in — domain gate (not already checked in, approved).
+        // Shared with the adventure quest-complete path so the two cannot diverge.
+        if let Err(e) = attendee.can_check_in_virtually() {
+            tracing::warn!(
+                attendee_id = %attendee.api_id,
+                error = %e,
+                "online check-in denied",
+            );
+            return Err(AppError::Validation(e.to_string()).into());
         }
         // Verify event supports online track
         if !event.event_format.has_online() {
@@ -167,10 +166,18 @@ pub async fn check_in(
         let d1_clone = Arc::clone(d1);
         let event_id_clone = event.id.clone();
         let email_clone = attendee.email.clone();
+        // The campaign updater only logs the actor, so it takes the fingerprint
+        // (Issue 070) rather than a redactor it cannot hold across `wait_until`.
+        let fingerprint_clone = state.log_fingerprint(&attendee.email);
         if let Some(ctx) = &state.worker_ctx {
             ctx.wait_until(async move {
-                crate::db::campaigns::on_event_checkin(&d1_clone, &event_id_clone, &email_clone)
-                    .await;
+                crate::db::campaigns::on_event_checkin(
+                    &d1_clone,
+                    &event_id_clone,
+                    &email_clone,
+                    &fingerprint_clone,
+                )
+                .await;
             });
         }
     }
@@ -212,9 +219,9 @@ pub async fn check_in(
 
     tracing::info!(
         attendee_id = %attendee.api_id,
-        name = %attendee.display_name(),
-        staff_email = %claims.email,
-        claim_token = %claim_token,
+        name_fingerprint = %state.log_fingerprint(attendee.display_name()),
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&claim_token),
         checked_in_at = %timestamp,
         "check-in successful",
     );
@@ -273,9 +280,22 @@ pub async fn check_in(
         )
         .await
         {
-            Ok(true) => tracing::info!(%email, event_id = %event.id, amount = dep.amount_thb, "rolling credit returned on check-in (Model B)"),
+            Ok(true) => {
+                tracing::info!(
+                    attendee_fingerprint = %state.log_fingerprint(&email),
+                    event_id = %event.id,
+                    amount = dep.amount_thb,
+                    "rolling credit returned on check-in (Model B)"
+                )
+            }
             Ok(false) => {} // already returned — idempotent
-            Err(e) => tracing::error!(%email, error = %e, "credit return on check-in failed — reconcile"),
+            Err(e) => {
+                tracing::error!(
+                    attendee_fingerprint = %state.log_fingerprint(&email),
+                    error = %e,
+                    "credit return on check-in failed — reconcile"
+                )
+            }
         }
     }
 
@@ -302,7 +322,7 @@ pub async fn undo_check_in(
     Path(id): Path<String>,
     Query(query): Query<UndoCheckInQuery>,
 ) -> Result<impl IntoResponse, crate::error::WorkerError> {
-    tracing::info!(attendee_id = %id, staff_email = %claims.email, "undo check-in request");
+    tracing::info!(attendee_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "undo check-in request");
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
@@ -390,8 +410,8 @@ pub async fn undo_check_in(
 
     tracing::info!(
         attendee_id = %attendee.api_id,
-        name = %attendee.display_name(),
-        staff_email = %claims.email,
+        name_fingerprint = %state.log_fingerprint(attendee.display_name()),
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "undo check-in successful",
     );
 
@@ -421,9 +441,17 @@ pub async fn undo_check_in(
     {
         let email = attendee.email.trim().to_lowercase();
         if let Err(e) = crate::db::credit_ledger::remove_return(db, &event.id, &email).await {
-            tracing::error!(%email, error = %e, "credit return undo failed — reconcile");
+            tracing::error!(
+                attendee_fingerprint = %state.log_fingerprint(&email),
+                error = %e,
+                "credit return undo failed — reconcile"
+            );
         } else {
-            tracing::info!(%email, event_id = %event.id, "rolling credit return undone on undo-check-in");
+            tracing::info!(
+                attendee_fingerprint = %state.log_fingerprint(&email),
+                event_id = %event.id,
+                "rolling credit return undone on undo-check-in"
+            );
         }
     }
 

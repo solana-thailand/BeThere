@@ -21,6 +21,8 @@ pub mod events_page;
 pub mod form_builder;
 pub mod landing;
 pub mod login;
+pub mod nfc_checkin;
+pub mod notifications;
 pub mod onchain_events_panel;
 pub mod pr_pack;
 pub mod privacy;
@@ -29,7 +31,6 @@ pub mod public_event;
 pub mod quiz_editor;
 pub mod scanner;
 pub mod ticket;
-pub mod nfc_checkin;
 
 pub use event_summary::EventSummary;
 pub use nfc_checkin::NfcCheckin;

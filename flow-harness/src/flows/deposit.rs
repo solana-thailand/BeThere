@@ -36,10 +36,10 @@
 
 use std::time::{Duration, Instant};
 
-use domain::models::deposit::DepositStatusResponse;
+use domain::models::deposit::{DepositStatus, DepositStatusResponse};
 
-use crate::assertions::{now_ms, DepositStatusAsserter};
-use crate::client::{DepositUsdcRequest, WorkerClient};
+use crate::assertions::DepositStatusAsserter;
+use crate::client::{DepositSignatureRequest, DepositUsdcRequest, WorkerClient};
 use crate::context::StagingContext;
 use crate::error::{EscrowCode, HarnessError, HarnessResult, WorkerError};
 use crate::runner::Flow;
@@ -75,6 +75,11 @@ pub struct DepositFlowConfig {
     pub poll_interval: Duration,
     /// Total timeout before the flow fails with "verification timeout".
     pub poll_timeout: Duration,
+    /// On a previously verified fixture, also call the authenticated
+    /// confirmation endpoint. Off by default because the status record plus
+    /// PDA are sufficient for ordinary idempotent reruns; opt in when
+    /// diagnosing the confirmation route itself.
+    pub verify_existing_confirmation: bool,
 }
 
 impl Default for DepositFlowConfig {
@@ -85,6 +90,7 @@ impl Default for DepositFlowConfig {
             wallet_address: None,
             poll_interval: Duration::from_millis(DEFAULT_POLL_INTERVAL_MS),
             poll_timeout: Duration::from_millis(DEFAULT_POLL_TIMEOUT_MS),
+            verify_existing_confirmation: false,
         }
     }
 }
@@ -105,6 +111,25 @@ impl DepositFlow {
     pub fn new() -> Self {
         Self {
             config: DepositFlowConfig::default(),
+        }
+    }
+
+    /// Build a deposit flow for the fixture selected by the CLI environment.
+    ///
+    /// Named staging fixtures must keep the Worker event and attendee IDs
+    /// together. Reading both here makes `--flow deposit` target the same
+    /// fixture as [`StagingContext`], rather than silently falling back to the
+    /// historic default attendee.
+    #[must_use]
+    pub fn from_env() -> Self {
+        let defaults = DepositFlowConfig::default();
+        Self {
+            config: DepositFlowConfig {
+                attendee_id: fixture_value("FLOW_HARNESS_ATTENDEE_ID", defaults.attendee_id),
+                event_id: fixture_value("FLOW_HARNESS_EVENT_ID", defaults.event_id),
+                verify_existing_confirmation: env_flag("FLOW_HARNESS_VERIFY_CONFIRMED_DEPOSIT"),
+                ..defaults
+            },
         }
     }
 
@@ -136,6 +161,10 @@ impl DepositFlow {
     }
 }
 
+fn fixture_value(variable: &str, default: String) -> String {
+    std::env::var(variable).unwrap_or(default)
+}
+
 impl Default for DepositFlow {
     fn default() -> Self {
         Self::new()
@@ -154,91 +183,175 @@ impl Flow for DepositFlow {
 
         let wallet = self.wallet_address(ctx);
 
-        // ── Step 1: Request the deposit transaction ─────────────────────────
-        //
-        // Issues a live HTTP request to the worker; against an un-provisioned
-        // target it fails with `HarnessError::Transport` (recorded as a flow
-        // failure). Point the harness at a live staging worker to exercise it.
-        let deposit_req = DepositUsdcRequest {
-            attendee_id: self.config.attendee_id.clone(),
-            event_id: self.config.event_id.clone(),
-            wallet_address: wallet.clone(),
-        };
-        let deposit_resp = client.request_deposit_usdc(ctx, &deposit_req).await?;
-
-        // The response carries a base64 transaction and a Solana Pay URL.
-        // The harness signs + submits the transaction directly (it has the
-        // funded payer); the Solana Pay URL is a fallback for manual flows.
-        assert_deposit_response_present(&deposit_resp.transaction, &deposit_resp.solana_pay_url)?;
-
-        // ── Step 2: Sign + submit the transaction ───────────────────────────
-        //
-        // Decodes the base64 tx, signs with `ctx.payer`, submits via the
-        // `FLOW_HARNESS_RPC_URL` cluster, and awaits confirmation (see
-        // `crate::chain::submit_tx`).
-        let _signature = submit_deposit_transaction(ctx, &deposit_resp.transaction).await?;
-
-        // ── Step 3: Poll for verification ───────────────────────────────────
-        //
-        // The worker observes the transaction and flips `verified=true` on the
-        // attendee's `DepositStatus` row. We poll until verified or timeout.
-        let started_at = Instant::now();
-        let deadline = self.poll_deadline(started_at);
-
-        let status = loop {
-            if Self::reached_timeout(Instant::now(), deadline) {
-                return Err(HarnessError::AssertionFailed {
-                    flow: FLOW_NAME,
-                    reason: format!(
-                        "verification timeout after {}ms (attendee={})",
-                        self.config.poll_timeout.as_millis(),
-                        self.config.attendee_id
-                    ),
-                });
+        // A verified record is already durable evidence of a prior completed
+        // flow. Reuse it directly on reruns: calling the confirmation poller
+        // again adds latency but cannot add evidence, and must never precede
+        // the on-chain PDA assertion below.
+        let initial_status = client
+            .fetch_deposit_status(ctx, &self.config.attendee_id)
+            .await?;
+        let status = if is_verified(initial_status.status.as_ref()) {
+            eprintln!("   deposit: reusing verified staging record");
+            if self.config.verify_existing_confirmation {
+                eprintln!("   deposit: probing authenticated confirmation route");
+                let confirmation = client
+                    .confirm_deposit(ctx, &self.config.attendee_id)
+                    .await?;
+                if !confirmation.confirmed {
+                    return Err(HarnessError::AssertionFailed {
+                        flow: FLOW_NAME,
+                        reason: "verified deposit was not confirmed by the authenticated confirmation route"
+                            .to_string(),
+                    });
+                }
             }
+            initial_status
+        } else {
+            eprintln!("   deposit: checking for an interrupted prior submission");
+            record_discovered_signature(client, ctx, &self.config).await?;
 
-            let current = client
-                .fetch_deposit_status(ctx, &self.config.attendee_id)
-                .await?;
-
-            if is_verified(&current) {
-                break current;
+            // Recover first: an interrupted prior run may already have sent
+            // its transaction. Retrying must never create a duplicate attendee
+            // PDA.
+            eprintln!("   deposit: reading confirmation state");
+            match confirmation_probe(client, ctx, &self.config.attendee_id).await? {
+                ConfirmationProbe::Verified(status) => *status,
+                // The Worker has accepted the on-chain proof but its following
+                // read is not yet consistent. Keep polling; never build another
+                // deposit transaction for this attendee PDA.
+                ConfirmationProbe::Persisting => {
+                    wait_for_confirmed_status(client, ctx, &self.config).await?
+                }
+                ConfirmationProbe::NotConfirmed => {
+                    let deposit_req = DepositUsdcRequest {
+                        attendee_id: self.config.attendee_id.clone(),
+                        event_id: self.config.event_id.clone(),
+                        wallet_address: wallet.clone(),
+                    };
+                    let deposit_resp = client.request_deposit_usdc(ctx, &deposit_req).await?;
+                    assert_solana_pay_url(&deposit_resp.solana_pay_url)?;
+                    let tx_resp = client
+                        .fetch_deposit_transaction(ctx, &self.config.attendee_id, &wallet)
+                        .await?;
+                    assert_transaction_present(&tx_resp.transaction)?;
+                    let signature = submit_deposit_transaction(ctx, &tx_resp.transaction).await?;
+                    client
+                        .record_deposit_signature(
+                            ctx,
+                            &DepositSignatureRequest {
+                                attendee_id: self.config.attendee_id.clone(),
+                                event_id: self.config.event_id.clone(),
+                                tx_signature: signature,
+                            },
+                        )
+                        .await?;
+                    wait_for_confirmed_status(client, ctx, &self.config).await?
+                }
             }
-
-            // Sleep before the next poll. `tokio::time::sleep` is cancel-safe;
-            // the runner does not cancel mid-flow today, but the property is
-            // preserved for future short-circuit semantics.
-            tokio::time::sleep(self.config.poll_interval).await;
         };
 
         // ── Step 4: Assert the deposit-status response is internally
-        // consistent and the refund-window verdict matches expectation
-        // (deposit-just-verified ⇒ no refund yet, since `now < event_end` on
-        // a freshly-seeded event). The assertion logic is the staging-
-        // independent payload: even though we fetched the status over the
-        // network, the verdict computation is pure and is the regression
-        // safety net for fix #19.
-        DepositStatusAsserter::new(FLOW_NAME, &status)
-            .deadline_consistent()?
-            .outcome_is(crate::assertions::RefundOutcome::PreEventEnd, now_ms())?;
+        // consistent. This flow is deliberately safe to re-run against a
+        // verified fixture: its refund verdict changes as wall-clock time
+        // crosses the event end, while the deposit itself remains valid.
+        // The dedicated refund flows own the time-window outcome assertions.
+        DepositStatusAsserter::new(FLOW_NAME, &status).deadline_consistent()?;
 
         // ── Step 5: Assert the on-chain PDA exists with expected fields ─────
         //
         // Fetches the `AttendeeDeposit` PDA via RPC and asserts owner == escrow
         // program and a fresh (not checked-in / not refunded) deposit — see
         // `assert_on_chain_pda_exists`. Defense-in-depth over the API assertions.
+        eprintln!("   deposit: verifying attendee PDA on Devnet");
         assert_on_chain_pda_exists(ctx).await?;
 
         Ok(())
     }
 }
 
+async fn record_discovered_signature(
+    client: &WorkerClient,
+    ctx: &StagingContext,
+    config: &DepositFlowConfig,
+) -> HarnessResult<()> {
+    let status = client.fetch_deposit_status(ctx, &config.attendee_id).await?;
+    let needs_signature = status
+        .status
+        .as_ref()
+        .is_some_and(|deposit| !deposit.verified && deposit.tx_signature.as_deref().is_none_or(str::is_empty));
+    if !needs_signature {
+        return Ok(());
+    }
+
+    let (pda, _) = ctx.attendee_deposit_pda();
+    if let Some(signature) = crate::chain::latest_signature_for_address(ctx, &pda).await? {
+        client
+            .record_deposit_signature(
+                ctx,
+                &DepositSignatureRequest {
+                    attendee_id: config.attendee_id.clone(),
+                    event_id: config.event_id.clone(),
+                    tx_signature: signature,
+                },
+            )
+            .await?;
+    }
+    Ok(())
+}
+
+enum ConfirmationProbe {
+    NotConfirmed,
+    Persisting,
+    Verified(Box<DepositStatusResponse>),
+}
+
+async fn confirmation_probe(
+    client: &WorkerClient,
+    ctx: &StagingContext,
+    attendee_id: &str,
+) -> HarnessResult<ConfirmationProbe> {
+    let confirmation = client.confirm_deposit(ctx, attendee_id).await?;
+    if !confirmation.confirmed {
+        return Ok(ConfirmationProbe::NotConfirmed);
+    }
+
+    let status = client.fetch_deposit_status(ctx, attendee_id).await?;
+    if is_verified(status.status.as_ref()) {
+        Ok(ConfirmationProbe::Verified(Box::new(status)))
+    } else {
+        Ok(ConfirmationProbe::Persisting)
+    }
+}
+
+async fn wait_for_confirmed_status(
+    client: &WorkerClient,
+    ctx: &StagingContext,
+    config: &DepositFlowConfig,
+) -> HarnessResult<DepositStatusResponse> {
+    let deadline = Instant::now() + config.poll_timeout;
+    loop {
+        if Instant::now() >= deadline {
+            return Err(HarnessError::AssertionFailed {
+                flow: FLOW_NAME,
+                reason: format!(
+                    "verification timeout after {}ms (attendee={})",
+                    config.poll_timeout.as_millis(),
+                    config.attendee_id
+                ),
+            });
+        }
+        match confirmation_probe(client, ctx, &config.attendee_id).await? {
+            ConfirmationProbe::Verified(status) => return Ok(*status),
+            ConfirmationProbe::NotConfirmed | ConfirmationProbe::Persisting => {}
+        }
+        tokio::time::sleep(config.poll_interval).await;
+    }
+}
+
 // ── Pure helpers (staging-independent, unit-tested) ──────────────────────────
 
-/// A deposit response must carry a non-empty transaction and (optionally) a
-/// non-empty Solana Pay URL. The URL may be empty for the `/deposit/usdc/tx`
-/// variant; the harness only requires it for the Solana Pay path.
-fn assert_deposit_response_present(transaction: &str, solana_pay_url: &str) -> HarnessResult<()> {
+/// A callback transaction must be non-empty and plausibly serialized.
+fn assert_transaction_present(transaction: &str) -> HarnessResult<()> {
     if transaction.is_empty() {
         return Err(HarnessError::AssertionFailed {
             flow: FLOW_NAME,
@@ -256,9 +369,12 @@ fn assert_deposit_response_present(transaction: &str, solana_pay_url: &str) -> H
             ),
         });
     }
-    // Solana Pay URLs are optional for the tx-submission path but, when
-    // present, must be well-formed (start with `solana:`).
-    if !solana_pay_url.is_empty() && !solana_pay_url.starts_with("solana:") {
+    Ok(())
+}
+
+/// A deposit initiation response must provide a valid Solana Pay callback.
+fn assert_solana_pay_url(solana_pay_url: &str) -> HarnessResult<()> {
+    if !solana_pay_url.starts_with("solana:") {
         return Err(HarnessError::AssertionFailed {
             flow: FLOW_NAME,
             reason: format!(
@@ -267,24 +383,26 @@ fn assert_deposit_response_present(transaction: &str, solana_pay_url: &str) -> H
             ),
         });
     }
+    if solana_pay_url.len() <= "solana:".len() {
+        return Err(HarnessError::AssertionFailed {
+            flow: FLOW_NAME,
+            reason: "deposit response `solana_pay_url` is empty".to_string(),
+        });
+    }
     Ok(())
 }
 
-/// Determine whether a [`DepositStatusResponse`] reports a verified deposit.
+/// Determine whether the attendee's deposit record is verified.
 ///
-/// The `DepositStatusResponse` shape surfaces verification via the underlying
-/// `DepositStatus.verified` field. The exact accessor depends on which fields
-/// the response carries; this helper centralises the truth so a future
-/// refactor of `domain` updates one call-site.
-///
-/// TODO(staging-independent): once `DepositStatusResponse` is confirmed to
-/// surface `verified` directly, replace this with a field read. For now, we
-/// infer verification from `deposit_amount_usdc > 0` (the worker populates
-/// the amount only after verifying on-chain). This is the conservative read:
-/// a verified-but-zero-amount deposit (not currently possible) would poll
-/// until timeout, which is the correct fail-safe.
-fn is_verified(status: &DepositStatusResponse) -> bool {
-    status.deposit_amount_usdc > 0
+/// Event-level `deposit_amount_usdc` is configuration, not evidence of an
+/// attendee payment. Only the nested deposit record records on-chain
+/// verification; absent or pending records must continue polling.
+fn is_verified(status: Option<&DepositStatus>) -> bool {
+    status.is_some_and(|deposit| deposit.verified)
+}
+
+fn env_flag(name: &str) -> bool {
+    std::env::var(name).is_ok_and(|value| matches!(value.as_str(), "1" | "true" | "TRUE"))
 }
 
 /// Classify a worker error from the deposit endpoint.
@@ -417,7 +535,7 @@ mod tests {
 
     #[test]
     fn assert_deposit_response_rejects_empty_transaction() {
-        let err = assert_deposit_response_present("", "").unwrap_err();
+        let err = assert_transaction_present("").unwrap_err();
         assert!(matches!(err, HarnessError::AssertionFailed { .. }));
         assert!(err.to_string().contains("missing `transaction`"));
     }
@@ -426,28 +544,26 @@ mod tests {
     fn assert_deposit_response_rejects_short_transaction() {
         // 50 bytes — below the 100-byte sanity floor.
         let tx = "0".repeat(50);
-        let err = assert_deposit_response_present(&tx, "").unwrap_err();
+        let err = assert_transaction_present(&tx).unwrap_err();
         assert!(err.to_string().contains("suspiciously short"));
     }
 
     #[test]
-    fn assert_deposit_response_accepts_valid_tx_without_pay_url() {
+    fn assert_transaction_accepts_valid_payload() {
         let tx = "0".repeat(200);
-        assert!(assert_deposit_response_present(&tx, "").is_ok());
+        assert!(assert_transaction_present(&tx).is_ok());
     }
 
     #[test]
-    fn assert_deposit_response_accepts_valid_solana_pay_url() {
-        let tx = "0".repeat(200);
+    fn assert_solana_pay_url_accepts_valid_callback() {
         let url = "solana:https://example.com/pay";
-        assert!(assert_deposit_response_present(&tx, url).is_ok());
+        assert!(assert_solana_pay_url(url).is_ok());
     }
 
     #[test]
-    fn assert_deposit_response_rejects_malformed_pay_url() {
-        let tx = "0".repeat(200);
+    fn assert_solana_pay_url_rejects_malformed_callback() {
         let url = "https://example.com/pay";
-        let err = assert_deposit_response_present(&tx, url).unwrap_err();
+        let err = assert_solana_pay_url(url).unwrap_err();
         assert!(err.to_string().contains("solana_pay_url` malformed"));
     }
 
@@ -489,6 +605,53 @@ mod tests {
         assert_eq!(c.event_id, "flow-test-event");
         assert_eq!(c.poll_interval, Duration::from_millis(2_000));
         assert_eq!(c.poll_timeout, Duration::from_millis(60_000));
+    }
+
+    #[test]
+    fn fixture_value_uses_override_or_default() {
+        assert_eq!(
+            fixture_value("FLOW_HARNESS_TEST_FIXTURE_VALUE", "default".to_string()),
+            "default"
+        );
+    }
+
+    #[test]
+    fn confirmation_response_requires_explicit_boolean() {
+        let confirmed: crate::client::ConfirmDepositResponse =
+            serde_json::from_str(r#"{"confirmed":true,"tx_signature":"sig"}"#)
+                .expect("valid confirmation response");
+        assert!(confirmed.confirmed);
+        assert_eq!(confirmed.tx_signature.as_deref(), Some("sig"));
+        let pending: crate::client::ConfirmDepositResponse =
+            serde_json::from_str(r#"{"confirmed":false}"#).expect("pending response");
+        assert!(!pending.confirmed);
+        assert!(pending.tx_signature.is_none());
+    }
+
+    #[test]
+    fn verification_requires_the_attendee_record() {
+        let pending = DepositStatus {
+            attendee_id: "attendee".to_string(),
+            event_id: "event".to_string(),
+            method: domain::models::deposit::DepositMethod::Usdc,
+            amount: 10_000_000,
+            currency: "USDC".to_string(),
+            tx_signature: Some("signature".to_string()),
+            verified: false,
+            deposited_at: "2026-01-01T00:00:00Z".to_string(),
+            wallet_address: Some("wallet".to_string()),
+            deposit_order: 1,
+            refundable: true,
+            rejected: false,
+        };
+        assert!(!is_verified(None));
+        assert!(!is_verified(Some(&pending)));
+
+        let verified = DepositStatus {
+            verified: true,
+            ..pending
+        };
+        assert!(is_verified(Some(&verified)));
     }
 
     #[tokio::test]

@@ -72,17 +72,19 @@ pub fn Adventure() -> impl IntoView {
         if let Some(ref token) = restore_token {
             // Restore from API (claim flow)
             let token = token.clone();
-        let levels = restore_levels.get();
-        let set_g = restore_set_game;
-        let set_completed = restore_set_completed;
-        let eid_for_status = restore_event_id.clone();
-        leptos::task::spawn_local(async move {
-            match api::get_adventure_status(&token, eid_for_status.as_deref()).await {
-                Ok(status_data) => {
-                    if let Some(progress) = status_data.progress
-                        && !progress.levels_completed.is_empty() {
+            let levels = restore_levels.get();
+            let set_g = restore_set_game;
+            let set_completed = restore_set_completed;
+            let eid_for_status = restore_event_id.clone();
+            leptos::task::spawn_local(async move {
+                match api::get_adventure_status(&token, eid_for_status.as_deref()).await {
+                    Ok(status_data) => {
+                        if let Some(progress) = status_data.progress
+                            && !progress.levels_completed.is_empty()
+                        {
                             // Find which level indices are completed
-                            let completed_indices: HashSet<usize> = levels.iter()
+                            let completed_indices: HashSet<usize> = levels
+                                .iter()
                                 .enumerate()
                                 .filter(|(_, l)| progress.levels_completed.contains(&l.id))
                                 .map(|(i, _)| i)
@@ -90,9 +92,10 @@ pub fn Adventure() -> impl IntoView {
                             set_completed.set(completed_indices.clone());
 
                             // Find the first uncompleted level
-                            let next_level_idx = levels.iter().position(|l| {
-                                !progress.levels_completed.contains(&l.id)
-                            }).unwrap_or(0);
+                            let next_level_idx = levels
+                                .iter()
+                                .position(|l| !progress.levels_completed.contains(&l.id))
+                                .unwrap_or(0);
                             log::info!(
                                 "[adventure] restored progress: {}/{} levels done, loading level {}",
                                 progress.levels_completed.len(),
@@ -106,72 +109,84 @@ pub fn Adventure() -> impl IntoView {
                                 set_g.set(state);
                             }
                         }
-                }
-                Err(e) => {
+                    }
+                    Err(e) => {
                         log::warn!("[adventure] failed to restore progress: {e}");
                         // Continue with default — first level with intro
                     }
                 }
             });
-            } else {
-                // Restore from localStorage (casual play)
-                let stored = gloo_utils::window()
-                    .local_storage()
-                    .ok()
-                    .flatten()
-                    .and_then(|ls| ls.get(LS_COMPLETED_KEY).ok().flatten());
-                if let Some(json) = stored
-                    && let Ok(indices) = serde_json::from_str::<HashSet<usize>>(&json) {
-                        log::info!("[adventure] restored {} completed levels from localStorage", indices.len());
-                        let levels = restore_levels.get();
-                        let next_idx = (0..levels.len()).find(|i| !indices.contains(i)).unwrap_or(0);
-                        if let Some(level) = levels.get(next_idx) {
-                            let mut state = engine::init_game_state(level);
-                            state.current_level = next_idx;
-                            state.showing_intro = false;
-                            restore_set_game.set(state);
-                        }
-                        restore_set_completed.set(indices);
-                    }
+        } else {
+            // Restore from localStorage (casual play)
+            let stored = gloo_utils::window()
+                .local_storage()
+                .ok()
+                .flatten()
+                .and_then(|ls| ls.get(LS_COMPLETED_KEY).ok().flatten());
+            if let Some(json) = stored
+                && let Ok(indices) = serde_json::from_str::<HashSet<usize>>(&json)
+            {
+                log::info!(
+                    "[adventure] restored {} completed levels from localStorage",
+                    indices.len()
+                );
+                let levels = restore_levels.get();
+                let next_idx = (0..levels.len())
+                    .find(|i| !indices.contains(i))
+                    .unwrap_or(0);
+                if let Some(level) = levels.get(next_idx) {
+                    let mut state = engine::init_game_state(level);
+                    state.current_level = next_idx;
+                    state.showing_intro = false;
+                    restore_set_game.set(state);
+                }
+                restore_set_completed.set(indices);
+            }
 
-                // Fetch adventure config from API to determine required_level
-                if let Some(ref eid) = restore_event_id {
-                    let eid = eid.clone();
-                    let set_rl = restore_set_required_level;
-                    let set_ap = restore_set_adventure_passed;
-                    let set_slug = restore_set_event_slug;
-                    let completed_read = restore_completed_read;
-                    leptos::task::spawn_local(async move {
-                        match api::get_public_adventure_config(&eid).await {
-                            Ok(config) => {
-                                // Store slug for navigation links
-                                if !config.event_slug.is_empty() {
-                                    set_slug.set(Some(config.event_slug.clone()));
-                                }
-                                if config.enabled {
-                                    log::info!("[adventure] config: enabled={}, required_level={:?}", config.enabled, config.required_level);
-                                    set_rl.set(config.required_level);
-                                    // Check if already passed from restored progress
-                                    if let Some(req_lvl) = config.required_level {
-                                        let completed = completed_read.get();
-                                        // required_level is 0-based in config
-                                        // e.g. required_level=2 means levels 0,1,2 must be completed
-                                        let all_done = (0..=req_lvl).all(|i| completed.contains(&i));
-                                        if all_done {
-                                            log::info!("[adventure] casual mode: already passed from restored progress");
-                                            set_ap.set(true);
-                                        }
+            // Fetch adventure config from API to determine required_level
+            if let Some(ref eid) = restore_event_id {
+                let eid = eid.clone();
+                let set_rl = restore_set_required_level;
+                let set_ap = restore_set_adventure_passed;
+                let set_slug = restore_set_event_slug;
+                let completed_read = restore_completed_read;
+                leptos::task::spawn_local(async move {
+                    match api::get_public_adventure_config(&eid).await {
+                        Ok(config) => {
+                            // Store slug for navigation links
+                            if !config.event_slug.is_empty() {
+                                set_slug.set(Some(config.event_slug.clone()));
+                            }
+                            if config.enabled {
+                                log::info!(
+                                    "[adventure] config: enabled={}, required_level={:?}",
+                                    config.enabled,
+                                    config.required_level
+                                );
+                                set_rl.set(config.required_level);
+                                // Check if already passed from restored progress
+                                if let Some(req_lvl) = config.required_level {
+                                    let completed = completed_read.get();
+                                    // required_level is 0-based in config
+                                    // e.g. required_level=2 means levels 0,1,2 must be completed
+                                    let all_done = (0..=req_lvl).all(|i| completed.contains(&i));
+                                    if all_done {
+                                        log::info!(
+                                            "[adventure] casual mode: already passed from restored progress"
+                                        );
+                                        set_ap.set(true);
                                     }
                                 }
                             }
-                            Err(e) => {
-                                log::warn!("[adventure] failed to fetch config: {e}");
-                            }
                         }
-                    });
-                }
+                        Err(e) => {
+                            log::warn!("[adventure] failed to fetch config: {e}");
+                        }
+                    }
+                });
             }
-        });
+        }
+    });
 
     // Timer — increments every second while level is active
     let game_for_timer = game;
@@ -249,7 +264,8 @@ pub fn Adventure() -> impl IntoView {
             // Save to API (claim flow)
             let level_id = level.id.clone();
             let elapsed = auto_save_elapsed.get();
-            let stars = engine::calculate_stars(g.moves_count, g.solved_puzzles.len() as u32, elapsed);
+            let stars =
+                engine::calculate_stars(g.moves_count, g.solved_puzzles.len() as u32, elapsed);
             let score = AdventureLevelScore {
                 moves: g.moves_count,
                 puzzles_solved: g.solved_puzzles.len() as u32,
@@ -280,13 +296,17 @@ pub fn Adventure() -> impl IntoView {
             let mut completed = auto_save_completed_read.get();
             completed.insert(level_idx);
             if let Ok(json) = serde_json::to_string(&completed)
-                && let Some(ls) = gloo_utils::window().local_storage().ok().flatten() {
-                    if ls.set(LS_COMPLETED_KEY, &json).is_err() {
-                        log::warn!("[adventure] failed to save to localStorage");
-                    } else {
-                        log::info!("[adventure] saved {} completed levels to localStorage", completed.len());
-                    }
+                && let Some(ls) = gloo_utils::window().local_storage().ok().flatten()
+            {
+                if ls.set(LS_COMPLETED_KEY, &json).is_err() {
+                    log::warn!("[adventure] failed to save to localStorage");
+                } else {
+                    log::info!(
+                        "[adventure] saved {} completed levels to localStorage",
+                        completed.len()
+                    );
                 }
+            }
 
             // Check if adventure is passed in casual mode
             // required_level is 0-based in config: n means levels 0..=n must be completed
@@ -294,7 +314,9 @@ pub fn Adventure() -> impl IntoView {
             if let Some(req_lvl) = req_lvl {
                 let all_required_done = (0..=req_lvl).all(|i| completed.contains(&i));
                 if all_required_done {
-                    log::info!("[adventure] casual mode: quest passed (required level index {req_lvl} completed)");
+                    log::info!(
+                        "[adventure] casual mode: quest passed (required level index {req_lvl} completed)"
+                    );
                     auto_save_set_adventure_passed.set(true);
                 }
             }
@@ -307,33 +329,37 @@ pub fn Adventure() -> impl IntoView {
     let _quest_event_slug = event_slug;
     let (quest_checkin_done, set_quest_checkin_done) = signal(false);
     Effect::new(move |_| {
-        if quest_adventure_passed.get() && !quest_checkin_done.get() && !has_token
-            && let Some(ref eid) = quest_event_id {
-                let eid = eid.clone();
-                let set_done = set_quest_checkin_done;
-                let set_slug = set_event_slug;
-                let set_ct = set_quest_claim_token;
-                leptos::task::spawn_local(async move {
-                    match api::quest_complete_checkin(&eid).await {
-                        Ok(data) => {
-                            log::info!("[adventure] virtual check-in done: {}", data.status);
-                            if !data.event_slug.is_empty() {
-                                set_slug.set(Some(data.event_slug));
-                            }
-                            if let Some(ct) = data.claim_token
-                                && !ct.is_empty() {
-                                    log::info!("[adventure] got claim token from check-in");
-                                    set_ct.set(Some(ct));
-                                }
-                            set_done.set(true);
+        if quest_adventure_passed.get()
+            && !quest_checkin_done.get()
+            && !has_token
+            && let Some(ref eid) = quest_event_id
+        {
+            let eid = eid.clone();
+            let set_done = set_quest_checkin_done;
+            let set_slug = set_event_slug;
+            let set_ct = set_quest_claim_token;
+            leptos::task::spawn_local(async move {
+                match api::quest_complete_checkin(&eid).await {
+                    Ok(data) => {
+                        log::info!("[adventure] virtual check-in done: {}", data.status);
+                        if !data.event_slug.is_empty() {
+                            set_slug.set(Some(data.event_slug));
                         }
-                        Err(e) => {
-                            log::warn!("[adventure] virtual check-in failed: {e}");
-                            set_done.set(true); // Don't retry
+                        if let Some(ct) = data.claim_token
+                            && !ct.is_empty()
+                        {
+                            log::info!("[adventure] got claim token from check-in");
+                            set_ct.set(Some(ct));
                         }
+                        set_done.set(true);
                     }
-                });
-            }
+                    Err(e) => {
+                        log::warn!("[adventure] virtual check-in failed: {e}");
+                        set_done.set(true); // Don't retry
+                    }
+                }
+            });
+        }
     });
 
     // Dismiss intro on first interaction
@@ -445,7 +471,9 @@ pub fn Adventure() -> impl IntoView {
                     set_game.update(|g| {
                         *g = engine::open_puzzle_by_id(g.clone(), puzzle_id, &levels);
                     });
-                    set_notification.set(Some("Gate locked! Solve the puzzle to open it.".to_string()));
+                    set_notification.set(Some(
+                        "Gate locked! Solve the puzzle to open it.".to_string(),
+                    ));
                     auto_dismiss_notification();
                     return;
                 }
@@ -500,7 +528,9 @@ pub fn Adventure() -> impl IntoView {
                 set_game.update(|g| {
                     *g = engine::open_puzzle_by_id(g.clone(), puzzle_id, &levels);
                 });
-                set_notification.set(Some("Gate locked! Solve the puzzle to open it.".to_string()));
+                set_notification.set(Some(
+                    "Gate locked! Solve the puzzle to open it.".to_string(),
+                ));
                 auto_dismiss_notification();
                 return;
             }
@@ -514,38 +544,36 @@ pub fn Adventure() -> impl IntoView {
 
     let touch_start_handler = move |ev: web_sys::TouchEvent| {
         if let Some(touch) = ev.touches().get(0) {
-            set_touch_start.set(Some((
-                touch.client_x() as f64,
-                touch.client_y() as f64,
-            )));
+            set_touch_start.set(Some((touch.client_x() as f64, touch.client_y() as f64)));
         }
     };
 
     let swipe_dpad_move = dpad_move;
     let touch_end_handler = move |ev: web_sys::TouchEvent| {
         if let Some((sx, sy)) = touch_start.get()
-            && let Some(touch) = ev.changed_touches().get(0) {
-                let ex = touch.client_x() as f64;
-                let ey = touch.client_y() as f64;
-                let dx = ex - sx;
-                let dy = ey - sy;
-                let min_swipe = 30.0;
-                if dx.abs() < min_swipe && dy.abs() < min_swipe {
-                    return; // too short, ignore
-                }
-                let dir = if dx.abs() > dy.abs() {
-                    if dx > 0.0 {
-                        engine::Direction::Right
-                    } else {
-                        engine::Direction::Left
-                    }
-                } else if dy > 0.0 {
-                    engine::Direction::Down
-                } else {
-                    engine::Direction::Up
-                };
-                swipe_dpad_move(dir);
+            && let Some(touch) = ev.changed_touches().get(0)
+        {
+            let ex = touch.client_x() as f64;
+            let ey = touch.client_y() as f64;
+            let dx = ex - sx;
+            let dy = ey - sy;
+            let min_swipe = 30.0;
+            if dx.abs() < min_swipe && dy.abs() < min_swipe {
+                return; // too short, ignore
             }
+            let dir = if dx.abs() > dy.abs() {
+                if dx > 0.0 {
+                    engine::Direction::Right
+                } else {
+                    engine::Direction::Left
+                }
+            } else if dy > 0.0 {
+                engine::Direction::Down
+            } else {
+                engine::Direction::Up
+            };
+            swipe_dpad_move(dir);
+        }
         set_touch_start.set(None);
     };
 
@@ -568,10 +596,7 @@ pub fn Adventure() -> impl IntoView {
     }
 
     let first_level_ref = levels_signal.get();
-    let first_level_width = first_level_ref
-        .first()
-        .map(|l| l.width)
-        .unwrap_or(12);
+    let first_level_width = first_level_ref.first().map(|l| l.width).unwrap_or(12);
 
     // Format elapsed time as MM:SS
     let format_time = move || {

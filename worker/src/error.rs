@@ -25,7 +25,15 @@ impl From<AppError> for WorkerError {
 impl IntoResponse for WorkerError {
     fn into_response(self) -> Response {
         let status = self.0.status_code();
-        let message = self.0.to_string();
+        // Two renderings, deliberately. `Display` is the operator-facing detail
+        // and goes to the log only; `public_message` is the caller-facing body.
+        // Issue 078: they used to be the same string, which handed the upstream
+        // endpoint URL and its verbatim response to unauthenticated callers of
+        // `GET /api/claim/{token}`. The `x-correlation-id` response header set by
+        // `middleware::correlation` is what ties the opaque body back to the log
+        // line that still carries the detail.
+        let detail = self.0.to_string();
+        let public = self.0.public_message();
 
         // Central failure capture: previously a 5xx was only visible in logs if
         // the handler happened to call tracing::error! itself, so server-side
@@ -34,13 +42,13 @@ impl IntoResponse for WorkerError {
         // client errors and stay quiet to avoid log noise.) The correlation id for
         // this request is on the response header + the middleware completion log.
         if status >= 500 {
-            tracing::error!(status, error = %message, "request failed (server error)");
+            tracing::error!(status, error = %detail, "request failed (server error)");
         }
 
         let body = ApiResponse::<()> {
             success: false,
             data: None,
-            error: Some(message),
+            error: Some(public.into_owned()),
             correlation_id: None,
         };
 

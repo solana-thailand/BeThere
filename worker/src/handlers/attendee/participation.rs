@@ -19,8 +19,9 @@ use crate::state::AppState;
 ///
 /// Accepts both display-case (`In-Person`/`Online`) and canonical
 /// (`in_person`/`online`) input — the frontend currently sends display-case.
-/// Rejects `Other` (covers `walkin`, `test`, junk) so this endpoint can't be
-/// used to clobber the `walkin` sentinel or set garbage.
+/// Rejects values other than `InPerson` and `Online` (including the
+/// post-event-only `Retrospective` kind) so this endpoint cannot clobber a
+/// sentinel, set garbage, or turn a live attendee into a learning lead.
 ///
 /// Returns `(canonical_for_d1, display_for_sheet)`.
 pub(super) fn normalize_override(raw: &str) -> Result<ParticipationType, AppError> {
@@ -32,7 +33,10 @@ pub(super) fn normalize_override(raw: &str) -> Result<ParticipationType, AppErro
         ));
     }
     let parsed = ParticipationType::parse(raw);
-    if parsed == ParticipationType::Other {
+    if !matches!(
+        parsed,
+        ParticipationType::InPerson | ParticipationType::Online
+    ) {
         return Err(AppError::Validation(format!(
             "participation_type must be in-person or online, got '{raw}'"
         )));
@@ -75,7 +79,7 @@ pub async fn update_participation_type(
     tracing::info!(
         attendee_id = %id,
         new_participation_type = %new_value,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "manual participation_type override"
     );
 

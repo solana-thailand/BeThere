@@ -150,6 +150,9 @@ pub struct Runner {
     results_root: PathBuf,
     /// Sentinel file touched on a green run; read by the §3.5 preflight gate.
     last_green_path: PathBuf,
+    /// Focused diagnostic runs must never make a partial suite look green to
+    /// the production preflight gate.
+    allow_green_sentinel: bool,
 }
 
 impl Runner {
@@ -165,7 +168,16 @@ impl Runner {
             flows: Vec::new(),
             results_root,
             last_green_path,
+            allow_green_sentinel: true,
         }
+    }
+
+    /// Prevent this runner from touching `.last-green`, while preserving its
+    /// normal summary artifact. Used for a single-flow diagnostic invocation.
+    #[must_use]
+    pub fn without_green_sentinel(mut self) -> Self {
+        self.allow_green_sentinel = false;
+        self
     }
 
     /// Register a flow. Flows execute in registration order.
@@ -248,7 +260,7 @@ impl Runner {
         // Persist before touching the sentinel so a crash mid-write never
         // produces a green marker without a corresponding summary.
         let _ = self.write_summary(&summary, &started_at)?;
-        if summary.all_passed {
+        if summary.all_passed && self.allow_green_sentinel {
             self.touch_last_green_if_all_passed(&started_at)?;
         }
 

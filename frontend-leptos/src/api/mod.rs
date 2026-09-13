@@ -5,35 +5,35 @@
 
 // ===== Domain modules =====
 
-pub(crate) mod fetch;
-mod types;
+mod admin;
+mod attendee;
 mod campaign;
+mod claim;
 mod contacts;
 mod dashboard;
+mod deposit;
 mod event;
 mod event_series;
-mod attendee;
-mod deposit;
-mod claim;
-mod admin;
+pub(crate) mod fetch;
 mod privacy;
 mod profile;
+mod types;
 mod wallet;
 mod wire;
 
 // Re-export everything so existing `use crate::api::*` still works.
-pub use types::*;
+pub use admin::*;
+pub use attendee::*;
 pub use campaign::*;
+pub use claim::*;
 pub use contacts::*;
 pub use dashboard::*;
+pub use deposit::*;
 pub use event::*;
 pub use event_series::*;
-pub use attendee::*;
-pub use deposit::*;
-pub use claim::*;
-pub use admin::*;
 pub use privacy::*;
 pub use profile::*;
+pub use types::*;
 pub use wallet::*;
 pub use wire::*;
 
@@ -41,8 +41,11 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use fetch::{get as http_get, get_no_cache as http_get_no_cache, post as http_post, put as http_put, delete as http_delete, response_json, response_text};
 use crate::auth::{get_token, redirect_to_login_expired};
+use fetch::{
+    delete as http_delete, get as http_get, get_no_cache as http_get_no_cache, post as http_post,
+    put as http_put, response_json, response_text,
+};
 
 // ---------------------------------------------------------------------------
 // B5: Stale-while-revalidate in-memory API response cache
@@ -479,7 +482,11 @@ pub(crate) async fn api_patch_json<T: serde::de::DeserializeOwned + Default>(
 pub async fn get_auth_url(redirect: Option<&str>) -> Result<AuthUrlResponse, ApiError> {
     let url = match redirect {
         Some(r) if !r.is_empty() => {
-            format!("{}/auth/url?redirect={}", api_base(), urlencoding::encode(r))
+            format!(
+                "{}/auth/url?redirect={}",
+                api_base(),
+                urlencoding::encode(r)
+            )
         }
         _ => format!("{}/auth/url", api_base()),
     };
@@ -492,10 +499,11 @@ pub async fn get_auth_url(redirect: Option<&str>) -> Result<AuthUrlResponse, Api
         });
     }
 
-    let result: ApiResponse<AuthUrlResponse> = response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse auth URL response: {e}"),
-        status: 0,
-    })?;
+    let result: ApiResponse<AuthUrlResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse auth URL response: {e}"),
+            status: 0,
+        })?;
 
     result.data.ok_or_else(|| ApiError {
         message: "No data in auth URL response".to_string(),

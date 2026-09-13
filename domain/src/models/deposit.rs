@@ -178,7 +178,10 @@ impl ThbDeposit {
     /// credit/comp/cash decision is made.
     pub fn source(&self) -> DepositSource {
         if matches!(self.verified_by.as_deref(), Some("SYSTEM_ROLLING_CREDIT"))
-            || matches!(self.slip_url.as_deref(), Some("ROLLING_CREDIT_AUTO_APPLIED"))
+            || matches!(
+                self.slip_url.as_deref(),
+                Some("ROLLING_CREDIT_AUTO_APPLIED")
+            )
         {
             DepositSource::Credit
         } else if matches!(self.verified_by.as_deref(), Some("SYSTEM_STAFF_WAIVE"))

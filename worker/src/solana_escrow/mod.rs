@@ -89,7 +89,7 @@ pub(crate) fn seed_cluster_from_env(env: &worker::Env) {
 }
 
 /// The target cluster, defaulting to `"devnet"` until [`set_cluster`] has run.
-fn cluster() -> &'static str {
+pub(crate) fn cluster() -> &'static str {
     SOLANA_CLUSTER.get().map(String::as_str).unwrap_or("devnet")
 }
 

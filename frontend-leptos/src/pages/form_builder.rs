@@ -10,7 +10,7 @@
 use leptos::prelude::*;
 
 use crate::api::{
-    self, FormFieldTypeAdmin, FormFieldConfigAdmin, RegistrationFormConfigAdmin, VALID_PROFILE_KEYS,
+    self, FormFieldConfigAdmin, FormFieldTypeAdmin, RegistrationFormConfigAdmin, VALID_PROFILE_KEYS,
 };
 use crate::components::{self, ToastType};
 
@@ -157,9 +157,10 @@ pub fn FormBuilder(
     let handle_move_down = move |idx: usize| {
         set_config.update(|c| {
             if let Some(cfg) = c
-                && idx + 1 < cfg.fields.len() {
-                    cfg.fields.swap(idx, idx + 1);
-                }
+                && idx + 1 < cfg.fields.len()
+            {
+                cfg.fields.swap(idx, idx + 1);
+            }
         });
     };
 
@@ -181,11 +182,7 @@ pub fn FormBuilder(
         let mut keys = std::collections::HashSet::new();
         for field in &cfg.fields {
             if field.key.trim().is_empty() {
-                components::show_toast(
-                    &set_toast,
-                    "All fields must have a key",
-                    ToastType::Error,
-                );
+                components::show_toast(&set_toast, "All fields must have a key", ToastType::Error);
                 return;
             }
             if field.label.trim().is_empty() {
@@ -215,7 +212,10 @@ pub fn FormBuilder(
             {
                 components::show_toast(
                     &set_toast,
-                    &format!("Field '{}' needs non-empty options for Select/Multi-select", field.key),
+                    &format!(
+                        "Field '{}' needs non-empty options for Select/Multi-select",
+                        field.key
+                    ),
                     ToastType::Error,
                 );
                 return;
@@ -252,9 +252,7 @@ pub fn FormBuilder(
     };
 
     // Field count for display
-    let field_count = Memo::new(move |_| {
-        config.get().map(|c| c.fields.len()).unwrap_or(0)
-    });
+    let field_count = Memo::new(move |_| config.get().map(|c| c.fields.len()).unwrap_or(0));
 
     let profile_field_count = Memo::new(move |_| {
         config

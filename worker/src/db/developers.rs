@@ -62,19 +62,100 @@ pub(crate) struct RegistrationResponseRow {
 // Developer Profile Queries
 // ---------------------------------------------------------------------------
 
+/// Columns of `developer_profiles` a registration form is allowed to set.
+///
+/// [`upsert_developer_field`] interpolates its column name into the SQL text —
+/// SQLite cannot bind an *identifier* — so the name must be resolved to one of
+/// these `&'static str` entries before it reaches the query. The registration
+/// body carries a free-form `profile_fields: HashMap<String, String>` whose keys
+/// arrive straight off the wire on a public endpoint; without this gate the
+/// caller chooses the identifier, which is SQL injection.
+///
+/// Deliberately **excluded**, each for its own reason:
+///
+/// - `email` — the primary key. Always bound as `?1`.
+/// - `wallet_address` — owned by [`upsert_developer_wallet`] and the wallet-link
+///   flow, which prove control of the key first.
+/// - `telegram_id`, `*_verified`, `*_verified_at` — written only after the
+///   provider actually verified the account (`handlers::social_link`). A
+///   registration body must not be able to assert `github_verified = 1`.
+/// - `first_seen_at`, `last_active_at`, `total_events`, `badges_earned`,
+///   `created_at`, `updated_at` — bookkeeping this write path maintains itself.
+///
+/// Sorted so a reviewer can diff it against the migration DDL by eye.
+const UPSERTABLE_PROFILE_COLUMNS: &[&str] = &[
+    "company_org",
+    "consent_outreach",
+    "discord_handle",
+    "display_name",
+    "expectations",
+    "experience_level",
+    "github_handle",
+    "interests",
+    "learning_goals",
+    "location_city",
+    "primary_role",
+    "tech_stack",
+    "telegram_handle",
+    "twitter_handle",
+];
+
+/// Namespace for answers that describe an *event*, not the person answering.
+///
+/// DevRel phase-2 item 2: post-event satisfaction is collected through the
+/// existing post-event registration body (`post.satisfaction.overall`,
+/// `post.nps`, `post.would_return`) and belongs in `registration_responses`
+/// only. Such a key is *expected* not to name a `developer_profiles` column, so
+/// the profile upsert skips it deliberately instead of failing and logging once
+/// per answer per respondent — which is what made it look like a defect.
+///
+/// Anything outside this namespace that fails to resolve is still a real
+/// mistake (a form config naming a column that does not exist) and still warns.
+pub(crate) const EVENT_SCOPED_FIELD_PREFIX: &str = "post.";
+
+/// Whether `field_name` is an event-scoped answer rather than a profile field.
+pub(crate) fn is_event_scoped_field(field_name: &str) -> bool {
+    field_name.starts_with(EVENT_SCOPED_FIELD_PREFIX)
+}
+
+/// Resolve a wire-supplied field name to the `&'static str` column it names.
+///
+/// Returning `&'static str` rather than `bool` is the point: the caller cannot
+/// interpolate the untrusted `&str` even by accident, because only the value
+/// returned here is in scope at the `format!`.
+fn resolve_profile_column(field_name: &str) -> Option<&'static str> {
+    UPSERTABLE_PROFILE_COLUMNS
+        .iter()
+        .find(|column| **column == field_name)
+        .copied()
+}
+
 /// Upsert a developer profile field.
 ///
 /// If the developer doesn't exist yet, creates a new row with the provided
 /// email and field. If they exist, updates only the specified field and
-/// increments total_events + updates last_active_at.
+/// updates last_active_at.
 ///
 /// Use this for individual field updates from registration responses.
+///
+/// `field_name` must name a column in [`UPSERTABLE_PROFILE_COLUMNS`]; anything
+/// else is rejected with an error rather than reaching the database. Callers
+/// treat the error as non-fatal, so an unrecognised form key is dropped with a
+/// warning instead of failing the registration.
 pub(crate) async fn upsert_developer_field(
     db: &D1Database,
     email: &str,
     field_name: &str,
     field_value: &str,
 ) -> Result<(), String> {
+    // `field_name` reaches here from the public registration body. Resolve it to
+    // a compile-time column name before it can touch the SQL string.
+    let Some(field_name) = resolve_profile_column(field_name) else {
+        return Err(format!(
+            "developer profile field '{field_name}' is not an upsertable column"
+        ));
+    };
+
     // Build dynamic UPDATE SET clause for the specific field.
     //
     // NOTE: this is called once PER FIELD during registration, so it must NOT
@@ -270,6 +351,28 @@ pub(crate) async fn insert_registration_response(
 
 /// Batch-insert multiple registration responses in a single D1 call.
 /// Each tuple is (field_key, field_value, is_profile_field).
+/// Columns bound per response row. Used to size the chunks below.
+const RESPONSE_BIND_COUNT: usize = 6;
+
+/// Response rows per INSERT statement.
+///
+/// D1 caps the number of bound parameters in a single statement, so a batch
+/// that grows with the size of a form eventually fails *as a whole* — and this
+/// write is best-effort, so the failure would be one warning and a silently
+/// missing set of answers. Six fixed consent/contact rows plus a question set
+/// reaches that ceiling at around a dozen questions, which is well within what
+/// a post-event survey would ask (DevRel phase-2 item 2). Chunking removes the
+/// ceiling instead of documenting it.
+const RESPONSE_CHUNK_ROWS: usize = 10;
+
+/// D1 rejects a statement binding more than this many parameters.
+const D1_MAX_BOUND_PARAMS: usize = 100;
+
+// Compile-time, not a test: widening the INSERT or raising the chunk size must
+// fail the build rather than wait for a best-effort write to be dropped in
+// production with a single warning line.
+const _: () = assert!(RESPONSE_CHUNK_ROWS * RESPONSE_BIND_COUNT <= D1_MAX_BOUND_PARAMS);
+
 pub(crate) async fn batch_insert_registration_responses(
     db: &D1Database,
     event_id: &str,
@@ -280,6 +383,19 @@ pub(crate) async fn batch_insert_registration_responses(
         return Ok(());
     }
 
+    for chunk in responses.chunks(RESPONSE_CHUNK_ROWS) {
+        insert_registration_response_chunk(db, event_id, developer_email, chunk).await?;
+    }
+
+    Ok(())
+}
+
+async fn insert_registration_response_chunk(
+    db: &D1Database,
+    event_id: &str,
+    developer_email: &str,
+    responses: &[(&str, &str, bool)],
+) -> Result<(), String> {
     // Generate all IDs upfront, then build SQL + params referencing them.
     let ids: Vec<String> = (0..responses.len())
         .map(|_| uuid::Uuid::now_v7().to_string())
@@ -296,7 +412,7 @@ pub(crate) async fn batch_insert_registration_responses(
         sql.push_str("(?, ?, ?, ?, ?, ?, datetime('now'))");
     }
 
-    let mut params: Vec<D1Type> = Vec::with_capacity(responses.len() * 6);
+    let mut params: Vec<D1Type> = Vec::with_capacity(responses.len() * RESPONSE_BIND_COUNT);
     for (i, (field_key, field_value, is_profile_field)) in responses.iter().enumerate() {
         params.push(D1Type::Text(ids[i].as_str()));
         params.push(D1Type::Text(event_id));
@@ -448,16 +564,26 @@ pub(crate) async fn developer_count(db: &D1Database) -> Result<i64, String> {
 
 /// Clear PII for a developer profile (PDPA right to erasure).
 /// Keeps the row but blanks all identifying fields.
+///
+/// `company_org` and `location_city` are `TEXT NOT NULL DEFAULT ''`, so they are
+/// blanked rather than nulled. Setting them to NULL aborted the whole statement
+/// on a NOT NULL constraint, and `handlers::privacy` only logs that error — so
+/// the erasure silently cleared nothing at all, including `display_name` and the
+/// social handles.
 pub(crate) async fn clear_developer_pii(db: &D1Database, email: &str) -> Result<(), String> {
-    let sql = format!(
-        "UPDATE developer_profiles SET \
+    let sql = "UPDATE developer_profiles SET \
          display_name = '[DELETED]', wallet_address = NULL, \
          github_handle = NULL, discord_handle = NULL, twitter_handle = NULL, \
-         company_org = NULL, location_city = NULL, \
+         telegram_handle = NULL, telegram_id = NULL, \
+         github_verified = 0, telegram_verified = 0, discord_verified = 0, \
+         github_verified_at = NULL, telegram_verified_at = NULL, discord_verified_at = NULL, \
+         company_org = '', location_city = '', \
          updated_at = datetime('now') \
-         WHERE LOWER(email) = '{email}'"
-    );
-    db.exec(&sql)
+         WHERE LOWER(email) = ?";
+    db.prepare(sql)
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 clear_developer_pii bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 clear_developer_pii: {e:?}"))?;
     Ok(())
@@ -468,12 +594,20 @@ pub(crate) async fn delete_developer_responses(
     db: &D1Database,
     email: &str,
 ) -> Result<usize, String> {
-    let sql =
-        format!("DELETE FROM registration_responses WHERE LOWER(developer_email) = '{email}'");
-    db.exec(&sql)
+    let result = db
+        .prepare("DELETE FROM registration_responses WHERE LOWER(developer_email) = ?")
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 delete_developer_responses bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 delete_developer_responses: {e:?}"))?;
-    Ok(0) // D1 exec doesn't return rows affected
+    // Unlike `exec`, a prepared `run` reports the affected row count.
+    Ok(result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0))
 }
 
 // ---------------------------------------------------------------------------
@@ -590,4 +724,138 @@ pub(crate) async fn list_developers_paginated(
         .map_err(|e| format!("D1 list_developers_paginated deserialize: {e:?}"))?;
 
     Ok((rows, count))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UPSERTABLE_PROFILE_COLUMNS;
+    use super::is_event_scoped_field;
+    use super::resolve_profile_column;
+
+    /// `post.` answers describe the event; everything else describes the person.
+    #[test]
+    fn event_scoped_fields_are_recognised_by_namespace_only() {
+        for key in ["post.satisfaction.overall", "post.nps", "post.would_return"] {
+            assert!(is_event_scoped_field(key), "{key} must be event-scoped");
+        }
+        for key in ["experience_level", "tech_stack", "interests", "postcode"] {
+            assert!(
+                !is_event_scoped_field(key),
+                "{key} must stay a profile field"
+            );
+        }
+    }
+
+    /// The namespace must not collide with a real profile column, or an answer
+    /// would silently stop updating the profile it is supposed to update.
+    #[test]
+    fn no_profile_column_lives_in_the_event_scoped_namespace() {
+        for column in UPSERTABLE_PROFILE_COLUMNS {
+            assert!(
+                !is_event_scoped_field(column),
+                "`{column}` is both an upsertable profile column and                  event-scoped — the namespace has to be disjoint"
+            );
+        }
+    }
+
+    /// Every allowlisted column must actually exist on `developer_profiles`.
+    ///
+    /// A typo here does not fail loudly: `upsert_developer_field` would accept
+    /// the field, D1 would reject the statement, and the caller logs a warning
+    /// and moves on — the registrant's answer is silently dropped. The DDL is
+    /// the source of truth, so this reads it rather than restating it.
+    #[test]
+    fn upsertable_columns_exist_in_the_migration_ddl() {
+        let columns = developer_profiles_columns();
+        assert!(
+            columns.len() > 15,
+            "parsed only {} columns from the migrations — the parser is broken and \
+             this test would pass vacuously",
+            columns.len()
+        );
+        for column in UPSERTABLE_PROFILE_COLUMNS {
+            assert!(
+                columns.iter().any(|c| c == column),
+                "`{column}` is in UPSERTABLE_PROFILE_COLUMNS but no migration \
+                 declares it on `developer_profiles`. Parsed: {columns:?}"
+            );
+        }
+    }
+
+    /// The allowlist is the only way a column name reaches the SQL text.
+    #[test]
+    fn unknown_field_names_do_not_resolve() {
+        assert_eq!(resolve_profile_column("display_name"), Some("display_name"));
+        // The shapes an injection attempt takes, all rejected.
+        for hostile in [
+            "display_name, total_events) VALUES ('x', 'y', 1",
+            "display_name--",
+            "Display_Name",
+            "github_verified",
+            "wallet_address",
+            "email",
+            "",
+        ] {
+            assert_eq!(
+                resolve_profile_column(hostile),
+                None,
+                "`{hostile}` must not resolve to a column"
+            );
+        }
+    }
+
+    /// Sorted order is load-bearing for review: the list is diffed against the
+    /// DDL by eye, and an out-of-order insert hides duplicates.
+    #[test]
+    fn upsertable_columns_are_sorted_and_unique() {
+        let mut sorted = UPSERTABLE_PROFILE_COLUMNS.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.as_slice(), UPSERTABLE_PROFILE_COLUMNS);
+    }
+
+    /// Column names declared on `developer_profiles` by the migrations —
+    /// the `CREATE TABLE` body plus every `ALTER TABLE … ADD COLUMN`.
+    fn developer_profiles_columns() -> Vec<String> {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+        let mut paths: Vec<_> = std::fs::read_dir(&dir)
+            .expect("read migrations dir")
+            .map(|e| e.expect("dir entry").path())
+            .filter(|p| p.extension().is_some_and(|e| e == "sql"))
+            .collect();
+        paths.sort();
+
+        let mut columns = Vec::new();
+        for path in paths {
+            let sql = std::fs::read_to_string(&path).expect("read migration");
+            let mut in_create = false;
+            for line in sql.lines() {
+                let line = line.split("--").next().unwrap_or("").trim();
+                if let Some(rest) = line.strip_prefix("ALTER TABLE developer_profiles ADD COLUMN")
+                    && let Some(name) = rest.split_whitespace().next()
+                {
+                    columns.push(name.trim_end_matches(';').to_string());
+                }
+                if line.starts_with("CREATE TABLE") && line.contains("developer_profiles") {
+                    in_create = true;
+                    continue;
+                }
+                if !in_create {
+                    continue;
+                }
+                match line.starts_with(')') {
+                    true => in_create = false,
+                    false => {
+                        if let Some(name) = line.split_whitespace().next()
+                            && !name.is_empty()
+                            && name.chars().all(|c| c.is_ascii_lowercase() || c == '_')
+                        {
+                            columns.push(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        columns
+    }
 }

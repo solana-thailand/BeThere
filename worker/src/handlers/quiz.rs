@@ -83,7 +83,7 @@ pub async fn submit_quiz(
     Json(body): Json<QuizSubmitRequest>,
 ) -> Result<ApiOk<QuizSubmitResponse>, WorkerError> {
     tracing::info!(
-        claim_token = %token,
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token),
         answer_count = body.answers.len(),
         "quiz submit requested"
     );
@@ -113,14 +113,14 @@ pub async fn submit_quiz(
     {
         Ok(Some(_)) => {}
         Ok(None) => {
-            tracing::warn!(claim_token = %token, "quiz submit: invalid claim token");
+            tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), "quiz submit: invalid claim token");
             return Err(AppError::NotFound(
                 "invalid claim token — you must be checked in first".to_string(),
             )
             .into());
         }
         Err(ref e) => {
-            tracing::error!(claim_token = %token, error = ?e, "quiz submit: failed to look up claim token");
+            tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), error = ?e, "quiz submit: failed to look up claim token");
             return Err(AppError::Internal(format!("failed to verify claim: {e}")).into());
         }
     }
@@ -186,13 +186,13 @@ pub async fn submit_quiz(
                     "You've used all your quiz attempts for this event. Ask an organizer to reset them.".to_string(),
                 )
             } else {
-                tracing::error!(claim_token = %token, error = ?e, "quiz submit failed");
+                tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), error = ?e, "quiz submit failed");
                 AppError::Internal(msg)
             }
         })?;
 
     tracing::info!(
-        claim_token = %token,
+        claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token),
         attempt = result.attempt_number,
         score_percent = result.score_percent,
         passed = result.passed,
@@ -212,7 +212,7 @@ pub async fn get_quiz_status(
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
-    tracing::info!(claim_token = %token, "quiz status requested");
+    tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), "quiz status requested");
 
     // Resolve the attendee's real event from the claim token (same as submit and
     // the claim gate) so status reflects the progress the claim will read.
@@ -245,7 +245,7 @@ pub async fn get_quiz_status(
     let status = quiz::get_quiz_status(d1, kv, eid, &token)
         .await
         .map_err(|e| {
-            tracing::error!(claim_token = %token, error = ?e, "quiz status failed");
+            tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), error = ?e, "quiz status failed");
             AppError::Internal(e.to_string())
         })?;
 
@@ -285,7 +285,7 @@ pub async fn get_admin_quiz(
     Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
-    tracing::info!(staff_email = %claims.email, "admin quiz read");
+    tracing::info!(staff_fingerprint = %state.log_fingerprint(&claims.email), "admin quiz read");
 
     // Resolve event WITH per-event access (S2: was resolve_event — any staff
     // could read another organizer's quiz incl. the answer key).
@@ -331,7 +331,7 @@ pub async fn put_quiz(
     Json(body): Json<QuizConfig>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_count = body.questions.len(),
         "admin quiz update"
     );
@@ -343,51 +343,7 @@ pub async fn put_quiz(
     let d1 = state.d1.as_deref();
     let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
-    // Validate: at least 1 question
-    if body.questions.is_empty() {
-        return Err(AppError::Validation("quiz must have at least 1 question".to_string()).into());
-    }
-
-    // Validate: each question has at least 2 options
-    for q in &body.questions {
-        if q.options.len() < 2 {
-            return Err(AppError::Validation(format!(
-                "question '{}' must have at least 2 options",
-                q.id
-            ))
-            .into());
-        }
-        if (q.correct_index as usize) >= q.options.len() {
-            return Err(AppError::Validation(format!(
-                "question '{}' correct_index {} out of range (0-{})",
-                q.id,
-                q.correct_index,
-                q.options.len() - 1
-            ))
-            .into());
-        }
-    }
-
-    // Validate: passing score 1-100
-    if body.passing_score_percent == 0 || body.passing_score_percent > 100 {
-        return Err(AppError::Validation(
-            "passing_score_percent must be between 1 and 100".to_string(),
-        )
-        .into());
-    }
-
-    // Validate: max attempts >= 1
-    if body.max_attempts == 0 {
-        return Err(AppError::Validation("max_attempts must be at least 1".to_string()).into());
-    }
-
-    // Validate: unique question IDs
-    let mut seen_ids = std::collections::HashSet::new();
-    for q in &body.questions {
-        if !seen_ids.insert(&q.id) {
-            return Err(AppError::Validation(format!("duplicate question id: '{}'", q.id)).into());
-        }
-    }
+    quiz::validate_ready_config(&body).map_err(AppError::Validation)?;
 
     quiz::save_quiz_config(d1, kv, eid, &body)
         .await
@@ -420,7 +376,7 @@ pub async fn add_quiz_question(
     Json(body): Json<QuizQuestion>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_id = %body.id,
         "admin quiz add question"
     );
@@ -468,7 +424,7 @@ pub async fn update_quiz_question(
     Json(body): Json<QuizQuestion>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_id = %question_id,
         "admin quiz update question"
     );
@@ -512,7 +468,7 @@ pub async fn delete_quiz_question(
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_id = %question_id,
         "admin quiz delete question"
     );
@@ -542,7 +498,7 @@ pub async fn toggle_quiz_question(
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         question_id = %question_id,
         "admin quiz toggle question"
     );

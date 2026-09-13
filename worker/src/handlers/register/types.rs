@@ -136,4 +136,8 @@ pub(super) struct DeveloperData<'a> {
     pub(super) consent_marketing: bool,
     /// Dynamic profile fields (key, value) pairs from form config.
     pub(super) profile_fields: Vec<(String, String)>,
+    /// Mints the keyed fingerprint this struct's `email` is logged under
+    /// (Issue 070). `write_developer_data` holds no `AppState`, so the caller
+    /// that does passes the redactor down rather than the raw secret.
+    pub(super) redactor: crate::crypto::LogRedactor<'a>,
 }

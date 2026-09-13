@@ -66,7 +66,20 @@ pub async fn increment_deposit_counter(kv: &KvStore, event_id: &str) -> Result<u
     Ok(next)
 }
 
-/// Save THB deposit record for an attendee (D1-first, KV fallback).
+/// Save THB deposit record for an attendee.
+///
+/// **D1 or KV, never both.** When D1 is configured it is the sole store: the
+/// settlement columns (`refunded` / `held_as_credit`) are owned by CAS statements
+/// there (plan 022 §3), and serialising the caller's whole in-memory struct into
+/// KV as well would reintroduce exactly the retraction the CAS exists to prevent.
+/// KV is the store only for a D1-less deployment.
+///
+/// The D1 branch therefore *drops* any KV copy rather than refreshing it. A blob
+/// left over from a D1-less deployment would otherwise diverge for good, and
+/// `get_thb_deposit_with_fallback` (the ticket page's read) serves KV on a D1
+/// miss — it would show a settled deposit as still outstanding. Deleting cannot
+/// orphan anything: this branch has just written the row into D1, so the fallback
+/// finds it there.
 pub async fn save_thb_deposit(
     kv: &KvStore,
     deposit: &event_checkin_domain::models::deposit::ThbDeposit,
@@ -82,6 +95,18 @@ pub async fn save_thb_deposit(
             crate::db::thb_deposits::update_thb_deposit(db, deposit).await?;
         } else {
             crate::db::thb_deposits::insert_thb_deposit(db, deposit).await?;
+        }
+
+        // Best-effort: a failed delete leaves the pre-existing divergence, which
+        // is no worse than before, and must never fail a money write.
+        let key = thb_deposit_key(&deposit.event_id, &deposit.attendee_id);
+        if let Err(e) = kv.delete(&key).await {
+            tracing::warn!(
+                event_id = %deposit.event_id,
+                attendee_id = %deposit.attendee_id,
+                error = ?e,
+                "failed to drop the stale KV copy of a THB deposit (D1 is authoritative)"
+            );
         }
         return Ok(());
     }

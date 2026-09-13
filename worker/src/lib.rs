@@ -4,7 +4,12 @@ mod auth;
 mod claim;
 mod cleanup;
 mod crypto;
-mod db;
+// Public for the same reason as `event_store` below — the worker compiles to a
+// cdylib with no downstream Rust consumer, and
+// `worker/tests/event_enum_column_fallbacks.rs` drives
+// `db::events::D1EventRow::to_event_config` directly. Its items were already
+// `pub`; only the module declaration was private.
+pub mod db;
 mod durable_objects;
 mod error;
 mod escrow_indexer;
@@ -17,6 +22,7 @@ pub mod event_store;
 mod handlers;
 mod http;
 mod middleware;
+pub mod notifications;
 mod org_store;
 mod quiz;
 
@@ -25,6 +31,7 @@ mod solana;
 mod solana_escrow;
 mod state;
 mod storage;
+mod virtual_checkin;
 
 // Export DO class for workers-rs macro registration
 pub use durable_objects::EventDurableObject;
@@ -56,7 +63,9 @@ const INDEX_HTML: &str = include_str!("../../frontend-leptos/dist/index.html");
 /// fallback is Worker-generated for non-asset routes (`/claim/*`, `/staff`,
 /// `/admin`), so the header must be set here, not in `_headers`.
 static SPA_NO_STORE: std::sync::LazyLock<axum::http::HeaderValue> =
-    std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"));
+    std::sync::LazyLock::new(|| {
+        axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0")
+    });
 
 static SPA_PRAGMA: std::sync::LazyLock<axum::http::HeaderValue> =
     std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-cache"));
@@ -86,7 +95,8 @@ fn service_unavailable(e: &str) -> axum::http::Response<axum::body::Body> {
     let body = serde_json::json!({
         "success": false,
         "error": format!("service unavailable: {e}")
-    }).to_string();
+    })
+    .to_string();
 
     axum::http::Response::builder()
         .status(axum::http::StatusCode::SERVICE_UNAVAILABLE)
@@ -132,7 +142,10 @@ async fn fetch(
 
     // Build the API router with middleware stack.
     let mut api_routes = handlers::routes(state.clone())
-        .layer(axum::middleware::from_fn(middleware::rate_limit_layer))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            middleware::rate_limit_layer,
+        ))
         .layer(axum::middleware::from_fn(middleware::correlation_id_layer))
         // Outside correlation so it can read the x-correlation-id it stamps on the
         // response; fires a best-effort Slack alert on 5xx (no-op if unconfigured).
@@ -153,14 +166,20 @@ async fn fetch(
     }
 }
 
-/// Cron-triggered cleanup — runs daily at 03:00 UTC.
+/// Scheduled job: cleanup daily at 03:00 UTC.
 ///
 /// Deletes expired KV entries (session progress, deposits, claim locks,
 /// event configs) based on retention policy defined in `cleanup.rs`.
 #[event(scheduled)]
 async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
-    console_error_panic_hook::set_once();
-    tracing_wasm::set_as_global_default();
+    // Same `OnceLock` guard as `fetch`: `tracing_wasm::set_as_global_default()`
+    // panics with `SetGlobalDefaultError` if a dispatcher is already installed.
+    // The cron and the fetch handler share an isolate, so an unguarded call here
+    // aborted the whole cleanup run on any isolate that had served a request.
+    let _ = LOG_INITIALIZED.get_or_init(|| {
+        console_error_panic_hook::set_once();
+        tracing_wasm::set_as_global_default();
+    });
 
     // Seed the escrow cluster in this isolate too — the cron path does not build AppState,
     // so any escrow read from a future scheduled job would otherwise default to devnet.
@@ -185,22 +204,65 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
         match db::credit_ledger::reconcile(db).await {
             Ok(report) if !report.is_clean() => {
                 tracing::error!(
+                    applies_repaired = report.applies_repaired,
                     orphan_holds = report.orphan_holds,
                     negative_balances = report.negative_balances,
+                    double_settled = report.double_settled,
+                    phantom_holds = report.phantom_holds,
+                    incomplete_applies = report.incomplete_applies,
                     "credit ledger reconcile FAILED"
                 );
                 if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
                     && !webhook.is_empty()
                 {
                     let msg = format!(
-                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s). Check credit_ledger vs thb_deposits.",
-                        report.orphan_holds, report.negative_balances
+                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s), {} double-settled deposit(s) (cash refunded AND held as credit), {} phantom hold(s) (ledger credit with no held deposit), {} incomplete credit application(s). Check credit_ledger vs deposit projections.",
+                        report.orphan_holds,
+                        report.negative_balances,
+                        report.double_settled,
+                        report.phantom_holds,
+                        report.incomplete_applies
                     );
                     let _ = middleware::alert::post_slack(&webhook, &msg).await;
                 }
             }
-            Ok(_) => tracing::info!("credit ledger reconcile clean"),
+            Ok(report) => tracing::info!(
+                applies_repaired = report.applies_repaired,
+                "credit ledger reconcile clean"
+            ),
             Err(e) => tracing::warn!(error = %e, "credit ledger reconcile query failed"),
+        }
+
+        match db::nft_mint_jobs::reconcile(db).await {
+            Ok(report) if !report.is_clean() => {
+                tracing::error!(
+                    attendee_projections_repaired = report.attendee_projections_repaired,
+                    jobs_marked_persisted = report.jobs_marked_persisted,
+                    confirmed_remaining = report.confirmed_remaining,
+                    stale_pending = report.stale_pending,
+                    "NFT mint journal reconcile requires attention"
+                );
+                if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
+                    && !webhook.is_empty()
+                {
+                    let message = format!(
+                        ":warning: BeThere NFT journal reconcile — repaired {} attendee projection(s), finalized {} job(s), {} confirmed job(s) still inconsistent, {} pending job(s) older than one hour.",
+                        report.attendee_projections_repaired,
+                        report.jobs_marked_persisted,
+                        report.confirmed_remaining,
+                        report.stale_pending
+                    );
+                    let _ = middleware::alert::post_slack(&webhook, &message).await;
+                }
+            }
+            Ok(report) => tracing::info!(
+                attendee_projections_repaired = report.attendee_projections_repaired,
+                jobs_marked_persisted = report.jobs_marked_persisted,
+                "NFT mint journal reconcile clean"
+            ),
+            Err(error) => {
+                tracing::warn!(error = %error, "NFT mint journal reconcile query failed")
+            }
         }
     }
 }

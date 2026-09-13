@@ -111,7 +111,7 @@ pub async fn get_public_event(
         state.d1.as_deref(),
     )
     .await
-    .map_err(AppError::NotFound)?;
+    .map_err(AppError::from)?;
 
     // Read form config for dynamic rendering (Issue #049 Phase 2)
     let form_config = if config.dev_profile_enabled {
@@ -178,9 +178,11 @@ pub async fn get_public_event(
     let online_available = config.event_format.has_online()
         && online_remaining.is_none_or(|r| r > 0)
         && is_online_registration_open(&config, in_person_available);
+    let post_event_registration_accepting =
+        config.post_event_registration_accepting(chrono::Utc::now().timestamp_millis());
 
     // Return sanitized response — exclude all sensitive/internal fields
-    Ok(ApiOk::new(json!({
+    let mut response = json!({
         "id": config.id,
         "name": config.name,
         "slug": config.slug,
@@ -230,7 +232,25 @@ pub async fn get_public_event(
         } else {
             serde_json::Value::Null
         },
-    })))
+    });
+    let response_fields = response.as_object_mut().ok_or_else(|| {
+        AppError::Internal("public event response serialization produced a non-object".to_string())
+    })?;
+    // A completed-event gateway links only to the canonical Genesis archive.
+    // `link` remains the organizer-configured external URL for ordinary event
+    // pages; it is never trusted as an archive by default.
+    response_fields.insert(
+        "archive_url".to_string(),
+        serde_json::Value::String(genesis_archive_url(&config.link)),
+    );
+    // Server-calculated so a client cannot keep a stale CTA visible after the
+    // organizer's post-event enrollment deadline has elapsed.
+    response_fields.insert(
+        "post_event_registration_accepting".to_string(),
+        serde_json::Value::Bool(post_event_registration_accepting),
+    );
+
+    Ok(ApiOk::new(response))
 }
 
 /// `GET /api/public/events/past`
@@ -324,8 +344,9 @@ pub async fn get_public_recap(
         state.d1.as_deref(),
     )
     .await
-    // 404 (not "unpublished") — slug doesn't resolve to any event.
-    .map_err(|_| AppError::NotFound(format!("event '{slug}' not found")))?;
+    // 404 (not "unpublished") when the slug resolves to nothing; a KV/D1 outage
+    // stays a 500 rather than masquerading as a missing event.
+    .map_err(AppError::from)?;
 
     // 2. Public recap requires the event to be Completed and published.
     //    Any other state returns 404 (indistinguishable from "no recap").
@@ -356,6 +377,11 @@ pub async fn get_public_recap(
     //    primitives — we don't want the full EventSummary (financials/no-show
     //    are sensitive), so we read the persisted row directly and project out
     //    only the three headline numbers.
+    //
+    //    A read failure is fatal rather than a zero-fill: the zeros are
+    //    indistinguishable from a real "nobody came" and would be published as
+    //    the event's attendance. `get_recap` above already propagates its read
+    //    error; this read hits the same row and must agree.
     let funnel = match crate::db::event_summaries::get_summary(db, &config.id).await {
         Ok(Some(s)) => json!({
             "registered_count": s.funnel.registered_count,
@@ -363,15 +389,35 @@ pub async fn get_public_recap(
             "checked_in_count": s.funnel.checked_in_count,
             "claimed_count": s.funnel.claimed_count,
         }),
-        _ => json!({
+        // Unreachable in practice — `get_recap` found this row a few lines up.
+        Ok(None) => json!({
             "registered_count": 0,
             "deposited_count": 0,
             "checked_in_count": 0,
             "claimed_count": 0,
         }),
+        Err(e) => {
+            tracing::error!(slug = %slug, event_id = %config.id, error = %e, "recap funnel read failed");
+            return Err(
+                AppError::Internal("could not load the recap — please try again".into()).into(),
+            );
+        }
     };
 
     tracing::info!(slug = %slug, event_id = %config.id, "public recap served");
+
+    // The public payload reports whether registration *accepts a submission
+    // now*, not the raw organizer toggle: the flag stays `true` after the
+    // deadline lapses, and the recap page's CTA is rendered straight from this
+    // value. Gating on the raw flag would invite a visitor to sign in and fill
+    // a form that `post_event::register` then answers 410 Gone. The server
+    // clock decides — the same clock that endpoint checks against.
+    let accepting = config.post_event_registration_accepting(chrono::Utc::now().timestamp_millis());
+    // Public recaps only expose an encrypted Web URL. Event data can also be
+    // imported from Sheets or older API clients, so the HTML input type alone
+    // is not a sufficient trust boundary.
+    let public_video_url = https_public_url(&config.video_url);
+    let learning_resources = public_learning_resources(&config.community_links);
 
     Ok(ApiOk::new(json!({
         "event": {
@@ -385,7 +431,9 @@ pub async fn get_public_recap(
             "event_format": config.event_format.as_str(),
             "poster_url": config.poster_url,
             "nft_image_url": config.nft_image_url,
-            "post_event_registration_open": config.post_event_registration_open,
+            "video_url": public_video_url,
+            "learning_resources": learning_resources,
+            "post_event_registration_open": accepting,
         },
         "recap_markdown": recap.recap_markdown,
         "recap_image_url": recap.recap_image_url,
@@ -393,6 +441,49 @@ pub async fn get_public_recap(
         "frozen_at": recap.frozen_at,
         "funnel": funnel,
     })))
+}
+
+/// Return an organizer URL only when it is safe to place in a public link or
+/// embed. This intentionally rejects HTTP, relative, and active-content URLs.
+fn https_public_url(url: &str) -> String {
+    url.strip_prefix("https://")
+        .filter(|rest| !rest.trim().is_empty())
+        .map(|rest| format!("https://{rest}"))
+        .unwrap_or_default()
+}
+
+/// Return the canonical Genesis archive URL only for a trusted event-page path.
+/// The DevRel archive owns its event narrative and mapping; BeThere stores only
+/// the per-event link selected by an organizer and never copies that map.
+fn genesis_archive_url(url: &str) -> String {
+    const GENESIS_EVENT_PREFIX: &str = "https://solana-thailand.github.io/genesis/events/";
+
+    url.strip_prefix(GENESIS_EVENT_PREFIX)
+        .filter(|path| !path.trim().is_empty())
+        .map(|path| format!("{GENESIS_EVENT_PREFIX}{path}"))
+        .unwrap_or_default()
+}
+
+fn public_learning_resources(
+    links: &[event_checkin_domain::models::event::CommunityLink],
+) -> Vec<event_checkin_domain::models::event::CommunityLink> {
+    links
+        .iter()
+        .filter(|link| {
+            matches!(
+                link.platform.as_str(),
+                "resource" | "slides" | "source" | "download"
+            )
+        })
+        .filter_map(|link| {
+            let url = https_public_url(&link.url);
+            (!url.is_empty()).then(|| event_checkin_domain::models::event::CommunityLink {
+                platform: link.platform.clone(),
+                url,
+                label: link.label.clone(),
+            })
+        })
+        .collect()
 }
 
 /// Count attendees by track from sheet data.
@@ -424,7 +515,7 @@ async fn count_attendees_by_track(
     for attendee in &attendees {
         if attendee.is_in_person() {
             in_person_count += 1;
-        } else {
+        } else if attendee.counts_toward_online_track() {
             online_count += 1;
         }
     }
@@ -455,5 +546,59 @@ fn is_online_registration_open(
         OnlineOpenMode::Always => true,
         OnlineOpenMode::AutoOnFull => !in_person_available,
         OnlineOpenMode::Manual => config.online_registration_open,
+    }
+}
+
+#[cfg(test)]
+mod public_url_tests {
+    use event_checkin_domain::models::event::CommunityLink;
+
+    use super::{genesis_archive_url, https_public_url, public_learning_resources};
+
+    #[test]
+    fn only_nonempty_https_urls_are_public() {
+        assert_eq!(
+            https_public_url("https://youtube.com/watch?v=abc"),
+            "https://youtube.com/watch?v=abc"
+        );
+        assert!(https_public_url("http://example.com/video").is_empty());
+        assert!(https_public_url("javascript:alert(1)").is_empty());
+        assert!(https_public_url("https://   ").is_empty());
+    }
+
+    #[test]
+    fn only_trusted_genesis_event_paths_are_archive_urls() {
+        assert_eq!(
+            genesis_archive_url("https://solana-thailand.github.io/genesis/events/example/"),
+            "https://solana-thailand.github.io/genesis/events/example/"
+        );
+        assert!(genesis_archive_url("https://example.com/events/example/").is_empty());
+        assert!(genesis_archive_url("https://solana-thailand.github.io/genesis/").is_empty());
+    }
+
+    #[test]
+    fn public_learning_resources_filter_type_and_url() {
+        let links = vec![
+            CommunityLink {
+                platform: "slides".into(),
+                url: "https://example.com/slides".into(),
+                label: "Workshop slides".into(),
+            },
+            CommunityLink {
+                platform: "source".into(),
+                url: "javascript:alert(1)".into(),
+                label: "Unsafe".into(),
+            },
+            CommunityLink {
+                platform: "discord".into(),
+                url: "https://discord.gg/example".into(),
+                label: String::new(),
+            },
+        ];
+
+        let public = public_learning_resources(&links);
+        assert_eq!(public.len(), 1);
+        assert_eq!(public[0].platform, "slides");
+        assert_eq!(public[0].label, "Workshop slides");
     }
 }

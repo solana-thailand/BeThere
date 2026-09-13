@@ -109,37 +109,47 @@ deposit-gated event.
 
 Flow in `worker/src/handlers/register/signup.rs`:
 
-- **§5c (`:287`)** — After capacity checks, if the event is deposit-gated, the
-  attendee is in-person, and `credit_identity_ok`, read the contact's credit
-  balance (`sheets::contacts::get_credit_balance`). If `credit_thb >=
+- **Credit selection** — After capacity checks, if the event is deposit-gated,
+  the attendee is in-person, and `credit_identity_ok`, read the org-scoped D1
+  ledger balance. If `credit_thb >=
   deposit_amount_thb` (or the USDC equivalent), mark the deposit as
   credit-covered (`credit_covered_method = "credit_thb" | "credit_usdc"`).
 - **`credit_identity_ok` gate (`:89`)** — Rolling credit is stored value tied to
   an email, so it is only spendable by a Google-verified session *or* a wallet
   session whose wallet is already bound to that email (Plan 017). A wallet
   session that merely *types* an email cannot drain another email's credit.
-- **§7b (`:343`)** — Persist the attendee to D1 **fatally** *before* spending any
+- **Attendee first** — Persist the attendee to D1 **fatally** *before* spending any
   credit (so credit is never consumed for a reservation that didn't durably save).
-- **Auto-apply, fail-closed & correctly ordered (`:387`)** — **Decrement credit
-  first** (`decrement_credit`); only if that succeeds record a covered, verified
-  `ThbDeposit` with `slip_url = "ROLLING_CREDIT_AUTO_APPLIED"`, `verified = true`,
-  `verified_by = "SYSTEM_ROLLING_CREDIT"`. If the decrement fails,
-  `credit_covered_method` is cleared and the attendee falls back to the normal
-  payment path (credit untouched). The reverse order would double-spend real
-  money on retry.
-- **next_step (`:665`)** — When credit covered the deposit, the response routes
+- **Atomic auto-apply** — One idempotent D1 batch conditionally spends the
+  ledger balance and creates the verified deposit status. THB credit also gets
+  its non-cash `ThbDeposit` projection. The batch rolls back as a unit, refuses
+  to overwrite another payment, and retries repair matching legacy projections
+  without a second spend. `credit_thb` and `credit_usdc` retain their exact
+  method and currency in `deposit_statuses`.
+- **Daily safety net** — Credit reconciliation repairs the legacy THB-method
+  mismatch only when ledger, attendee, marker, currency, and amount all match
+  and no cash row exists. It reports any application still incomplete.
+- **next_step** — When credit covered the deposit, the response routes
   straight to `/ticket/...` instead of the deposit page.
 
 ### Credit fields
 
-- **D1 `contacts`** (`worker/src/db/contacts.rs`): `deposit_credit_thb`,
-  `deposit_credit_usdc`, `deposit_credit_since` (cols K–M), written by
-  `update_deposit_credit` (`:80`) / the increment path. Plus the Phase-3 exit
-  flag `credit_refund_requested` / `credit_refund_requested_at`
-  (`set_/clear_/get_credit_refund_requested`, `:335`–`:438`) and the aggregate
-  `credit_liability` (`:301`).
-- The **Master Contacts Sheet** is the human-readable master; D1 is the read
-  source of truth for the liability chip and the request-flag reads.
+- **The `credit_ledger` table** (`worker/src/db/credit_ledger.rs`, migration
+  `0028`) is the source of truth: append-only, keyed
+  `(email, organization_id, currency)`, balance = `SUM(delta)`. Every balance
+  read, the liability chip, the admin payout queue and the payout reversal go
+  through it.
+- **D1 `contacts`** (`worker/src/db/contacts.rs`) keeps the Phase-3 exit flag
+  `credit_refund_requested` / `credit_refund_requested_at`
+  (`set_/clear_/get_credit_refund_requested`). Its `deposit_credit_thb`,
+  `deposit_credit_usdc`, `deposit_credit_since` columns (K–M) are **superseded
+  and unwritten** — the mutable cells the ledger replaced after the 2026-08-14
+  loss. `update_deposit_credit` was deleted; nothing may read them for a money
+  decision, and `credit_ledger_guards.rs` enforces that.
+- The **Master Contacts Sheet** is the human-readable master and a display-only
+  mirror (`sheets::contacts::increment_credit`). It is org-blind — one contacts
+  sheet for all orgs — so a multi-org deployment shows a merged number there.
+  Harmless only because no read path treats it as authoritative.
 
 ---
 

@@ -4,7 +4,9 @@
 # to drive the deposit/refund/claim flows.
 #
 # Usage:
-#   bash worker/scripts/seed-staging.sh           # Seed (INSERT OR REPLACE)
+#   bash worker/scripts/seed-staging.sh           # Seed default fixture (INSERT OR REPLACE)
+#   bash worker/scripts/seed-staging.sh --event-id flow-deposit-20260912
+#                                                   # Seed a fresh named fixture
 #   bash worker/scripts/seed-staging.sh --clean   # Wipe the test event rows first
 #   bash worker/scripts/seed-staging.sh --local   # Target local D1 (--local) instead of --remote
 #
@@ -13,7 +15,7 @@
 #   2. Migrations applied: npx wrangler d1 migrations apply bethere-db-staging --remote
 #   3. The database_name below matches the [env.staging] D1 binding in wrangler.toml.
 #
-# This script ONLY touches staging data (event id `flow-test-event`). It never
+# This script ONLY touches staging data for the selected fixture event. It never
 # reads or writes production. Verify isolation with the count check at the end.
 
 set -euo pipefail
@@ -23,45 +25,93 @@ cd "$(dirname "$0")/.."
 DB_NAME="bethere-db-staging"
 REMOTE_FLAG="--remote"
 CLEAN=0
+EVENT_ID="flow-test-event"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean) CLEAN=1; shift ;;
         --local) REMOTE_FLAG="--local"; shift ;;
+        --event-id)
+            [[ $# -ge 2 ]] || { echo "--event-id requires a value" >&2; exit 2; }
+            EVENT_ID="$2"
+            shift 2
+            ;;
         *) echo "Unknown arg: $1" >&2; exit 2 ;;
     esac
 done
 
+# Event IDs are interpolated into D1 statements below. Restrict them to the
+# same slug-safe alphabet used by the event form so the operator cannot turn a
+# fixture helper into a SQL injection tool.
+if [[ ! "$EVENT_ID" =~ ^[a-z0-9][a-z0-9-]{2,80}$ ]]; then
+    echo "Invalid --event-id '${EVENT_ID}': use 3-81 lowercase letters, digits, or hyphens." >&2
+    exit 2
+fi
+
 # ── Deterministic test data ──────────────────────────────────────────────────
 # The harness needs an event whose refund window is exercisable without waiting
 # hours. We anchor on the seed run time:
-#   event_start = now - 4h        (clearly in the past)
-#   event_end   = now - 2h        (ended → checked-in refunds allowed)
-#   refund_deadline_hours = 6     → refund_deadline = event_end + 6h = now + 4h
-# So at seed time: a no-show can refund (now < deadline), a checked-in user can
-# always refund, and waiting >4h flips the no-show path closed for re-testing.
+#   event_start = now - 1h        (registration/deposit is already open)
+#   event_end   = now + 4h        (deposit flow can assert the pre-end state)
+#   refund_deadline_hours = 6     → refund_deadline = event_end + 6h = now + 10h
+# The live harness advances through lifecycle-specific fixtures; this base seed
+# deliberately starts before event_end so a fresh deposit has a deterministic
+# `PreEventEnd` outcome.
 NOW_MS=$(( $(date +%s) * 1000 ))
 EVENT_START_MS=$(( NOW_MS - 1 * 3600 * 1000 ))
 EVENT_END_MS=$(( NOW_MS + 4 * 3600 * 1000 ))
 REFUND_DEADLINE_HOURS=6
+# Domain and escrow values use USDC's six-decimal smallest unit. A human-facing
+# 10 USDC deposit must therefore be stored and passed on-chain as 10_000_000.
+DEPOSIT_AMOUNT_USDC=10000000
 
-EVENT_ID="flow-test-event"
-EVENT_SLUG="flow-test-event"
-EVENT_NAME="Flow Harness Test Event (staging)"
+EVENT_SLUG="$EVENT_ID"
+EVENT_NAME="Flow Harness Fixture (${EVENT_ID})"
 
-# Test attendee — deterministically checked-in so the checked-in refund path is
-# immediately exercisable. The harness can insert a SECOND no-show attendee via
-# the API to exercise the deadline path.
-ATTENDEE_ID="flow-test-attendee-1"
-ATTENDEE_EMAIL="flow-test-attendee-1@staging.local"
+# Test attendee — checked in for the post-event refund scenario, while its
+# deposit starts pending so the first harness flow can create and verify the
+# on-chain deposit. The harness can use a second attendee for the no-show path.
+ATTENDEE_ID="${EVENT_ID}-attendee-1"
+ATTENDEE_EMAIL="${EVENT_ID}-attendee-1@staging.local"
 ATTENDEE_NAME="Flow Test Attendee (checked-in)"
+# Deterministic per fixture so re-seeding does not invalidate a token an
+# operator already pasted into a browser. Any string works as a lookup key.
+CLAIM_TOKEN="${CLAIM_TOKEN:-${EVENT_ID}-claim-token-1}"
+# The Worker parses `checked_in_at` with `chrono::DateTime::parse_from_rfc3339`
+# (worker/src/claim/ttl.rs) and the real check-in handlers write
+# `chrono::Utc::now().to_rfc3339()`, e.g. `2026-05-24T08:08:11.774+00:00`.
+#
+# SQLite's `datetime('now')` renders `2026-05-24 08:08:11` — a SPACE separator
+# and no UTC offset. That is not RFC 3339, so the parser rejects it and the
+# Issue 071 claim-token replay window FAILS OPEN for every seeded row. The
+# seeded data then silently disagrees with production, and a staging run of
+# scripts/verify/claim_token_window_staging.sh cannot tell a working window
+# from a disabled one. Emit the production format instead.
+CHECKED_IN_AT_SQL="strftime('%Y-%m-%dT%H:%M:%f+00:00','now')"
 
 run_sql () {
     # $1 = SQL string. Executes against staging D1.
     npx wrangler d1 execute "$DB_NAME" --env staging $REMOTE_FLAG --command "$1" >/dev/null
 }
 
+read_sql_json () {
+    # $1 = SELECT statement. Never suppress output: the caller uses the JSON
+    # to refuse destructive reseeding of an initialized escrow fixture.
+    npx wrangler d1 execute "$DB_NAME" --env staging $REMOTE_FLAG --json --command "$1"
+}
+
 echo "🌱 Seeding staging D1 ($DB_NAME, $REMOTE_FLAG)..."
+
+# An EventEscrow records immutable on-chain event timing and PDA data. Replacing
+# its D1 event row would silently detach the Worker from that account and make
+# future deposits/refunds unsafe to diagnose. This check runs before --clean so
+# an accidental fixture refresh cannot delete a live staging escrow lifecycle.
+EXISTING_EVENT=$(read_sql_json "SELECT escrow_status FROM events WHERE id = '${EVENT_ID}' LIMIT 1;")
+if printf '%s' "$EXISTING_EVENT" | grep -Eq '"escrow_status"[[:space:]]*:[[:space:]]*"(initialized|deactivated|closed)"'; then
+    echo "❌ Refusing to reseed ${EVENT_ID}: its escrow is already initialized/deactivated/closed." >&2
+    echo "   Create a new fixture event instead; never replace an on-chain escrow row." >&2
+    exit 1
+fi
 
 if [[ "$CLEAN" -eq 1 ]]; then
     echo "🧹 Removing existing flow-test rows..."
@@ -81,21 +131,21 @@ run_sql "INSERT OR REPLACE INTO events (
 ) VALUES (
     '${EVENT_ID}', '${EVENT_NAME}', '${EVENT_SLUG}', 'active', 'in_person',
     ${EVENT_START_MS}, ${EVENT_END_MS},
-    1, 10, 0,
+    1, ${DEPOSIT_AMOUNT_USDC}, 0,
     'none', ${REFUND_DEADLINE_HOURS}, 5,
     'public', 'Staging test event for flow harness', 'Bangkok (staging)',
     datetime('now'), datetime('now')
 );"
 
 # ── Test attendee (checked-in) ────────────────────────────────────────────────
-echo "📝 Upserting attendee ${ATTENDEE_ID} (checked_in)..."
+echo "📝 Upserting attendee ${ATTENDEE_ID} (checked_in, claim_token=${CLAIM_TOKEN})..."
 run_sql "INSERT OR REPLACE INTO attendees (
     id, event_id, email, name, approval_status, participation_type,
-    checked_in_at, deposit_status, deposit_amount_usdc
+    checked_in_at, claim_token, deposit_status, deposit_amount_usdc
 ) VALUES (
     '${ATTENDEE_ID}', '${EVENT_ID}', '${ATTENDEE_EMAIL}', '${ATTENDEE_NAME}',
     'approved', 'in_person',
-    datetime('now'), 'verified', 10
+    ${CHECKED_IN_AT_SQL}, '${CLAIM_TOKEN}', 'pending', ${DEPOSIT_AMOUNT_USDC}
 );"
 
 # ── Deposit status row (mirrors deposit_statuses table) ───────────────────────
@@ -104,8 +154,8 @@ run_sql "INSERT OR REPLACE INTO deposit_statuses (
     attendee_id, event_id, method, amount, currency,
     verified, deposited_at, wallet_address, deposit_order, refundable
 ) VALUES (
-    '${ATTENDEE_ID}', '${EVENT_ID}', 'usdc', 10, 'USDC',
-    1, datetime('now'), '', 1, 1
+    '${ATTENDEE_ID}', '${EVENT_ID}', 'usdc', ${DEPOSIT_AMOUNT_USDC}, 'USDC',
+    0, datetime('now'), '', 1, 1
 );"
 
 # ── Isolation sanity check ───────────────────────────────────────────────────
@@ -118,7 +168,8 @@ npx wrangler d1 execute "$DB_NAME" --env staging $REMOTE_FLAG \
 echo ""
 echo "✅ Staging seed complete."
 echo "   Event:        ${EVENT_ID}  (ends ${EVENT_END_MS}, refund deadline +${REFUND_DEADLINE_HOURS}h)"
-echo "   Attendee:     ${ATTENDEE_ID} (checked-in, usdc deposit verified)"
+echo "   Attendee:     ${ATTENDEE_ID} (checked-in, usdc deposit pending)"
 echo "   Refund window: checked-in → anytime after event_end; no-show → before refund_deadline."
 echo ""
-echo "Next: bash worker/deploy.sh staging   # then point flow-harness at the staging URL."
+echo "Next: open the staging event in Manage Events → Edit → Escrow Management."
+echo "      Initialize its Devnet escrow with the organizer wallet, then run the focused deposit harness."

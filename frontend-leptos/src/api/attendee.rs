@@ -90,9 +90,10 @@ pub async fn get_attendees(
     let mut params = Vec::new();
 
     if let Some(id) = event_id
-        && !id.is_empty() {
-            params.push(format!("event_id={id}"));
-        }
+        && !id.is_empty()
+    {
+        params.push(format!("event_id={id}"));
+    }
     if let Some(c) = cursor {
         params.push(format!("cursor={c}"));
     }
@@ -138,11 +139,10 @@ pub async fn get_attendee(id: &str, event_id: Option<&str>) -> Result<AttendeeDa
 
     let json = cached_get(&path).await?;
 
-    let wrapper: ApiResponse<AttendeeData> =
-        serde_json::from_str(&json).map_err(|e| ApiError {
-            message: format!("Failed to parse attendee: {e}"),
-            status: 0,
-        })?;
+    let wrapper: ApiResponse<AttendeeData> = serde_json::from_str(&json).map_err(|e| ApiError {
+        message: format!("Failed to parse attendee: {e}"),
+        status: 0,
+    })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -174,12 +174,15 @@ pub async fn get_public_ticket(
     let response = super::api_get_no_cache(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Request failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Request failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: response.status(),
@@ -188,11 +191,10 @@ pub async fn get_public_ticket(
 
     let json = super::fetch::response_text(&response).await?;
 
-    let wrapper: ApiResponse<AttendeeData> =
-        serde_json::from_str(&json).map_err(|e| ApiError {
-            message: format!("Failed to parse ticket data: {e}"),
-            status: 0,
-        })?;
+    let wrapper: ApiResponse<AttendeeData> = serde_json::from_str(&json).map_err(|e| ApiError {
+        message: format!("Failed to parse ticket data: {e}"),
+        status: 0,
+    })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -202,7 +204,11 @@ pub async fn get_public_ticket(
 
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
-pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<CheckInData, ApiError> {
+pub async fn check_in(
+    id: &str,
+    event_id: Option<&str>,
+    online: bool,
+) -> Result<CheckInData, ApiError> {
     let mut path = match event_id {
         Some(eid) if !eid.is_empty() => format!("/checkin/{id}?event_id={eid}"),
         _ => format!("/checkin/{id}"),
@@ -225,10 +231,11 @@ pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<
         });
     }
 
-    let wrapper: ApiResponse<CheckInData> = response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse check-in response: {e}"),
-        status: 0,
-    })?;
+    let wrapper: ApiResponse<CheckInData> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse check-in response: {e}"),
+            status: 0,
+        })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -244,9 +251,10 @@ pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<
 pub async fn undo_check_in(attendee_id: &str, event_id: Option<&str>) -> Result<(), ApiError> {
     let mut path = format!("/attendees/{attendee_id}/undo-checkin");
     if let Some(eid) = event_id
-        && !eid.is_empty() {
-            path = format!("{path}?event_id={eid}");
-        }
+        && !eid.is_empty()
+    {
+        path = format!("{path}?event_id={eid}");
+    }
 
     let response = api_post(&path).await?;
 
@@ -324,7 +332,9 @@ pub async fn update_participation_type(
     new_value: &str,
 ) -> Result<ParticipationTypeUpdate, ApiError> {
     let path = match event_id {
-        Some(eid) if !eid.is_empty() => format!("/attendee/{attendee_id}/participation-type?event_id={eid}"),
+        Some(eid) if !eid.is_empty() => {
+            format!("/attendee/{attendee_id}/participation-type?event_id={eid}")
+        }
         _ => format!("/attendee/{attendee_id}/participation-type"),
     };
     let body = ParticipationTypeBody {
@@ -337,7 +347,9 @@ pub async fn update_participation_type(
 
 /// POST /api/walkin/register
 /// Register a walk-in attendee for an event.
-pub async fn register_walkin(req: &WalkinRegisterRequest) -> Result<WalkinRegisterResponse, ApiError> {
+pub async fn register_walkin(
+    req: &WalkinRegisterRequest,
+) -> Result<WalkinRegisterResponse, ApiError> {
     let response = super::api_post_json("/walkin/register", req).await?;
     Ok(response)
 }
@@ -347,12 +359,13 @@ pub async fn register_walkin(req: &WalkinRegisterRequest) -> Result<WalkinRegist
 pub async fn list_walkins(event_id: &str) -> Result<WalkinListResponse, ApiError> {
     let path = format!("/walkin/list?event_id={event_id}");
     let cached = cached_get(&path).await?;
-    let response: ApiResponse<WalkinListResponse> = serde_json::from_str(&cached).unwrap_or(ApiResponse {
-        success: false,
-        data: None,
-        error: Some("Failed to parse response".to_string()),
-        correlation_id: None,
-    });
+    let response: ApiResponse<WalkinListResponse> =
+        serde_json::from_str(&cached).unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to parse response".to_string()),
+            correlation_id: None,
+        });
     if !response.success {
         return Err(ApiError {
             message: response.error.unwrap_or("Unknown error".to_string()),
@@ -370,10 +383,11 @@ pub async fn list_walkins(event_id: &str) -> Result<WalkinListResponse, ApiError
 pub async fn export_walkin_csv(event_id: &str) -> Result<WalkinExportResponse, ApiError> {
     let path = format!("/walkin/export?event_id={event_id}");
     let response = api_get(&path).await?;
-    let result: ApiResponse<WalkinExportResponse> = response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse response: {e}"),
-        status: 0,
-    })?;
+    let result: ApiResponse<WalkinExportResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse response: {e}"),
+            status: 0,
+        })?;
 
     if !result.success {
         return Err(ApiError {
@@ -427,10 +441,11 @@ pub async fn generate_qrs(force: bool, event_id: Option<&str>) -> Result<Generat
         });
     }
 
-    let wrapper: ApiResponse<GenerateQrData> = response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse QR generation response: {e}"),
-        status: 0,
-    })?;
+    let wrapper: ApiResponse<GenerateQrData> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse QR generation response: {e}"),
+            status: 0,
+        })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),

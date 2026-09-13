@@ -87,11 +87,11 @@ pub fn EventRecap() -> impl IntoView {
         });
     });
 
-    let is_loading = move || matches!(load_state.get(), RecapLoadState::Loading) && data.get().is_none();
+    let is_loading =
+        move || matches!(load_state.get(), RecapLoadState::Loading) && data.get().is_none();
     let is_not_found = move || matches!(load_state.get(), RecapLoadState::NotFound);
-    let is_hard_failure = move || {
-        matches!(load_state.get(), RecapLoadState::Failed(_)) && data.get().is_none()
-    };
+    let is_hard_failure =
+        move || matches!(load_state.get(), RecapLoadState::Failed(_)) && data.get().is_none();
 
     view! {
         <Title text="Event Recap — BeThere" />
@@ -159,6 +159,8 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
     let date_str = format_event_date_range(event.event_start_ms, event.event_end_ms);
     let funnel = payload.funnel.clone();
     let markdown = payload.recap_markdown.clone();
+    let video_url = event.video_url.clone();
+    let learning_resources = event.learning_resources.clone();
     let published_str = payload
         .recap_published_at
         .as_deref()
@@ -276,6 +278,23 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
             }}
         </div>
 
+        // Reuse the ticket recording component so current attendees and people
+        // catching up later receive identical URL handling and presentation.
+        {if video_url.is_empty() {
+            ().into_any()
+        } else {
+            view! {
+                <div style="width:100%;margin-bottom:1.5rem;">
+                    <crate::pages::ticket::video_section::VideoSection
+                        video_url=video_url
+                        variant="card".to_string()
+                    />
+                </div>
+            }.into_any()
+        }}
+
+        {render_learning_resources(learning_resources)}
+
         // ── Recap body (rendered as preformatted text in v1) ──
         {move || {
             let md = markdown.clone();
@@ -327,6 +346,53 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
             }
         }}
     }
+}
+
+fn render_learning_resources(links: Vec<crate::api::CommunityLink>) -> AnyView {
+    if links.is_empty() {
+        return ().into_any();
+    }
+
+    let items = links
+        .into_iter()
+        .enumerate()
+        .map(|(index, link)| {
+            let kind = match link.platform.as_str() {
+                "slides" => "Slides",
+                "source" => "Source code",
+                "download" => "Download",
+                _ => "Resource",
+            };
+            let display_label = if link.label.trim().is_empty() {
+                kind.to_string()
+            } else {
+                format!("{} · {kind}", link.label)
+            };
+            view! {
+                <a
+                    href=link.url
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="pe-community-link-item"
+                >
+                    <span class="recap-resource-order" aria-hidden="true">{index + 1}</span>
+                    <span class="pe-community-link-label">{display_label}</span>
+                    <span aria-hidden="true">"↗"</span>
+                </a>
+            }
+        })
+        .collect::<Vec<_>>();
+
+    view! {
+        <div class="card" style="width:100%;margin-bottom:1.5rem;">
+            <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">"Learning resources"</h2>
+            <p class="subtitle" style="margin:0 0 1rem;">
+                "Continue with the organizer's slides, code, and supporting materials."
+            </p>
+            <div class="pe-community-links-list">{items}</div>
+        </div>
+    }
+    .into_any()
 }
 
 // ---------------------------------------------------------------------------

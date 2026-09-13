@@ -64,8 +64,40 @@ SHIM
 
 # Environment variables (non-secret config)
 [vars]
+# Set to 1 only after migration 0030 and verified sender setup (docs/notifications.md).
+NOTIFICATIONS_ENABLED = "0"
+NOTIFICATION_FROM = ""
 SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
+# Issue 071: claim/quiz/adventure capability tokens travel in the URL path, so
+# Cloudflare's own request log records them - Workers Logs readers can replay a
+# claim for as long as the token is accepted. This bounds that window to N
+# seconds after the attendee's CHECK-IN (not token issuance: the token is minted
+# at registration and reused, so an issuance anchor would expire attendees
+# mid-event). "0" disables the check - the kill switch if it ever denies a real
+# attendee.
+#
+# PRODUCTION RUNS A WIDER MIGRATION WINDOW THAN STAGING, ON PURPOSE.
+# The window is measured from `checked_in_at`, a column that already has values
+# on every row, so switching it on is RETROACTIVE - it takes effect for past
+# check-ins the instant it deploys, and no grace period is possible. Measured
+# against production D1 on 2026-09-13: 85 attendees were checked in but had not
+# claimed, and 71 of them had checked in more than 30 days earlier. Deploying
+# 30 days would therefore have revoked a real entitlement for 71 people. The
+# oldest unclaimed check-in was 139 days old (oldest check-in of any kind was
+# under 150 days), and all 91 checked-in rows store RFC 3339 with an offset, so
+# the window genuinely applies to all of them rather than failing open.
+# 15552000 = 180 days covers every outstanding claim with >= 41 days of
+# headroom while still replacing an unbounded window with a bounded one.
+# TIGHTEN THIS TO 2592000 (30 days) once the backlog has drained - tracked in
+# .issues/071_capability_token_in_url_platform_logs.md. Re-run the backlog
+# query there before tightening; do not lower it on a hunch.
+#
+# DO NOT DELETE THIS LINE TO "unset" THE WINDOW. An absent or non-numeric value
+# falls back to DEFAULT_CLAIM_TOKEN_TTL_SECS in worker/src/claim/ttl.rs, which
+# is 30 days - the value measured above as revoking 71 real entitlements. The
+# way to disable the check is an explicit "0", not removal.
+CLAIM_TOKEN_TTL_SECS = "15552000"
 # Telegram Login Widget bot username (public). The widget stays OFF until the
 # TELEGRAM_BOT_TOKEN secret is also set — see /api/auth/telegram/config.
 TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
@@ -135,6 +167,37 @@ crons = ["0 3 * * *"]
 # Reduces check-in latency by minimizing network round-trips. Zero cost on all plans.
 [placement]
 mode = "smart"
+
+# Native per-location counters are included as Worker bindings and avoid a
+# D1/KV/DO operation on every protected request. The in-process limiter remains
+# a fallback for local development and binding failures.
+[[ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "63201"
+[ratelimits.simple]
+limit = 20
+period = 60
+
+[[ratelimits]]
+name = "CLAIM_RATE_LIMITER"
+namespace_id = "63202"
+[ratelimits.simple]
+limit = 120
+period = 60
+
+[[ratelimits]]
+name = "DEPOSIT_RATE_LIMITER"
+namespace_id = "63203"
+[ratelimits.simple]
+limit = 60
+period = 60
+
+[[ratelimits]]
+name = "WEBHOOK_RATE_LIMITER"
+namespace_id = "63204"
+[ratelimits.simple]
+limit = 120
+period = 60
 
 # Phase 4: Quiz KV namespace — REMOVED (Option C).
 # Quiz data is now D1-only. QUIZ KV binding removed from wrangler.toml.
@@ -218,6 +281,22 @@ name = "bethere-staging"
 # environment"). Below mirrors production and overrides the env-specific ones.
 SERVER_URL = "https://bethere-staging.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere-staging.solana-thailand.workers.dev/claim"
+# Deliberately TIGHTER than production (which runs a 180-day migration window
+# for its real unclaimed backlog - see the [vars] comment). Staging data is
+# disposable, so it keeps the 30-day target value and stays the environment
+# where the deny path is actually exercised before prod ever tightens.
+CLAIM_TOKEN_TTL_SECS = "2592000"
+# Keep outbound notifications and NFT minting fail-closed in staging until their
+# staging-only credentials and resources are deliberately configured.
+NOTIFICATIONS_ENABLED = "0"
+NOTIFICATION_FROM = ""
+TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
+# The staging Worker has a HELIUS_API_KEY secret. Use the authenticated Devnet
+# endpoint rather than unauthenticated public RPCs, which may block Cloudflare
+# egress and make escrow confirmation unreliable.
+HELIUS_RPC_URL = "https://devnet.helius-rpc.com"
+CROSSMINT_HOST = "staging.crossmint.com"
+CROSSMINT_COLLECTION_ID = ""
 # Staging targets devnet (vars are non-inheritable, so it must be redeclared here).
 SOLANA_CLUSTER = "devnet"
 GOOGLE_SHEET_NAME = "Attendees"
@@ -254,7 +333,41 @@ preview_id = "dd1d541c936242ecb1533ba6ac6a9851"   # staging shares the main name
 binding = "ASSETS_BUCKET"
 bucket_name = "bethere-assets-staging"
 
+# Rate Limit bindings are non-inheritable. Staging uses distinct namespaces so
+# load tests and flow-harness runs cannot consume production counters.
+[[env.staging.ratelimits]]
+name = "AUTH_RATE_LIMITER"
+namespace_id = "63301"
+[env.staging.ratelimits.simple]
+limit = 20
+period = 60
+
+[[env.staging.ratelimits]]
+name = "CLAIM_RATE_LIMITER"
+namespace_id = "63302"
+[env.staging.ratelimits.simple]
+limit = 120
+period = 60
+
+[[env.staging.ratelimits]]
+name = "DEPOSIT_RATE_LIMITER"
+namespace_id = "63303"
+[env.staging.ratelimits.simple]
+limit = 60
+period = 60
+
+[[env.staging.ratelimits]]
+name = "WEBHOOK_RATE_LIMITER"
+namespace_id = "63304"
+[env.staging.ratelimits.simple]
+limit = 120
+period = 60
+
 # NOTE: DO bindings (EVENT_DO) remain commented out for staging too — the PUT API
 # fallback in deploy.sh rejects durable_object bindings (10021). When the CF
 # versions API recovers and DOs are re-enabled in production, mirror the binding
 # here. The worker already handles event_do=None gracefully.
+
+# Enable after onboarding a sender domain to Cloudflare Email Sending:
+# [[send_email]]
+# name = "EMAIL"

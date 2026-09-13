@@ -12,7 +12,10 @@ fn email_looks_valid(email: &str) -> bool {
     }
     match e.split_once('@') {
         Some((local, domain)) => {
-            !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+            !local.is_empty()
+                && domain.contains('.')
+                && !domain.starts_with('.')
+                && !domain.ends_with('.')
         }
         None => false,
     }
@@ -77,30 +80,31 @@ pub fn registration_form(
 
     // Auto-fill from localStorage for returning users
     if let Some(saved_json) = loadDevProfile()
-        && let Ok(profile) = serde_json::from_str::<SavedDevProfile>(&saved_json) {
-            if !profile.name.is_empty() && reg_name.get().is_empty() {
-                set_reg_name.set(profile.name.clone());
-            }
-            if !profile.contact_channel.is_empty() && reg_contact_channel.get().is_empty() {
-                set_reg_contact_channel.set(profile.contact_channel.clone());
-            }
-            if !profile.contact_handle.is_empty() && reg_contact_handle.get().is_empty() {
-                set_reg_contact_handle.set(profile.contact_handle.clone());
-            }
-            if !profile.fields.is_empty() {
-                set_dynamic_field_values.update(|vals| {
-                    for (k, v) in &profile.fields {
-                        if !v.is_empty() && !vals.contains_key(k) {
-                            vals.insert(k.clone(), v.clone());
-                        }
-                    }
-                });
-            }
-            log::info!(
-                "[registration_form] pre-filled {} fields from saved dev profile",
-                profile.fields.len()
-            );
+        && let Ok(profile) = serde_json::from_str::<SavedDevProfile>(&saved_json)
+    {
+        if !profile.name.is_empty() && reg_name.get().is_empty() {
+            set_reg_name.set(profile.name.clone());
         }
+        if !profile.contact_channel.is_empty() && reg_contact_channel.get().is_empty() {
+            set_reg_contact_channel.set(profile.contact_channel.clone());
+        }
+        if !profile.contact_handle.is_empty() && reg_contact_handle.get().is_empty() {
+            set_reg_contact_handle.set(profile.contact_handle.clone());
+        }
+        if !profile.fields.is_empty() {
+            set_dynamic_field_values.update(|vals| {
+                for (k, v) in &profile.fields {
+                    if !v.is_empty() && !vals.contains_key(k) {
+                        vals.insert(k.clone(), v.clone());
+                    }
+                }
+            });
+        }
+        log::info!(
+            "[registration_form] pre-filled {} fields from saved dev profile",
+            profile.fields.len()
+        );
+    }
 
     view! {
         {move || {
@@ -130,9 +134,8 @@ pub fn registration_form(
                         saveDevProfile(&json);
                     }
 
-                    // Plan 017: if the wallet couldn't be linked (email already had an
-                    // account), pause on this screen with guidance instead of the fast
-                    // auto-redirect, so the user learns how to merge the two.
+                    // Wallet possession does not prove ownership of the typed email.
+                    // Pause with the verified linking path instead of auto-redirecting.
                     let wallet_not_linked = matches!(data.wallet_linked, Some(false));
 
                     let redirect_url = next_url.clone();
@@ -160,7 +163,7 @@ pub fn registration_form(
                                     view! {
                                         <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:0.82rem;line-height:1.45;color:#cbd5e1;text-align:left;">
                                             <strong style="color:#fff;">"Heads up: "</strong>
-                                            "this email already has an account, so your wallet wasn't linked to it. To sign in with your wallet next time, open your Profile (signed in with Google), then press \"Connect Wallet\"."
+                                            "your wallet wasn't linked to the email because the email hasn't been verified. To sign in with your wallet next time, open your Profile after signing in with Google, then press \"Connect Wallet\"."
                                         </div>
                                         <button class="pe-submit-btn" on:click=move |_| navigateTo(&continue_url)>
                                             "Continue →"

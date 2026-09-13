@@ -97,7 +97,10 @@ pub fn DepositVerifiedCard() -> impl IntoView {
                 <Icon icon=IconName::Check class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">"Deposit: Verified ✓"</div>
+                <crate::components::StatusBadge
+                    tone=crate::components::StatusTone::Confirmed
+                    label="Deposit verified"
+                />
             </div>
         </div>
     }
@@ -130,6 +133,10 @@ pub fn DepositPendingCard(
                 <Icon icon=IconName::Hourglass class="icon-sm" />
             </div>
             <div>
+                <crate::components::StatusBadge
+                    tone=crate::components::StatusTone::Pending
+                    label="Pending"
+                />
                 <div class="ticket-action-title">{label}</div>
                 <div class="ticket-action-desc">{desc}</div>
             </div>
@@ -265,6 +272,8 @@ enum RolloverState {
 /// and a new event from the same organizer is available.
 #[component]
 pub fn RolloverActionCard(
+    /// Source deposit amount in USDC smallest units.
+    deposit_amount_usdc: u64,
     /// Name of the target event to roll deposit into.
     #[prop(into)]
     target_event_name: String,
@@ -390,6 +399,12 @@ pub fn RolloverActionCard(
 
                     RolloverState::WalletConnected(wn, _pk) => {
                         let wn_display = wn.clone();
+                        let amount = crate::pages::deposit::types::format_usdc(deposit_amount_usdc);
+                        let cluster = utils::get_cluster();
+                        let network = format!(
+                            "Solana {}",
+                            crate::pages::deposit::components::cluster_display_label(&cluster)
+                        );
                         let sv_source = source_eid;
                         let sv_target = target_eid;
                         let sv_aid = aid_stored;
@@ -398,8 +413,14 @@ pub fn RolloverActionCard(
                             <div class="ticket-action-title">
                                 {format!("Connected via {}", wn_display)}
                             </div>
+                            {crate::pages::deposit::components::transaction_review(vec![
+                                ("You authorize", format!("Move {amount} USDC to {target_event_name}")),
+                                ("Network", network),
+                                ("Extra payment", "None".to_string()),
+                                ("Network fee", "Paid in SOL by this connected wallet".to_string()),
+                            ])}
                             <div class="ticket-action-desc">
-                                "Click below to sign and send the rollover transaction."
+                                "Review these details, then approve in your wallet."
                             </div>
                             <button
                                 class="btn btn-success btn-sm ticket-action-btn"
@@ -675,13 +696,14 @@ pub fn HoldDepositCard(
                     }.into_any(),
 
                     HoldDepositState::Confirmed { credit_thb, credit_usdc } => {
-                        let balance_str = if credit_thb > 0 && credit_usdc > 0 {
-                            format!("{} THB + {} USDC", credit_thb, credit_usdc)
-                        } else if credit_thb > 0 {
-                            format!("{} THB", credit_thb)
-                        } else {
-                            format!("{} USDC", credit_usdc)
-                        };
+                        // Shared formatter: USDC is the 6-decimal smallest unit and
+                        // must not be printed raw (15_000_000 is $15, not $15M).
+                        // Falls back to the amount just held if the server reports a
+                        // zero balance — impossible right after a hold, but it keeps
+                        // the sentence well-formed rather than emitting "Total credit: .".
+                        let balance_str =
+                            super::credit_chip::credit_balance_label(credit_thb, credit_usdc)
+                                .unwrap_or_else(|| format!("{amount} THB"));
                         view! {
                             <div class="ticket-action-title ticket-action-title-success">
                                 "Deposit Held as Credit ✓"

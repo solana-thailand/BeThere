@@ -99,12 +99,13 @@ pub async fn get_my_profile(
         .as_ref()
         .ok_or_else(|| AppError::NotFound("D1 database not available".to_string()))?;
 
-    tracing::info!(email = %claims.email, "GET /api/my-profile");
+    let identity_fingerprint = state.log_fingerprint(&claims.email);
+    tracing::info!(identity_fingerprint = %identity_fingerprint, "GET /api/my-profile");
 
     let profile = match crate::db::developers::get_developer_profile(d1, &claims.email).await {
         Ok(Some(p)) => p,
         Ok(None) => {
-            tracing::info!(email = %claims.email, "no profile found, returning defaults");
+            tracing::info!(identity_fingerprint = %identity_fingerprint, "no profile found, returning defaults");
             // Return a default empty profile for new users
             crate::db::developers::DeveloperProfileRow {
                 email: claims.email.clone(),
@@ -137,7 +138,7 @@ pub async fn get_my_profile(
             }
         }
         Err(e) => {
-            tracing::error!(email = %claims.email, error = %e, "D1 get_developer_profile failed");
+            tracing::error!(identity_fingerprint = %identity_fingerprint, error = %e, "D1 get_developer_profile failed");
             return Err(WorkerError(AppError::Internal(format!(
                 "Failed to fetch profile: {e}"
             ))));
@@ -150,7 +151,7 @@ pub async fn get_my_profile(
     let events_joined = crate::db::developers::count_events_joined(d1, &claims.email)
         .await
         .unwrap_or_else(|e| {
-            tracing::warn!(email = %claims.email, error = %e, "count_events_joined failed; falling back to stored total_events");
+            tracing::warn!(identity_fingerprint = %identity_fingerprint, error = %e, "count_events_joined failed; falling back to stored total_events");
             profile.total_events.unwrap_or(0)
         });
 
@@ -212,9 +213,9 @@ pub async fn update_my_profile(
           primary_role, tech_stack, interests, learning_goals, company_org, \
           location_city, consent_outreach, first_seen_at, last_active_at, \
           total_events, updated_at) \
-         VALUES ('{email}', '{display_name}', '{github}', '{discord}', '{twitter}', '{telegram}', \
-          '{primary_role}', '{tech_stack}', '{interests}', '{learning_goals}', \
-          '{company_org}', '{location_city}', {consent_val}, \
+         VALUES (?, ?, ?, ?, ?, ?, \
+          ?, ?, ?, ?, \
+          ?, ?, {consent_val}, \
           datetime('now'), datetime('now'), 0, datetime('now')) \
          ON CONFLICT (email) DO UPDATE SET \
           display_name = excluded.display_name, \
@@ -230,22 +231,28 @@ pub async fn update_my_profile(
           location_city = excluded.location_city, \
           consent_outreach = excluded.consent_outreach, \
           updated_at = datetime('now')",
-        email = claims.email.replace('\'', "''"),
-        display_name = body.display_name.replace('\'', "''"),
-        github = body.github_handle.replace('\'', "''"),
-        discord = body.discord_handle.replace('\'', "''"),
-        twitter = body.twitter_handle.replace('\'', "''"),
-        telegram = body.telegram_handle.replace('\'', "''"),
-        primary_role = body.primary_role.replace('\'', "''"),
-        tech_stack = tech_stack_json.replace('\'', "''"),
-        interests = interests_json.replace('\'', "''"),
-        learning_goals = body.learning_goals.replace('\'', "''"),
-        company_org = body.company_org.replace('\'', "''"),
-        location_city = body.location_city.replace('\'', "''"),
         consent_val = consent_val,
     );
 
+    // Order MUST match the `?` placeholders in the VALUES clause above.
+    let args = [
+        worker::d1::D1Type::Text(&claims.email),
+        worker::d1::D1Type::Text(&body.display_name),
+        worker::d1::D1Type::Text(&body.github_handle),
+        worker::d1::D1Type::Text(&body.discord_handle),
+        worker::d1::D1Type::Text(&body.twitter_handle),
+        worker::d1::D1Type::Text(&body.telegram_handle),
+        worker::d1::D1Type::Text(&body.primary_role),
+        worker::d1::D1Type::Text(&tech_stack_json),
+        worker::d1::D1Type::Text(&interests_json),
+        worker::d1::D1Type::Text(&body.learning_goals),
+        worker::d1::D1Type::Text(&body.company_org),
+        worker::d1::D1Type::Text(&body.location_city),
+    ];
+
     worker::D1Database::prepare(d1, &sql)
+        .bind_refs(&args)
+        .map_err(|e| AppError::Internal(format!("D1 update_my_profile bind: {e:?}")))?
         .run()
         .await
         .map_err(|e| AppError::Internal(format!("Failed to update profile: {e:?}")))?;
@@ -259,10 +266,10 @@ pub async fn update_my_profile(
         discord_handle: Some(body.discord_handle).filter(|s| !s.is_empty()),
         twitter_handle: Some(body.twitter_handle).filter(|s| !s.is_empty()),
         telegram_handle: Some(body.telegram_handle).filter(|s| !s.is_empty()),
-        telegram_id: None, // set via Telegram Login Widget only
-        github_verified: false, // set via OAuth only
+        telegram_id: None,        // set via Telegram Login Widget only
+        github_verified: false,   // set via OAuth only
         telegram_verified: false, // set via Telegram widget only
-        discord_verified: false, // set via OAuth only
+        discord_verified: false,  // set via OAuth only
         github_verified_at: None,
         telegram_verified_at: None,
         discord_verified_at: None,

@@ -20,6 +20,7 @@
 //!   POST   /api/events/reseed-kv     — reseed KV index from D1 (super admin only)
 
 pub mod audit;
+pub mod common;
 pub mod create;
 pub mod duplicate;
 pub mod lifecycle;
@@ -28,6 +29,7 @@ pub mod post_event_registration;
 pub mod poster;
 pub mod pr_pack;
 pub mod read;
+pub mod readiness;
 pub mod recap;
 pub mod seed;
 pub mod summary;
@@ -43,6 +45,7 @@ pub use post_event_registration::put_post_event_registration;
 pub use poster::{delete_poster, upload_poster};
 pub use pr_pack::get_pr_pack;
 pub use read::get_event;
+pub use readiness::get_readiness;
 pub use recap::{get_recap_handler, put_recap};
 pub use seed::{migrate_quiz, reseed_kv_from_d1, seed_event};
 pub use summary::{freeze_event_summary, get_event_summary};

@@ -14,6 +14,8 @@ use crate::audit_store::{AuditAction, create_entry_with_meta};
 use crate::error::ApiOk;
 use crate::state::AppState;
 
+use super::common::{enforce_organizer, load_event};
+
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{EventConfig, EventStatus};
@@ -37,7 +39,7 @@ pub async fn get_event_summary(
     let now_ms = Utc::now().timestamp_millis();
 
     let event = load_event(&state, kv, &id).await?;
-    enforce_organizer(&claims, &state, &event).await?;
+    enforce_organizer(&claims, &state, &event, "view event summaries").await?;
 
     if event.status == EventStatus::Draft {
         return Err(AppError::Validation(
@@ -47,10 +49,28 @@ pub async fn get_event_summary(
     }
 
     // 4. Existing frozen row wins.
-    if let Some(db) = state.d1.as_deref()
-        && let Ok(Some(frozen)) = crate::db::event_summaries::get_summary(db, &event.id).await {
-            return Ok(summary_response(frozen, true));
+    //
+    // A read failure here MUST NOT fall through to step 5: the freeze is the
+    // event's durable record, and recomputing would silently overwrite it with
+    // numbers that have drifted since (late refunds, late claims). Refusing is
+    // recoverable; a destroyed snapshot is not.
+    if let Some(db) = state.d1.as_deref() {
+        match crate::db::event_summaries::get_summary(db, &event.id).await {
+            Ok(Some(frozen)) => return Ok(summary_response(frozen, true)),
+            Ok(None) => {}
+            Err(e) => {
+                tracing::error!(
+                    event_id = %event.id,
+                    error = %e,
+                    "D1 get_summary failed — refusing to re-freeze over a possibly-existing snapshot"
+                );
+                return Err(AppError::Internal(
+                    "could not read the event summary — please try again".into(),
+                )
+                .into());
+            }
         }
+    }
 
     // 5. Event is over → freeze on read.
     if now_ms >= event.event_end_ms {
@@ -78,7 +98,7 @@ pub async fn freeze_event_summary(
     let now_ms = Utc::now().timestamp_millis();
 
     let event = load_event(&state, kv, &id).await?;
-    enforce_organizer(&claims, &state, &event).await?;
+    enforce_organizer(&claims, &state, &event, "view event summaries").await?;
 
     if event.status == EventStatus::Draft {
         return Err(AppError::Validation("event is still a draft — cannot freeze".into()).into());
@@ -100,40 +120,6 @@ pub async fn freeze_event_summary(
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
-
-/// Load an event by id, KV first then D1 fallback.
-///
-/// Mirrors the pattern in `duplicate_event` / `restore_event`.
-async fn load_event(
-    state: &AppState,
-    kv: Option<&worker::KvStore>,
-    id: &str,
-) -> Result<EventConfig, AppError> {
-    if let Some(kv_ref) = kv
-        && let Ok(Some(c)) = crate::event_store::get_event(kv_ref, id).await {
-            return Ok(c);
-        }
-    if let Some(ref d1) = state.d1
-        && let Ok(Some(row)) = crate::db::events::get_event(d1, id).await {
-            return Ok(row.to_event_config());
-        }
-    Err(AppError::NotFound(format!("event '{id}' not found")))
-}
-
-/// Reject non-organizers (Staff cannot view summaries).
-async fn enforce_organizer(
-    claims: &Claims,
-    state: &AppState,
-    event: &EventConfig,
-) -> Result<(), AppError> {
-    let role = crate::auth::resolve_user_role(&claims.email, state, Some(event)).await;
-    if role < crate::auth::UserRole::Organizer {
-        return Err(AppError::Forbidden(
-            "only super admins or organizers can view event summaries".into(),
-        ));
-    }
-    Ok(())
-}
 
 /// Compute + persist a freeze, and write an audit entry.
 ///

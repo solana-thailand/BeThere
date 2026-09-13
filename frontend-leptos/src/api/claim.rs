@@ -312,20 +312,24 @@ pub async fn get_quiz(event_id: Option<&str>) -> Result<QuizQuestionsData, ApiEr
     let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Quiz fetch failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Quiz fetch failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: response.status(),
         });
     }
 
-    let wrapper: ApiResponse<QuizQuestionsData> =
-        super::fetch::response_json(&response).await.map_err(|e| ApiError {
+    let wrapper: ApiResponse<QuizQuestionsData> = super::fetch::response_json(&response)
+        .await
+        .map_err(|e| ApiError {
             message: format!("Failed to parse quiz response: {e}"),
             status: 0,
         })?;
@@ -341,10 +345,7 @@ pub async fn get_quiz(event_id: Option<&str>) -> Result<QuizQuestionsData, ApiEr
 ///
 /// Public endpoint — no authentication required.
 /// The attendee must be checked in (valid claim token).
-pub async fn submit_quiz(
-    token: &str,
-    answers: &[QuizAnswer],
-) -> Result<QuizSubmitData, ApiError> {
+pub async fn submit_quiz(token: &str, answers: &[QuizAnswer]) -> Result<QuizSubmitData, ApiError> {
     let url = format!("{}/quiz/{token}/submit", api_base());
     let body = serde_json::json!({ "answers": answers });
     let body_str = serde_json::to_string(&body).unwrap_or_default();
@@ -353,20 +354,24 @@ pub async fn submit_quiz(
     let response = super::fetch::post(&url, &hdrs, Some(body_str)).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Quiz submit failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Quiz submit failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: response.status(),
         });
     }
 
-    let wrapper: ApiResponse<QuizSubmitData> =
-        super::fetch::response_json(&response).await.map_err(|e| ApiError {
+    let wrapper: ApiResponse<QuizSubmitData> = super::fetch::response_json(&response)
+        .await
+        .map_err(|e| ApiError {
             message: format!("Failed to parse quiz submit response: {e}"),
             status: 0,
         })?;
@@ -386,20 +391,24 @@ pub async fn get_quiz_status(token: &str) -> Result<QuizStatusData, ApiError> {
     let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Quiz status fetch failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Quiz status fetch failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: response.status(),
         });
     }
 
-    let wrapper: ApiResponse<QuizStatusData> =
-        super::fetch::response_json(&response).await.map_err(|e| ApiError {
+    let wrapper: ApiResponse<QuizStatusData> = super::fetch::response_json(&response)
+        .await
+        .map_err(|e| ApiError {
             message: format!("Failed to parse quiz status response: {e}"),
             status: 0,
         })?;
@@ -434,20 +443,24 @@ pub async fn post_claim(
     let response = super::fetch::post(&url, &hdrs, Some(body_str)).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Claim mint failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Claim mint failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: response.status(),
         });
     }
 
-    let wrapper: ApiResponse<ClaimMintData> =
-        super::fetch::response_json(&response).await.map_err(|e| ApiError {
+    let wrapper: ApiResponse<ClaimMintData> = super::fetch::response_json(&response)
+        .await
+        .map_err(|e| ApiError {
             message: format!("Failed to parse mint response: {e}"),
             status: 0,
         })?;
@@ -470,12 +483,15 @@ pub async fn get_public_adventure_config(
     let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Adventure config fetch failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Adventure config fetch failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: response.status(),
@@ -483,10 +499,12 @@ pub async fn get_public_adventure_config(
     }
 
     let wrapper: ApiResponse<crate::api::admin::AdventureConfigData> =
-        super::fetch::response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse adventure config: {e}"),
-            status: 0,
-        })?;
+        super::fetch::response_json(&response)
+            .await
+            .map_err(|e| ApiError {
+                message: format!("Failed to parse adventure config: {e}"),
+                status: 0,
+            })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -498,7 +516,10 @@ pub async fn get_public_adventure_config(
 /// Get adventure status and progress for a claim token.
 ///
 /// Public endpoint — no authentication required.
-pub async fn get_adventure_status(token: &str, event_id: Option<&str>) -> Result<AdventureStatusData, ApiError> {
+pub async fn get_adventure_status(
+    token: &str,
+    event_id: Option<&str>,
+) -> Result<AdventureStatusData, ApiError> {
     let mut url = format!("{}/adventure/{token}/status", api_base());
     if let Some(eid) = event_id.filter(|e| !e.is_empty()) {
         url = format!("{url}?event_id={eid}");
@@ -506,20 +527,24 @@ pub async fn get_adventure_status(token: &str, event_id: Option<&str>) -> Result
     let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Adventure status fetch failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Adventure status fetch failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: response.status(),
         });
     }
 
-    let wrapper: ApiResponse<AdventureStatusData> =
-        super::fetch::response_json(&response).await.map_err(|e| ApiError {
+    let wrapper: ApiResponse<AdventureStatusData> = super::fetch::response_json(&response)
+        .await
+        .map_err(|e| ApiError {
             message: format!("Failed to parse adventure status response: {e}"),
             status: 0,
         })?;
@@ -551,12 +576,15 @@ pub async fn save_adventure_progress(
     let response = super::fetch::post(&url, &hdrs, Some(body_str)).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Adventure save failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Adventure save failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: response.status(),
@@ -570,18 +598,17 @@ pub async fn save_adventure_progress(
         progress: AdventureProgressData,
     }
     let wrapper: ApiResponse<SaveResponse> =
-        super::fetch::response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse adventure save response: {e}"),
-            status: 0,
-        })?;
+        super::fetch::response_json(&response)
+            .await
+            .map_err(|e| ApiError {
+                message: format!("Failed to parse adventure save response: {e}"),
+                status: 0,
+            })?;
 
-    wrapper
-        .data
-        .map(|d| d.progress)
-        .ok_or_else(|| ApiError {
-            message: wrapper.error.unwrap_or("No data".to_string()),
-            status: 0,
-        })
+    wrapper.data.map(|d| d.progress).ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
 }
 
 /// Response from POST /api/adventure/quest-complete
@@ -598,9 +625,7 @@ pub struct QuestCompleteData {
 /// POST /api/adventure/quest-complete
 /// Triggers virtual check-in for authenticated users who completed the adventure in casual mode.
 /// Returns the claim_token and event_slug for navigation.
-pub async fn quest_complete_checkin(
-    event_id: &str,
-) -> Result<QuestCompleteData, ApiError> {
+pub async fn quest_complete_checkin(event_id: &str) -> Result<QuestCompleteData, ApiError> {
     let url = format!("{}/adventure/quest-complete", api_base());
     let body = serde_json::json!({ "event_id": event_id });
     let body_str = serde_json::to_string(&body).unwrap_or_default();
@@ -609,20 +634,24 @@ pub async fn quest_complete_checkin(
     let response = super::fetch::post(&url, &hdrs, Some(body_str)).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Quest complete check-in failed".to_string()),
-            correlation_id: None,
-        });
+        let body: ApiResponse<()> =
+            super::fetch::response_json(&response)
+                .await
+                .unwrap_or(ApiResponse {
+                    success: false,
+                    data: None,
+                    error: Some("Quest complete check-in failed".to_string()),
+                    correlation_id: None,
+                });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: response.status(),
         });
     }
 
-    let wrapper: ApiResponse<QuestCompleteData> =
-        super::fetch::response_json(&response).await.map_err(|e| ApiError {
+    let wrapper: ApiResponse<QuestCompleteData> = super::fetch::response_json(&response)
+        .await
+        .map_err(|e| ApiError {
             message: format!("Failed to parse quest-complete response: {e}"),
             status: 0,
         })?;

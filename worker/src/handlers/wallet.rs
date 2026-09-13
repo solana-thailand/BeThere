@@ -217,7 +217,7 @@ pub async fn get_leaderboard(
             }
             Err(e) => {
                 tracing::warn!(
-                    wallet = %dev.wallet_address,
+                    wallet_fingerprint = %state.log_fingerprint(&dev.wallet_address),
                     error = %e,
                     "DAS API failed for wallet, skipping in leaderboard"
                 );

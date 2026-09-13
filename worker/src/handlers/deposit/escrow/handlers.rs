@@ -26,15 +26,19 @@ pub async fn init_escrow_tx_handler(
     Extension(claims): Extension<Claims>,
     Json(body): Json<InitEscrowTxRequest>,
 ) -> Result<ApiOk<InitEscrowTxResponse>, WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let kv = state.events_kv.as_ref();
 
-    let event = event_store::get_event_config(kv, &body.event_id)
-        .await
-        .map_err(AppError::Internal)?
-        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
+    // Event data is D1-authoritative. A staging seed (and any event created
+    // while the KV cache is cold) may exist only in D1, so this must follow the
+    // same KV → D1 resolution path as the Admin event detail endpoint.
+    let event = event_store::resolve_event_or_fallback(
+        kv,
+        Some(&body.event_id),
+        &state.config,
+        state.d1.as_deref(),
+    )
+    .await
+    .map_err(AppError::from)?;
 
     if !event.deposit_enabled {
         return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
@@ -115,7 +119,7 @@ pub async fn init_escrow_tx_handler(
 
     let tx = crate::solana_escrow::build_init_escrow_transaction(
         &rpc_url,
-        Some(kv),
+        kv,
         organizer_pubkey,
         on_chain_event_id,
         event.deposit_amount_usdc,
@@ -134,18 +138,20 @@ pub async fn init_escrow_tx_handler(
     );
 
     // Audit log
-    let _ = crate::audit_store::append_event_audit(
-        kv,
-        &event.id,
-        crate::audit_store::create_entry(
-            &claims.email,
-            crate::audit_store::AuditAction::EscrowInitialized,
+    if let Some(kv) = kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv,
             &event.id,
-            "escrow PDA initialization TX built",
-        ),
-        state.d1.as_deref(),
-    )
-    .await;
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::EscrowInitialized,
+                &event.id,
+                "escrow PDA initialization TX built",
+            ),
+            state.d1.as_deref(),
+        )
+        .await;
+    }
 
     Ok(ApiOk::new(InitEscrowTxResponse {
         transaction: tx.transaction_b64,
@@ -423,7 +429,8 @@ pub async fn backfill_wallets_handler(
         }
     };
 
-    let result = workflows::run_backfill_workflow(&kv, &rpc_url, &event_ids).await;
+    let result =
+        workflows::run_backfill_workflow(&kv, &rpc_url, &event_ids, state.log_redactor()).await;
 
     Ok(ApiOk::new(BackfillWalletsResponse {
         scanned: result.scanned,
@@ -727,8 +734,7 @@ pub async fn claim_forfeited_tx_handler(
     // their still-refundable deposits were offered as forfeit candidates. Fix:
     // derive each candidate wallet's deposit PDA and exclude it when that PDA
     // appears in the checked-in set.
-    let mut refunded_wallets: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
+    let mut refunded_wallets: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut checked_in_pdas: std::collections::HashSet<String> = std::collections::HashSet::new();
     for ev in &onchain_events {
         match ev.instruction {

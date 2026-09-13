@@ -10,7 +10,19 @@ cannot distinguish a genuinely successful TX from a failed one. This helper
 blocks until the TX is available via getTransaction, then reports STATUS.
 
 Usage:
+    SIGNER_KEYPAIR_PATH=~/.config/solana/id.json \
+    SOLANA_RPC_URL=https://api.devnet.solana.com \
+        python3 sign_and_submit.py <tx_b64>
+
+The signer is taken as a **path** and read here, so the secret key never
+appears in this process's argument vector — argv is readable by any local user
+via `ps`, which is how the key used to leak (.issues/073). The RPC URL moves to
+the environment for the same reason: it may carry an `?api-key=` credential.
+
+Legacy positional form, still accepted so older callers keep working:
     python3 sign_and_submit.py <tx_b64> <keypair_json> <rpc_url>
+It passes the raw key on the command line and warns on stderr. Do not add new
+callers that use it.
 
 Output lines (in order):
     SIGNATURE=<sig>     emitted when sendTransaction accepts the TX
@@ -20,7 +32,9 @@ Output lines (in order):
     ERR=<json>          only emitted when STATUS=FAILED
     ERROR=<msg>         emitted (instead of SIGNATURE=) when submission itself failed
 
-Optional environment:
+Environment:
+    SIGNER_KEYPAIR_PATH path to a Solana keypair JSON file (preferred over argv)
+    SOLANA_RPC_URL      RPC endpoint (preferred over argv)
     CONFIRM_TIMEOUT     seconds to wait for getTransaction to surface the TX (default 45)
 
 Requires the PyNaCl package (nacl.signing for Ed25519 signing):
@@ -32,6 +46,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import pathlib
 import sys
 import time
 import urllib.error
@@ -90,10 +105,61 @@ def _confirm_and_check(sig: str, rpc_url: str, max_wait: float) -> tuple[str, st
     return ("TIMEOUT", last_note or "tx not available within timeout")
 
 
+def _load_keypair_json() -> str:
+    """Return the keypair JSON, preferring the path in the environment.
+
+    Reading the file here keeps the secret out of argv. The positional form is
+    still honoured for callers that have not migrated, but it warns, because
+    anything in argv is world-readable locally while the process lives.
+    """
+    path = os.environ.get("SIGNER_KEYPAIR_PATH", "")
+    if path:
+        resolved = pathlib.Path(path).expanduser()
+        try:
+            return resolved.read_text()
+        except OSError as exc:
+            raise SystemExit(
+                f"ERROR: cannot read SIGNER_KEYPAIR_PATH={resolved}: {exc}"
+            ) from exc
+
+    if len(sys.argv) > 2 and sys.argv[2]:
+        print(  # noqa: T201
+            "WARNING: keypair passed as a command-line argument, which exposes "
+            "it via `ps`. Use SIGNER_KEYPAIR_PATH instead (.issues/073).",
+            file=sys.stderr,
+        )
+        return str(sys.argv[2])
+
+    raise SystemExit(
+        "ERROR: no signer. Set SIGNER_KEYPAIR_PATH=<keypair.json>."
+    )
+
+
+def _resolve_rpc_url() -> str:
+    """Return the RPC endpoint, preferring the environment over argv."""
+    from_env = os.environ.get("SOLANA_RPC_URL", "")
+    if from_env:
+        return from_env
+
+    if len(sys.argv) > 3 and sys.argv[3]:
+        return str(sys.argv[3])
+
+    raise SystemExit(
+        "ERROR: no RPC endpoint. Set SOLANA_RPC_URL=<url>."
+    )
+
+
 def main() -> None:
+    if len(sys.argv) < 2 or not sys.argv[1]:
+        raise SystemExit(
+            "ERROR: missing <tx_b64>. Usage: "
+            "SIGNER_KEYPAIR_PATH=<path> SOLANA_RPC_URL=<url> "
+            "python3 sign_and_submit.py <tx_b64>"
+        )
+
     tx_b64 = str(sys.argv[1])
-    keypair_json = str(sys.argv[2])
-    rpc_url = str(sys.argv[3])
+    keypair_json = _load_keypair_json()
+    rpc_url = _resolve_rpc_url()
     confirm_timeout = float(os.environ.get("CONFIRM_TIMEOUT", "45"))
 
     tx_bytes = bytearray(base64.b64decode(tx_b64))

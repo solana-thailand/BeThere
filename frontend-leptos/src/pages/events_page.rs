@@ -12,8 +12,8 @@ use crate::components;
 use crate::utils;
 
 use super::event_form::{
-    default_form, form_from_detail, format_date_display, status_badge_class, status_label,
-    EventFormComponent,
+    EventFormComponent, default_form, form_from_detail, format_date_display, status_badge_class,
+    status_label,
 };
 
 // ===== View State =====
@@ -33,8 +33,7 @@ enum EventsView {
 pub fn EventsPage(
     #[prop(name = "set_toast")] set_toast: WriteSignal<Option<components::ToastMessage>>,
     #[prop(name = "active_event_id")] active_event_id: ReadSignal<Option<String>>,
-    #[prop(name = "set_pending_promote_event")]
-    set_pending_promote_event: WriteSignal<
+    #[prop(name = "set_pending_promote_event")] set_pending_promote_event: WriteSignal<
         Option<crate::pages::campaigns_page::PromoteEventPayload>,
     >,
 ) -> impl IntoView {
@@ -56,6 +55,9 @@ pub fn EventsPage(
     let (search_query, set_search_query) = signal(String::new());
     let search_input_ref: NodeRef<leptos::html::Input> = NodeRef::new();
     let (refresh_counter, set_refresh_counter) = signal(0u32);
+    let (next_events_cursor, set_next_events_cursor) = signal(None::<String>);
+    let (loading_more_events, set_loading_more_events) = signal(false);
+    let (readiness, set_readiness) = signal(api::CoreReadinessData::default());
 
     // Ctrl+K keyboard shortcut to focus search
     Effect::new(move |_| {
@@ -72,10 +74,8 @@ pub fn EventsPage(
         );
         let window = web_sys::window().expect("no window");
         use wasm_bindgen::JsCast;
-        let _ = window.add_event_listener_with_callback(
-            "keydown",
-            handler.as_ref().unchecked_ref(),
-        );
+        let _ =
+            window.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
         handler.forget();
     });
 
@@ -83,11 +83,13 @@ pub fn EventsPage(
     Effect::new(move |_| {
         let _ = refresh_counter.get();
         set_loading.set(true);
+        set_next_events_cursor.set(None);
 
         leptos::task::spawn_local(async move {
-            match api::list_events().await {
+            match api::list_events_page(None).await {
                 Ok(data) => {
                     set_events.set(data.events);
+                    set_next_events_cursor.set(data.next_cursor);
                 }
                 Err(e) => {
                     log::error!("[events-page] failed to load events: {e}");
@@ -96,6 +98,12 @@ pub fn EventsPage(
                         &format!("Failed to load events: {e}"),
                         components::ToastType::Error,
                     );
+                }
+            }
+            match api::get_core_readiness().await {
+                Ok(report) => set_readiness.set(report),
+                Err(error) => {
+                    log::warn!("[events-page] failed to load readiness report: {error}");
                 }
             }
             set_loading.set(false);
@@ -148,6 +156,43 @@ pub fn EventsPage(
                         </Show>
                     </div>
                 </div>
+
+                <Show
+                    when=move || !readiness.get().quiz_problems.is_empty()
+                    fallback=|| view! { <div></div> }
+                >
+                    {move || {
+                        let report = readiness.get();
+                        let event_count = report.quiz_problems.len();
+                        let blocked = report.blocked_attendees;
+                        view! {
+                            <div class="card" role="alert">
+                                <div class="card-header">
+                                    <div>
+                                        <span class="card-title">"⚠ Quiz setup needs attention"</span>
+                                        <p>
+                                            {format!(
+                                                "{event_count} visible event(s) have an invalid quiz gate; {blocked} checked-in attendee(s) may be unable to claim their NFT."
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="quiz-settings-grid">
+                                    {report.quiz_problems.into_iter().map(|problem| view! {
+                                        <div class="quiz-setting-item">
+                                            <span class="quiz-setting-label">
+                                                {format!("{} ({})", problem.event_name, problem.status)}
+                                            </span>
+                                            <span class="setting-value">
+                                                {format!("{} · {} blocked", problem.reason, problem.blocked_attendees)}
+                                            </span>
+                                        </div>
+                                    }).collect_view()}
+                                </div>
+                            </div>
+                        }
+                    }}
+                </Show>
 
                 // Event detail summary card (shows when dropdown selects an event)
                 <Show when=move || active_event_id.get().is_some() fallback=|| view! { <div></div> }>
@@ -204,6 +249,7 @@ pub fn EventsPage(
                                 let delete_id = evt.id.clone();
                                 let dup_id = evt.id.clone();
                                 let summary_id = evt.id.clone();
+                                let notification_event_id = evt.id.clone();
                                 let can_manage = components::can_manage_events(&user_role.get());
                                 let is_draft = evt.status == api::EventStatus::Draft;
                                 let is_archived = evt.status == api::EventStatus::Archived;
@@ -469,6 +515,7 @@ pub fn EventsPage(
                                                 </span>
                                             </div>
                                         </div>
+                                        {if can_manage {view! {<super::notifications::NotificationPanel event_id=notification_event_id/>}.into_any()} else {view!{<span></span>}.into_any()}}
                                     </div>
                                 }.into_any()
                             }
@@ -763,6 +810,36 @@ pub fn EventsPage(
                             }
                         }).collect_view()
                     }}
+                </Show>
+                <Show when=move || next_events_cursor.get().is_some() fallback=|| view! { <div></div> }>
+                    <div class="admin-load-more">
+                        <button
+                            class="btn btn-outline btn-sm"
+                            disabled=move || loading_more_events.get()
+                            on:click=move |_| {
+                                let Some(cursor) = next_events_cursor.get_untracked() else {
+                                    return;
+                                };
+                                set_loading_more_events.set(true);
+                                leptos::task::spawn_local(async move {
+                                    match api::list_events_page(Some(&cursor)).await {
+                                        Ok(data) => {
+                                            set_events.update(|events| events.extend(data.events));
+                                            set_next_events_cursor.set(data.next_cursor);
+                                        }
+                                        Err(e) => components::show_toast(
+                                            &set_toast,
+                                            &format!("Failed to load more events: {e}"),
+                                            components::ToastType::Error,
+                                        ),
+                                    }
+                                    set_loading_more_events.set(false);
+                                });
+                            }
+                        >
+                            {move || if loading_more_events.get() { "Loading..." } else { "Load more events" }}
+                        </button>
+                    </div>
                 </Show>
             </Show>
 

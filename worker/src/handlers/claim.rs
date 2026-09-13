@@ -93,7 +93,7 @@ pub async fn post_claim(
         && let Some(w) = requested
         && let Err(e) = validate_wallet_address(w)
     {
-        tracing::warn!(claim_token = %token, error = %e, "invalid wallet address for claim");
+        tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), error = %e, "invalid wallet address for claim");
         return Err(AppError::Validation(e).into());
     }
 

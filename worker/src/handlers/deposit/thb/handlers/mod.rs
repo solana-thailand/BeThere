@@ -118,8 +118,28 @@ pub(super) async fn migrate_data_urls(
                     attendee_id = %deposit.attendee_id,
                     "migrated refund_proof_url data URL to R2"
                 );
-                deposit.refund_proof_url = Some(migrated);
+                deposit.refund_proof_url = Some(migrated.clone());
                 changed = true;
+
+                // `refund_proof_url` is a settlement column: `update_thb_deposit`
+                // no longer writes it, so `save_thb_deposit` below cannot persist
+                // this. Use the narrow setter, which rewrites only this column and
+                // so can never retract a settled refund.
+                if let Some(db) = d1
+                    && let Err(e) = crate::db::thb_deposits::set_refund_proof_url(
+                        db,
+                        event_id,
+                        &deposit.attendee_id,
+                        &migrated,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        attendee_id = %deposit.attendee_id,
+                        error = %e,
+                        "failed to persist migrated refund_proof_url — will retry on next list call"
+                    );
+                }
             }
         }
 

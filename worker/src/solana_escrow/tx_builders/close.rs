@@ -5,7 +5,7 @@ use super::super::{
     ClaimForfeitedTransaction, CloseDepositTransaction, CloseEventTransaction,
     DeactivateEventTransaction, EscrowError,
 };
-use super::{EscrowCtx, acct_sw, acct_w, acct_r, finalize_tx};
+use super::{EscrowCtx, acct_r, acct_sw, acct_w, finalize_tx};
 
 /// Build a serialized `deactivate_event` transaction for the bethere-escrow program.
 ///

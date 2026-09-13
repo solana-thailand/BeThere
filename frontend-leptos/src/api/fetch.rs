@@ -3,8 +3,8 @@
 //! Replaces `gloo::net::http::Request` to avoid pulling in the entire gloo crate.
 //! Uses `web_sys::window().fetch_with_request()` + `wasm_bindgen_futures::JsFuture`.
 
-use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestCache, RequestInit, RequestMode, Response};
 
@@ -55,20 +55,17 @@ async fn fetch_inner(
         opts.set_body(&JsValue::from_str(body_str));
     }
 
-    let request = Request::new_with_str_and_init(url, &opts)
-        .map_err(|e| ApiError {
-            message: format!("Failed to create request: {e:?}"),
-            status: 0,
-        })?;
+    let request = Request::new_with_str_and_init(url, &opts).map_err(|e| ApiError {
+        message: format!("Failed to create request: {e:?}"),
+        status: 0,
+    })?;
 
     let req_headers = request.headers();
     for (key, value) in headers {
-        req_headers
-            .set(key, value)
-            .map_err(|e| ApiError {
-                message: format!("Failed to set header: {e:?}"),
-                status: 0,
-            })?;
+        req_headers.set(key, value).map_err(|e| ApiError {
+            message: format!("Failed to set header: {e:?}"),
+            status: 0,
+        })?;
     }
 
     let window = web_sys::window().ok_or_else(|| ApiError {
@@ -77,12 +74,10 @@ async fn fetch_inner(
     })?;
 
     let promise = window.fetch_with_request(&request);
-    let resp_value = JsFuture::from(promise)
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Fetch failed: {e:?}"),
-            status: 0,
-        })?;
+    let resp_value = JsFuture::from(promise).await.map_err(|e| ApiError {
+        message: format!("Fetch failed: {e:?}"),
+        status: 0,
+    })?;
 
     Ok(Response::from(resp_value))
 }
@@ -93,18 +88,14 @@ pub(crate) async fn response_text(response: &Response) -> Result<String, ApiErro
         message: format!("Failed to get response text promise: {e:?}"),
         status: 0,
     })?;
-    let text_value = JsFuture::from(promise)
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Failed to read response text: {e:?}"),
-            status: 0,
-        })?;
-    text_value
-        .as_string()
-        .ok_or_else(|| ApiError {
-            message: "Response text is not a string".to_string(),
-            status: 0,
-        })
+    let text_value = JsFuture::from(promise).await.map_err(|e| ApiError {
+        message: format!("Failed to read response text: {e:?}"),
+        status: 0,
+    })?;
+    text_value.as_string().ok_or_else(|| ApiError {
+        message: "Response text is not a string".to_string(),
+        status: 0,
+    })
 }
 
 /// Read the response body as JSON, parse into type T.
@@ -132,18 +123,14 @@ pub(crate) async fn response_array_buffer(response: &Response) -> Result<Vec<u8>
         message: format!("Failed to get response array_buffer promise: {e:?}"),
         status: 0,
     })?;
-    let ab_value = JsFuture::from(promise)
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Failed to read response array_buffer: {e:?}"),
-            status: 0,
-        })?;
-    let array_buffer: js_sys::ArrayBuffer = ab_value
-        .dyn_into()
-        .map_err(|_| ApiError {
-            message: "Response body is not an ArrayBuffer".to_string(),
-            status: 0,
-        })?;
+    let ab_value = JsFuture::from(promise).await.map_err(|e| ApiError {
+        message: format!("Failed to read response array_buffer: {e:?}"),
+        status: 0,
+    })?;
+    let array_buffer: js_sys::ArrayBuffer = ab_value.dyn_into().map_err(|_| ApiError {
+        message: "Response body is not an ArrayBuffer".to_string(),
+        status: 0,
+    })?;
     let u8_array = js_sys::Uint8Array::new(&array_buffer);
     let mut buf = vec![0u8; u8_array.length() as usize];
     u8_array.copy_to(&mut buf);
@@ -156,7 +143,10 @@ pub(crate) async fn get(url: &str, headers: &[(&str, &str)]) -> Result<Response,
 }
 
 /// Convenience: GET request that bypasses browser HTTP cache.
-pub(crate) async fn get_no_cache(url: &str, headers: &[(&str, &str)]) -> Result<Response, ApiError> {
+pub(crate) async fn get_no_cache(
+    url: &str,
+    headers: &[(&str, &str)],
+) -> Result<Response, ApiError> {
     fetch_no_cache("GET", url, headers, None).await
 }
 
@@ -200,20 +190,17 @@ pub(crate) async fn post_raw(
     opts.set_mode(RequestMode::Cors);
     opts.set_body(&body);
 
-    let request = Request::new_with_str_and_init(url, &opts)
-        .map_err(|e| ApiError {
-            message: format!("Failed to create request: {e:?}"),
-            status: 0,
-        })?;
+    let request = Request::new_with_str_and_init(url, &opts).map_err(|e| ApiError {
+        message: format!("Failed to create request: {e:?}"),
+        status: 0,
+    })?;
 
     let req_headers = request.headers();
     for (key, value) in headers {
-        req_headers
-            .set(key, value)
-            .map_err(|e| ApiError {
-                message: format!("Failed to set header: {e:?}"),
-                status: 0,
-            })?;
+        req_headers.set(key, value).map_err(|e| ApiError {
+            message: format!("Failed to set header: {e:?}"),
+            status: 0,
+        })?;
     }
 
     let window = web_sys::window().ok_or_else(|| ApiError {
@@ -222,12 +209,10 @@ pub(crate) async fn post_raw(
     })?;
 
     let promise = window.fetch_with_request(&request);
-    let resp_value = JsFuture::from(promise)
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Fetch failed: {e:?}"),
-            status: 0,
-        })?;
+    let resp_value = JsFuture::from(promise).await.map_err(|e| ApiError {
+        message: format!("Fetch failed: {e:?}"),
+        status: 0,
+    })?;
 
     Ok(Response::from(resp_value))
 }

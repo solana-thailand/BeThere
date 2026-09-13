@@ -33,6 +33,15 @@ pub struct UsdcSummary {
     pub total_amount: u64,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct DashboardMetrics {
+    pub registered: u64,
+    pub checked_in: u64,
+    pub claims_minted: u64,
+    pub deposits_verified: u64,
+    pub usdc_locked_total: u64,
+}
+
 /// A single entry in the dashboard's live activity feed.
 ///
 /// Sourced from the append-only `audit_log` table; trimmed to the columns
@@ -48,6 +57,26 @@ pub struct ActivityEntry {
 // ---------------------------------------------------------------------------
 // Aggregate queries
 // ---------------------------------------------------------------------------
+
+/// Fetch all frequently-polled headline metrics in one D1 round trip.
+pub async fn live_metrics(db: &D1Database, event_id: &str) -> Result<DashboardMetrics, String> {
+    let stmt = db
+        .prepare(include_str!("sql/dashboard_live_metrics.sql"))
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 live_metrics bind: {e:?}"))?;
+    let rows = d1_safe::safe_all_rows(&stmt).await?;
+    let Some(row) = rows.first() else {
+        return Ok(DashboardMetrics::default());
+    };
+    let value = |key: &str| row.get(key).and_then(|v| v.as_i64()).unwrap_or(0).max(0) as u64;
+    Ok(DashboardMetrics {
+        registered: value("registered"),
+        checked_in: value("checked_in"),
+        claims_minted: value("claims_minted"),
+        deposits_verified: value("deposits_verified"),
+        usdc_locked_total: value("usdc_locked_total"),
+    })
+}
 
 /// Count approved attendees (registered) for an event.
 ///

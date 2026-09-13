@@ -23,6 +23,7 @@
 //!   Q: organization_id     | solana-thailand          | Org ID (empty = global)
 //!   R: video_url           | https://youtube.com/...  | Video/livestream URL
 
+use super::a1;
 use worker::KvStore;
 
 use crate::http::{ValueRange, post_json};
@@ -158,9 +159,10 @@ pub async fn list_events_tab(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Vec<EventTabRow>, String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
-    let range = format!("{sheet_name}!A:R");
+    let range = format!("{sheet_ref}!A:R");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -248,7 +250,8 @@ async fn find_event_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<Option<usize>, String> {
-    let range = format!("{sheet_name}!A:A");
+    let sheet_ref = a1::sheet_ref(sheet_name);
+    let range = format!("{sheet_ref}!A:A");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -274,14 +277,15 @@ async fn update_event_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<(), String> {
-    let range = format!("{sheet_name}!A{row_index}:R{row_index}");
+    let sheet_ref = a1::sheet_ref(sheet_name);
+    let range = format!("{sheet_ref}!A{row_index}:R{row_index}");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}?valueInputOption=USER_ENTERED",
         urlencoding::encode(&range)
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A{row_index}:R{row_index}"),
+        range: format!("{sheet_ref}!A{row_index}:R{row_index}"),
         values: vec![row_data.to_vec()],
     };
 
@@ -297,13 +301,14 @@ async fn append_event_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<(), String> {
+    let sheet_ref = a1::sheet_ref(sheet_name);
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:R:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
-        urlencoding::encode(sheet_name)
+        urlencoding::encode(&sheet_ref)
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A:R"),
+        range: format!("{sheet_ref}!A:R"),
         values: vec![row.to_vec()],
     };
 

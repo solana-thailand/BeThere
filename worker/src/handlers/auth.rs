@@ -114,16 +114,19 @@ pub async fn auth_callback(
     }
 
     // Create JWT session token for ALL users (staff and non-staff)
-    let token =
-        match auth::create_session_jwt(&user_info.email, &user_info.id, &state.config.jwt_secret)
-            .await
-        {
-            Ok(token) => token,
-            Err(ref e) => {
-                tracing::error!("jwt creation failed: {e}");
-                return Redirect::to("/login?error=token_failed").into_response();
-            }
-        };
+    let token = match crate::crypto::create_verified_email_jwt(
+        &user_info.email,
+        &user_info.id,
+        &state.config.jwt_secret,
+    )
+    .await
+    {
+        Ok(token) => token,
+        Err(ref e) => {
+            tracing::error!("jwt creation failed: {e}");
+            return Redirect::to("/login?error=token_failed").into_response();
+        }
+    };
 
     // Determine redirect: prefer explicit state param (event page redirect),
     // fall back to role-based defaults.
@@ -140,14 +143,17 @@ pub async fn auth_callback(
             "/staff"
         };
         tracing::info!(
-            "staff login successful: {} (role={role}, redirect={dashboard})",
-            user_info.email,
+            identity_fingerprint = %state.log_fingerprint(&user_info.email),
+            role = %role,
+            redirect = %dashboard,
+            "staff login successful",
         );
         dashboard.to_string()
     } else {
         tracing::info!(
-            "attendee login successful: {} (role={role})",
-            user_info.email,
+            identity_fingerprint = %state.log_fingerprint(&user_info.email),
+            role = %role,
+            "attendee login successful",
         );
         "/".to_string()
     };
@@ -222,6 +228,7 @@ pub async fn auth_me(
         "role": role,
         "wallet_only": wallet_only,
         "wallet_address": wallet_address,
+        "email_verified": claims.email_verified,
     }))
 }
 
@@ -260,7 +267,8 @@ pub async fn auth_logout(State(state): State<AppState>, req: axum::extract::Requ
 pub async fn wallet_nonce(
     State(state): State<AppState>,
     axum::Json(req): axum::Json<event_checkin_domain::models::auth::WalletNonceRequest>,
-) -> Result<ApiOk<event_checkin_domain::models::auth::WalletNonceResponse>, crate::error::WorkerError> {
+) -> Result<ApiOk<event_checkin_domain::models::auth::WalletNonceResponse>, crate::error::WorkerError>
+{
     if let Err(e) = crate::solana::validate_wallet_address(&req.wallet_address) {
         return Err(event_checkin_domain::models::error::AppError::Validation(e).into());
     }
@@ -287,11 +295,13 @@ pub async fn wallet_nonce(
         tracing::error!("SIWS nonce cannot be stored — EVENTS KV binding missing");
     }
 
-    Ok(ApiOk::new(event_checkin_domain::models::auth::WalletNonceResponse {
-        nonce,
-        message,
-        expires_at,
-    }))
+    Ok(ApiOk::new(
+        event_checkin_domain::models::auth::WalletNonceResponse {
+            nonce,
+            message,
+            expires_at,
+        },
+    ))
 }
 
 /// POST /api/auth/wallet/verify
@@ -332,7 +342,10 @@ pub async fn wallet_verify(
     if let Err(e) =
         crate::solana::verify_siws_signature(&req.wallet_address, &stored_message, &req.signature)
     {
-        tracing::warn!(wallet = %req.wallet_address, "SIWS signature verification failed: {e}");
+        tracing::warn!(
+            wallet_fingerprint = %state.log_fingerprint(&req.wallet_address),
+            "SIWS signature verification failed: {e}"
+        );
         return Err(event_checkin_domain::models::error::AppError::Validation(
             "wallet signature verification failed".into(),
         )
@@ -342,9 +355,11 @@ pub async fn wallet_verify(
     // Single-use: delete the challenge so the signature can't be replayed.
     let _ = kv.delete(&kv_key).await;
 
-    // Lookup linked email from D1 contacts/attendees if available
+    // Upgrade to an email identity only when a prior flow proved both the
+    // mailbox (Google) and this wallet (SIWS). Contact and badge wallets are
+    // not authentication bindings.
     let linked_email = if let Some(ref d1) = state.d1 {
-        crate::db::contacts::find_email_by_wallet(d1, &req.wallet_address)
+        crate::db::contacts::find_verified_email_by_wallet(d1, &req.wallet_address)
             .await
             .unwrap_or(None)
     } else {
@@ -356,9 +371,10 @@ pub async fn wallet_verify(
         .unwrap_or_else(|| format!("wallet:{}", req.wallet_address));
 
     // Create session JWT token
-    let jwt_token = auth::create_session_jwt(&user_id, &req.wallet_address, &state.config.jwt_secret)
-        .await
-        .map_err(event_checkin_domain::models::error::AppError::Internal)?;
+    let jwt_token =
+        auth::create_session_jwt(&user_id, &req.wallet_address, &state.config.jwt_secret)
+            .await
+            .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
     let cookie_api = format!(
         "event_checkin_token={}; HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age=86400",
@@ -377,7 +393,13 @@ pub async fn wallet_verify(
         authenticated: true,
     };
 
-    Ok((headers, axum::Json(event_checkin_domain::models::api::ApiResponse::data(resp_body))).into_response())
+    Ok((
+        headers,
+        axum::Json(event_checkin_domain::models::api::ApiResponse::data(
+            resp_body,
+        )),
+    )
+        .into_response())
 }
 
 /// POST /api/auth/wallet/bind
@@ -388,6 +410,13 @@ pub async fn wallet_bind(
     Extension(claims): Extension<Claims>,
     axum::Json(req): axum::Json<event_checkin_domain::models::auth::WalletBindRequest>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    if !claims.email_verified {
+        return Err(event_checkin_domain::models::error::AppError::Forbidden(
+            "verify your email with Google before linking a wallet".into(),
+        )
+        .into());
+    }
+
     if let Err(e) = crate::solana::validate_wallet_address(&req.wallet_address) {
         return Err(event_checkin_domain::models::error::AppError::Validation(e).into());
     }
@@ -423,7 +452,11 @@ pub async fn wallet_bind(
     if let Err(e) =
         crate::solana::verify_siws_signature(&req.wallet_address, &stored_message, &req.signature)
     {
-        tracing::warn!(email = %claims.email, wallet = %req.wallet_address, "wallet bind signature verification failed: {e}");
+        tracing::warn!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            wallet_fingerprint = %state.log_fingerprint(&req.wallet_address),
+            "wallet bind signature verification failed: {e}"
+        );
         return Err(event_checkin_domain::models::error::AppError::Validation(
             "wallet signature verification failed".into(),
         )
@@ -442,7 +475,8 @@ pub async fn wallet_bind(
         && !existing.eq_ignore_ascii_case(claims.email.trim())
     {
         tracing::warn!(
-            email = %claims.email, wallet = %req.wallet_address,
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            wallet_fingerprint = %state.log_fingerprint(&req.wallet_address),
             "wallet bind rejected: already linked to another account"
         );
         return Err(event_checkin_domain::models::error::AppError::Validation(
@@ -451,8 +485,8 @@ pub async fn wallet_bind(
         .into());
     }
 
-    // Link wallet_address to claims.email in contacts table
-    crate::db::contacts::link_wallet_to_email(d1, &claims.email, &req.wallet_address)
+    // Persist the two-sided identity proof on the developer profile.
+    crate::db::contacts::link_verified_wallet_to_email(d1, &claims.email, &req.wallet_address)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
@@ -462,4 +496,3 @@ pub async fn wallet_bind(
         "wallet_address": req.wallet_address,
     })))
 }
-

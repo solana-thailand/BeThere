@@ -56,7 +56,7 @@ pub async fn generate_qrs(
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     tracing::info!(
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         force = force,
         "QR generation requested"
     );
@@ -245,7 +245,7 @@ pub async fn generate_qrs(
 
     tracing::info!(
         total_updated = updated,
-        staff_email = %claims.email,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
         "QR generation complete"
     );
 

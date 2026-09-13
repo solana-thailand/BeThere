@@ -2,7 +2,7 @@
 //! Replaces `Result<T, String>` with `Result<T, AppError>` for proper error
 //! classification and HTTP status code mapping.
 
-use std::fmt;
+use std::{borrow::Cow, fmt};
 
 /// Application-level error with HTTP status code mapping.
 #[derive(Debug)]
@@ -95,6 +95,111 @@ impl AppError {
     pub fn is_auth_error(&self) -> bool {
         matches!(self, Self::Unauthorized(_) | Self::Forbidden(_))
     }
+
+    /// The message that may be returned to the caller in an API error body.
+    ///
+    /// Issue 078. [`Display`](fmt::Display) renders the operator-facing detail
+    /// and is what belongs on the log line; it is **not** safe as a response
+    /// body, because 5xx messages are routinely built by wrapping an upstream
+    /// failure (`format!("failed to look up claim: {e}")`) and therefore carry
+    /// that upstream's endpoint URL, identifiers and verbatim response body.
+    /// `GET /api/claim/{token}` is unauthenticated, so anyone could read them.
+    ///
+    /// The split is by variant, not by message text — special-casing one
+    /// upstream would leave the policy wrong for the next one:
+    ///
+    /// - 5xx (`Internal`, `External`) are *our* failures. The caller gets a
+    ///   stable, content-free string; the detail stays on the `tracing` event,
+    ///   findable by the `x-correlation-id` echoed on the same response.
+    /// - 4xx describe what the *caller* did wrong, so the message is part of
+    ///   the API contract and is kept — but still passed through
+    ///   [`redact_urls`], because a client error can also be produced by
+    ///   wrapping an upstream error (an RPC rejection surfacing as
+    ///   `Validation`), and that wrapping is exactly where a URL leaks in.
+    pub fn public_message(&self) -> Cow<'_, str> {
+        match self {
+            Self::Internal(_) => Cow::Borrowed("internal error"),
+            Self::External {
+                service, status, ..
+            } => Cow::Owned(format!(
+                "external service error: {service} returned {status}"
+            )),
+            _ => Cow::Owned(redact_urls(&self.to_string()).into_owned()),
+        }
+    }
+}
+
+/// Placeholder substituted for a URL removed from a caller-facing message.
+pub const REDACTED_URL: &str = "[redacted-url]";
+
+/// Replace every `scheme://…` run in `message` with [`REDACTED_URL`].
+///
+/// Issue 078. An upstream endpoint is not a secret on its own, but it names
+/// internal infrastructure and it is where credential-bearing identifiers hide:
+/// the platform spreadsheet ID sits in the Sheets path, and the Solana RPC key
+/// sits in the query string of `SolanaConfig::full_rpc_url`.
+///
+/// Redaction is shape-driven rather than a host allowlist so an upstream added
+/// tomorrow is covered the day it is added — the same reasoning as
+/// `middleware::correlation::redact_path` in the Worker.
+pub fn redact_urls(message: &str) -> Cow<'_, str> {
+    match message.contains("://") {
+        false => Cow::Borrowed(message),
+        true => Cow::Owned(rewrite_without_urls(message)),
+    }
+}
+
+fn rewrite_without_urls(message: &str) -> String {
+    let bytes = message.as_bytes();
+    let mut redacted = String::with_capacity(message.len());
+    let mut cursor = 0usize;
+
+    while cursor < message.len() {
+        match message[cursor..].find("://") {
+            None => {
+                redacted.push_str(&message[cursor..]);
+                break;
+            }
+            Some(offset) => {
+                let marker = cursor + offset;
+                let start = scheme_start(bytes, marker, cursor);
+                redacted.push_str(&message[cursor..start]);
+                redacted.push_str(REDACTED_URL);
+                cursor = url_end(bytes, marker + "://".len());
+            }
+        }
+    }
+
+    redacted
+}
+
+/// Walk back from the `://` marker over the scheme, stopping at `floor` so a
+/// second URL in the same message can never re-consume text already emitted.
+fn scheme_start(bytes: &[u8], marker: usize, floor: usize) -> usize {
+    let mut start = marker;
+    while start > floor && is_scheme_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    start
+}
+
+fn is_scheme_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'-' | b'.')
+}
+
+/// Consume to the first byte that cannot continue a URL. Quotes and backslashes
+/// terminate as well as whitespace: upstream bodies arrive as JSON, where the
+/// URL is wrapped in `"` and the message is escaped.
+fn url_end(bytes: &[u8], from: usize) -> usize {
+    let mut end = from;
+    while end < bytes.len() && !is_url_terminator(bytes[end]) {
+        end += 1;
+    }
+    end
+}
+
+fn is_url_terminator(byte: u8) -> bool {
+    byte.is_ascii_whitespace() || matches!(byte, b'"' | b'\'' | b'`' | b'<' | b'>' | b'\\')
 }
 
 /// Helper trait to convert `Result<T, String>` to `Result<T, AppError>`.
