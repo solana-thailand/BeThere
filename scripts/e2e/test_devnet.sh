@@ -30,38 +30,10 @@ BASE_URL="${BASE_URL:-http://localhost:8787}"
 AUTH_TOKEN="${AUTH_TOKEN:-}"
 EVENT_ID="${EVENT_ID:-default}"
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-PASS=0
-FAIL=0
-SKIP=0
-
-# --- Helpers ---
-pass() { PASS=$((PASS + 1)); echo -e "  ${GREEN}✅ PASS${NC} $1"; }
-fail() { FAIL=$((FAIL + 1)); echo -e "  ${RED}❌ FAIL${NC} $1"; }
-skip() { SKIP=$((SKIP + 1)); echo -e "  ${YELLOW}⏭️  SKIP${NC} $1"; }
-info() { echo -e "  ${CYAN}ℹ️  INFO${NC} $1"; }
-section() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
-
-check_json() {
-    local response="$1"
-    local key="$2"
-    local expected="$3"
-    local actual
-    actual=$(echo "$response" | python3 -c "import sys,json; print(json.load(sys.stdin)$key)" 2>/dev/null || echo "PARSE_ERROR")
-    if [ "$actual" = "$expected" ]; then
-        return 0
-    else
-        echo "     expected: $expected"
-        echo "     actual:   $actual"
-        return 1
-    fi
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Shared helpers — see .issues/076.
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
 # --- Parse args ---
 MINT_ONLY=false

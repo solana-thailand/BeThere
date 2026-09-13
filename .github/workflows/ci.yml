@@ -316,6 +316,14 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: e2e helper library smoke test
+        # `scripts/e2e/` is run by hand against devnet, so nothing else in CI
+        # would notice a break in the helpers its eight scripts now share
+        # (Issue #076). This covers the parts that need no chain: the tallies,
+        # the JSON assertion, and that every script still resolves the helpers
+        # it calls.
+        run: bash scripts/verify/e2e_lib_smoke.sh
+
       - name: Install blake3 (wrangler-compatible asset hashing)
         run: python3 -m pip install --quiet blake3
 

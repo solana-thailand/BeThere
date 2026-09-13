@@ -45,5 +45,11 @@ fi
 # locally can be red in CI for no reason visible in the diff. CI pins the
 # version; this line makes any mismatch obvious in the log.
 echo "🔍 ShellCheck $(shellcheck --version | awk '/^version:/ {print $2}') over ${#targets[@]} script(s); ${#DEFERRED[@]} deferred."
-shellcheck "${targets[@]}"
+# `-x` follows `source`d files. `scripts/e2e/lib/` (Issue 076) is sourced
+# through "$SCRIPT_DIR/...", which ShellCheck cannot resolve statically; each
+# call site carries a `# shellcheck source=` directive, and without -x every one
+# of them raises SC1091 and the shared variables read as unassigned.
+# `--source-path=SCRIPTDIR` resolves those directives relative to the sourcing
+# script rather than this gate's CWD (the repo root).
+shellcheck -x --source-path=SCRIPTDIR "${targets[@]}"
 echo "✅ ShellCheck clean."

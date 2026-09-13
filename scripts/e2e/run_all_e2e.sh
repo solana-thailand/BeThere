@@ -22,13 +22,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
+# Shared colours — see .issues/076. This orchestrator tallies into its own
+# PASSED/FAILED, not the library's PASS/FAIL.
+# shellcheck source=lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
 
 # Defaults
 BASE_URL="${BASE_URL:-http://localhost:8787}"
