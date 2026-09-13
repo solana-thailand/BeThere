@@ -211,6 +211,37 @@ class OutboxTests(unittest.TestCase):
         self.db.execute(query('inbox_read_all'), ('a@example.com',))
         self.assertIsNone(self.db.execute("SELECT read_at FROM notification_outbox WHERE id=?", (registration,)).fetchone()['read_at'])
 
+    def test_form_stays_per_event_while_the_message_is_per_person(self):
+        """The collapse in 0038 must not collapse the form.
+
+        `/feedback` used to enumerate from the notification inbox. One row per
+        person is right for sending and wrong for a form whose unit is the
+        event — a person with two sessions was offered one (.issues/102).
+        """
+        self.db.execute("UPDATE events SET status='completed' WHERE id IN ('event-a','event-b')")
+        with self.db:
+            for attendee, event in (('reg-a', 'event-a'), ('reg-b', 'event-b')):
+                self.db.execute(
+                    "INSERT INTO attendees(id,event_id,email,name,participation_type)"
+                    " VALUES (?,?,'regular@example.com','Regular','online')",
+                    (attendee, event))
+                self.db.execute(
+                    'INSERT INTO notification_enrollments(attendee_id,event_id) VALUES (?,?)',
+                    (attendee, event))
+        for event in ('event-a', 'event-b'):
+            self.db.execute(
+                'UPDATE events SET post_event_registration_open=1 WHERE id=?', (event,))
+
+        messages = self.db.execute(
+            "SELECT COUNT(*) FROM notification_outbox n JOIN attendees a ON a.id=n.attendee_id"
+            " WHERE n.kind='survey' AND n.status='pending' AND lower(a.email)='regular@example.com'"
+        ).fetchone()[0]
+        blocks = self.db.execute(
+            "SELECT COUNT(*) FROM feedback_eligible_events WHERE lower(email)='regular@example.com'"
+        ).fetchone()[0]
+        self.assertEqual(messages, 1, 'one message for the person')
+        self.assertEqual(blocks, 2, 'one question block per session they attended')
+
     def test_one_survey_per_person_not_one_per_event(self):
         """`dedup_key` is `[event, attendee, kind]`, which is right for every
         kind whose destination is one event and wrong for `survey`, whose
