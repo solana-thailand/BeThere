@@ -1810,6 +1810,16 @@ pub fn EventFormComponent(
                                 </select>
                             </div>
                         </Show>
+                        // Post-event lead capture — sits beside Status because
+                        // the two are set together: an event is marked Completed
+                        // and then opened for retrospective sign-ups.
+                        <Show when=move || !is_create fallback=|| view! { <div></div> }>
+                            <crate::pages::post_event_panel::PostEventRegistrationPanel
+                                set_toast=set_toast
+                                event_id=editing_id
+                                status=Signal::derive(move || form.get().status)
+                            />
+                        </Show>
                     </div>
                     </div>
                 </div>
