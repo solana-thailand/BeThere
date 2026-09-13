@@ -1,7 +1,7 @@
 //! Re-read eligibility and render immediately before transport.
 use super::{
     Notification, content,
-    policy::{ReminderTiming, reminder_timing},
+    policy::{NotificationKind, ReminderTiming, in_delivery_window, reminder_timing},
 };
 use crate::db::d1_safe::safe_all_rows;
 use worker::{D1Database, d1::D1Type};
@@ -17,17 +17,24 @@ pub(super) async fn prepare(
     job: &Notification,
     base: &str,
 ) -> Result<Prepared, String> {
+    // A kind the build does not know cannot be rendered or reasoned about.
+    let Some(kind) = NotificationKind::parse(&job.kind) else {
+        return Ok(Prepared::Cancel);
+    };
     let Some(row) = crate::db::events::get_event(db, &job.event_id).await? else {
         return Ok(Prepared::Cancel);
     };
     let event = row.to_event_config();
     let now = chrono::Utc::now().timestamp_millis();
-    if event.status != event_checkin_domain::models::event::EventStatus::Active
-        || (event.event_end_ms > 0 && event.event_end_ms <= now)
-    {
+    if !in_delivery_window(
+        kind.delivery_window(),
+        &event.status,
+        event.event_end_ms,
+        now,
+    ) {
         return Ok(Prepared::Cancel);
     }
-    if job.kind == "reminder" {
+    if kind == NotificationKind::Reminder {
         match reminder_timing(event.time_tba, event.event_start_ms, now) {
             ReminderTiming::Cancel => return Ok(Prepared::Cancel),
             ReminderTiming::Defer(until) => return Ok(Prepared::Defer(until)),
@@ -43,14 +50,27 @@ pub(super) async fn prepare(
     if !event_checkin_domain::validation::is_plausible_email(email) {
         return Ok(Prepared::Cancel);
     }
-    if job.kind == "reminder" && a["checked_in_at"].as_str().is_some_and(|s| !s.is_empty()) {
+    let checked_in = a["checked_in_at"].as_str().is_some_and(|s| !s.is_empty());
+    if kind == NotificationKind::Reminder && checked_in {
+        return Ok(Prepared::Cancel);
+    }
+    if kind.requires_check_in() && !checked_in {
+        return Ok(Prepared::Cancel);
+    }
+    // The survey's questions live on the post-event registration form, so the
+    // message is only honest while that form still accepts an answer — the
+    // organizer can close it, or its deadline can lapse, after the job is queued.
+    if kind == NotificationKind::Survey && !event.post_event_registration_accepting(now) {
         return Ok(Prepared::Cancel);
     }
     let deposit =
         crate::db::deposit_statuses::get_deposit_status(db, &job.event_id, &job.attendee_id)
             .await?;
     let online = a["participation_type"].as_str() == Some("online");
-    if job.kind.starts_with("deposit_") {
+    if matches!(
+        kind,
+        NotificationKind::DepositConfirmed | NotificationKind::DepositRejected
+    ) {
         if !event.deposit_enabled || online {
             return Ok(Prepared::Cancel);
         }
@@ -58,8 +78,8 @@ pub(super) async fn prepare(
             return Ok(Prepared::Cancel);
         };
         if d.deposited_at != job.version
-            || (job.kind == "deposit_confirmed" && (!d.verified || d.rejected))
-            || (job.kind == "deposit_rejected" && !d.rejected)
+            || (kind == NotificationKind::DepositConfirmed && (!d.verified || d.rejected))
+            || (kind == NotificationKind::DepositRejected && !d.rejected)
         {
             return Ok(Prepared::Cancel);
         }
@@ -67,13 +87,14 @@ pub(super) async fn prepare(
     let needs_deposit = event.deposit_enabled
         && !online
         && !deposit.as_ref().is_some_and(|d| d.verified && !d.rejected);
-    Ok(Prepared::Ready(content::render(
+    Ok(Prepared::Ready(content::render(&content::Render {
         job,
-        &event,
+        kind,
+        event: &event,
         email,
-        a["name"].as_str().unwrap_or(""),
+        name: a["name"].as_str().unwrap_or(""),
         online,
         needs_deposit,
         base,
-    )?))
+    })))
 }
