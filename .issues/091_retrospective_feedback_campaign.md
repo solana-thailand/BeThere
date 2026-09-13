@@ -1,6 +1,6 @@
 # 091 — Asking 30 people for feedback on events that already happened
 
-**Status:** backfill applied to prod 2026-09-13 (45 survey rows / 30 people); the combined page is built and **not deployed**
+**Status:** live in prod 2026-09-13 — backfill applied (45 survey rows / 30 people) and `/feedback` deployed as `8d7ed82d`
 **Found:** 2026-09-13, deciding how to reach attendees with no email transport
 **Severity:** medium (the feature shipped in `.issues/080`/`087` currently reaches nobody)
 
@@ -183,10 +183,25 @@ Telegram handle erased by answering. Now
 Latent since the endpoint shipped and never triggered, because it had no callers
 (0 `retrospective` rows in prod). This page would have been the first.
 
-### Not done
+### Deployed
 
-- **Not deployed.** The backfill is live but the page is not, so the 45 inbox
-  rows currently link to `/feedback`, which 404s until the next release.
+Prod version `8d7ed82d-ad91-4b3e-8dfe-c13b4282fd15`, commit `4414de1`, bundle
+`event-checkin-frontend-7a60e85e0fcd0d36`. `GET /feedback` returns 200 with
+`text/html`, and `cmp` confirms the served wasm is byte-identical to the local
+build — which was checked before deploying to contain both
+`post.satisfaction.content` and `ด้านอาหารเครื่องดื่ม`. Staging served the same
+bytes first. Prod health after the release: `attendees 477`, `events 16`,
+`d1.connected true`.
+
+One link in the chain is **not** verified from here: the inbox payload now says
+`action_url: /feedback`, but `GET /api/my-notifications` needs a Google session,
+so that is covered by the unit test
+(`survey_points_at_the_combined_feedback_page_not_a_deposit_or_calendar`) rather
+than by a probe against production. The first person to open their inbox is the
+first real check.
+
+### Still not done
+
 - No styling of its own — it reuses `card` / `dev-profile-field` /
   `dev-profile-input` rather than adding a 20th stylesheet.
 - `post_event_register.rs` still asks its own three questions
