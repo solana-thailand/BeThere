@@ -38,7 +38,7 @@ extern "C" {
     fn __bethere_build_tag() -> String;
 }
 use crate::pages::{
-    EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister, admin::Admin,
+    Discover, EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister, admin::Admin,
     adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
     dev_profile::DevProfile, event_summary::EventSummary, landing::Landing, login::Login,
@@ -103,6 +103,8 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/events/:slug/post-event-register") view=PostEventRegister />
                     // One page, every event the person attended (.issues/091).
                     <Route path=path!("/feedback") view=Feedback />
+                    // What is on, and what I am part of (.issues/096).
+                    <Route path=path!("/discover") view=Discover />
                     <Route path=path!("/privacy") view=Privacy />
                     <Route path=path!("/data-privacy") view=DataPrivacy />
                     <Route path=path!("/adventure") view=Adventure />

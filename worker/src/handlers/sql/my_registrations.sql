@@ -1,5 +1,6 @@
 SELECT e.id AS event_id,e.name AS event_name,e.slug AS event_slug,
-       e.event_start_ms,e.event_format,a.id AS attendee_id,a.name,
+       e.event_start_ms,e.event_end_ms,e.poster_url,e.nft_image_url,
+       e.location,e.time_tba,e.event_format,a.id AS attendee_id,a.name,
        a.participation_type,a.claim_token,
        (a.checked_in_at IS NOT NULL AND a.checked_in_at<>'') AS checked_in,
        (a.claimed_at IS NOT NULL AND a.claimed_at<>'') AS claimed,

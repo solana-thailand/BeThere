@@ -1,0 +1,250 @@
+//! `/discover` — what is on, and what I am part of (`.issues/096`).
+//!
+//! The landing page opens with a pitch: hero, three stat tiles, "how it works",
+//! an FAQ. That is the right page for someone who has never heard of BeThere and
+//! the wrong one for everybody else. A person who has already registered arrives
+//! wanting one of three things — when is the next event, where is my ticket, what
+//! did I go to — and all three are below the fold behind an explanation they have
+//! already read.
+//!
+//! This page answers those and nothing else. Two lists, dates on the left, one
+//! tap per row.
+//!
+//! Splitting "mine" on `event_end_ms` rather than `event_start_ms` is deliberate:
+//! an event that is running right now belongs under the heading that says it is
+//! happening, not the one that says it already happened.
+
+use leptos::prelude::*;
+use serde::Deserialize;
+
+#[derive(Clone, Deserialize)]
+struct PublicEventItem {
+    name: String,
+    slug: String,
+    event_start_ms: i64,
+    #[serde(default)]
+    time_tba: bool,
+    #[serde(default)]
+    location: String,
+    #[serde(default)]
+    nft_image_url: String,
+    #[serde(default)]
+    poster_url: String,
+}
+
+#[derive(Clone, Deserialize, Default)]
+struct PublicEventsResponse {
+    events: Vec<PublicEventItem>,
+}
+
+#[derive(Clone, Deserialize)]
+struct MyRegistration {
+    event_name: String,
+    event_slug: String,
+    event_start_ms: i64,
+    #[serde(default)]
+    event_end_ms: i64,
+    #[serde(default)]
+    poster_url: String,
+    #[serde(default)]
+    nft_image_url: String,
+    #[serde(default)]
+    location: String,
+    #[serde(default)]
+    time_tba: bool,
+    status: String,
+}
+
+/// One row, whichever list it came from.
+#[derive(Clone)]
+struct Row {
+    title: String,
+    href: String,
+    start_ms: i64,
+    time_tba: bool,
+    location: String,
+    image: String,
+    /// Right-hand pill: registration status for my events, nothing for public.
+    status: Option<String>,
+    past: bool,
+}
+
+/// Poster first, badge second — the fallback `event_hero` documents.
+fn pick_image(poster: &str, badge: &str) -> String {
+    match poster.is_empty() {
+        false => poster.to_string(),
+        // The generic badge SVG is not a picture of anything. Better an empty
+        // slot than four identical thumbnails down the page.
+        true => match badge.contains("badge-hd.svg") {
+            true => String::new(),
+            false => badge.to_string(),
+        },
+    }
+}
+
+#[component]
+#[allow(non_snake_case)]
+pub fn Discover() -> impl IntoView {
+    let (upcoming, set_upcoming) = signal(Vec::<Row>::new());
+    let (mine_now, set_mine_now) = signal(Vec::<Row>::new());
+    let (mine_past, set_mine_past) = signal(Vec::<Row>::new());
+    let (loaded, set_loaded) = signal(false);
+
+    leptos::task::spawn_local(async move {
+        let now_ms = js_sys::Date::now() as i64;
+
+        if let Ok(page) = crate::api::api_get_json::<PublicEventsResponse>("/public/events").await {
+            set_upcoming.set(
+                page.events
+                    .into_iter()
+                    .map(|e| Row {
+                        title: e.name,
+                        href: format!("/e/{}", e.slug),
+                        start_ms: e.event_start_ms,
+                        time_tba: e.time_tba,
+                        location: e.location,
+                        image: pick_image(&e.poster_url, &e.nft_image_url),
+                        status: None,
+                        past: false,
+                    })
+                    .collect(),
+            );
+        }
+
+        // Signed out is a normal state here, not an error: the upcoming list is
+        // public and still worth showing on its own.
+        if let Ok(rows) = crate::api::api_get_json::<Vec<MyRegistration>>("/my-registrations").await
+        {
+            let (past, current): (Vec<_>, Vec<_>) = rows
+                .into_iter()
+                .map(|r| {
+                    // `event_end_ms` is 0 on the legacy KV path and on events
+                    // with no end recorded; fall back to the start so such a row
+                    // still sorts somewhere sensible instead of to 1970.
+                    let ends = match r.event_end_ms > 0 {
+                        true => r.event_end_ms,
+                        false => r.event_start_ms,
+                    };
+                    (
+                        ends < now_ms,
+                        Row {
+                            title: r.event_name,
+                            href: format!("/e/{}", r.event_slug),
+                            start_ms: r.event_start_ms,
+                            time_tba: r.time_tba,
+                            location: r.location,
+                            image: pick_image(&r.poster_url, &r.nft_image_url),
+                            status: Some(r.status),
+                            past: ends < now_ms,
+                        },
+                    )
+                })
+                .partition(|(is_past, _)| *is_past);
+            // Soonest first for what is still to come; most recent first for
+            // what is done — in both cases the row you care about is at the top.
+            let mut current: Vec<Row> = current.into_iter().map(|(_, row)| row).collect();
+            current.sort_by_key(|r| r.start_ms);
+            let mut past: Vec<Row> = past.into_iter().map(|(_, row)| row).collect();
+            past.sort_by_key(|r| -r.start_ms);
+            set_mine_now.set(current);
+            set_mine_past.set(past);
+        }
+
+        set_loaded.set(true);
+    });
+
+    view! {
+        <div class="container dv-page">
+            <header class="dv-head">
+                <h1>"ค้นพบอีเวนต์"</h1>
+                <p class="subtitle">"ดูงานที่กำลังจะมาถึง และงานที่คุณลงทะเบียนไว้"</p>
+            </header>
+
+            <Show when=move || loaded.get() fallback=|| view! { <p class="page-loading">"กำลังโหลด…"</p> }>
+                <Section title="เร็ว ๆ นี้" rows=upcoming empty="ยังไม่มีงานที่เปิดรับอยู่ตอนนี้" />
+                <Section title="งานของฉัน" rows=mine_now empty="" />
+                <Section title="งานที่ผ่านมา" rows=mine_past empty="" />
+            </Show>
+        </div>
+    }
+}
+
+/// A titled list. Renders nothing at all when it is empty and has no empty text —
+/// an empty "งานของฉัน" heading tells a new visitor only that they are missing out.
+#[component]
+fn Section(title: &'static str, rows: ReadSignal<Vec<Row>>, empty: &'static str) -> impl IntoView {
+    view! {
+        <Show when=move || !rows.get().is_empty() || !empty.is_empty() fallback=|| ()>
+            <section class="dv-section">
+                <h2 class="dv-section-title">{title}</h2>
+                <Show
+                    when=move || !rows.get().is_empty()
+                    fallback=move || view! { <p class="dv-empty">{empty}</p> }
+                >
+                    <For each=move || rows.get() key=|r| r.href.clone() let:row>
+                        <a class="dv-row" href=row.href.clone()>
+                            <DateChip ms=row.start_ms past=row.past />
+                            <div class="dv-row-body">
+                                <span class="dv-row-title">{row.title.clone()}</span>
+                                <span class="dv-row-meta">
+                                    {
+                                        let when = match row.time_tba {
+                                            true => "เวลาแจ้งภายหลัง".to_string(),
+                                            false => crate::utils::format_event_day(row.start_ms),
+                                        };
+                                        [when, row.location.clone()]
+                                            .into_iter()
+                                            .filter(|p| !p.is_empty())
+                                            .collect::<Vec<_>>()
+                                            .join(" · ")
+                                    }
+                                </span>
+                            </div>
+                            {match row.status.clone() {
+                                Some(status) => view! { <span class="dv-pill">{status}</span> }.into_any(),
+                                None => view! { <div></div> }.into_any(),
+                            }}
+                            {match row.image.is_empty() {
+                                true => view! { <div></div> }.into_any(),
+                                false => view! {
+                                    <img class="dv-thumb" src=row.image.clone() alt="" />
+                                }.into_any(),
+                            }}
+                        </a>
+                    </For>
+                </Show>
+            </section>
+        </Show>
+    }
+}
+
+/// Big day number over a short month, colour-keyed to past/upcoming.
+///
+/// The colour is the whole point: it says which list a row belongs to without
+/// the reader parsing a date, which is what makes a mixed page scannable.
+#[component]
+fn DateChip(ms: i64, past: bool) -> impl IntoView {
+    let (day, month) = match ms > 0 {
+        false => (String::new(), String::new()),
+        true => {
+            let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+            d.set_time(ms as f64);
+            let opts = js_sys::Object::new();
+            let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
+            let month = d
+                .to_locale_string("en-GB", &opts)
+                .as_string()
+                .unwrap_or_default();
+            (d.get_date().to_string(), month.to_uppercase())
+        }
+    };
+    view! {
+        <div class=match past {
+            true => "dv-chip is-past",
+            false => "dv-chip",
+        }>
+            <span class="dv-chip-month">{month}</span>
+            <span class="dv-chip-day">{day}</span>
+        </div>
+    }
+}

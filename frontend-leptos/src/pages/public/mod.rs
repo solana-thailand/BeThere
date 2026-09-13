@@ -18,11 +18,13 @@
 //! no-show counts, financials) are intentionally excluded by the backend —
 //! the public recap celebrates attendance, not accounting.
 
+pub mod discover;
 pub mod event_recap;
 pub mod feedback;
 pub mod past_events;
 pub mod post_event_register;
 
+pub use discover::Discover;
 pub use event_recap::EventRecap;
 pub use feedback::Feedback;
 pub use past_events::PastEvents;

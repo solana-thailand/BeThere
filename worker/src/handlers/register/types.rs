@@ -86,6 +86,20 @@ pub struct MyRegistrationsItem {
     pub event_name: String,
     pub event_slug: String,
     pub event_start_ms: i64,
+    /// When the event ends. `/discover` splits "my events" on this rather than
+    /// on the start, so an event that is running right now stays under
+    /// "happening" instead of dropping into the past at its own start time.
+    #[serde(default)]
+    pub event_end_ms: i64,
+    /// Poster first, badge second — the same 3-tier fallback `event_hero` uses.
+    #[serde(default)]
+    pub poster_url: String,
+    #[serde(default)]
+    pub nft_image_url: String,
+    #[serde(default)]
+    pub location: String,
+    #[serde(default)]
+    pub time_tba: bool,
     pub attendee_id: String,
     pub name: String,
     pub participation_type: String,
