@@ -36,6 +36,16 @@ pub fn Login() -> impl IntoView {
     let query = use_query_map();
     let next_param = query.get().get("next").map(|s| s.to_string());
 
+    // `/feedback` needs a Google-verified email; a wallet session gets a 403
+    // from the survey endpoint. Used to bias this page's copy (`.issues/106`).
+    // A plain bool in a signal, not a closure: it is read from two places in the
+    // view and a capturing closure is not `Copy`.
+    let wants_feedback = RwSignal::new(
+        next_param
+            .as_deref()
+            .is_some_and(|n| n.starts_with("/feedback")),
+    );
+
     // On successful wallet sign-in, hard-navigate to `next` (or home).
     // Use window.location rather than the SPA router: this callback fires from
     // inside the WalletSignInButton's async task, and an SPA navigate() disposes
@@ -134,7 +144,16 @@ pub fn Login() -> impl IntoView {
 
                 // Subtitle
                 <p class="subtitle">
-                    "Choose your sign-in method to access BeThere Protocol."
+                    {move || match wants_feedback.get() {
+                        // The survey is addressed to a verified email, so a
+                        // wallet session cannot answer it. The two buttons below
+                        // are equally prominent, and anyone arriving from the
+                        // survey link who picks wallet first reached a dead end
+                        // (`.issues/106`). Say which one works before they
+                        // choose, rather than explaining afterwards.
+                        true => "ใช้ Google ด้วยอีเมลที่คุณลงทะเบียนงานไว้ — แบบสอบถามผูกกับอีเมลนั้น",
+                        false => "Choose your sign-in method to access BeThere Protocol.",
+                    }}
                 </p>
 
                 // Powered by Solana badge
@@ -165,6 +184,15 @@ pub fn Login() -> impl IntoView {
 
                     // Solana Wallet sign-in button (shared component + SIWS modal)
                     <crate::wallet_signin::WalletSignInButton on_success=on_wallet_success />
+
+                    // Both buttons look equally valid, and for the survey one of
+                    // them is not. Naming the consequence next to the button is
+                    // cheaper than the dead end it prevents (`.issues/106`).
+                    <Show when=move || wants_feedback.get() fallback=|| ()>
+                        <p class="login-method-note">
+                            "กระเป๋าเงินใช้ตอบแบบสอบถามไม่ได้ เพราะแบบสอบถามผูกกับอีเมลที่ลงทะเบียนงานไว้"
+                        </p>
+                    </Show>
                 </div>
 
                 // Error message
