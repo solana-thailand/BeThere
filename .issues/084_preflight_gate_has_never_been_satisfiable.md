@@ -1,6 +1,6 @@
 # 084 — The production preflight gate has never been satisfiable
 
-**Status:** open — blocks every production deploy
+**Status:** partially fixed 2026-09-13 — the wiring drifts are fixed and proven; a 6/6 green run is still not demonstrated
 **Found:** 2026-09-13, attempting the first prod deploy since the gate landed
 **Severity:** high (either prod cannot be deployed, or the gate gets bypassed
 routinely and stops meaning anything)
@@ -120,3 +120,86 @@ made by the deposit flow. Disposable, but it explains the divergence from what
 - Memory `kv-masks-direct-d1-event-writes` — a D1-only fixture edit was masked
   by staging's KV copy during this investigation; `POST /api/events/reseed-kv`
   cleared it.
+
+
+---
+
+## Investigation — 2026-09-13
+
+### The root cause is narrower than the four symptoms suggested
+
+Only `DepositFlow::from_env()` and `AuthFlow::from_env()` read the environment.
+The three refund flows and the claim flow were registered with `::new()` —
+hardcoded `flow-test-event`, `flow-test-attendee-1`, `flow-test-claim-token`.
+
+So `FLOW_HARNESS_EVENT_ID` moved **one** flow. A run against a named fixture
+silently exercised **two different events at once**: deposit against the named
+one, everything else against a stale `flow-test-event`. Three of the four
+"drifts" reported above are downstream of that single fact.
+
+### Fixed
+
+- `fixture_value` moved into `flows/mod.rs` as `pub(crate)`; all five flows now
+  have `from_env()`, and `register_default` / `register_named` use it. One run,
+  one fixture.
+- `DEFAULT_CLAIM_TOKEN` corrected from the never-written literal
+  `flow-test-claim-token` to `flow-test-event-claim-token-1`, and
+  `ClaimFlow::from_env` derives `${event_id}-claim-token-1` via
+  `seeded_claim_token`, matching `seed-staging.sh`. `FLOW_HARNESS_CLAIM_TOKEN`
+  overrides it.
+- A guard test fails if `register_default` ever constructs a flow with `::new()`
+  again. **Negative-controlled** — reverting one call makes it fail.
+
+### Proposed fix #1 above was wrong — do not apply it
+
+It said to seed `event_end = now - 2h`. **That breaks the fixture entirely.**
+Tried on staging; escrow initialization failed:
+
+```
+{"InstructionError": [1, {"Custom": 13}]}   # EscrowError::EventEndInPast
+```
+
+`initialize_event_escrow` rejects an event that has already ended
+(`bethere-escrow/src/errors.rs:32`). A fixture **cannot be born past its own
+end**, so `seed-staging.sh`'s `now + 4h` is correct and has been restored.
+
+The refund flows still need the wall clock past `event_end`. Both constraints
+are satisfiable only by a **two-phase** fixture, now implemented:
+
+```sh
+bash worker/scripts/seed-staging.sh --event-id <id>                     # end = now + 4h
+#   initialize the escrow on-chain, then deposit
+bash worker/scripts/seed-staging.sh --event-id <id> --advance-past-end  # end = now - 2h
+```
+
+`--advance-past-end` updates D1 **and resyncs KV**. The resync is load-bearing:
+`resolve_event_or_fallback` reads KV first and falls back to D1 only when the
+KV read *errors*, so a D1-only update is masked by the cached `EventConfig` and
+the Worker keeps serving the old horizon. This was hit for real during the
+investigation and reads exactly like the update silently not working.
+
+**Verified end to end on staging** (`flow-084-lifecycle`): seeded, escrow
+initialized on-chain (`927NXWLx…`, confirmed by the Worker), advanced, and the
+Worker then served an `event_end_ms` with `now >= event_end`.
+
+### Still not green
+
+`deposit` against a *freshly initialized* escrow fails with
+`Transaction simulation failed: ... Provided owner is not allowed` — an SPL
+ownership problem in the deposit/vault path, distinct from everything above.
+The same flow **passes** against the older `flow-deposit-20260913` fixture, so
+it is specific to a newly initialized vault and not to the release.
+
+That is the remaining work before the gate can go green. Until then production
+deploys still need `--force --reason`.
+
+### Noticed, not fixed
+
+`worker/scripts/.preflight-bypass.log` is matched by `*.log` in `.gitignore`,
+so the audit trail for production gate bypasses exists **only on the machine
+that ran the deploy**. An audit log nobody else can read is weak evidence —
+worth committing it or shipping entries somewhere durable.
+
+`flow-harness` is not a workspace member, so CI's `cargo fmt --check` does not
+cover it; six files carry pre-existing drift, reverted out of this change to
+keep the diff honest. Same blind spot as `frontend-leptos` (`.issues/083`).

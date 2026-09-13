@@ -122,6 +122,7 @@ impl DepositFlow {
     /// historic default attendee.
     #[must_use]
     pub fn from_env() -> Self {
+        use super::fixture_value;
         let defaults = DepositFlowConfig::default();
         Self {
             config: DepositFlowConfig {
@@ -159,10 +160,6 @@ impl DepositFlow {
     pub fn reached_timeout(now: Instant, deadline: Instant) -> bool {
         now >= deadline
     }
-}
-
-fn fixture_value(variable: &str, default: String) -> String {
-    std::env::var(variable).unwrap_or(default)
 }
 
 impl Default for DepositFlow {
@@ -274,11 +271,12 @@ async fn record_discovered_signature(
     ctx: &StagingContext,
     config: &DepositFlowConfig,
 ) -> HarnessResult<()> {
-    let status = client.fetch_deposit_status(ctx, &config.attendee_id).await?;
-    let needs_signature = status
-        .status
-        .as_ref()
-        .is_some_and(|deposit| !deposit.verified && deposit.tx_signature.as_deref().is_none_or(str::is_empty));
+    let status = client
+        .fetch_deposit_status(ctx, &config.attendee_id)
+        .await?;
+    let needs_signature = status.status.as_ref().is_some_and(|deposit| {
+        !deposit.verified && deposit.tx_signature.as_deref().is_none_or(str::is_empty)
+    });
     if !needs_signature {
         return Ok(());
     }
@@ -605,14 +603,6 @@ mod tests {
         assert_eq!(c.event_id, "flow-test-event");
         assert_eq!(c.poll_interval, Duration::from_millis(2_000));
         assert_eq!(c.poll_timeout, Duration::from_millis(60_000));
-    }
-
-    #[test]
-    fn fixture_value_uses_override_or_default() {
-        assert_eq!(
-            fixture_value("FLOW_HARNESS_TEST_FIXTURE_VALUE", "default".to_string()),
-            "default"
-        );
     }
 
     #[test]
