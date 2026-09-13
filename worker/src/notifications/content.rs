@@ -60,13 +60,11 @@ pub fn render(
     // by the mail — sending someone to their ticket would be a dead end, and
     // there is nothing left to deposit for an event that is already over.
     let (action, action_label) = match *kind {
-        NotificationKind::Survey => (
-            format!(
-                "{base}/events/{}/post-event-register",
-                urlencoding::encode(&event.slug)
-            ),
-            "Answer four quick questions",
-        ),
+        // One page for every event this person still owes feedback on, so a
+        // regular attendee follows one link instead of one per event
+        // (`.issues/091`). The single-event route is unchanged and still
+        // serves the QR codes on the recap posters.
+        NotificationKind::Survey => (format!("{base}/feedback"), "Share your feedback"),
         NotificationKind::DepositRejected => (
             format!("{base}/deposit/{id}?event_id={event_id}"),
             "Review your payment and upload a new slip",
@@ -211,10 +209,14 @@ mod tests {
         assert!(message.text.contains("session link"));
     }
     /// The survey is the only kind sent after the event: it must point at the
-    /// form that carries the questions, never at a deposit that can no longer be
+    /// page that carries the questions, never at a deposit that can no longer be
     /// paid or a calendar entry for a date that has passed.
+    ///
+    /// That page is `/feedback`, which collects every event this person still
+    /// owes feedback on (`.issues/091`) — deliberately *not* the single-event
+    /// route, so one message does not become one message per event attended.
     #[test]
-    fn survey_points_at_the_post_event_form_not_a_deposit_or_calendar() {
+    fn survey_points_at_the_combined_feedback_page_not_a_deposit_or_calendar() {
         let (job, event) = fixture();
         let message = render(&Render {
             job: &job,
@@ -226,11 +228,11 @@ mod tests {
             needs_deposit: true, // an unpaid deposit must not hijack a post-event message
             base: "https://bethere.example",
         });
-        assert!(
-            message
-                .text
-                .contains("https://bethere.example/events/builders%2Fone/post-event-register")
-        );
+        assert!(message.text.contains("https://bethere.example/feedback"));
+        // The single-event route is still live for the recap QR codes, but a
+        // notification must not send anyone down it — that is the regression
+        // this whole page exists to prevent.
+        assert!(!message.text.contains("/post-event-register"));
         assert!(!message.text.contains("/deposit/"));
         assert!(!message.text.contains("Add to calendar"));
         assert!(message.subject.starts_with("How was the event?"));

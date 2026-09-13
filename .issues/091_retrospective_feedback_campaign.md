@@ -1,6 +1,6 @@
 # 091 — Asking 30 people for feedback on events that already happened
 
-**Status:** open — the SQL is written and rehearsed, the prod write is not done
+**Status:** backfill applied to prod 2026-09-13 (45 survey rows / 30 people); the combined page is built and **not deployed**
 **Found:** 2026-09-13, deciding how to reach attendees with no email transport
 **Severity:** medium (the feature shipped in `.issues/080`/`087` currently reaches nobody)
 
@@ -89,17 +89,17 @@ Rehearsed against a copy of the prod export with 0035 applied:
 Both directions were run, so the DELETE is proven load-bearing rather than
 assumed to be.
 
-### Running it
+### Applied
 
-```bash
-cd worker
-mv ~/.pnp.cjs ~/.pnp.cjs.bak
-npx wrangler d1 execute DB --remote --file ../.issues/091_backfill.sql
-mv ~/.pnp.cjs.bak ~/.pnp.cjs
+Run by the owner on 2026-09-13; the agent session could not, because the
+permission classifier refuses a prod D1 write. Verified straight afterwards:
+
+```
+notification_outbox  →  survey | pending | 45     (no 'registration' rows)
+notification_inbox_visible  →  45 rows | 30 people
 ```
 
-Blocked from the agent session — the permission classifier refuses a prod D1
-write. Everything up to it (rehearsal, A/B, the migration, the deploy) was done.
+Both numbers match the rehearsal exactly.
 
 ### Reversing it
 
@@ -124,33 +124,91 @@ SELECT COUNT(*), COUNT(DISTINCT email) FROM notification_inbox_visible;
 
 ## The message copy
 
-Already neutral and already shipped — no change needed:
+Neutral, and now pointed at the combined page:
 
 - title `How was the event?` (`notifications/content.rs:54`)
-- CTA `Answer four quick questions` → `/events/{slug}/post-event-register`
+- CTA `Share your feedback` → `/feedback`
 
-The comment at `content.rs:59-61` records why it points at the form rather than
-the ticket: there is nothing left to deposit for an event that is over.
+The comment at `content.rs` records why it avoids the ticket: there is nothing
+left to deposit for an event that is over. The single-event route is unchanged
+and still serves the QR codes printed on the recap posters — a notification just
+must not send anyone down it, and a test asserts that.
 
-## Open: one form for all of a person's events
+## Built: one page for all of a person's events
 
-Requested 2026-09-13. Today the unit is the event, so a person who attended
-three gets three inbox rows and three forms — 45 submissions from 30 people.
+`/feedback` — `frontend-leptos/src/pages/public/feedback.rs`.
 
-It is cheaper than it looks. `POST /api/public/event/{slug}/register-post-event`
-already takes an arbitrary `profile_fields` map scoped by slug, so a combined
-page can submit the same four `post.*` answers once per event from a single
-button. **No backend change and no migration** — a new route that lists the
-events where the caller has a check-in and the form is accepting, renders the
-four questions per event, and POSTs N times on submit.
+Of the two shapes, the second was chosen: **per-event answers on one page**. One
+set of answers for everything would read better and lose the per-event signal,
+which is the only signal DevRel reports on.
 
-The tension to resolve before building it: one set of answers for all events
-gets a higher completion rate and loses the per-event signal, which is the
-signal DevRel wants. Per-event answers on one page keeps both, at the cost of a
-longer form. Recommend the second — same page, repeated question block, one
-submit.
+The question set is transcribed from DevRel's own Google Form rather than
+invented, so the numbers stay comparable with the Phase 1 figures already
+submitted to the Foundation. Read out of the live form's `FB_PUBLIC_LOAD_DATA_`:
 
-Not started. Do the backfill first; it is what makes any of this reach anyone.
+| key | question | type |
+|---|---|---|
+| `post.satisfaction.content` | ด้านเนื้อหา | ไม่พึงพอใจ / พึงพอใจ / พึงพอใจมาก |
+| `post.satisfaction.venue` | ด้านสถานที่ | same scale |
+| `post.satisfaction.catering` | ด้านอาหารเครื่องดื่ม | same scale |
+| `post.satisfaction.promotion` | ด้านการประชาสัมพันธ์ | same scale |
+| `post.comment` | ข้อเสนอแนะ | free text |
+| `post.next_topics` | เนื้อหาที่ท่านสนใจ…ครั้งต่อไป | free text, asked once |
+| `post.latent_space_continue` | ซีรีส์ Latent Space — อยากให้จัดต่อไหม? | 4 options, asked once |
+
+Three things worth knowing about the implementation:
+
+- **Eligibility is not re-derived.** The event list comes from
+  `GET /api/my-notifications`; `notification_inbox_visible` already means
+  "enrolled, approved, checked in, form still accepting". A second definition in
+  the client is a second thing to keep in step.
+- **The two closing questions ride with the first block only.** They are about
+  the programme, not an event; sending them per block would multiply one opinion
+  by however many events the person attended.
+- **A partial failure keeps what succeeded.** Someone who answers for three
+  events does not lose two because the third closed mid-submission.
+
+`InboxNotification` gained `event_slug` for this — the view always had `slug`,
+it was just folded into `action_url`, and parsing a slug back out of a URL is
+coupling that breaks the day the URL changes.
+
+### The contact-wipe this turned up
+
+`upsert_post_event_attendee` did `contact_channel = excluded.contact_channel`,
+and the handler collapses an absent field to `""`. A feedback-only submission
+sends no contact details — so every one of the 30 people would have had their
+Telegram handle erased by answering. Now
+`COALESCE(NULLIF(excluded.contact_channel, ''), attendees.contact_channel)`.
+
+Latent since the endpoint shipped and never triggered, because it had no callers
+(0 `retrospective` rows in prod). This page would have been the first.
+
+### Not done
+
+- **Not deployed.** The backfill is live but the page is not, so the 45 inbox
+  rows currently link to `/feedback`, which 404s until the next release.
+- No styling of its own — it reuses `card` / `dev-profile-field` /
+  `dev-profile-input` rather than adding a 20th stylesheet.
+- `post_event_register.rs` still asks its own three questions
+  (`post.satisfaction.overall`, `post.nps`, `post.would_return`) for the QR
+  path. Two question sets for one thing is the duplication this repo keeps
+  getting bitten by; unify once the campaign has run.
+
+### Points for answering — recommended against, for now
+
+Asked 2026-09-13. **No for this round**, for one reason that outweighs the rest:
+a reward attached to a *satisfaction* score biases the score, and these numbers
+go to the Solana Foundation. "We paid people to rate us" is not a footnote worth
+earning for 30 responses.
+
+The other two: 30 people is small enough that a direct ask works better than an
+incentive, and it is a second build on top of an undeployed one two days before
+the call.
+
+Worth revisiting for RTM #6, where the survey is same-day and completion is a
+volume problem rather than a reach problem. If it happens, reward *completion*
+and not sentiment, and keep it non-monetary — the deposit credit ledger is
+right there and is exactly the thing that must not be involved.
 
 ## Related
 
