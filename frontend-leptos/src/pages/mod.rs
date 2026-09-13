@@ -24,6 +24,7 @@ pub mod login;
 pub mod nfc_checkin;
 pub mod notifications;
 pub mod onchain_events_panel;
+pub mod post_event_panel;
 pub mod pr_pack;
 pub mod privacy;
 pub mod public;
