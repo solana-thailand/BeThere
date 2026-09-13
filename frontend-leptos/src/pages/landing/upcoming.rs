@@ -134,22 +134,15 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                         <div class="landing-events-grid">
                             {evts.into_iter().map(|evt| {
                                 let event_url = format!("/e/{}", evt.slug);
-                                let date_str = if evt.event_start_ms > 0 {
-                                    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
-                                    d.set_time(evt.event_start_ms as f64);
-                                    if evt.time_tba {
-                                        // Date only — show just the date, time is TBA
-                                        let opts = js_sys::Object::new();
-                                        let _ = js_sys::Reflect::set(&opts, &"year".into(), &"numeric".into());
-                                        let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
-                                        let _ = js_sys::Reflect::set(&opts, &"day".into(), &"numeric".into());
-                                        let date_part = d.to_locale_string("en-US", &opts).as_string().unwrap_or_default();
-                                        format!("{date_part} · Time TBA")
-                                    } else {
-                                        d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
+                                let date_str = match (evt.event_start_ms > 0, evt.time_tba) {
+                                    (false, _) => "Date TBA".to_string(),
+                                    (true, true) => format!(
+                                        "{} · Time TBA",
+                                        crate::utils::format_event_day(evt.event_start_ms)
+                                    ),
+                                    (true, false) => {
+                                        crate::utils::format_event_datetime(evt.event_start_ms)
                                     }
-                                } else {
-                                    "Date TBA".to_string()
                                 };
                                 let deposit_badge = if evt.deposit_enabled {
                                     view! { <span class="landing-inline-icon"><Icon icon=IconName::Coin class="icon-xs"/>" Deposit required"</span> }.into_any()

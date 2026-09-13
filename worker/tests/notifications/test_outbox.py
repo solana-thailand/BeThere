@@ -211,6 +211,38 @@ class OutboxTests(unittest.TestCase):
         self.db.execute(query('inbox_read_all'), ('a@example.com',))
         self.assertIsNone(self.db.execute("SELECT read_at FROM notification_outbox WHERE id=?", (registration,)).fetchone()['read_at'])
 
+    def test_survey_counts_online_by_registration_and_onsite_by_check_in(self):
+        """DevRel's own counting rule, and the one their Phase 1 figures use.
+
+        Nobody watching a livestream is scanned at a door. Gating the survey on
+        `checked_in_at` excluded 337 online registrations against 2 check-ins
+        (.issues/097). An in-person no-show still stays out: "How was the
+        event?" is the wrong question for someone who did not come.
+        """
+        self.db.execute("UPDATE events SET status='completed', post_event_registration_open=1 WHERE id='event-a'")
+
+        cases = [
+            ('online-noshow', 'online', None, True),
+            ('online-watched', 'online', '2026-01-01T00:00:00Z', True),
+            ('onsite-came', 'in_person', '2026-01-01T00:00:00Z', True),
+            ('onsite-noshow', 'in_person', None, False),
+            ('retro', 'retrospective', None, False),
+        ]
+        for attendee, participation, checked_in, expected in cases:
+            with self.subTest(participation=participation, checked_in=bool(checked_in)):
+                self.register(attendee=attendee)
+                self.db.execute(
+                    'UPDATE attendees SET participation_type=?, checked_in_at=? WHERE id=?',
+                    (participation, checked_in, attendee))
+                self.db.execute(
+                    "INSERT OR IGNORE INTO notification_outbox(dedup_key,event_id,attendee_id,kind,due_at)"
+                    " VALUES (?, 'event-a', ?, 'survey', unixepoch())",
+                    (f'["event-a","{attendee}","survey"]', attendee))
+                seen = self.db.execute(
+                    "SELECT COUNT(*) FROM notification_inbox_visible WHERE attendee_id=? AND kind='survey'",
+                    (attendee,)).fetchone()[0]
+                self.assertEqual(bool(seen), expected)
+
     def test_inbox_is_visible_to_every_status_past_pending(self):
         """`approval_status` is a progression, not a set of alternatives.
 
