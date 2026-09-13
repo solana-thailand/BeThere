@@ -103,6 +103,17 @@ pub struct EventDetail {
     pub staff_emails: Vec<String>,
     #[serde(default)]
     pub claim_base_url: String,
+    /// Whether post-event lead capture is open (Plan 008 — Phase 3).
+    ///
+    /// Written only by `PUT /api/events/{id}/post-event-registration`, never by
+    /// the generic event update — `UpdateEventRequest` deliberately has no such
+    /// field, so the "completed events only" guard cannot be bypassed through
+    /// the form. Read-only here.
+    #[serde(default)]
+    pub post_event_registration_open: bool,
+    /// Optional deadline (Unix epoch ms) for post-event registration.
+    #[serde(default)]
+    pub post_event_registration_until_ms: Option<i64>,
     #[serde(default)]
     pub deposit_enabled: bool,
     #[serde(default)]
