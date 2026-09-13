@@ -208,3 +208,52 @@
         flex: 1;
     }
 }
+
+/* Collapsed sessions (.issues/103).
+ *
+ * 123 of 206 people have exactly one session and never see this. The 29 with
+ * four or more are the regulars, and for them the difference between a list and
+ * a stack of open cards is the difference between a form and a chore. */
+.fb-event.is-collapsed {
+    padding: 0.625rem 0.75rem;
+}
+
+.fb-event.is-collapsed .fb-event-head {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.fb-event.is-collapsed .fb-event-poster {
+    width: 44px;
+}
+
+/* The header is a button now, not a link — nothing on this form is persisted
+ * until submit, so navigating away from a half-filled block discards it. */
+.fb-event-head {
+    width: 100%;
+    background: none;
+    border: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.fb-tick {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 1rem;
+    color: var(--success);
+}
+
+.fb-chevron {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+}
+
+.fb-progress {
+    margin: 0.75rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
