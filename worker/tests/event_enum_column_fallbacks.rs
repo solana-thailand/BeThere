@@ -231,6 +231,13 @@ fn event_format_falls_back_to_in_person() {
 /// `Public` there puts a private event on the front page. Per-reader copies of
 /// a rule are how this codebase's guards keep diverging (plan 022), so pin the
 /// parse to a single home.
+///
+/// **Down from three readers to two, 2026-09-13.** The count dropped from 11 to
+/// 8 because the two listing readers now share one `public_event_json`
+/// (`.issues/095`) — the same consolidation this test exists to push toward, so
+/// the number moving *down* is the guard succeeding, not being weakened. A
+/// number moving down for any other reason means a reader stopped calling the
+/// helper, which is what the assertion is still here to catch.
 #[test]
 fn the_enum_parse_has_exactly_one_home() {
     let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/db/events.rs"))
@@ -250,9 +257,9 @@ fn the_enum_parse_has_exactly_one_home() {
          string-to-enum conversion means a reader grew its own copy of the rule"
     );
     assert!(
-        code.matches("parse_enum_column(").count() >= 11,
-        "expected all three readers to route their enum columns through the \
-         helper (5 + 3 + 3 columns)"
+        code.matches("parse_enum_column(").count() >= 8,
+        "expected both readers to route their enum columns through the helper \
+         (5 + 3 columns)"
     );
     assert!(
         !code.contains(".unwrap_or_else(|| \"public\".to_string())"),
