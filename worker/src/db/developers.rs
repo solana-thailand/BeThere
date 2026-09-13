@@ -100,6 +100,24 @@ const UPSERTABLE_PROFILE_COLUMNS: &[&str] = &[
     "twitter_handle",
 ];
 
+/// Namespace for answers that describe an *event*, not the person answering.
+///
+/// DevRel phase-2 item 2: post-event satisfaction is collected through the
+/// existing post-event registration body (`post.satisfaction.overall`,
+/// `post.nps`, `post.would_return`) and belongs in `registration_responses`
+/// only. Such a key is *expected* not to name a `developer_profiles` column, so
+/// the profile upsert skips it deliberately instead of failing and logging once
+/// per answer per respondent — which is what made it look like a defect.
+///
+/// Anything outside this namespace that fails to resolve is still a real
+/// mistake (a form config naming a column that does not exist) and still warns.
+pub(crate) const EVENT_SCOPED_FIELD_PREFIX: &str = "post.";
+
+/// Whether `field_name` is an event-scoped answer rather than a profile field.
+pub(crate) fn is_event_scoped_field(field_name: &str) -> bool {
+    field_name.starts_with(EVENT_SCOPED_FIELD_PREFIX)
+}
+
 /// Resolve a wire-supplied field name to the `&'static str` column it names.
 ///
 /// Returning `&'static str` rather than `bool` is the point: the caller cannot
@@ -333,6 +351,28 @@ pub(crate) async fn insert_registration_response(
 
 /// Batch-insert multiple registration responses in a single D1 call.
 /// Each tuple is (field_key, field_value, is_profile_field).
+/// Columns bound per response row. Used to size the chunks below.
+const RESPONSE_BIND_COUNT: usize = 6;
+
+/// Response rows per INSERT statement.
+///
+/// D1 caps the number of bound parameters in a single statement, so a batch
+/// that grows with the size of a form eventually fails *as a whole* — and this
+/// write is best-effort, so the failure would be one warning and a silently
+/// missing set of answers. Six fixed consent/contact rows plus a question set
+/// reaches that ceiling at around a dozen questions, which is well within what
+/// a post-event survey would ask (DevRel phase-2 item 2). Chunking removes the
+/// ceiling instead of documenting it.
+const RESPONSE_CHUNK_ROWS: usize = 10;
+
+/// D1 rejects a statement binding more than this many parameters.
+const D1_MAX_BOUND_PARAMS: usize = 100;
+
+// Compile-time, not a test: widening the INSERT or raising the chunk size must
+// fail the build rather than wait for a best-effort write to be dropped in
+// production with a single warning line.
+const _: () = assert!(RESPONSE_CHUNK_ROWS * RESPONSE_BIND_COUNT <= D1_MAX_BOUND_PARAMS);
+
 pub(crate) async fn batch_insert_registration_responses(
     db: &D1Database,
     event_id: &str,
@@ -343,6 +383,19 @@ pub(crate) async fn batch_insert_registration_responses(
         return Ok(());
     }
 
+    for chunk in responses.chunks(RESPONSE_CHUNK_ROWS) {
+        insert_registration_response_chunk(db, event_id, developer_email, chunk).await?;
+    }
+
+    Ok(())
+}
+
+async fn insert_registration_response_chunk(
+    db: &D1Database,
+    event_id: &str,
+    developer_email: &str,
+    responses: &[(&str, &str, bool)],
+) -> Result<(), String> {
     // Generate all IDs upfront, then build SQL + params referencing them.
     let ids: Vec<String> = (0..responses.len())
         .map(|_| uuid::Uuid::now_v7().to_string())
@@ -359,7 +412,7 @@ pub(crate) async fn batch_insert_registration_responses(
         sql.push_str("(?, ?, ?, ?, ?, ?, datetime('now'))");
     }
 
-    let mut params: Vec<D1Type> = Vec::with_capacity(responses.len() * 6);
+    let mut params: Vec<D1Type> = Vec::with_capacity(responses.len() * RESPONSE_BIND_COUNT);
     for (i, (field_key, field_value, is_profile_field)) in responses.iter().enumerate() {
         params.push(D1Type::Text(ids[i].as_str()));
         params.push(D1Type::Text(event_id));
@@ -676,7 +729,34 @@ pub(crate) async fn list_developers_paginated(
 #[cfg(test)]
 mod tests {
     use super::UPSERTABLE_PROFILE_COLUMNS;
+    use super::is_event_scoped_field;
     use super::resolve_profile_column;
+
+    /// `post.` answers describe the event; everything else describes the person.
+    #[test]
+    fn event_scoped_fields_are_recognised_by_namespace_only() {
+        for key in ["post.satisfaction.overall", "post.nps", "post.would_return"] {
+            assert!(is_event_scoped_field(key), "{key} must be event-scoped");
+        }
+        for key in ["experience_level", "tech_stack", "interests", "postcode"] {
+            assert!(
+                !is_event_scoped_field(key),
+                "{key} must stay a profile field"
+            );
+        }
+    }
+
+    /// The namespace must not collide with a real profile column, or an answer
+    /// would silently stop updating the profile it is supposed to update.
+    #[test]
+    fn no_profile_column_lives_in_the_event_scoped_namespace() {
+        for column in UPSERTABLE_PROFILE_COLUMNS {
+            assert!(
+                !is_event_scoped_field(column),
+                "`{column}` is both an upsertable profile column and                  event-scoped — the namespace has to be disjoint"
+            );
+        }
+    }
 
     /// Every allowlisted column must actually exist on `developer_profiles`.
     ///

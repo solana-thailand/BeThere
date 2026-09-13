@@ -59,6 +59,41 @@ pub(super) async fn upsert_contact_after_registration(
     }
 }
 
+/// Most dynamic answers a single submission may carry.
+///
+/// `profile_fields` arrives as a free-form map on two *public* endpoints
+/// (`register` and `register-post-event`), so its size is attacker-chosen. The
+/// cap is generous against real use — a registration form plus a post-event
+/// question set — and exists so one request cannot turn into an unbounded
+/// number of rows.
+const MAX_PROFILE_FIELDS: usize = 40;
+
+/// Longest accepted key. Long enough for `post.satisfaction.overall`.
+const MAX_PROFILE_KEY_LEN: usize = 64;
+
+/// Longest accepted answer. Long enough for a free-text survey comment.
+const MAX_PROFILE_VALUE_LEN: usize = 2_000;
+
+/// The answers from a submission that are safe to persist.
+///
+/// Both registration entry points funnel through `write_developer_data`, so
+/// applying the bound here covers them together — a guard on one caller would
+/// leave the sibling path unbounded, which is how this class of bug survives.
+/// Empty values are dropped (an unanswered optional field is not an answer).
+fn accepted_profile_fields(fields: &[(String, String)]) -> Vec<(&str, &str)> {
+    fields
+        .iter()
+        .filter(|(key, value)| {
+            !value.is_empty()
+                && !key.is_empty()
+                && key.len() <= MAX_PROFILE_KEY_LEN
+                && value.len() <= MAX_PROFILE_VALUE_LEN
+        })
+        .take(MAX_PROFILE_FIELDS)
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect()
+}
+
 /// Write developer profile + registration responses to D1 (Issue #049 Phase 2).
 ///
 /// Best-effort: each write is individually wrapped in warn-on-error.
@@ -95,17 +130,19 @@ pub(super) async fn write_developer_data(data: &DeveloperData<'_>) {
         tracing::warn!(attendee_fingerprint = %attendee_fingerprint, error = %e, "D1 developer consent_outreach upsert failed (non-fatal)");
     }
 
-    // 1c. Upsert dynamic profile fields
-    for (key, value) in &data.profile_fields {
-        if !value.is_empty()
-            && let Err(e) = crate::db::developers::upsert_developer_field(
-                d1,
-                email,
-                key.as_str(),
-                value.as_str(),
-            )
-            .await
-        {
+    // 1c. Upsert dynamic profile fields.
+    //
+    // `post.`-namespaced keys are answers about the event, not about the
+    // person, so they are stored in `registration_responses` and nowhere else.
+    // Sending them to the profile upsert would fail the allowlist and log once
+    // per answer per respondent — noise that scales with the size of the
+    // question set (DevRel phase-2 item 2). A non-namespaced key that fails to
+    // resolve is still a real form-config mistake and still warns.
+    for (key, value) in accepted_profile_fields(&data.profile_fields) {
+        if crate::db::developers::is_event_scoped_field(key) {
+            continue;
+        }
+        if let Err(e) = crate::db::developers::upsert_developer_field(d1, email, key, value).await {
             tracing::warn!(attendee_fingerprint = %attendee_fingerprint, key, error = %e, "D1 developer field upsert failed (non-fatal)");
         }
     }
@@ -136,11 +173,13 @@ pub(super) async fn write_developer_data(data: &DeveloperData<'_>) {
         ),
     ];
 
-    // Profile-enriching fields
-    for (key, value) in &data.profile_fields {
-        if !value.is_empty() {
-            responses.push((key.as_str(), value.as_str(), true));
-        }
+    // Dynamic answers. `is_profile_field` records whether the answer *also*
+    // updated `developer_profiles` — so an event-scoped `post.` answer, which
+    // deliberately does not, must not claim it did. DevRel read this column to
+    // work out where the existing 2,103 rows came from; it has to stay honest.
+    for (key, value) in accepted_profile_fields(&data.profile_fields) {
+        let is_profile_field = !crate::db::developers::is_event_scoped_field(key);
+        responses.push((key, value, is_profile_field));
     }
 
     if let Err(e) =
@@ -152,6 +191,91 @@ pub(super) async fn write_developer_data(data: &DeveloperData<'_>) {
             %event_id,
             error = %e,
             "D1 batch registration responses failed (non-fatal)"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        MAX_PROFILE_FIELDS, MAX_PROFILE_KEY_LEN, MAX_PROFILE_VALUE_LEN, accepted_profile_fields,
+    };
+
+    fn pair(key: &str, value: &str) -> (String, String) {
+        (key.to_string(), value.to_string())
+    }
+
+    #[test]
+    fn answers_survive_unchanged() {
+        let fields = vec![pair("experience_level", "Senior"), pair("post.nps", "9")];
+        assert_eq!(
+            accepted_profile_fields(&fields),
+            vec![("experience_level", "Senior"), ("post.nps", "9")]
+        );
+    }
+
+    /// An untouched optional field is not an answer and must not become a row.
+    #[test]
+    fn empty_values_and_keys_are_dropped() {
+        let fields = vec![
+            pair("experience_level", ""),
+            pair("", "orphan"),
+            pair("interests", "DeFi"),
+        ];
+        assert_eq!(
+            accepted_profile_fields(&fields),
+            vec![("interests", "DeFi")]
+        );
+    }
+
+    /// The caps are a policy choice, so they are pinned against literals rather
+    /// than against themselves. The test below asserts the `take` is applied by
+    /// reading `MAX_PROFILE_FIELDS`, which means it cannot notice the constant
+    /// being raised to something useless — this one can.
+    #[test]
+    fn the_caps_stay_within_a_defensible_range() {
+        assert!(
+            (10..=100).contains(&MAX_PROFILE_FIELDS),
+            "MAX_PROFILE_FIELDS = {MAX_PROFILE_FIELDS}: under 10 breaks a real              question set, over 100 stops being a bound on a public endpoint"
+        );
+        assert!((32..=256).contains(&MAX_PROFILE_KEY_LEN));
+        assert!((256..=8_192).contains(&MAX_PROFILE_VALUE_LEN));
+    }
+
+    /// `profile_fields` is a free-form map on two public endpoints, so its size
+    /// is chosen by the caller.
+    #[test]
+    fn an_oversized_submission_is_bounded() {
+        let fields: Vec<(String, String)> = (0..MAX_PROFILE_FIELDS * 5)
+            .map(|i| pair(&format!("post.q{i}"), "answer"))
+            .collect();
+        assert_eq!(accepted_profile_fields(&fields).len(), MAX_PROFILE_FIELDS);
+    }
+
+    #[test]
+    fn overlong_keys_and_values_are_rejected_not_truncated() {
+        let long_key = "p".repeat(MAX_PROFILE_KEY_LEN + 1);
+        let long_value = "v".repeat(MAX_PROFILE_VALUE_LEN + 1);
+        let fields = vec![
+            pair(&long_key, "ok"),
+            pair("post.comment", &long_value),
+            pair("post.nps", "9"),
+        ];
+        // Truncating would store a corrupted answer; dropping is the honest
+        // outcome and leaves the rest of the submission intact.
+        assert_eq!(accepted_profile_fields(&fields), vec![("post.nps", "9")]);
+    }
+
+    /// The boundary itself, so an off-by-one in the comparison is caught.
+    #[test]
+    fn keys_and_values_at_the_limit_are_accepted() {
+        let key = format!("post.{}", "k".repeat(MAX_PROFILE_KEY_LEN - "post.".len()));
+        let value = "v".repeat(MAX_PROFILE_VALUE_LEN);
+        assert_eq!(key.len(), MAX_PROFILE_KEY_LEN);
+        let fields = vec![(key.clone(), value.clone())];
+        assert_eq!(
+            accepted_profile_fields(&fields),
+            vec![(key.as_str(), value.as_str())]
         );
     }
 }
