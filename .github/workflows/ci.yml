@@ -40,9 +40,11 @@ jobs:
       - name: cargo fmt --check (workspace)
         # The tree was brought fully rustfmt-clean; this keeps it that way rather
         # than letting drift accumulate into another repo-wide reformat commit.
-        # Scoped to the workspace: frontend-leptos is excluded from it, and rustfmt
-        # hard-errors on whitespace-only lines inside Leptos `view!` macros, which
-        # would make a --check gate there fail on formatting it cannot itself fix.
+        # Covers `domain` and `worker` — the whole workspace.
+        #
+        # It does NOT cover frontend-leptos, which the root Cargo.toml `exclude`s;
+        # `--all` means "all workspace members", not "all crates in the tree". That
+        # crate is gated separately in the frontend-clippy job below (.issues/092).
         run: cargo fmt --all -- --check
 
       - name: cargo check (workspace)
@@ -116,13 +118,27 @@ jobs:
       - name: Setup Rust (stable, wasm32 target)
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry + target
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: frontend-leptos
+
+      - name: cargo fmt --check (frontend)
+        # The workspace fmt gate cannot reach this crate — it is `exclude`d from
+        # the workspace, so `cargo fmt --all` at the root skips it entirely and
+        # six files had drifted unnoticed by 2026-09-13 (.issues/092).
+        #
+        # The exclusion was previously justified by rustfmt hard-erroring on
+        # whitespace-only lines inside Leptos `view!` macros. That does not
+        # reproduce on the current toolchain: `cargo fmt` here exits 0, writes
+        # only ordinary formatting, is idempotent on a second pass, and leaves
+        # clippy -D warnings and the native tests green. If a future rustfmt
+        # regresses on `view!`, delete this step rather than reformatting
+        # around it — and say so here.
+        run: cargo fmt --check
 
       - name: cargo clippy (frontend, wasm32, -D warnings)
         run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings

@@ -135,8 +135,7 @@ pub fn Feedback() -> impl IntoView {
 
         // The attendee row already holds a name and the upsert overwrites it,
         // so send back what is on file rather than inventing one.
-        if let Ok(rows) =
-            crate::api::api_get_json::<Vec<MyRegistration>>("/my-registrations").await
+        if let Ok(rows) = crate::api::api_get_json::<Vec<MyRegistration>>("/my-registrations").await
             && let Some(first) = rows.into_iter().find(|r| !r.name.trim().is_empty())
         {
             set_name.set(first.name);
