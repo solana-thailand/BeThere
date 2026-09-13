@@ -1,6 +1,6 @@
 # 083 — The post-event registration flag had no UI and could only be set by hand
 
-**Status:** fixed 2026-09-13 (code only; not deployed) — see `.issues/090`
+**Status:** fixed 2026-09-13, **deployed** to prod `253717a5` — see `.issues/090`
 **Found:** 2026-09-13, planning the DevRel phase-2 event flips
 **Severity:** medium (a shipped feature was unreachable)
 

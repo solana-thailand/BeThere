@@ -1,6 +1,6 @@
 # 090 — What is not in production before the 15 Sep Foundation call
 
-**Status:** open — the gap is a deploy, not code
+**Status:** deployed 2026-09-13 (prod `253717a5`) — two follow-ups remain, see the outcome section
 **Found:** 2026-09-13, checking BeThere against `solana-thailand-devrel-helper`
 **Severity:** high — DevRel's top-priority ask is merged and invisible
 
@@ -105,3 +105,78 @@ the repo — it carries PII).
 4. Re-run the wasm string check above; `post.satisfaction.overall` must now
    return a non-zero count. That is the pass condition, not HTTP 200.
 5. Complete the two draft events; decide the deadline question.
+
+---
+
+## Deployed 2026-09-13 — outcome
+
+**Status: closed for the deploy; two follow-ups below.**
+
+| | |
+|---|---|
+| Prod version | `253717a5-9334-484c-9ac5-85ef7675fd13` (was `20499a78`) |
+| Prod commit | `0c56c41` |
+| Frontend bundle | `event-checkin-frontend-61180dc45a1b247a` (was `d954a4af68c66138`) |
+| Migration `0035` | applied to `bethere-db-staging` **and** `bethere-db`, 27 commands each |
+
+### The pass condition was met
+
+The check in the section above was a string search against the served wasm.
+The stronger form was available once the artifact existed locally, so that is
+what was run: `cmp` between the downloaded prod object and the local
+`dist/` build — **byte-identical**. That build was verified before deploying to
+contain `post.satisfaction.overall` (1) and `post.would_return` (1), against
+**0** in the outgoing prod bundle. Staging served the same bytes first.
+
+Effect of the migration verified on both databases by reading the rebuilt
+constraint back, not by trusting the exit code:
+
+```
+kind IN ('registration','reminder','deposit_confirmed','deposit_rejected','survey')
+```
+
+Prod `/api/health` after: `status: ok`, `d1.connected: true`, `attendees 477`,
+`events 16` — unchanged by the table rebuild. `deploy.sh`'s own Content-Type
+smoke test passed on both environments.
+
+### The preflight gate was bypassed, again
+
+`flow-harness/results/.last-green` still does not exist, so prod was deployed
+with `--force --reason`. That entry is the **fifth bypass today**;
+`worker/scripts/.preflight-bypass.log` now has five lines and zero green runs.
+
+`.issues/084` predicted exactly this — *"either prod cannot be deployed, or the
+gate gets bypassed routinely and stops meaning anything."* The second branch is
+now the observed behaviour. A gate that is bypassed on every deploy is not a
+gate, and the honest options are to finish 084 or to remove it. Continuing to
+`--force` past it is the one option that costs something and buys nothing.
+
+### Correction: completing the two draft events buys nothing today
+
+The section above lists it as a gap because their post-event form cannot open.
+That is true and incomplete — checked afterwards, both have **0 attendees and
+0 check-ins**:
+
+| slug | status | attendees | checked in |
+|---|---|---|---|
+| `solana-in-latent-space-part-7` | draft | 0 | 0 |
+| `comfyui-thailand-1st-meetup` | draft | 0 | 0 |
+
+So there is nobody who could fill the form, and `.issues/080`'s survey enqueue
+trigger — which fires only for enrolled attendees with a non-null
+`checked_in_at` — would select nobody. Completing them is state hygiene, not a
+fix for a reachable dead end. It should not be presented as one on the call.
+
+It is also **blocked from this session regardless**: the transition goes through
+`PUT /api/events/{id}` in the authed router, and prod runs `DEV_MODE=0` with
+`JWT_SECRET` held as a Cloudflare secret (`state.rs`, `get_secret`), so no token
+can be minted here. It needs an organizer login in the UI — and the decision of
+whether two events with no attendees should be completed at all.
+
+### What is now live and has still never been used
+
+`registration_responses` has **0** rows with a `post.%` key and `attendees` has
+**0** rows with `participation_type = 'retrospective'`. The questions are
+reachable in production as of this deploy; the first person to answer one will
+be the first end-to-end exercise of the path. Worth saying plainly on the 15th
+rather than presenting the feature as proven.
