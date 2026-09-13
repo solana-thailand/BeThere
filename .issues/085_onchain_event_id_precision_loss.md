@@ -1,6 +1,7 @@
 # 085 — `on_chain_event_id` is a u64 in a signed-64-bit column, and half of them are silently corrupted
 
-**Status:** open — **production data affected**, recovery demonstrated, fix not applied
+**Status:** open — **production data affected**, worse than first written (see
+"Escalation"), recovery demonstrated, fix not applied
 **Found:** 2026-09-13, diagnosing why the flow-harness deposit flow failed
 **Severity:** high — every escrow operation for an affected event is broken, and
 the failure is silent at write time
@@ -122,3 +123,78 @@ Exits non-zero while any row is stored as REAL.
   deposit failure that led here. The remaining "SPL ownership" blocker in that
   issue **is this bug**, not a vault problem.
 - `.issues/047_instruction_introspection.md`, `.issues/013` — escrow safety.
+
+
+---
+
+## Escalation — 2026-09-13, later
+
+The first write-up said this affects "about half" of events. **It affects
+effectively all of them**, and there is a second, independent bug.
+
+### Bug 2: the read path loses precision on *every* id
+
+D1 rows reach Rust through `JSON.stringify`, so every integer becomes a
+JavaScript number — float64. Anything above **2⁵³** (9 007 199 254 740 992)
+is rounded. FNV-1a output is spread across the whole u64 range, so 2⁵³ is a
+negligible fraction of it: **essentially every id is corrupted on read**, even
+when D1 holds it perfectly.
+
+Demonstrated on a row whose stored value is *intact*:
+
+```
+flow-test-event   raw=5055890856068877000   CAST(... AS TEXT)=5055890856068877793
+```
+
+The database is right; the Worker is wrong. So Bug 1 (write) and Bug 2 (read)
+are independent, and Bug 2 has the wider blast radius.
+
+`db/events.rs:64-67` carries a comment about u64 exceeding `i64::MAX` — someone
+hit the *deserialization* symptom and re-typed the field as `u64`, but never
+noticed the rounding. The example value in that comment,
+`15159210065911600000`, is itself the corrupted form of `islanddao-v4-demo`'s
+real id.
+
+### Why anything worked at all: KV was holding the truth
+
+`EventConfig` in KV is serialized by **Rust**, so KV held the exact u64. The
+KV-first read path therefore returned correct ids, and D1 was only consulted on
+a KV miss. That is why escrow operations mostly worked.
+
+### `POST /api/events/reseed-kv` destroys that
+
+It rewrites KV from D1 — copying the corrupted value over the good one. It is a
+**live production endpoint**. Running it replaces every exact KV id with a
+rounded one and makes the corruption total and permanent.
+
+Observed: after a reseed on staging, the Worker reports
+`flow-test-event → 5055890856068877000`, though D1 still holds
+`…877793` and the true value is `…877793`.
+
+**Do not call `reseed-kv` on production until this is fixed.** It is not a
+recovery tool for this bug; it is an amplifier.
+
+### The true id is always recomputable
+
+`derive_on_chain_event_id` (`handlers/deposit/mod.rs:48`) is FNV-1a over the
+event's string id — a pure function. Verified two independent ways:
+
+| event | FNV-1a of the id | recovered by PDA search |
+|---|---|---|
+| `islanddao-v4-demo` | `15159210065911598203` | `15159210065911598203` ✓ |
+| `flow-test-event` | `5055890856068877793` | matches the intact D1 value ✓ |
+
+So repair does not need the brute-force search at all — recompute and verify
+against `escrow_address`. The search remains useful only for an event whose id
+was explicitly overridden rather than derived.
+
+### Revised fix
+
+1. **Column to TEXT** (migration) and write a quoted literal — fixes Bug 1.
+2. **Deserialize from string** — fixes Bug 2. A tolerant deserializer
+   (number *or* string) is needed during rollout, but a numeric value above
+   2⁵³ must then be treated as **untrusted**, not merely parsed.
+3. **Repair existing rows** by recomputing FNV-1a and asserting the result
+   derives to the stored `escrow_address`.
+4. **Guard `reseed-kv`** so it cannot write an id that fails that assertion.
+5. Read-back assertion after escrow init, as above.
