@@ -71,14 +71,43 @@ struct MyRegistration {
     name: String,
 }
 
+/// The slice of `GET /api/public/event/{slug}` this page needs.
+///
+/// Fetched per block rather than added to the inbox payload: the inbox view is
+/// a SQL view, so widening it costs a migration, and this is one cached public
+/// GET per event for an N that is 1–3.
+#[derive(Clone, Default, Deserialize)]
+struct EventRecall {
+    #[serde(default)]
+    poster_url: String,
+    #[serde(default)]
+    nft_image_url: String,
+    #[serde(default)]
+    event_start_ms: i64,
+    #[serde(default)]
+    location: String,
+}
+
 /// One event's block of answers.
 #[derive(Clone)]
 struct EventBlock {
     slug: String,
     name: String,
+    /// Poster, date and venue — filled in after the block renders.
+    ///
+    /// Four months is long enough to forget which session was which, and a
+    /// person who cannot place the event either abandons the form or answers
+    /// about the wrong one. DevRel hit this with the Google Forms and solved it
+    /// by pasting recordings into the mail; the same problem, solved where the
+    /// question actually is.
+    recall: RwSignal<EventRecall>,
     /// One signal per dimension, in `DIMENSIONS` order.
     ratings: [RwSignal<String>; 4],
     comment: RwSignal<String>,
+    /// The comment box starts collapsed. The fast path is four taps per event;
+    /// a textarea per event that most people leave blank is what makes a short
+    /// form look like a long one.
+    comment_open: RwSignal<bool>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -162,6 +191,8 @@ pub fn Feedback() -> impl IntoView {
             built.push(EventBlock {
                 slug: item.event_slug,
                 name: item.event_name,
+                recall: RwSignal::new(EventRecall::default()),
+                comment_open: RwSignal::new(false),
                 ratings: [
                     RwSignal::new(String::new()),
                     RwSignal::new(String::new()),
@@ -175,6 +206,20 @@ pub fn Feedback() -> impl IntoView {
         match built.is_empty() {
             true => set_state.set(PageState::NothingToDo),
             false => {
+                // Show the questions immediately and let each poster arrive when
+                // it arrives. Blocking the whole form on N public GETs would
+                // trade the thing that makes people answer for the thing that
+                // helps them answer accurately.
+                for block in &built {
+                    let slug = block.slug.clone();
+                    let recall = block.recall;
+                    leptos::task::spawn_local(async move {
+                        let path = format!("/public/event/{slug}");
+                        if let Ok(detail) = crate::api::api_get_json::<EventRecall>(&path).await {
+                            recall.set(detail);
+                        }
+                    });
+                }
                 set_blocks.set(built);
                 set_state.set(PageState::Ready);
             }
@@ -271,39 +316,111 @@ pub fn Feedback() -> impl IntoView {
                             key=|block| block.slug.clone()
                             let:block
                         >
-                            <section class="card">
-                                <h2>{block.name.clone()}</h2>
+                            <section class="card fb-event">
+                                // Poster, date and venue before the questions —
+                                // the point of the block is that the reader
+                                // recognises the event before rating it. The
+                                // heading links to the event's own page for
+                                // anyone who needs more than a picture.
+                                <a class="fb-event-head" href=format!("/e/{}", block.slug)>
+                                    {
+                                        let recall = block.recall;
+                                        move || {
+                                            let r = recall.get();
+                                            let img = match (r.poster_url.is_empty(), r.nft_image_url.is_empty()) {
+                                                (false, _) => r.poster_url.clone(),
+                                                (true, false) => r.nft_image_url.clone(),
+                                                _ => String::new(),
+                                            };
+                                            match img.is_empty() {
+                                                // No placeholder box while it loads
+                                                // and none if the event never had an
+                                                // image: an empty frame is noise.
+                                                true => view! { <div></div> }.into_any(),
+                                                false => view! {
+                                                    <img class="fb-event-poster" src=img alt="Event poster" />
+                                                }.into_any(),
+                                            }
+                                        }
+                                    }
+                                    <div class="fb-event-meta">
+                                        <h2>{block.name.clone()}</h2>
+                                        {
+                                            let recall = block.recall;
+                                            move || {
+                                                let r = recall.get();
+                                                let when = match r.event_start_ms > 0 {
+                                                    true => crate::utils::format_event_day(r.event_start_ms),
+                                                    false => String::new(),
+                                                };
+                                                let line = [when, r.location.clone()]
+                                                    .into_iter()
+                                                    .filter(|part| !part.is_empty())
+                                                    .collect::<Vec<_>>()
+                                                    .join(" · ");
+                                                view! { <p class="subtitle">{line}</p> }
+                                            }
+                                        }
+                                    </div>
+                                </a>
+
                                 {DIMENSIONS.iter().enumerate().map(|(index, (_, label))| {
                                     let rating = block.ratings[index];
                                     view! {
-                                        <fieldset class="dev-profile-field">
-                                            <legend class="dev-profile-label">{*label}</legend>
-                                            {SCALE.iter().map(|option| {
-                                                let value = (*option).to_string();
-                                                let selected = value.clone();
-                                                view! {
-                                                    <label>
-                                                        <input
-                                                            type="radio"
-                                                            prop:checked=move || rating.get() == selected
-                                                            on:change=move |_| rating.set(value.clone())
-                                                        />
-                                                        {*option}
-                                                    </label>
-                                                }
-                                            }).collect_view()}
-                                        </fieldset>
+                                        // One row per dimension: label left, three
+                                        // choices right. Four stacked fieldsets of
+                                        // radios read as a wall; the whole event is
+                                        // four taps.
+                                        <div class="fb-row">
+                                            <span class="fb-row-label">{*label}</span>
+                                            <div class="fb-scale" role="group" aria-label=*label>
+                                                {SCALE.iter().map(|option| {
+                                                    let value = (*option).to_string();
+                                                    let selected = value.clone();
+                                                    let set_to = value.clone();
+                                                    view! {
+                                                        <button
+                                                            type="button"
+                                                            class=move || match rating.get() == selected {
+                                                                true => "fb-choice is-selected",
+                                                                false => "fb-choice",
+                                                            }
+                                                            aria-pressed=move || (rating.get() == value).to_string()
+                                                            on:click=move |_| rating.set(set_to.clone())
+                                                        >
+                                                            {*option}
+                                                        </button>
+                                                    }
+                                                }).collect_view()}
+                                            </div>
+                                        </div>
                                     }
                                 }).collect_view()}
-                                <label class="dev-profile-field">
-                                    "ข้อเสนอแนะ"
-                                    <textarea
-                                        class="dev-profile-input"
-                                        rows="3"
-                                        prop:value=move || block.comment.get()
-                                        on:input=move |ev| block.comment.set(event_target_value(&ev))
-                                    />
-                                </label>
+
+                                {
+                                    let open = block.comment_open;
+                                    let comment = block.comment;
+                                    move || match open.get() {
+                                        false => view! {
+                                            <button
+                                                type="button"
+                                                class="fb-add-comment"
+                                                on:click=move |_| open.set(true)
+                                            >
+                                                "+ เพิ่มข้อเสนอแนะ"
+                                            </button>
+                                        }.into_any(),
+                                        true => view! {
+                                            <textarea
+                                                class="dev-profile-input"
+                                                rows="3"
+                                                placeholder="ข้อเสนอแนะ (ไม่บังคับ)"
+                                                prop:value=move || comment.get()
+                                                on:input=move |ev| comment.set(event_target_value(&ev))
+                                            />
+                                        }.into_any(),
+                                    }
+                                }
                             </section>
                         </For>
 
