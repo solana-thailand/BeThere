@@ -51,8 +51,35 @@ pub fn render(
         NotificationKind::Reminder => "Your event is coming up",
         NotificationKind::DepositConfirmed => "Your deposit is confirmed",
         NotificationKind::DepositRejected => "Your payment slip needs attention",
-        NotificationKind::Survey => "How was the event?",
+        NotificationKind::Survey => "How were the sessions?",
     };
+
+    // The survey is the one kind whose row no longer stands for an event.
+    // `dedup_key` is per person (migration 0038), so the event this row happens
+    // to be filed under is whichever one enrolled them first — of up to twelve.
+    // Every event-shaped part of the message below is therefore wrong for it:
+    // the subject would name one of twelve, When/Where would describe a session
+    // that is over, and "Your ticket" would link to a past event's ticket.
+    //
+    // So it gets its own message rather than the shared one with a different
+    // title. `/feedback` enumerates the sessions; the mail does not try to.
+    if *kind == NotificationKind::Survey {
+        let feedback = format!("{base}/feedback");
+        let name = clean(name);
+        return Message {
+            to: (*email).into(),
+            subject: format!("{title} — Solana Developer Thailand"),
+            text: format!(
+                "Hi {name},\n\nThank you for coming to the sessions you attended this year.\n\nWe are writing up what to run next, and the one thing we do not have is what you thought. It takes about two minutes, every question is skippable, and answers go to the organising team — nothing is attributed by name.\n\nShare your feedback: {feedback}\n\nThe page lists every session you attended, so you only need to open it once.\n\nThis is an event service message from BeThere."
+            ),
+            html: format!(
+                "<h1>{}</h1><p>Hi {},</p><p>Thank you for coming to the sessions you attended this year.</p><p>We are writing up what to run next, and the one thing we do not have is what you thought. It takes about two minutes, every question is skippable, and answers go to the organising team — nothing is attributed by name.</p><p><a href=\"{}\">Share your feedback</a></p><p>The page lists every session you attended, so you only need to open it once.</p><p>This is an event service message from BeThere.</p>",
+                escape(title),
+                escape(&name),
+                escape(&feedback)
+            ),
+        };
+    }
     let id = urlencoding::encode(&job.attendee_id);
     let event_id = urlencoding::encode(&job.event_id);
     let ticket = format!("{base}/ticket/{id}?event_id={event_id}");
@@ -235,6 +262,14 @@ mod tests {
         assert!(!message.text.contains("/post-event-register"));
         assert!(!message.text.contains("/deposit/"));
         assert!(!message.text.contains("Add to calendar"));
-        assert!(message.subject.starts_with("How was the event?"));
+        assert!(message.subject.starts_with("How were the sessions?"));
+        // One row now stands for every session this person attended (migration
+        // 0038), so the message must not claim to be about one of them — not in
+        // the subject, and not as a When/Where/ticket for an event that is over.
+        assert!(!message.subject.contains(&event.name));
+        assert!(!message.text.contains(&event.name));
+        assert!(!message.text.contains("When:"));
+        assert!(!message.text.contains("Where:"));
+        assert!(!message.text.contains("Your ticket:"));
     }
 }

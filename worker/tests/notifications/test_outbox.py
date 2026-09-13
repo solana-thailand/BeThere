@@ -211,6 +211,43 @@ class OutboxTests(unittest.TestCase):
         self.db.execute(query('inbox_read_all'), ('a@example.com',))
         self.assertIsNone(self.db.execute("SELECT read_at FROM notification_outbox WHERE id=?", (registration,)).fetchone()['read_at'])
 
+    def test_one_survey_per_person_not_one_per_event(self):
+        """`dedup_key` is `[event, attendee, kind]`, which is right for every
+        kind whose destination is one event and wrong for `survey`, whose
+        destination is `/feedback` — a page not scoped to an event.
+
+        `dispatch()` sends one message per row, so before migration 0038 prod
+        held 425 rows for 206 people and one person would have received twelve
+        identical mails (.issues/101).
+        """
+        self.db.execute("UPDATE events SET status='completed' WHERE id IN ('event-a','event-b')")
+        # One human, two events, two attendee rows — which is how the schema
+        # represents a repeat attendee.
+        #
+        # The shared email is set at INSERT, not by a later UPDATE:
+        # `notification_attendee_email` erases the outbox and the enrolments
+        # whenever an address changes, which is correct PDPA behaviour and would
+        # quietly empty the fixture.
+        with self.db:
+            for attendee, event in (('dup-a', 'event-a'), ('dup-b', 'event-b')):
+                self.db.execute(
+                    "INSERT INTO attendees(id,event_id,email,name,participation_type)"
+                    " VALUES (?,?,'regular@example.com','Regular','online')",
+                    (attendee, event))
+                self.db.execute(
+                    'INSERT INTO notification_enrollments(attendee_id,event_id) VALUES (?,?)',
+                    (attendee, event))
+
+        for event in ('event-a', 'event-b'):
+            self.db.execute(
+                'UPDATE events SET post_event_registration_open=1 WHERE id=?', (event,))
+
+        rows = self.db.execute(
+            "SELECT COUNT(*) FROM notification_outbox n JOIN attendees a ON a.id=n.attendee_id"
+            " WHERE n.kind='survey' AND n.status='pending' AND lower(a.email)='regular@example.com'"
+        ).fetchone()[0]
+        self.assertEqual(rows, 1, 'two events, one person, one survey message')
+
     def test_survey_counts_online_by_registration_and_onsite_by_check_in(self):
         """DevRel's own counting rule, and the one their Phase 1 figures use.
 
