@@ -274,6 +274,14 @@ pub async fn my_registrations(
                         event_name,
                         event_slug,
                         event_start_ms,
+                        // The legacy KV path carries no event row, so these stay
+                        // at their defaults; `/discover` degrades to a dateless
+                        // card rather than failing. Production reads D1.
+                        event_end_ms: 0,
+                        poster_url: String::new(),
+                        nft_image_url: String::new(),
+                        location: String::new(),
+                        time_tba: false,
                         attendee_id: attendee.api_id.clone(),
                         name: attendee.name.clone(),
                         participation_type: attendee.participation_type.clone(),
@@ -306,6 +314,16 @@ struct RegistrationSnapshot {
     event_name: String,
     event_slug: String,
     event_start_ms: i64,
+    #[serde(default)]
+    event_end_ms: i64,
+    #[serde(default)]
+    poster_url: String,
+    #[serde(default)]
+    nft_image_url: String,
+    #[serde(default)]
+    location: String,
+    #[serde(default)]
+    time_tba: i64,
     event_format: String,
     attendee_id: String,
     name: String,
@@ -366,6 +384,11 @@ async fn my_registrations_from_d1(
                 event_name: row.event_name,
                 event_slug: row.event_slug,
                 event_start_ms: row.event_start_ms,
+                event_end_ms: row.event_end_ms,
+                poster_url: row.poster_url,
+                nft_image_url: row.nft_image_url,
+                location: row.location,
+                time_tba: row.time_tba != 0,
                 attendee_id: row.attendee_id,
                 name: row.name,
                 participation_type: row.participation_type,
