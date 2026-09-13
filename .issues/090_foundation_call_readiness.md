@@ -77,10 +77,14 @@ call rather than presenting the feature as proven.
    at all: `solana-in-latent-space-part-7` (ended 2026-07-29) and
    `comfyui-thailand-1st-meetup` (ended 2026-09-12). Both need the same
    Completed transition the other twelve got.
-2. **`post_event_registration_until_ms` is NULL on all twelve.** No deadline
-   means the form never closes. That is a defensible default for a
-   retrospective backfill, but it is currently an accident rather than a
-   choice, and `.issues/080`'s survey withdrawal logic keys off it.
+2. **`post_event_registration_until_ms` is NULL on all twelve** — the form
+   never closes. ~~Currently an accident rather than a choice.~~ **Wrong, and
+   corrected 2026-09-13:** NULL is the designed value.
+   `post_event_registration_deadline_passed` documents it as *"`None` = open
+   indefinitely, so it never passes. Plan 008 — Phase 3"*
+   (`domain/src/models/event/config.rs:369`). Setting a value only schedules a
+   close date in advance. For a retrospective backfill across twelve past
+   events, NULL is correct and nothing needs changing. See `.issues/091`.
 3. **Six events have no `poster_url`** — all six Latent Space sessions plus
    `intro-to-vibing-on-solana`.
 
