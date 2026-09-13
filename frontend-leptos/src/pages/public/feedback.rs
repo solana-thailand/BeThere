@@ -39,6 +39,43 @@ const DIMENSIONS: [(&str, &str); 4] = [
     ("post.satisfaction.promotion", "ด้านการประชาสัมพันธ์"),
 ];
 
+/// The dimensions to ask about, by how the person took part.
+///
+/// DevRel runs two Google Forms, and the online one asks a **single**
+/// unlabelled 1–3 satisfaction item where the onsite one asks four named
+/// dimensions. The reason is obvious once stated: someone who watched a
+/// livestream has no opinion on the room or the coffee, and asking anyway
+/// produces a number that looks like data.
+///
+/// Content and promotion apply to both. Venue and catering are onsite-only.
+fn dimensions_for(participation_type: &str) -> &'static [usize] {
+    match participation_type {
+        "online" => &[0, 3],
+        _ => &[0, 1, 2, 3],
+    }
+}
+
+/// Why an online registrant did not watch.
+///
+/// **This question is in neither Google Form.** It lives in the covering email
+/// as a sentence — *"คำถามที่สำคัญที่สุดสำหรับเรา: อะไรที่ทำให้คุณ 'ไม่ได้ดู'
+/// ทั้งที่ลงทะเบียนไว้ — เวลา หัวข้อ ภาษา หรือไม่รู้ว่าไลฟ์แล้ว"* — so the
+/// answer, if it came at all, arrived as free text in a comment box. DevRel
+/// calls it the most useful thing the survey can find, and the gap it measures
+/// is real: 337 online registrations against 7,553 archive views.
+///
+/// Asked only of `online` attendees, and first, because for someone who did not
+/// watch it is the only question they can honestly answer (`.issues/098`).
+const KEY_WATCHED: &str = "post.online.watched";
+const WATCHED_OPTIONS: [&str; 6] = [
+    "ได้ดูสด",
+    "ดูย้อนหลัง",
+    "ไม่ได้ดู — ติดเวลา",
+    "ไม่ได้ดู — หัวข้อไม่ตรงที่สนใจ",
+    "ไม่ได้ดู — ภาษา",
+    "ไม่ได้ดู — ไม่รู้ว่าไลฟ์แล้ว",
+];
+
 /// The three-point scale, in the Google Form's own order and wording.
 const SCALE: [&str; 3] = ["ไม่พึงพอใจ", "พึงพอใจ", "พึงพอใจมาก"];
 
@@ -59,6 +96,8 @@ struct InboxItem {
     kind: String,
     event_name: String,
     event_slug: String,
+    #[serde(default)]
+    participation_type: String,
 }
 
 #[derive(Clone, Default, Deserialize)]
@@ -101,7 +140,11 @@ struct EventBlock {
     /// by pasting recordings into the mail; the same problem, solved where the
     /// question actually is.
     recall: RwSignal<EventRecall>,
-    /// One signal per dimension, in `DIMENSIONS` order.
+    participation_type: String,
+    /// Online only: whether they watched, and if not what got in the way.
+    watched: RwSignal<String>,
+    /// One signal per dimension, in `DIMENSIONS` order. Every block carries all
+    /// four; `dimensions_for` decides which are asked and which are submitted.
     ratings: [RwSignal<String>; 4],
     comment: RwSignal<String>,
     /// The comment box starts collapsed. The fast path is four taps per event;
@@ -129,12 +172,17 @@ enum PageState {
 /// empty string reads as "answered with nothing".
 fn answers_for(block: &EventBlock) -> std::collections::HashMap<String, String> {
     let mut answers = std::collections::HashMap::new();
-    for (index, (key, _)) in DIMENSIONS.iter().enumerate() {
-        let value = block.ratings[index].get();
+    for index in dimensions_for(&block.participation_type) {
+        let value = block.ratings[*index].get();
         let trimmed = value.trim();
         if !trimmed.is_empty() {
-            answers.insert((*key).to_string(), trimmed.to_string());
+            answers.insert(DIMENSIONS[*index].0.to_string(), trimmed.to_string());
         }
+    }
+    let watched = block.watched.get();
+    let trimmed = watched.trim();
+    if !trimmed.is_empty() {
+        answers.insert(KEY_WATCHED.to_string(), trimmed.to_string());
     }
     let comment = block.comment.get();
     let trimmed = comment.trim();
@@ -191,6 +239,8 @@ pub fn Feedback() -> impl IntoView {
             built.push(EventBlock {
                 slug: item.event_slug,
                 name: item.event_name,
+                participation_type: item.participation_type,
+                watched: RwSignal::new(String::new()),
                 recall: RwSignal::new(EventRecall::default()),
                 comment_open: RwSignal::new(false),
                 ratings: [
@@ -364,7 +414,45 @@ pub fn Feedback() -> impl IntoView {
                                     </div>
                                 </a>
 
-                                {DIMENSIONS.iter().enumerate().map(|(index, (_, label))| {
+                                // Online only, and first: for someone who did
+                                // not watch, this is the only question they can
+                                // answer honestly, and it is the one DevRel
+                                // most wants answered (.issues/098).
+                                {
+                                    let watched = block.watched;
+                                    match block.participation_type == "online" {
+                                        false => view! { <div></div> }.into_any(),
+                                        true => view! {
+                                            <fieldset class="fb-options">
+                                                <legend class="dev-profile-label">
+                                                    "คุณได้ดูงานนี้ไหม"
+                                                </legend>
+                                                {WATCHED_OPTIONS.iter().map(|option| {
+                                                    let value = (*option).to_string();
+                                                    let selected = value.clone();
+                                                    let set_to = value.clone();
+                                                    view! {
+                                                        <button
+                                                            type="button"
+                                                            class=move || match watched.get() == selected {
+                                                                true => "fb-option is-selected",
+                                                                false => "fb-option",
+                                                            }
+                                                            aria-pressed=move || (watched.get() == value).to_string()
+                                                            on:click=move |_| watched.set(set_to.clone())
+                                                        >
+                                                            {*option}
+                                                        </button>
+                                                    }
+                                                }).collect_view()}
+                                            </fieldset>
+                                        }.into_any(),
+                                    }
+                                }
+
+                                {dimensions_for(&block.participation_type).iter().map(|index| {
+                                    let index = *index;
+                                    let label = DIMENSIONS[index].1;
                                     let rating = block.ratings[index];
                                     view! {
                                         // One row per dimension: label left, three
@@ -372,8 +460,8 @@ pub fn Feedback() -> impl IntoView {
                                         // radios read as a wall; the whole event is
                                         // four taps.
                                         <div class="fb-row">
-                                            <span class="fb-row-label">{*label}</span>
-                                            <div class="fb-scale" role="group" aria-label=*label>
+                                            <span class="fb-row-label">{label}</span>
+                                            <div class="fb-scale" role="group" aria-label=label>
                                                 {SCALE.iter().map(|option| {
                                                     let value = (*option).to_string();
                                                     let selected = value.clone();

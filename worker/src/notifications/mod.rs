@@ -46,6 +46,13 @@ pub struct InboxNotification {
     /// it happens to know the shape of is the kind of coupling that breaks the
     /// day the URL changes.
     pub event_slug: String,
+    /// How this person took part: `in_person`, `online`, `retrospective`.
+    ///
+    /// The feedback page asks a different question set per type — an online
+    /// viewer has no opinion on the venue or the catering, and the question
+    /// DevRel most wants answered ("you registered and did not watch; what got
+    /// in the way") only makes sense for them (`.issues/098`).
+    pub participation_type: String,
     pub title: String,
     pub body: String,
     pub action_url: String,

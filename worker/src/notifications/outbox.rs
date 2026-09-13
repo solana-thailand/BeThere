@@ -70,6 +70,7 @@ pub async fn list_for_attendee(
             kind: kind.as_str().to_string(),
             event_name,
             event_slug,
+            participation_type: participation_type.clone(),
             title: title.into(),
             body,
             action_url,
@@ -304,5 +305,18 @@ mod tests {
     fn action_urls_encode_their_ids() {
         let (url, _) = inbox_action(NotificationKind::Reminder, false, "att/1", "evt 1", "View");
         assert_eq!(url, "/ticket/att%2F1?event_id=evt%201");
+    }
+
+    /// The feedback page asks a different question set per participation type,
+    /// so the inbox payload has to carry it — the view always selected it, it
+    /// was only ever used to decide whether a deposit was outstanding
+    /// (`.issues/098`).
+    #[test]
+    fn deposit_logic_and_the_exposed_participation_type_do_not_share_a_meaning() {
+        // `needs_deposit` narrows to in-person; the field the page reads must
+        // stay the raw value, including the ones that never owe a deposit.
+        assert!(!needs_deposit(true, "online", false, "none"));
+        assert!(!needs_deposit(true, "retrospective", false, "none"));
+        assert!(needs_deposit(true, "in_person", false, "none"));
     }
 }
