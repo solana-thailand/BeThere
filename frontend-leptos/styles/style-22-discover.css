@@ -15,8 +15,13 @@
     font-size: 1.75rem;
 }
 
+/* The shared `.subtitle` is `text-align: center`, which is right on the pages
+ * that use it under a centred hero and wrong here — it sat centred beneath a
+ * left-aligned h1. Overridden rather than dropping the class, which also
+ * carries the size, colour and line-height this needs. */
 .dv-head .subtitle {
     margin: 0.25rem 0 0;
+    text-align: left;
 }
 
 .dv-section {
