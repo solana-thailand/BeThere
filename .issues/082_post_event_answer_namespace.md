@@ -1,6 +1,6 @@
 # 082 — `post.` answer namespace, and a bound on the public field map
 
-**Status:** fixed 2026-09-13 (code only; nothing deployed)
+**Status:** fixed 2026-09-13 (code only; nothing deployed) — see `.issues/090`
 **Found:** 2026-09-13, answering DevRel `BETHERE-ASKS.md` item 2
 **Severity:** low for the namespace, medium for the bound
 

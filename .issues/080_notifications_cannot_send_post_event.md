@@ -1,6 +1,6 @@
 # 080 — The notification pipeline cancelled every post-event send by design
 
-**Status:** fixed 2026-09-13, not yet deployed
+**Status:** fixed 2026-09-13, merged to `develop` via PR #93, **not yet deployed** — see `.issues/090`
 **Found:** 2026-09-13, answering the DevRel `BETHERE-ASKS.md` item 4
 **Severity:** medium (a whole class of message was unreachable; no data at risk)
 

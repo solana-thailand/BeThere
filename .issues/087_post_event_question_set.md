@@ -1,6 +1,6 @@
 # 087 — Post-event satisfaction questions in the registration form
 
-**Status:** implemented 2026-09-13, not yet deployed
+**Status:** implemented 2026-09-13, not yet deployed — see `.issues/090`
 **Requested by:** Solana Thailand DevRel, `reports/phase-2/BETHERE-ASKS.md` item 2
 **Severity:** feature — their stated top priority
 
