@@ -91,40 +91,35 @@ const LATENT_SPACE_OPTIONS: [&str; 4] = [
     "ไม่เคยดู และไม่ทราบว่ามีซีรีส์นี้",
 ];
 
-#[derive(Clone, Deserialize)]
-struct InboxItem {
-    kind: String,
-    event_name: String,
-    event_slug: String,
-    #[serde(default)]
-    participation_type: String,
-}
-
-#[derive(Clone, Default, Deserialize)]
-struct InboxPage {
-    items: Vec<InboxItem>,
-}
-
+/// Only the display name, which the post-event upsert overwrites.
 #[derive(Clone, Deserialize)]
 struct MyRegistration {
     name: String,
 }
 
-/// The slice of `GET /api/public/event/{slug}` this page needs.
+/// One rateable session, from `GET /api/my-feedback-events`.
 ///
-/// Fetched per block rather than added to the inbox payload: the inbox view is
-/// a SQL view, so widening it costs a migration, and this is one cached public
-/// GET per event for an N that is 1–3.
+/// Not from the notification inbox any more: migration 0038 collapsed the queue
+/// to one row per person, which is right for sending and wrong for a form whose
+/// unit is the event. The message is per person, the form is per (person,
+/// event), and each now reads a source at its own grain (`.issues/102`).
+///
+/// It also carries the poster and venue, so the page no longer fetches each
+/// event's public payload separately.
 #[derive(Clone, Default, Deserialize)]
-struct EventRecall {
+struct FeedbackEvent {
+    slug: String,
+    event_name: String,
+    #[serde(default)]
+    event_start_ms: i64,
+    #[serde(default)]
+    location: String,
     #[serde(default)]
     poster_url: String,
     #[serde(default)]
     nft_image_url: String,
     #[serde(default)]
-    event_start_ms: i64,
-    #[serde(default)]
-    location: String,
+    participation_type: String,
 }
 
 /// One event's block of answers.
@@ -132,14 +127,19 @@ struct EventRecall {
 struct EventBlock {
     slug: String,
     name: String,
-    /// Poster, date and venue — filled in after the block renders.
+    /// Poster, date and venue, to place the session.
     ///
     /// Four months is long enough to forget which session was which, and a
     /// person who cannot place the event either abandons the form or answers
     /// about the wrong one. DevRel hit this with the Google Forms and solved it
     /// by pasting recordings into the mail; the same problem, solved where the
     /// question actually is.
-    recall: RwSignal<EventRecall>,
+    ///
+    /// Plain values, not signals: `/api/my-feedback-events` returns them with
+    /// the list, so there is nothing to arrive later.
+    event_start_ms: i64,
+    location: String,
+    image: String,
     participation_type: String,
     /// Online only: whether they watched, and if not what got in the way.
     watched: RwSignal<String>,
@@ -218,30 +218,35 @@ pub fn Feedback() -> impl IntoView {
             set_name.set(first.name);
         }
 
-        let page = match crate::api::api_get_json::<InboxPage>("/my-notifications").await {
-            Ok(page) => page,
-            Err(e) => {
-                set_state.set(PageState::Error(e.message));
-                return;
-            }
-        };
+        let events =
+            match crate::api::api_get_json::<Vec<FeedbackEvent>>("/my-feedback-events").await {
+                Ok(events) => events,
+                Err(e) => {
+                    set_state.set(PageState::Error(e.message));
+                    return;
+                }
+            };
 
-        // One block per event. The same event cannot appear twice today, but
-        // dedupe rather than rely on that: a re-enqueued survey would otherwise
-        // render two blocks that submit over each other.
-        let mut seen = Vec::<String>::new();
-        let mut built = Vec::new();
-        for item in page.items {
-            if item.kind != "survey" || seen.contains(&item.event_slug) {
-                continue;
-            }
-            seen.push(item.event_slug.clone());
-            built.push(EventBlock {
-                slug: item.event_slug,
-                name: item.event_name,
-                participation_type: item.participation_type,
+        let built: Vec<EventBlock> = events
+            .into_iter()
+            .map(|e| EventBlock {
+                slug: e.slug,
+                name: e.event_name,
+                event_start_ms: e.event_start_ms,
+                location: e.location,
+                // Poster first, badge second — the fallback `event_hero`
+                // documents. The generic badge SVG is the same image for every
+                // event, so it identifies nothing and is better left out.
+                image: match (
+                    e.poster_url.is_empty(),
+                    e.nft_image_url.contains("badge-hd.svg"),
+                ) {
+                    (false, _) => e.poster_url,
+                    (true, false) => e.nft_image_url,
+                    _ => String::new(),
+                },
+                participation_type: e.participation_type,
                 watched: RwSignal::new(String::new()),
-                recall: RwSignal::new(EventRecall::default()),
                 comment_open: RwSignal::new(false),
                 ratings: [
                     RwSignal::new(String::new()),
@@ -250,26 +255,12 @@ pub fn Feedback() -> impl IntoView {
                     RwSignal::new(String::new()),
                 ],
                 comment: RwSignal::new(String::new()),
-            });
-        }
+            })
+            .collect();
 
         match built.is_empty() {
             true => set_state.set(PageState::NothingToDo),
             false => {
-                // Show the questions immediately and let each poster arrive when
-                // it arrives. Blocking the whole form on N public GETs would
-                // trade the thing that makes people answer for the thing that
-                // helps them answer accurately.
-                for block in &built {
-                    let slug = block.slug.clone();
-                    let recall = block.recall;
-                    leptos::task::spawn_local(async move {
-                        let path = format!("/public/event/{slug}");
-                        if let Ok(detail) = crate::api::api_get_json::<EventRecall>(&path).await {
-                            recall.set(detail);
-                        }
-                    });
-                }
                 set_blocks.set(built);
                 set_state.set(PageState::Ready);
             }
@@ -373,44 +364,27 @@ pub fn Feedback() -> impl IntoView {
                                 // heading links to the event's own page for
                                 // anyone who needs more than a picture.
                                 <a class="fb-event-head" href=format!("/e/{}", block.slug)>
-                                    {
-                                        let recall = block.recall;
-                                        move || {
-                                            let r = recall.get();
-                                            let img = match (r.poster_url.is_empty(), r.nft_image_url.is_empty()) {
-                                                (false, _) => r.poster_url.clone(),
-                                                (true, false) => r.nft_image_url.clone(),
-                                                _ => String::new(),
-                                            };
-                                            match img.is_empty() {
-                                                // No placeholder box while it loads
-                                                // and none if the event never had an
-                                                // image: an empty frame is noise.
-                                                true => view! { <div></div> }.into_any(),
-                                                false => view! {
-                                                    <img class="fb-event-poster" src=img alt="Event poster" />
-                                                }.into_any(),
-                                            }
-                                        }
-                                    }
+                                    {match block.image.is_empty() {
+                                        // No frame at all rather than an empty
+                                        // one: six events have no poster, and a
+                                        // blank box identifies nothing.
+                                        true => view! { <div></div> }.into_any(),
+                                        false => view! {
+                                            <img class="fb-event-poster" src=block.image.clone() alt="Event poster" />
+                                        }.into_any(),
+                                    }}
                                     <div class="fb-event-meta">
                                         <h2>{block.name.clone()}</h2>
-                                        {
-                                            let recall = block.recall;
-                                            move || {
-                                                let r = recall.get();
-                                                let when = match r.event_start_ms > 0 {
-                                                    true => crate::utils::format_event_day(r.event_start_ms),
-                                                    false => String::new(),
-                                                };
-                                                let line = [when, r.location.clone()]
+                                        <p class="subtitle">
+                                            {
+                                                let when = crate::utils::format_event_day(block.event_start_ms);
+                                                [when, block.location.clone()]
                                                     .into_iter()
                                                     .filter(|part| !part.is_empty())
                                                     .collect::<Vec<_>>()
-                                                    .join(" · ");
-                                                view! { <p class="subtitle">{line}</p> }
+                                                    .join(" · ")
                                             }
-                                        }
+                                        </p>
                                     </div>
                                 </a>
 

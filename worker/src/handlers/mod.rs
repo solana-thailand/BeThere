@@ -13,6 +13,7 @@ pub mod escrow_index;
 pub mod event_series;
 pub mod events;
 pub mod ext;
+pub mod feedback;
 pub mod health;
 pub mod metadata;
 pub mod notifications;
@@ -183,6 +184,10 @@ pub fn routes(state: AppState) -> Router<()> {
 
     let attendee_no_store = Router::new()
         .route("/my-notifications", get(notifications::my_list))
+        // The sessions this person can still rate. Separate from the
+        // notification because the message is per person and the form is
+        // per (person, event) — see `.issues/102`.
+        .route("/my-feedback-events", get(feedback::my_feedback_events))
         .route(
             "/my-notifications/read-all",
             post(notifications::my_read_all),

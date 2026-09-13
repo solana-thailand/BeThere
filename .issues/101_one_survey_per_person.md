@@ -1,6 +1,6 @@
 # 101 — One person would have received twelve identical emails
 
-**Status:** fixed 2026-09-14; migration 0038 **not applied to prod**
+**Status:** live in prod 2026-09-14 — migration 0038 applied to staging and prod, verified
 **Requested by:** DevRel, `reports/phase-2/BETHERE-ASKS-2.md`
 **Severity:** high — it is the last thing between the campaign and sending
 
@@ -108,17 +108,22 @@ Everything DevRel listed as out of scope: `/feedback`, the `post.` prefix, the
 eligibility rule, `post_event_registration_open`, `recap_published`, the quiz
 flags.
 
-## To apply
+## Applied
 
-```bash
-cd worker
-npx wrangler d1 migrations apply DB --env staging --remote
-npx wrangler d1 migrations apply DB --remote
+Migration 0038 on `bethere-db-staging` and `bethere-db`, 5 commands each. No
+separate backfill — the repair travels in the migration. Read back from
+production immediately after:
+
+```
+cancelled  219 rows   83 distinct emails
+pending    206 rows  206 distinct emails
 ```
 
-No separate backfill — the repair is in the migration. Expect afterwards:
-**206 pending / 206 emails**, 219 cancelled, and DevRel's verification query
-returning nothing.
+DevRel's `HAVING COUNT(*) > 1` verification query returns `"results": []`.
+
+Every number matches the rehearsal against the prod export exactly, including
+the 83 — the count of people who had duplicates, which is now the count of
+people whose surplus was collapsed.
 
 ## Related
 
