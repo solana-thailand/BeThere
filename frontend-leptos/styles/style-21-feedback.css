@@ -391,3 +391,16 @@
     flex-direction: column;
     align-items: center;
 }
+
+/* Shown when a draft was recovered. Without it the reader meets answers they do
+ * not remember giving and wonders what else the page decided for them
+ * (.issues/111). */
+.fb-restored {
+    margin: 0.75rem 0 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--success-bright);
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    border-radius: var(--radius-sm);
+}

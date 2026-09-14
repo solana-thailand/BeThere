@@ -18,7 +18,7 @@
 //! a second definition to keep in step.
 
 use leptos::prelude::*;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::api::{PostEventRegisterBody, register_post_event};
 use crate::pages::landing::{AuthState, SiteHeader};
@@ -91,6 +91,57 @@ const LATENT_SPACE_OPTIONS: [&str; 4] = [
     "เฉย ๆ",
     "ไม่เคยดู และไม่ทราบว่ามีซีรีส์นี้",
 ];
+
+/// Where an in-progress form is kept between visits.
+///
+/// Nothing on this page is persisted until submit, so a closed tab, a flat
+/// battery or a mistaken back-swipe threw away everything typed. Harmless at one
+/// block; 29 people have four or more and 3 have eleven, and they are the
+/// regulars whose answers matter most (`.issues/111`).
+///
+/// A safety net, not sync: it does not follow the reader to another device, and
+/// it is cleared per block the moment that block's answers reach the server.
+const DRAFT_KEY: &str = "bethere.feedback.draft.v1";
+
+/// One session's unsent answers, plus the two programme-level questions.
+#[derive(Clone, Default, Serialize, Deserialize)]
+struct Draft {
+    #[serde(default)]
+    events: std::collections::HashMap<String, DraftEvent>,
+    #[serde(default)]
+    next_topics: String,
+    #[serde(default)]
+    latent_space: String,
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+struct DraftEvent {
+    #[serde(default)]
+    ratings: Vec<String>,
+    #[serde(default)]
+    watched: String,
+    #[serde(default)]
+    comment: String,
+}
+
+fn storage() -> Option<web_sys::Storage> {
+    gloo_utils::window().local_storage().ok().flatten()
+}
+
+fn load_draft() -> Draft {
+    storage()
+        .and_then(|s| s.get_item(DRAFT_KEY).ok().flatten())
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
+
+fn store_draft(draft: &Draft) {
+    if let Some(s) = storage()
+        && let Ok(raw) = serde_json::to_string(draft)
+    {
+        let _ = s.set_item(DRAFT_KEY, &raw);
+    }
+}
 
 /// The next public event, for the thank-you screen.
 #[derive(Clone, Default, Deserialize)]
@@ -258,6 +309,9 @@ pub fn Feedback() -> impl IntoView {
     // reader to the next event instead of ending the conversation
     // (`.issues/110`).
     let (upcoming, set_upcoming) = signal(Vec::<UpcomingEvent>::new());
+    // Tells the reader the net caught something. A safety net nobody knows about
+    // does not reduce the anxiety it exists to reduce (`.issues/111`).
+    let (restored, set_restored) = signal(false);
     let next_topics = RwSignal::new(String::new());
     let latent_space = RwSignal::new(String::new());
 
@@ -305,38 +359,55 @@ pub fn Feedback() -> impl IntoView {
                 }
             };
 
+        // A draft only applies to a block the server has not already recorded.
+        // If both exist the draft is stale — they submitted since typing it —
+        // and showing it back would look like the submission had been undone.
+        let draft = load_draft();
+        next_topics.set(draft.next_topics.clone());
+        latent_space.set(draft.latent_space.clone());
+        let mut recovered = !draft.next_topics.is_empty() || !draft.latent_space.is_empty();
+
         let built: Vec<EventBlock> = events
             .into_iter()
-            .map(|e| EventBlock {
-                slug: e.slug,
-                name: e.event_name,
-                event_start_ms: e.event_start_ms,
-                location: e.location,
-                // Poster first, badge second — the fallback `event_hero`
-                // documents. The generic badge SVG is the same image for every
-                // event, so it identifies nothing and is better left out.
-                image: match (
-                    e.poster_url.is_empty(),
-                    e.nft_image_url.contains("badge-hd.svg"),
-                ) {
-                    (false, _) => e.poster_url,
-                    (true, false) => e.nft_image_url,
-                    _ => String::new(),
-                },
-                participation_type: e.participation_type,
-                already: e.answered != 0,
-                watched: RwSignal::new(String::new()),
-                comment_open: RwSignal::new(false),
-                open: RwSignal::new(false),
-                ratings: [
-                    RwSignal::new(String::new()),
-                    RwSignal::new(String::new()),
-                    RwSignal::new(String::new()),
-                    RwSignal::new(String::new()),
-                ],
-                comment: RwSignal::new(String::new()),
+            .map(|e| {
+                let saved = match e.answered == 0 {
+                    true => draft.events.get(&e.slug).cloned().unwrap_or_default(),
+                    false => DraftEvent::default(),
+                };
+                let has_saved = !saved.watched.is_empty()
+                    || !saved.comment.is_empty()
+                    || saved.ratings.iter().any(|r| !r.is_empty());
+                recovered = recovered || has_saved;
+                let rating_at =
+                    |i: usize| RwSignal::new(saved.ratings.get(i).cloned().unwrap_or_default());
+                EventBlock {
+                    slug: e.slug,
+                    name: e.event_name,
+                    event_start_ms: e.event_start_ms,
+                    location: e.location,
+                    // Poster first, badge second — the fallback `event_hero`
+                    // documents. The generic badge SVG is the same image for every
+                    // event, so it identifies nothing and is better left out.
+                    image: match (
+                        e.poster_url.is_empty(),
+                        e.nft_image_url.contains("badge-hd.svg"),
+                    ) {
+                        (false, _) => e.poster_url,
+                        (true, false) => e.nft_image_url,
+                        _ => String::new(),
+                    },
+                    participation_type: e.participation_type,
+                    already: e.answered != 0,
+                    watched: RwSignal::new(saved.watched.clone()),
+                    // Open the box if there is something in it to see.
+                    comment_open: RwSignal::new(!saved.comment.is_empty()),
+                    open: RwSignal::new(false),
+                    ratings: [rating_at(0), rating_at(1), rating_at(2), rating_at(3)],
+                    comment: RwSignal::new(saved.comment.clone()),
+                }
             })
             .collect();
+        set_restored.set(recovered);
 
         match built.iter().find(|b| !b.already).or_else(|| built.first()) {
             None => set_state.set(PageState::NothingToDo),
@@ -350,6 +421,39 @@ pub fn Feedback() -> impl IntoView {
                 set_state.set(PageState::Ready);
             }
         }
+    });
+
+    // One writer for the whole form. Hanging a save call off every radio and
+    // textarea would mean the next question added to the page silently is not
+    // saved; an effect over the signals cannot be forgotten.
+    Effect::new(move |_| {
+        let all = blocks.get();
+        if all.is_empty() {
+            return;
+        }
+        let mut draft = Draft {
+            next_topics: next_topics.get(),
+            latent_space: latent_space.get(),
+            ..Default::default()
+        };
+        for block in &all {
+            // Answers already on the server are not a draft.
+            if block.already {
+                continue;
+            }
+            let entry = DraftEvent {
+                ratings: block.ratings.iter().map(|r| r.get()).collect(),
+                watched: block.watched.get(),
+                comment: block.comment.get(),
+            };
+            let empty = entry.watched.is_empty()
+                && entry.comment.is_empty()
+                && entry.ratings.iter().all(|r| r.is_empty());
+            if !empty {
+                draft.events.insert(block.slug.clone(), entry);
+            }
+        }
+        store_draft(&draft);
     });
 
     let submit = move |_| {
@@ -386,7 +490,16 @@ pub fn Feedback() -> impl IntoView {
                     ..Default::default()
                 };
                 match register_post_event(&block.slug, &body).await {
-                    Ok(_) => saved += 1,
+                    Ok(_) => {
+                        saved += 1;
+                        // Cleared per block, as each one lands. Clearing the
+                        // whole draft at the end would throw away the answers
+                        // for a block whose POST failed — the one case where
+                        // the draft is the only remaining copy.
+                        let mut draft = load_draft();
+                        draft.events.remove(&block.slug);
+                        store_draft(&draft);
+                    }
                     // Report the first failure but keep going: a person who
                     // answered for three events should not lose two of them
                     // because the third event closed its form mid-submission.
@@ -399,7 +512,17 @@ pub fn Feedback() -> impl IntoView {
             }
             match failure {
                 Some(message) if saved == 0 => set_state.set(PageState::Error(message)),
-                _ => set_state.set(PageState::Done(saved)),
+                _ => {
+                    // The programme-level answers rode along with the first
+                    // block, so they are on the server now too.
+                    if saved > 0 {
+                        let mut draft = load_draft();
+                        draft.next_topics = String::new();
+                        draft.latent_space = String::new();
+                        store_draft(&draft);
+                    }
+                    set_state.set(PageState::Done(saved));
+                }
             }
         });
     };
@@ -517,6 +640,13 @@ pub fn Feedback() -> impl IntoView {
                             // Only shown to people with more than one session,
                             // which is 83 of 206. For the other 123 a counter
                             // reading "1 จาก 1" is noise.
+                            <Show when=move || restored.get() fallback=|| ()>
+                                // Say the net caught something. Otherwise the
+                                // reader sees answers they do not remember
+                                // giving and wonders what else the page decided
+                                // on their behalf (`.issues/111`).
+                                <p class="fb-restored">"กู้คำตอบที่คุณกรอกค้างไว้กลับมาแล้ว — ยังไม่ได้ส่ง"</p>
+                            </Show>
                             <Show when=move || { blocks.get().len() > 1 } fallback=|| ()>
                                 <p class="fb-progress">
                                     {move || {
