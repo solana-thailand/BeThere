@@ -27,10 +27,10 @@ pub(super) async fn verify_online_quest_completion(
             // No D1 available — neither is required
             return true;
         };
-        return match crate::adventure::get_adventure_status(db, event_id, claim_token).await {
-            Ok(AdventureStatus::Passed) | Ok(AdventureStatus::NotRequired) => true,
-            _ => false,
-        };
+        return matches!(
+            crate::adventure::get_adventure_status(db, event_id, claim_token).await,
+            Ok(AdventureStatus::Passed | AdventureStatus::NotRequired)
+        );
     }
 
     // Check quiz status first
