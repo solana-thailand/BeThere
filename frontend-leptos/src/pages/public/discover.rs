@@ -17,6 +17,8 @@
 use leptos::prelude::*;
 use serde::Deserialize;
 
+use crate::pages::landing::{AuthState, SiteHeader};
+
 #[derive(Clone, Deserialize)]
 struct PublicEventItem {
     name: String,
@@ -92,6 +94,10 @@ pub fn Discover() -> impl IntoView {
     // Drives the sign-in prompt. A signed-out visitor sees only the public list
     // and has no way to know the page has two more sections for them.
     let (signed_in, set_signed_in) = signal(false);
+    // Fed to the shared header. The page already learns whether there is a
+    // session from `/my-registrations`, so it does not need a second call.
+    let (auth_state, set_auth_state) = signal(AuthState::Checking);
+    let (user_role, set_user_role) = signal(String::new());
 
     leptos::task::spawn_local(async move {
         let now_ms = js_sys::Date::now() as i64;
@@ -168,23 +174,38 @@ pub fn Discover() -> impl IntoView {
             set_mine_past.set(past);
         }
 
+        // `fetch::get`, not `api_get` / `get_me` — those end a 401 with
+        // `redirect_to_login_expired()`, which is what sent signed-out visitors
+        // to the login page from this very function (`.issues/099`). Signed out
+        // is a normal state here; the header just renders its signed-out half.
+        let me_url = format!("{origin}/api/auth/me");
+        let me = match crate::api::fetch::get(&me_url, &[]).await {
+            Ok(resp) if resp.status() == 200 => crate::api::fetch::response_json::<
+                crate::api::ApiResponse<crate::api::MeResponse>,
+            >(&resp)
+            .await
+            .ok()
+            .and_then(|b| b.data),
+            _ => None,
+        };
+        match me {
+            Some(me) => {
+                set_user_role.set(me.role.clone());
+                set_auth_state.set(AuthState::SignedIn(me.email));
+            }
+            None => set_auth_state.set(AuthState::NotSignedIn),
+        }
+
         set_loaded.set(true);
     });
 
     view! {
         <div class="container dv-page">
-            // There is no shared site header — the landing page builds its own
-            // inline — so this page would otherwise render with no way back and
-            // no way in. A wordmark and a sign-in link is the minimum that makes
-            // it stand on its own (`.issues/100`).
-            <nav class="dv-nav">
-                <a class="dv-brand" href="/">"BeThere"</a>
-                <Show when=move || loaded.get() && !signed_in.get() fallback=|| ()>
-                    <a class="btn btn-outline btn-sm" href="/login?next=/discover">
-                        "เข้าสู่ระบบ"
-                    </a>
-                </Show>
-            </nav>
+            // The real header, now that it is a component rather than markup
+            // inline in the landing page (`.issues/105`). This page is the
+            // destination after sign-in, so it needs the menu, the profile link
+            // and sign-out — a wordmark alone would strand people here.
+            <SiteHeader auth_state=auth_state user_role=user_role />
 
             <header class="dv-head">
                 <h1>"ค้นพบอีเวนต์"</h1>
@@ -261,20 +282,7 @@ fn Section(title: &'static str, rows: ReadSignal<Vec<Row>>, empty: &'static str)
 /// the reader parsing a date, which is what makes a mixed page scannable.
 #[component]
 fn DateChip(ms: i64, past: bool) -> impl IntoView {
-    let (day, month) = match ms > 0 {
-        false => (String::new(), String::new()),
-        true => {
-            let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
-            d.set_time(ms as f64);
-            let opts = js_sys::Object::new();
-            let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
-            let month = d
-                .to_locale_string("en-GB", &opts)
-                .as_string()
-                .unwrap_or_default();
-            (d.get_date().to_string(), month.to_uppercase())
-        }
-    };
+    let (day, month) = crate::utils::format_event_day_parts(ms);
     view! {
         <div class=match past {
             true => "dv-chip is-past",

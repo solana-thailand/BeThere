@@ -321,6 +321,27 @@ pub fn format_event_datetime(ms: i64) -> String {
         .unwrap_or_default()
 }
 
+/// Split an instant into the day number and a short uppercase month —
+/// `("27", "SEPT")` — for the date chip on `/discover`.
+///
+/// Here rather than in the component for the reason `.issues/104` records: the
+/// same `to_locale_string` call written per surface diverges silently, and had
+/// already done so three times before this one was added.
+pub fn format_event_day_parts(ms: i64) -> (String, String) {
+    if ms <= 0 {
+        return (String::new(), String::new());
+    }
+    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+    d.set_time(ms as f64);
+    let opts = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
+    let month = d
+        .to_locale_string("en-GB", &opts)
+        .as_string()
+        .unwrap_or_default();
+    (d.get_date().to_string(), month.to_uppercase())
+}
+
 pub fn format_event_day(ms: i64) -> String {
     if ms <= 0 {
         return String::new();

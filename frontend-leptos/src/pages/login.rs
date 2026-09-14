@@ -36,6 +36,16 @@ pub fn Login() -> impl IntoView {
     let query = use_query_map();
     let next_param = query.get().get("next").map(|s| s.to_string());
 
+    // `/feedback` needs a Google-verified email; a wallet session gets a 403
+    // from the survey endpoint. Used to bias this page's copy (`.issues/106`).
+    // A plain bool in a signal, not a closure: it is read from two places in the
+    // view and a capturing closure is not `Copy`.
+    let wants_feedback = RwSignal::new(
+        next_param
+            .as_deref()
+            .is_some_and(|n| n.starts_with("/feedback")),
+    );
+
     // On successful wallet sign-in, hard-navigate to `next` (or home).
     // Use window.location rather than the SPA router: this callback fires from
     // inside the WalletSignInButton's async task, and an SPA navigate() disposes
@@ -45,7 +55,7 @@ pub fn Login() -> impl IntoView {
         let target = wallet_next
             .clone()
             .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| "/".to_string());
+            .unwrap_or_else(|| "/discover".to_string());
         if let Some(win) = web_sys::window() {
             let _ = win.location().set_href(&target);
         }
@@ -63,34 +73,31 @@ pub fn Login() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match crate::api::get_me().await {
                 Ok(me) => {
-                    let has_next = next_for_redirect.as_deref().is_some_and(|n| !n.is_empty());
                     let target = next_for_redirect
                         .filter(|n| !n.is_empty())
                         .unwrap_or_else(|| match me.role.as_str() {
                             "super_admin" | "organizer" => "/admin".to_string(),
                             "staff" => "/staff".to_string(),
-                            _ => "/".to_string(),
+                            // Not the landing page: it is a pitch, and someone
+                            // who just signed in has read it (`.issues/105`).
+                            _ => "/discover".to_string(),
                         });
                     log::info!(
                         "[login] already authenticated via cookie (role={}), redirecting to {target}",
                         me.role
                     );
 
-                    if me.role == "attendee"
-                        && !has_next
-                        && let Ok(resp) = crate::api::fetch::get("/api/my-registrations", &[]).await
-                        && resp.status() == 200
-                        && let Ok(data) =
-                            crate::api::fetch::response_json::<serde_json::Value>(&resp).await
-                        && let Some(regs) = data["data"].as_array()
-                        && let Some(latest) = regs.first()
-                        && let Some(url) = latest["next_step"]["url"].as_str()
-                        && !url.is_empty()
-                    {
-                        log::info!("[login] redirecting attendee to latest registration: {url}");
-                        nav(url, Default::default());
-                        return;
-                    }
+                    // The deep link that used to live here sent an attendee
+                    // to `regs.first()`, described in its own log line as "the
+                    // latest registration". `my_registrations.sql` orders
+                    // `event_start_ms ASC`, so `.first()` is the **oldest** one
+                    // — a repeat attendee landed on the ticket for an event from
+                    // April (`.issues/105`).
+                    //
+                    // `/discover` is what that heuristic was reaching for and
+                    // gets right: every registration, soonest first for what is
+                    // still to come, most recent first for what is done, with
+                    // the same next-step links on each row.
 
                     nav(&target, Default::default());
                 }
@@ -137,7 +144,16 @@ pub fn Login() -> impl IntoView {
 
                 // Subtitle
                 <p class="subtitle">
-                    "Choose your sign-in method to access BeThere Protocol."
+                    {move || match wants_feedback.get() {
+                        // The survey is addressed to a verified email, so a
+                        // wallet session cannot answer it. The two buttons below
+                        // are equally prominent, and anyone arriving from the
+                        // survey link who picks wallet first reached a dead end
+                        // (`.issues/106`). Say which one works before they
+                        // choose, rather than explaining afterwards.
+                        true => "ใช้ Google ด้วยอีเมลที่คุณลงทะเบียนงานไว้ — แบบสอบถามผูกกับอีเมลนั้น",
+                        false => "Choose your sign-in method to access BeThere Protocol.",
+                    }}
                 </p>
 
                 // Powered by Solana badge
@@ -168,6 +184,15 @@ pub fn Login() -> impl IntoView {
 
                     // Solana Wallet sign-in button (shared component + SIWS modal)
                     <crate::wallet_signin::WalletSignInButton on_success=on_wallet_success />
+
+                    // Both buttons look equally valid, and for the survey one of
+                    // them is not. Naming the consequence next to the button is
+                    // cheaper than the dead end it prevents (`.issues/106`).
+                    <Show when=move || wants_feedback.get() fallback=|| ()>
+                        <p class="login-method-note">
+                            "กระเป๋าเงินใช้ตอบแบบสอบถามไม่ได้ เพราะแบบสอบถามผูกกับอีเมลที่ลงทะเบียนงานไว้"
+                        </p>
+                    </Show>
                 </div>
 
                 // Error message

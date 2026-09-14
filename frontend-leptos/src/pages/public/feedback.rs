@@ -175,6 +175,15 @@ enum PageState {
     Ready,
     /// Signed in with nothing outstanding — a success state, not an error.
     NothingToDo,
+    /// Signed in, but on a wallet-only session.
+    ///
+    /// The survey is addressed to a verified email, so the Worker answers 403.
+    /// That used to land in `Error`, whose heading reads "ส่งไม่สำเร็จ" — wrong
+    /// twice over: nothing was submitted, and the message was an English
+    /// instruction with no button to act on. `/login` offers wallet and Google
+    /// side by side, so anyone arriving from the survey link who picks wallet
+    /// first hit a dead end (`.issues/106`).
+    NeedsGoogle,
     Submitting,
     Done(usize),
     Error(String),
@@ -236,6 +245,14 @@ pub fn Feedback() -> impl IntoView {
         let events =
             match crate::api::api_get_json::<Vec<FeedbackEvent>>("/my-feedback-events").await {
                 Ok(events) => events,
+                // A wallet-only session: the survey is addressed to a verified
+                // email, so the Worker answers 403. Its own state, because
+                // `Error` reads "ส่งไม่สำเร็จ" — nothing was submitted — and
+                // offered no way out (`.issues/106`).
+                Err(e) if e.status == 403 => {
+                    set_state.set(PageState::NeedsGoogle);
+                    return;
+                }
                 Err(e) => {
                     set_state.set(PageState::Error(e.message));
                     return;
@@ -348,6 +365,18 @@ pub fn Feedback() -> impl IntoView {
                     <div class="card fb-notice">
                         <h1>"ไม่มีแบบสอบถามค้างอยู่"</h1>
                         <p>"ขอบคุณครับ — ตอนนี้ไม่มีงานที่รอความเห็นจากคุณ"</p>
+                    </div>
+                }.into_any(),
+                PageState::NeedsGoogle => view! {
+                    <div class="card fb-notice">
+                        <h1>"ต้องเข้าสู่ระบบด้วย Google"</h1>
+                        <p>
+                            "แบบสอบถามผูกกับอีเมลที่คุณใช้ลงทะเบียนงาน "
+                            "การเข้าสู่ระบบด้วยกระเป๋าเงินจึงยังไม่พอ"
+                        </p>
+                        <a class="btn btn-primary" href="/login?next=/feedback">
+                            "เข้าสู่ระบบด้วย Google"
+                        </a>
                     </div>
                 }.into_any(),
                 PageState::Error(message) => view! {

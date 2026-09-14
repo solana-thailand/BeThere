@@ -257,3 +257,13 @@
     font-size: 0.8125rem;
     color: var(--text-secondary);
 }
+
+/* Shown on /login only when `next` is the survey (.issues/106). The two sign-in
+ * buttons are equally prominent and one of them cannot answer it. */
+.login-method-note {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    text-align: center;
+}

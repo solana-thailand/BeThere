@@ -6,7 +6,8 @@ use leptos_router::components::A;
 use crate::components::is_admin_role;
 use crate::icons::{Icon, IconName};
 
-use super::auth::{AuthState, trigger_landing_oauth, trigger_landing_signout};
+use super::auth::{AuthState, trigger_landing_oauth};
+use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
 use super::upcoming::UpcomingEvents;
 use super::waitlist::WaitlistForm;
@@ -14,24 +15,19 @@ use super::waitlist::WaitlistForm;
 /// Landing page component.
 #[component]
 pub fn Landing() -> impl IntoView {
-    let (mobile_menu_open, set_mobile_menu_open) = signal(false);
-
     // Auth state for nav bar
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (user_role, set_user_role) = signal(String::new());
 
     // Persona toggle: 0 = Attendees, 1 = Organizers
+    // The page's one role switcher: 0 = Attendee, 1 = Organizer, 2 = Staff.
+    //
+    // There used to be two — this pill and a separate tab row in "How it works"
+    // — on the same axis, with their own signals and a one-way sync between
+    // them, and they did not agree on how many roles exist (two against three).
+    // A reader who chose a side at the top had to choose again 800px later
+    // (`.issues/105`).
     let (persona, set_persona) = signal(0u8);
-    // Feature tab: 0 = Attendee, 1 = Organizer, 2 = Staff
-    let (feature_tab, set_feature_tab) = signal(0u8);
-
-    // Sync feature tab when persona changes
-    Effect::new(move |_| {
-        let p = persona.get();
-        if p <= 1 {
-            set_feature_tab.set(p);
-        }
-    });
 
     // Check auth on mount
     Effect::new(move |_| {
@@ -74,176 +70,7 @@ pub fn Landing() -> impl IntoView {
         <div class="landing-page">
 
             // ===== Nav Bar =====
-            <nav class="landing-nav">
-                <div class="landing-nav-inner">
-                    <div class="landing-nav-brand">
-                        <span class="landing-brand-name landing-brand-gradient">
-                            "BeThere"
-                        </span>
-                    </div>
-                    <div class="landing-nav-links">
-                        <a href="#how-it-works">"How it works"</a>
-                        <a href="#faq">"FAQ"</a>
-                        <a href="#waitlist">"For Organizers"</a>
-                        <a href="/past-events">"Past Events"</a>
-                    </div>
-                    <div class="landing-nav-right" style="display:flex;align-items:center;gap:8px;">
-                        <div class="landing-nav-actions">
-                            {move || {
-                                let state = auth_state.get();
-                                let role = user_role.get();
-                                match state {
-                                    AuthState::NotSignedIn => {
-                                        view! {
-                                            <button
-                                                class="btn btn-outline btn-sm"
-                                                on:click=move |_| trigger_landing_oauth()
-                                            >
-                                                "Sign In"
-                                            </button>
-                                        }.into_any()
-                                    }
-                                    AuthState::SignedIn(email) => {
-                                        let clean_email = email.clone();
-                                        let short_email = if clean_email.len() > 18 {
-                                            format!("{}...", &clean_email[..15])
-                                        } else {
-                                            clean_email.clone()
-                                        };
-                                        let avatar_char = clean_email.chars().next().unwrap_or('?').to_uppercase().to_string();
-                                        view! {
-                                            <A href="/profile" attr:class="landing-user-badge" attr:style="display:flex;align-items:center;gap:6px;background:rgba(20,241,149,0.1);border:1px solid rgba(20,241,149,0.3);padding:4px 10px;border-radius:999px;text-decoration:none;color:#fff;font-weight:600;font-size:0.82rem;transition:all 0.2s ease;">
-                                                <span class="landing-user-avatar" style="width:22px;height:22px;border-radius:50%;background:#14F195;color:#000;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:0.72rem;">
-                                                    {avatar_char}
-                                                </span>
-                                                <span class="landing-email-text hide-mobile" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{short_email}</span>
-                                            </A>
-                                            {if is_admin_role(&role) {
-                                                view! {
-                                                    <A href="/admin" attr:class="btn btn-outline btn-xs landing-desktop-only-btn">
-                                                        "Dashboard"
-                                                    </A>
-                                                }.into_any()
-                                            } else if role == "staff" {
-                                                view! {
-                                                    <A href="/staff" attr:class="btn btn-outline btn-xs landing-desktop-only-btn">
-                                                        "Scanner"
-                                                    </A>
-                                                }.into_any()
-                                            } else {
-                                                ().into_any()
-                                            }}
-                                            <button
-                                                class="btn btn-outline btn-xs landing-desktop-only-btn"
-                                                style="color:#94a3b8;border-color:rgba(255,255,255,0.15);"
-                                                on:click=move |_| trigger_landing_signout()
-                                                title="Sign Out"
-                                            >
-                                                "Sign Out"
-                                            </button>
-                                        }.into_any()
-                                    }
-                                    AuthState::Checking => ().into_any(),
-                                }
-                            }}
-                        </div>
-                        // Hamburger button — visible only on mobile
-                        <button
-                            class="landing-nav-hamburger"
-                            on:click=move |_| set_mobile_menu_open.update(|v| *v = !*v)
-                        >
-                            {move || {
-                                let open = mobile_menu_open.get();
-                                if open {
-                                    view! {
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                                        </svg>
-                                    }.into_any()
-                                } else {
-                                    view! {
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                                            <line x1="3" y1="6" x2="21" y2="6"></line>
-                                            <line x1="3" y1="12" x2="21" y2="12"></line>
-                                            <line x1="3" y1="18" x2="21" y2="18"></line>
-                                        </svg>
-                                    }.into_any()
-                                }
-                            }}
-                        </button>
-                    </div>
-                </div>
-                // Mobile dropdown menu
-                {move || {
-                    let open = mobile_menu_open.get();
-                    if open {
-                        view! {
-                            <div class="landing-nav-mobile-menu">
-                                <a href="#how-it-works" on:click=move |_| set_mobile_menu_open.set(false)>"How it works"</a>
-                                <a href="#faq" on:click=move |_| set_mobile_menu_open.set(false)>"FAQ"</a>
-                                <a href="#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"For Organizers"</a>
-                                <a href="/past-events" on:click=move |_| set_mobile_menu_open.set(false)>"Past Events"</a>
-                                <A href="/profile" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
-                                    <Icon icon=IconName::User class="icon-sm" />
-                                    "Developer Profile"
-                                </A>
-                                {move || match auth_state.get() {
-                                    AuthState::NotSignedIn | AuthState::Checking => {
-                                        view! {
-                                            <button
-                                                class="btn btn-outline btn-sm landing-mobile-signout"
-                                                on:click=move |_| {
-                                                    set_mobile_menu_open.set(false);
-                                                    trigger_landing_oauth();
-                                                }
-                                            >
-                                                "Sign In"
-                                            </button>
-                                        }.into_any()
-                                    }
-                                    AuthState::SignedIn(email) => {
-                                        let role = user_role.get();
-                                        view! {
-                                            {if is_admin_role(&role) {
-                                                view! {
-                                                    <A href="/admin" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
-                                                        <Icon icon=IconName::Chart class="icon-sm" />
-                                                        "Dashboard"
-                                                    </A>
-                                                }.into_any()
-                                            } else if role == "staff" {
-                                                view! {
-                                                    <A href="/staff" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
-                                                        <Icon icon=IconName::Camera class="icon-sm" />
-                                                        "Scanner"
-                                                    </A>
-                                                }.into_any()
-                                            } else {
-                                                ().into_any()
-                                            }}
-                                            <div class="landing-mobile-divider" style="padding-top:8px;">
-                                                <span class="landing-email-text">{email}</span>
-                                            </div>
-                                            <button
-                                                class="btn btn-outline btn-sm landing-mobile-signout"
-                                                on:click=move |_| {
-                                                    set_mobile_menu_open.set(false);
-                                                    trigger_landing_signout();
-                                                }
-                                            >
-                                                "Sign Out"
-                                            </button>
-                                        }.into_any()
-                                    }
-                                }}
-                            </div>
-                        }.into_any()
-                    } else {
-                        ().into_any()
-                    }
-                }}
-            </nav>
+            <SiteHeader auth_state=auth_state user_role=user_role />
 
             // ===== Hero =====
             <section class="landing-hero">
@@ -270,11 +97,21 @@ pub fn Landing() -> impl IntoView {
                     >
                         "For Organizers"
                     </button>
+                    // Staff used to exist only in the "How it works" tabs, which
+                    // meant the page carried two switchers for one axis that did
+                    // not even agree on how many roles there are (`.issues/105`).
+                    <button
+                        class="landing-persona-btn"
+                        class:landing-persona-btn--active=move || persona.get() == 2
+                        on:click=move |_| set_persona.set(2)
+                    >
+                        "For Event Staff"
+                    </button>
                 </div>
 
                 <h1 class="landing-hero-h1">
-                    {move || if persona.get() == 0 {
-                        view! {
+                    {move || match persona.get() {
+                        0 => view! {
                             <>
                                 "Commit. Show up."
                                 <br />
@@ -282,9 +119,8 @@ pub fn Landing() -> impl IntoView {
                                     "Get your money back."
                                 </span>
                             </>
-                        }.into_any()
-                    } else {
-                        view! {
+                        }.into_any(),
+                        1 => view! {
                             <>
                                 "No-shows cost you money."
                                 <br />
@@ -292,14 +128,26 @@ pub fn Landing() -> impl IntoView {
                                     "Fix it with deposits."
                                 </span>
                             </>
-                        }.into_any()
+                        }.into_any(),
+                        // Staff had no hero of its own before, because it was
+                        // not a hero option. Falling through to the organizer
+                        // pitch would sell a door scanner on payouts.
+                        _ => view! {
+                            <>
+                                "Scan. Check in."
+                                <br />
+                                <span class="landing-hero-gradient">
+                                    "Under two seconds."
+                                </span>
+                            </>
+                        }.into_any(),
                     }}
                 </h1>
                 <p class="landing-hero-desc">
-                    {move || if persona.get() == 0 {
-                        "Put down a deposit to reserve your spot. Show up, check in, and get every cent back — take a quick quiz to unlock a digital badge you own forever.".to_string()
-                    } else {
-                        "Set a deposit for your event. Track check-ins live. No-shows auto-payout to you. Attendees who show up get refunded.".to_string()
+                    {move || match persona.get() {
+                        0 => "Put down a deposit to reserve your spot. Show up, check in, and get every cent back — take a quick quiz to unlock a digital badge you own forever.".to_string(),
+                        1 => "Set a deposit for your event. Track check-ins live. No-shows auto-payout to you. Attendees who show up get refunded.".to_string(),
+                        _ => "Open the scanner on any phone, point it at an attendee's QR code, and the check-in is recorded. No app to install, no training.".to_string(),
                     }}
                 </p>
                 // Solana pill badge
@@ -398,33 +246,11 @@ pub fn Landing() -> impl IntoView {
                     </p>
                 </div>
 
-                // Tab buttons
-                <div class="landing-features-tabs">
-                    <button
-                        class="landing-features-tab"
-                        class:landing-features-tab--active=move || feature_tab.get() == 0
-                        on:click=move |_| set_feature_tab.set(0)
-                    >
-                        "I am an Attendee"
-                    </button>
-                    <button
-                        class="landing-features-tab"
-                        class:landing-features-tab--active=move || feature_tab.get() == 1
-                        on:click=move |_| set_feature_tab.set(1)
-                    >
-                        "I am an Organizer"
-                    </button>
-                    <button
-                        class="landing-features-tab"
-                        class:landing-features-tab--active=move || feature_tab.get() == 2
-                        on:click=move |_| set_feature_tab.set(2)
-                    >
-                        "I am Event Staff"
-                    </button>
-                </div>
+                // No tab row here any more. The hero pill is the page's one
+                // role switcher; this section follows it (`.issues/105`).
 
                 // Tab content — vertical timelines
-                {move || match feature_tab.get() {
+                {move || match persona.get() {
                     0 => view! {
                         <div class="landing-feature-timeline">
                             <div class="landing-timeline-step">
