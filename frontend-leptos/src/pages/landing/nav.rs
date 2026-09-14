@@ -30,11 +30,14 @@ pub fn SiteHeader(
     view! {
         <nav class="landing-nav">
             <div class="landing-nav-inner">
-                <div class="landing-nav-brand">
+                // A link, not a label. On the landing page it is a no-op, but
+                // this header is shared now and on any other page the wordmark
+                // was the obvious way home and did nothing (`.issues/107`).
+                <a class="landing-nav-brand" href="/">
                     <span class="landing-brand-name landing-brand-gradient">
                         "BeThere"
                     </span>
-                </div>
+                </a>
                 <div class="landing-nav-links">
                     <a href="/#how-it-works">"How it works"</a>
                     <a href="/#faq">"FAQ"</a>

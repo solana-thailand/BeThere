@@ -211,6 +211,41 @@ class OutboxTests(unittest.TestCase):
         self.db.execute(query('inbox_read_all'), ('a@example.com',))
         self.assertIsNone(self.db.execute("SELECT read_at FROM notification_outbox WHERE id=?", (registration,)).fetchone()['read_at'])
 
+    def test_an_answered_session_is_marked_not_hidden(self):
+        """The page reported `0 จาก 11` to someone who had already answered one.
+
+        `feedback_eligible_events` meant "may rate", and the page needed "still
+        needs to rate". It offered the answered session again and would have
+        written a second set of answers over the first (.issues/107).
+
+        Marked rather than filtered: a session that vanishes after you answer it
+        reads as the answer having been lost.
+        """
+        self.db.execute("UPDATE events SET status='completed', post_event_registration_open=1 WHERE id='event-a'")
+        with self.db:
+            self.db.execute(
+                "INSERT INTO attendees(id,event_id,email,name,participation_type)"
+                " VALUES ('ans','event-a','ans@example.com','A','online')")
+            self.db.execute(
+                "INSERT INTO notification_enrollments(attendee_id,event_id) VALUES ('ans','event-a')")
+
+        before = self.db.execute(
+            "SELECT answered FROM feedback_eligible_events WHERE lower(email)='ans@example.com'"
+        ).fetchone()[0]
+        self.assertEqual(before, 0)
+
+        self.db.execute(
+            "INSERT INTO registration_responses(event_id,developer_email,field_key,field_value,is_profile_field,answered_at)"
+            " VALUES ('event-a','ANS@Example.com','post.satisfaction.content','ok',1,datetime('now'))")
+
+        rows = self.db.execute(
+            "SELECT answered FROM feedback_eligible_events WHERE lower(email)='ans@example.com'"
+        ).fetchall()
+        self.assertEqual(len(rows), 1, 'still listed after answering')
+        # Case-insensitive: the submission path writes whatever case the caller
+        # signed in with.
+        self.assertEqual(rows[0][0], 1)
+
     def test_form_stays_per_event_while_the_message_is_per_person(self):
         """The collapse in 0038 must not collapse the form.
 
