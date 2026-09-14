@@ -331,3 +331,63 @@
     content: "●";
     color: var(--accent);
 }
+
+/* What the favour buys. Sits above the mechanics because someone deciding
+ * whether to start reads the reason first (.issues/110). */
+.fb-stake {
+    margin: 0.5rem 0 0.75rem;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--accent-border);
+    color: var(--text-heading);
+}
+
+.fb-submit-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* The next event, offered once the favour is done. A card rather than a link so
+ * it reads as an invitation and not as a footnote. */
+.fb-next-event {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1875rem;
+    width: 100%;
+    margin-top: 1rem;
+    padding: 0.875rem 1rem;
+    text-align: left;
+    text-decoration: none;
+    background: var(--bg-void);
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius);
+    transition: border-color 0.15s ease;
+}
+
+.fb-next-event:hover {
+    border-color: var(--accent);
+}
+
+.fb-next-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+
+.fb-next-name {
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+.fb-next-meta {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.fb-submit-bar {
+    flex-direction: column;
+    align-items: center;
+}

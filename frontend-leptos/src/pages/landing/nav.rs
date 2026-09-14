@@ -5,6 +5,12 @@
 //! to sign out (`.issues/100`). Redirecting people there without this would
 //! strand them.
 //!
+//! **No "Past Events" link.** `GET /api/public/events/past` is gated on
+//! `recap_published = 1`, which is 0 on every event and which DevRel has asked
+//! us not to flip — the recap half is not ready and the genesis site is the
+//! public archive. The link pointed at a permanently empty page
+//! (`.issues/110`).
+//!
 //! The in-page anchors are absolute (`/#faq`, not `#faq`) so they still work
 //! from a page that does not contain those sections: they navigate home and
 //! scroll, rather than doing nothing.
@@ -42,7 +48,6 @@ pub fn SiteHeader(
                     <a href="/#how-it-works">"How it works"</a>
                     <a href="/#faq">"FAQ"</a>
                     <a href="/#waitlist">"For Organizers"</a>
-                    <a href="/past-events">"Past Events"</a>
                 </div>
                 <div class="landing-nav-right" style="display:flex;align-items:center;gap:8px;">
                     <div class="landing-nav-actions">
@@ -140,7 +145,6 @@ pub fn SiteHeader(
                             <a href="/#how-it-works" on:click=move |_| set_mobile_menu_open.set(false)>"How it works"</a>
                             <a href="/#faq" on:click=move |_| set_mobile_menu_open.set(false)>"FAQ"</a>
                             <a href="/#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"For Organizers"</a>
-                            <a href="/past-events" on:click=move |_| set_mobile_menu_open.set(false)>"Past Events"</a>
                             <A href="/profile" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
                                 <Icon icon=IconName::User class="icon-sm" />
                                 "Developer Profile"
