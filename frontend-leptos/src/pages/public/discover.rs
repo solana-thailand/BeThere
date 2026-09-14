@@ -55,6 +55,21 @@ struct MyRegistration {
     #[serde(default)]
     time_tba: bool,
     status: String,
+    /// Where this person's own journey continues — their ticket, their claim,
+    /// their outstanding deposit.
+    ///
+    /// The rows used to link to `/e/{slug}`, the **public** event page, which
+    /// tells someone holding a ticket that the event has ended. The landing
+    /// page's own list has always used this field; `/discover` did not
+    /// (`.issues/109`).
+    #[serde(default)]
+    next_step: NextStep,
+}
+
+#[derive(Clone, Default, Deserialize)]
+struct NextStep {
+    #[serde(default)]
+    url: String,
 }
 
 /// One row, whichever list it came from.
@@ -153,7 +168,13 @@ pub fn Discover() -> impl IntoView {
                         ends < now_ms,
                         Row {
                             title: r.event_name,
-                            href: format!("/e/{}", r.event_slug),
+                            // Their ticket, not the public page. Falls back to
+                            // the event page only when the API has no next step
+                            // to offer.
+                            href: match r.next_step.url.is_empty() {
+                                false => r.next_step.url.clone(),
+                                true => format!("/e/{}", r.event_slug),
+                            },
                             start_ms: r.event_start_ms,
                             time_tba: r.time_tba,
                             location: r.location,
@@ -237,7 +258,7 @@ fn Section(title: &'static str, rows: ReadSignal<Vec<Row>>, empty: &'static str)
                     when=move || !rows.get().is_empty()
                     fallback=move || view! { <p class="dv-empty">{empty}</p> }
                 >
-                    <For each=move || rows.get() key=|r| r.href.clone() let:row>
+                    <For each=move || rows.get() key=|r| format!("{}|{}", r.title, r.href) let:row>
                         <a class="dv-row" href=row.href.clone()>
                             <DateChip ms=row.start_ms past=row.past />
                             <div class="dv-row-body">
