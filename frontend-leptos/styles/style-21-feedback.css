@@ -56,6 +56,9 @@
  * one job it has. */
 .fb-event-poster {
     width: 72px;
+    /* Reserved before the image arrives, so eleven rows do not reflow as three
+     * megabytes of PNG land one by one. */
+    background: var(--bg-void);
     aspect-ratio: 4 / 5;
     object-fit: cover;
     border-radius: var(--radius-sm);
@@ -292,4 +295,39 @@
 
 .landing-nav-brand {
     text-decoration: none;
+}
+
+/* Holds the slot for an event with no poster so every title starts at the same
+ * x. Dashed rather than solid: it reads as "nothing here", not as a failed
+ * image (.issues/108). */
+.fb-event-poster--empty {
+    border-style: dashed;
+    background: transparent;
+}
+
+/* The submit button sat below eleven rows. Anyone who answered the first block
+ * and wanted to stop had to scroll past everything they had chosen not to do.
+ * Sticky keeps the exit in reach at the point they decide to take it. */
+.fb-submit-bar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    padding: 0.75rem 0 1rem;
+    margin-top: 0.5rem;
+    background: linear-gradient(to bottom, transparent, var(--bg) 35%);
+}
+
+/* The closing single-choice options rendered as full-width bordered boxes with
+ * the label inside, which reads as an empty text input rather than something to
+ * pick. A leading marker makes the affordance obvious without a radio. */
+.fb-option::before {
+    content: "○";
+    margin-right: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.fb-option.is-selected::before {
+    content: "●";
+    color: var(--accent);
 }

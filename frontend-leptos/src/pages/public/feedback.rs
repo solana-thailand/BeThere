@@ -380,8 +380,11 @@ pub fn Feedback() -> impl IntoView {
     };
 
     view! {
+        // The header sits outside the container. Inside it the nav is squeezed
+        // into the page's reading width and its links wrap mid-word — "How it
+        // works" broke across two lines (`.issues/108`).
+        <SiteHeader auth_state=auth_state.read_only() user_role=user_role />
         <div class="container fb-page">
-            <SiteHeader auth_state=auth_state.read_only() user_role=user_role />
             {move || match state.get() {
                 PageState::Loading => view! { <p class="card layout-col-center">"กำลังโหลด…"</p> }.into_any(),
                 PageState::NothingToDo => view! {
@@ -417,9 +420,22 @@ pub fn Feedback() -> impl IntoView {
                         <h1>"ขอบคุณครับ"</h1>
                         <p>{format!("บันทึกความเห็นของคุณแล้ว {saved} งาน")}</p>
                         <div class="fb-done-actions">
-                            <a class="btn btn-primary" href="/feedback">
+                            // A link to `/feedback` from `/feedback` is a no-op:
+                            // the router matches the same route and nothing
+                            // remounts, so the button looked broken and only a
+                            // manual refresh brought the questions back. Reload
+                            // instead — the answered flags have to come from the
+                            // server anyway (`.issues/108`).
+                            <button
+                                class="btn btn-primary"
+                                on:click=move |_| {
+                                    if let Some(w) = web_sys::window() {
+                                        let _ = w.location().reload();
+                                    }
+                                }
+                            >
                                 "ให้ความเห็นงานอื่นต่อ"
-                            </a>
+                            </button>
                             <a class="btn btn-outline" href="/">"กลับหน้าหลัก"</a>
                         </div>
                     </div>
@@ -506,12 +522,14 @@ pub fn Feedback() -> impl IntoView {
                         </For>
 
 
-                        <button class="btn btn-primary" prop:disabled=busy on:click=submit>
-                            {move || match busy {
-                                true => "กำลังส่ง…",
-                                false => "ส่งความเห็น",
-                            }}
-                        </button>
+                        <div class="fb-submit-bar">
+                            <button class="btn btn-primary" prop:disabled=busy on:click=submit>
+                                {move || match busy {
+                                    true => "กำลังส่ง…",
+                                    false => "ส่งความเห็น",
+                                }}
+                            </button>
+                        </div>
                     }.into_any()
                 }
             }}
@@ -551,12 +569,25 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                 on:click=move |_| open.update(|v| *v = !*v)
                             >
                                 {match block.image.is_empty() {
-                                    // No frame at all rather than an empty
-                                    // one: six events have no poster, and a
-                                    // blank box identifies nothing.
-                                    true => view! { <div></div> }.into_any(),
+                                    // A reserved slot, not nothing. Six events
+                                    // have no poster, and omitting the element
+                                    // let their titles start at a different x
+                                    // from everyone else's — eleven rows with a
+                                    // ragged left edge read as a jumble
+                                    // (`.issues/108`).
+                                    true => view! { <div class="fb-event-poster fb-event-poster--empty"></div> }.into_any(),
                                     false => view! {
-                                        <img class="fb-event-poster" src=block.image.clone() alt="Event poster" />
+                                        <img
+                                            class="fb-event-poster"
+                                            src=block.image.clone()
+                                            // Decorative: the event name is
+                                            // beside it. A non-empty alt is what
+                                            // rendered as "Event poste" in the
+                                            // row while a 3 MB PNG loaded.
+                                            alt=""
+                                            loading="lazy"
+                                            decoding="async"
+                                        />
                                     }.into_any(),
                                 }}
                                 <div class="fb-event-meta">
