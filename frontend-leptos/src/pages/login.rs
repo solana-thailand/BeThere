@@ -55,7 +55,7 @@ pub fn Login() -> impl IntoView {
         let target = wallet_next
             .clone()
             .filter(|n| !n.is_empty())
-            .unwrap_or_else(|| "/discover".to_string());
+            .unwrap_or_else(|| "/".to_string());
         if let Some(win) = web_sys::window() {
             let _ = win.location().set_href(&target);
         }
@@ -78,9 +78,14 @@ pub fn Login() -> impl IntoView {
                         .unwrap_or_else(|| match me.role.as_str() {
                             "super_admin" | "organizer" => "/admin".to_string(),
                             "staff" => "/staff".to_string(),
-                            // Not the landing page: it is a pitch, and someone
-                            // who just signed in has read it (`.issues/105`).
-                            _ => "/discover".to_string(),
+                            // Back to `/` until `/discover` is ready to be the
+                            // front door: it duplicates what the signed-in
+                            // landing page already shows, its rows link to the
+                            // public event page rather than the reader's ticket,
+                            // and it has no route back. Owner's call, and the
+                            // right one — a redirect is a promise that the
+                            // destination is better (`.issues/107`).
+                            _ => "/".to_string(),
                         });
                     log::info!(
                         "[login] already authenticated via cookie (role={}), redirecting to {target}",

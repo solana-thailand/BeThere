@@ -267,3 +267,29 @@
     color: var(--text-secondary);
     text-align: center;
 }
+
+/* Already answered on an earlier visit, as opposed to typed in this one. The
+ * distinction matters: "ตอบแล้ว" claims the answer is stored (.issues/107). */
+.fb-badge {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    color: var(--success);
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.fb-done-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+.landing-nav-brand {
+    text-decoration: none;
+}

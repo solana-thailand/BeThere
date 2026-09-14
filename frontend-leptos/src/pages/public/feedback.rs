@@ -21,6 +21,7 @@ use leptos::prelude::*;
 use serde::Deserialize;
 
 use crate::api::{PostEventRegisterBody, register_post_event};
+use crate::pages::landing::{AuthState, SiteHeader};
 
 /// The question set, transcribed from the two Google Forms DevRel has been
 /// running (`solana-thailand-devrel-helper`, `reports/phase-1/survey-emails.md`).
@@ -120,6 +121,8 @@ struct FeedbackEvent {
     nft_image_url: String,
     #[serde(default)]
     participation_type: String,
+    #[serde(default)]
+    answered: i64,
 }
 
 /// One event's block of answers.
@@ -158,12 +161,19 @@ struct EventBlock {
     /// the regulars, and for them an expanded wall is the difference between a
     /// form and a chore (`.issues/103`).
     open: RwSignal<bool>,
+    /// Answered on a previous visit. Distinct from `block_answered`, which only
+    /// sees what was typed in this session — the page used to know nothing
+    /// about earlier submissions, so it reported `0 จาก 11` to someone who had
+    /// already answered one and offered to take the answer again
+    /// (`.issues/107`).
+    already: bool,
 }
 
 /// Has this block been answered at all? Drives the progress line and the tick
 /// on a collapsed row.
 fn block_answered(block: &EventBlock) -> bool {
-    block.ratings.iter().any(|r| !r.get().trim().is_empty())
+    block.already
+        || block.ratings.iter().any(|r| !r.get().trim().is_empty())
         || !block.watched.get().trim().is_empty()
         || !block.comment.get().trim().is_empty()
 }
@@ -222,16 +232,27 @@ pub fn Feedback() -> impl IntoView {
     let (state, set_state) = signal(PageState::Loading);
     let (blocks, set_blocks) = signal(Vec::<EventBlock>::new());
     let (name, set_name) = signal(String::new());
+    // Every page needs a way onward. This one had none — the reader arrived from
+    // an email and the only exit was the browser's back button (`.issues/107`).
+    // Signed in by construction: the page redirects to /login otherwise.
+    let auth_state = RwSignal::new(AuthState::Checking);
+    let (user_role, set_user_role) = signal(String::new());
     let next_topics = RwSignal::new(String::new());
     let latent_space = RwSignal::new(String::new());
 
     leptos::task::spawn_local(async move {
         // Auth gate on mount — same self-gating pattern as the single-event
         // form, so a survey link from the inbox works for a logged-out person.
-        if crate::api::get_me().await.is_err() {
-            let login_url = format!("/login?next={}", urlencoding::encode("/feedback"));
-            let _ = web_sys::window().map(|w| w.location().set_href(&login_url));
-            return;
+        match crate::api::get_me().await {
+            Ok(me) => {
+                set_user_role.set(me.role.clone());
+                auth_state.set(AuthState::SignedIn(me.email));
+            }
+            Err(_) => {
+                let login_url = format!("/login?next={}", urlencoding::encode("/feedback"));
+                let _ = web_sys::window().map(|w| w.location().set_href(&login_url));
+                return;
+            }
         }
 
         // The attendee row already holds a name and the upsert overwrites it,
@@ -278,6 +299,7 @@ pub fn Feedback() -> impl IntoView {
                     _ => String::new(),
                 },
                 participation_type: e.participation_type,
+                already: e.answered != 0,
                 watched: RwSignal::new(String::new()),
                 comment_open: RwSignal::new(false),
                 open: RwSignal::new(false),
@@ -291,7 +313,7 @@ pub fn Feedback() -> impl IntoView {
             })
             .collect();
 
-        match built.first() {
+        match built.iter().find(|b| !b.already).or_else(|| built.first()) {
             None => set_state.set(PageState::NothingToDo),
             Some(first) => {
                 // The list arrives most-recent-first, so the one block that
@@ -359,12 +381,14 @@ pub fn Feedback() -> impl IntoView {
 
     view! {
         <div class="container fb-page">
+            <SiteHeader auth_state=auth_state.read_only() user_role=user_role />
             {move || match state.get() {
                 PageState::Loading => view! { <p class="card layout-col-center">"กำลังโหลด…"</p> }.into_any(),
                 PageState::NothingToDo => view! {
                     <div class="card fb-notice">
                         <h1>"ไม่มีแบบสอบถามค้างอยู่"</h1>
                         <p>"ขอบคุณครับ — ตอนนี้ไม่มีงานที่รอความเห็นจากคุณ"</p>
+                        <a class="btn btn-primary" href="/">"กลับหน้าหลัก"</a>
                     </div>
                 }.into_any(),
                 PageState::NeedsGoogle => view! {
@@ -385,10 +409,19 @@ pub fn Feedback() -> impl IntoView {
                         <p>{message}</p>
                     </div>
                 }.into_any(),
+                // Somewhere to go next. This used to be a full stop: a sentence
+                // and no button, on a page most people reach with more sessions
+                // still unanswered (`.issues/107`).
                 PageState::Done(saved) => view! {
                     <div class="card fb-notice">
                         <h1>"ขอบคุณครับ"</h1>
                         <p>{format!("บันทึกความเห็นของคุณแล้ว {saved} งาน")}</p>
+                        <div class="fb-done-actions">
+                            <a class="btn btn-primary" href="/feedback">
+                                "ให้ความเห็นงานอื่นต่อ"
+                            </a>
+                            <a class="btn btn-outline" href="/">"กลับหน้าหลัก"</a>
+                        </div>
                     </div>
                 }.into_any(),
                 PageState::Ready | PageState::Submitting => {
@@ -541,9 +574,14 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                 </div>
                                 // A tick on a collapsed row is the only way to
                                 // tell answered from skipped without opening it.
-                                {move || match (!open.get(), block_answered(&answered)) {
-                                    (true, true) => view! { <span class="fb-tick">"✓"</span> }.into_any(),
-                                    (true, false) => view! { <span class="fb-chevron">"+"</span> }.into_any(),
+                                // "ตอบแล้ว" is a stronger claim than the tick and
+                                // is reserved for an answer that is actually
+                                // stored — otherwise someone who typed and left
+                                // would be told their answer was saved.
+                                {move || match (!open.get(), answered.already, block_answered(&answered)) {
+                                    (true, true, _) => view! { <span class="fb-badge">"ตอบแล้ว"</span> }.into_any(),
+                                    (true, false, true) => view! { <span class="fb-tick">"✓"</span> }.into_any(),
+                                    (true, false, false) => view! { <span class="fb-chevron">"+"</span> }.into_any(),
                                     _ => view! { <div></div> }.into_any(),
                                 }}
                             </button>

@@ -44,6 +44,13 @@ pub struct FeedbackEvent {
     /// Decides which satisfaction dimensions the block asks (`.issues/098`).
     #[serde(default)]
     pub participation_type: String,
+    /// Whether this person has already answered for this session.
+    ///
+    /// Not a filter. An answered session stays listed so the reader can see it
+    /// is done and change their mind; dropping it would read as the answer
+    /// having been lost (`.issues/107`).
+    #[serde(default)]
+    pub answered: i64,
 }
 
 #[worker::send]
