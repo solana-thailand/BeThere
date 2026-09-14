@@ -200,12 +200,10 @@ pub fn Discover() -> impl IntoView {
     });
 
     view! {
+        // Outside the container for the same reason as `/feedback`: the nav
+        // wraps when squeezed into the reading width (`.issues/108`).
+        <SiteHeader auth_state=auth_state user_role=user_role />
         <div class="container dv-page">
-            // The real header, now that it is a component rather than markup
-            // inline in the landing page (`.issues/105`). This page is the
-            // destination after sign-in, so it needs the menu, the profile link
-            // and sign-out — a wordmark alone would strand people here.
-            <SiteHeader auth_state=auth_state user_role=user_role />
 
             <header class="dv-head">
                 <h1>"ค้นพบอีเวนต์"</h1>
