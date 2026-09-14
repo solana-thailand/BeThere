@@ -170,22 +170,27 @@ pub async fn lookup_claim(
         .filter(|w| !w.is_empty());
 
     // Determine quiz status (Issue 002 — activity-gated claim)
-    let quiz_status = crate::quiz::get_quiz_status(
-        state.d1.as_deref(),
-        state.events_kv.as_ref().or(state.quiz_kv.as_ref()),
-        &event.id,
-        token,
-    )
-    .await
-    .unwrap_or(QuizStatus::NotRequired);
-
-    // If quiz_enabled is true but no quiz config exists yet, treat as NotStarted
-    // so the frontend shows the correct gate instead of letting the user claim.
-    // The organizer must configure quiz questions before attendees can claim.
-    let quiz_status = if event.quiz_enabled && quiz_status == QuizStatus::NotRequired {
-        QuizStatus::NotStarted
+    // If the event does NOT have quiz enabled, skip quiz unconditionally.
+    let quiz_status = if !event.quiz_enabled {
+        QuizStatus::NotRequired
     } else {
-        quiz_status
+        let qs = crate::quiz::get_quiz_status(
+            state.d1.as_deref(),
+            state.events_kv.as_ref().or(state.quiz_kv.as_ref()),
+            &event.id,
+            token,
+        )
+        .await
+        .unwrap_or(QuizStatus::NotRequired);
+
+        // If quiz_enabled is true but no quiz config exists yet, treat as NotStarted
+        // so the frontend shows the correct gate instead of letting the user claim.
+        // The organizer must configure quiz questions before attendees can claim.
+        if qs == QuizStatus::NotRequired {
+            QuizStatus::NotStarted
+        } else {
+            qs
+        }
     };
 
     // Read finalized claim lock KV for already-claimed attendees

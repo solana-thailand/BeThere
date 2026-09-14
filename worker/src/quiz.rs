@@ -260,6 +260,26 @@ pub async fn delete_question(
     Ok(())
 }
 
+/// Delete entire quiz configuration for an event (D1 + KV).
+pub async fn delete_quiz_config(
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
+    event_id: &str,
+) -> Result<(), String> {
+    if let Some(db) = d1 {
+        if let Err(e) = d1_quiz::delete_quiz_config_from_d1(db, event_id).await {
+            tracing::warn!(event_id, error = %e, "D1 delete quiz config failed");
+        }
+    }
+
+    if let Some(kv_ref) = kv {
+        let key = quiz_questions_key(event_id);
+        let _ = kv_ref.delete(&key).await;
+    }
+
+    Ok(())
+}
+
 /// Toggle the enabled state of a single question.
 pub async fn toggle_question(
     d1: Option<&D1Database>,

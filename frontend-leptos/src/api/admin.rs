@@ -249,6 +249,28 @@ pub async fn put_admin_quiz(
     api_post_json(&path, config).await
 }
 
+/// DELETE /api/admin/quiz — delete entire quiz configuration (admin only).
+pub async fn delete_admin_quiz(event_id: Option<&str>) -> Result<(), ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/admin/quiz?event_id={eid}"),
+        _ => "/admin/quiz".to_string(),
+    };
+    let response = super::api_delete(&path).await?;
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Delete failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or("Delete failed".to_string()),
+            status: response.status(),
+        });
+    }
+    Ok(())
+}
+
 /// DELETE /api/admin/quiz/questions/{id} — delete a single question.
 pub async fn delete_quiz_question(
     question_id: &str,

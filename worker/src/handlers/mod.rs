@@ -335,7 +335,9 @@ pub fn routes(state: AppState) -> Router<()> {
         // Admin quiz management (protected — organizer sets questions)
         .route(
             "/admin/quiz",
-            get(quiz::get_admin_quiz).post(quiz::put_quiz),
+            get(quiz::get_admin_quiz)
+                .post(quiz::put_quiz)
+                .delete(quiz::delete_admin_quiz),
         )
         // Individual quiz question CRUD (Issue 034 Phase 2)
         .route("/admin/quiz/questions", post(quiz::add_quiz_question))

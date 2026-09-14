@@ -21,6 +21,18 @@ pub(super) async fn verify_online_quest_completion(
     let d1 = state.d1.as_deref();
     let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
+    if !quiz_enabled {
+        // Quiz not enabled — check adventure (D1 only)
+        let Some(db) = d1 else {
+            // No D1 available — neither is required
+            return true;
+        };
+        return match crate::adventure::get_adventure_status(db, event_id, claim_token).await {
+            Ok(AdventureStatus::Passed) | Ok(AdventureStatus::NotRequired) => true,
+            _ => false,
+        };
+    }
+
     // Check quiz status first
     match crate::quiz::get_quiz_status(d1, kv, event_id, claim_token).await {
         Ok(QuizStatus::Passed) => true,
@@ -28,7 +40,7 @@ pub(super) async fn verify_online_quest_completion(
             // Quiz not configured — check adventure (D1 only)
             let Some(db) = d1 else {
                 // No D1 available — treat adventure as not required
-                return !quiz_enabled;
+                return false;
             };
             match crate::adventure::get_adventure_status(db, event_id, claim_token).await {
                 Ok(AdventureStatus::Passed) => true,
@@ -36,7 +48,7 @@ pub(super) async fn verify_online_quest_completion(
                     // Neither quiz nor adventure configured.
                     // If quiz_enabled is true, the organizer intends a quest but
                     // hasn't set it up yet — block claiming.
-                    !quiz_enabled
+                    false
                 }
                 _ => false,
             }

@@ -78,6 +78,18 @@ pub async fn upsert_quiz_config_to_d1(
     Ok(())
 }
 
+/// Delete quiz config from D1.
+pub async fn delete_quiz_config_from_d1(db: &D1Database, event_id: &str) -> Result<(), String> {
+    let stmt = db.prepare("DELETE FROM quiz_configs WHERE event_id = ?1");
+    stmt.bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 delete_quiz_config bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 delete_quiz_config run: {e:?}"))?;
+
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Quiz progress
 // ---------------------------------------------------------------------------

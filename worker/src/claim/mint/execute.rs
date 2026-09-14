@@ -197,6 +197,9 @@ pub async fn execute_claim(
     let quiz_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
     let quiz_fut = async {
+        if !event.quiz_enabled {
+            return Some(QuizStatus::NotRequired);
+        }
         crate::quiz::get_quiz_status(d1_ref, quiz_kv, &event.id, token)
             .await
             .ok()
@@ -213,30 +216,30 @@ pub async fn execute_claim(
     let (quiz_result, adv_result) = futures_util::join!(quiz_fut, adv_fut);
 
     // Check quiz gate
-    if let Some(quiz_status) = quiz_result {
-        match quiz_status {
-            QuizStatus::Passed => {}
-            QuizStatus::NotRequired => {
-                // Quiz not configured — if quiz_enabled is true, the organizer
-                // intends a quiz but hasn't set it up yet. Block the claim.
-                if event.quiz_enabled {
+    if event.quiz_enabled {
+        if let Some(quiz_status) = quiz_result {
+            match quiz_status {
+                QuizStatus::Passed => {}
+                QuizStatus::NotRequired => {
+                    // Quiz not configured — if quiz_enabled is true, the organizer
+                    // intends a quiz but hasn't set it up yet. Block the claim.
                     tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: quiz enabled but not configured");
                     return Err(AppError::Validation(
                         "quiz is being set up — please try again later".into(),
                     ));
                 }
-            }
-            QuizStatus::NotStarted => {
-                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: quiz not attempted");
-                return Err(AppError::Validation(
-                    "you must complete the quiz before claiming your badge".into(),
-                ));
-            }
-            QuizStatus::InProgress => {
-                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: quiz not passed");
-                return Err(AppError::Validation(
-                    "you must pass the quiz before claiming your badge".into(),
-                ));
+                QuizStatus::NotStarted => {
+                    tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: quiz not attempted");
+                    return Err(AppError::Validation(
+                        "you must complete the quiz before claiming your badge".into(),
+                    ));
+                }
+                QuizStatus::InProgress => {
+                    tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint blocked: quiz not passed");
+                    return Err(AppError::Validation(
+                        "you must pass the quiz before claiming your badge".into(),
+                    ));
+                }
             }
         }
     }

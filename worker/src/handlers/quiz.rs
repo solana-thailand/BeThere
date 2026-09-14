@@ -40,6 +40,16 @@ pub async fn get_quiz(
     // Resolve event (uses events_kv if available, falls back to global config)
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
+    if !event.quiz_enabled {
+        return Ok(ApiOk::new(json!({
+            "configured": false,
+            "questions": [],
+            "passing_score_percent": 0,
+            "max_attempts": 0,
+            "time_limit_seconds": null,
+        })));
+    }
+
     let eid = event.id.as_str();
     let d1 = state.d1.as_deref();
     let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
@@ -95,6 +105,10 @@ pub async fn submit_quiz(
     // the claim gate would never find it ("must complete the quiz").
     let resolved = crate::claim::coalesce_event_id(&state, &token, query.event_id.as_deref()).await;
     let event = resolve_event(&state, resolved.as_deref()).await?;
+
+    if !event.quiz_enabled {
+        return Err(AppError::Validation("quiz is not required for this event".to_string()).into());
+    }
 
     let eid = event.id.as_str();
     let d1 = state.d1.as_deref();
@@ -218,6 +232,18 @@ pub async fn get_quiz_status(
     // the claim gate) so status reflects the progress the claim will read.
     let resolved = crate::claim::coalesce_event_id(&state, &token, query.event_id.as_deref()).await;
     let event = resolve_event(&state, resolved.as_deref()).await?;
+
+    if !event.quiz_enabled {
+        return Ok(ApiOk::new(json!({
+            "configured": false,
+            "quiz_status": "not_required",
+            "attempts": 0,
+            "max_attempts": 0,
+            "best_score_percent": 0,
+            "passed": false,
+            "passing_threshold_percent": 0,
+        })));
+    }
 
     let eid = event.id.as_str();
     let d1 = state.d1.as_deref();
@@ -363,6 +389,34 @@ pub async fn put_quiz(
         "questions_count": body.questions.len(),
         "passing_score_percent": body.passing_score_percent,
         "max_attempts": body.max_attempts,
+    })))
+}
+
+/// DELETE /api/admin/quiz
+/// Delete the entire quiz configuration for an event.
+#[worker::send]
+pub async fn delete_admin_quiz(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    tracing::info!(
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
+        "admin quiz delete"
+    );
+
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
+    let eid = event.id.as_str();
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
+
+    quiz::delete_quiz_config(d1, kv, eid)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    tracing::info!(event_id = %eid, "quiz config deleted");
+    Ok(ApiOk::new(json!({
+        "deleted": true,
     })))
 }
 
