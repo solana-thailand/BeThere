@@ -60,6 +60,17 @@ than repaired.
 
 Organizers and staff keep `/admin` and `/staff`. An explicit `?next=` still wins.
 
+## The CSS audit caught the leftovers
+
+Deleting the tab row and swapping `/discover` onto the shared header left five
+rules behind — `landing-features-tab*`, `dv-nav`, `dv-brand`. `no_dead_css_classes`
+failed on them in CI, which is the test doing exactly what it is for: markup
+gets deleted, the stylesheet does not, and nothing else would have noticed.
+
+Local clippy was green when CI was red, because the audit is a `cargo test`
+rather than a lint. Worth remembering: **clippy passing is not the frontend
+gate.**
+
 ## Not verified
 
 Both changes are visual and the signed-in half needs a session. Compiled,

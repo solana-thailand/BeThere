@@ -172,24 +172,6 @@
     }
 }
 
-/* The page has no site chrome of its own — the landing header is built inline
- * in `landing/page.rs` and is not a component — so without this a visitor lands
- * here with no way back and no way to sign in (.issues/100). */
-.dv-nav {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding-bottom: 1.25rem;
-}
-
-.dv-brand {
-    font-weight: 700;
-    font-size: 1.125rem;
-    color: var(--accent);
-    text-decoration: none;
-}
-
 /* Shown only to a signed-out visitor, who otherwise sees one public list and no
  * indication that two more sections exist for them. */
 .dv-signin-hint {
