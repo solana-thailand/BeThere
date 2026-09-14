@@ -31,6 +31,10 @@ use crate::{
 #[derive(Serialize, serde::Deserialize)]
 pub struct FeedbackEvent {
     pub event_id: String,
+    /// Lets the page link to this person's own ticket for the session, which
+    /// carries the recording — the best recall aid the platform has
+    /// (`.issues/112`).
+    pub attendee_id: String,
     pub slug: String,
     pub event_name: String,
     #[serde(default)]

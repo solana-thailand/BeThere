@@ -404,3 +404,21 @@
     border: 1px solid var(--success-border);
     border-radius: var(--radius-sm);
 }
+
+/* "I cannot remember this one" — the reason a retrospective survey gets
+ * abandoned. Sits inside the open block, above the questions, because that is
+ * where the reader is when they get stuck (.issues/112). */
+.fb-recall {
+    display: block;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--border);
+    padding-bottom: 0.625rem;
+}
+
+.fb-recall:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent-border);
+}

@@ -178,6 +178,10 @@ struct MyRegistration {
 #[derive(Clone, Default, Deserialize)]
 struct FeedbackEvent {
     slug: String,
+    #[serde(default)]
+    event_id: String,
+    #[serde(default)]
+    attendee_id: String,
     event_name: String,
     #[serde(default)]
     event_start_ms: i64,
@@ -212,6 +216,10 @@ struct EventBlock {
     location: String,
     image: String,
     participation_type: String,
+    /// This person's ticket for this session. Carries the recording, the venue
+    /// and the agenda — the answer to "I cannot remember this one"
+    /// (`.issues/112`).
+    ticket_url: String,
     /// Online only: whether they watched, and if not what got in the way.
     watched: RwSignal<String>,
     /// One signal per dimension, in `DIMENSIONS` order. Every block carries all
@@ -397,6 +405,11 @@ pub fn Feedback() -> impl IntoView {
                         _ => String::new(),
                     },
                     participation_type: e.participation_type,
+                    ticket_url: format!(
+                        "/ticket/{}?event_id={}",
+                        urlencoding::encode(&e.attendee_id),
+                        urlencoding::encode(&e.event_id)
+                    ),
                     already: e.answered != 0,
                     watched: RwSignal::new(saved.watched.clone()),
                     // Open the box if there is something in it to see.
@@ -827,6 +840,28 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                             </button>
 
                             <Show when=move || open.get() fallback=|| ()>
+                                // "I cannot remember this one" is the reason
+                                // people abandon a retrospective survey, and
+                                // DevRel solved it in their mail by pasting the
+                                // recordings in. The ticket already carries the
+                                // recording, the venue and the agenda, and all
+                                // twelve open events have a `video_url`.
+                                //
+                                // A new tab on purpose. Drafts (`.issues/111`)
+                                // mean answers now survive navigating away —
+                                // which is what made this link safe to add at
+                                // all, after `.issues/108` removed the header
+                                // link for exactly that risk — but which block
+                                // is open is not saved, so same-tab would still
+                                // cost the reader their place (`.issues/112`).
+                                <a
+                                    class="fb-recall"
+                                    href=block.ticket_url.clone()
+                                    target="_blank"
+                                    rel="noopener"
+                                >
+                                    "จำงานนี้ไม่ได้? เปิดตั๋วของคุณเพื่อดูวิดีโอย้อนหลังและรายละเอียดงาน"
+                                </a>
                             // Online only, and first: for someone who did
                             // not watch, this is the only question they can
                             // answer honestly, and it is the one DevRel
