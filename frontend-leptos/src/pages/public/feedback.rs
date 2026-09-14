@@ -92,6 +92,23 @@ const LATENT_SPACE_OPTIONS: [&str; 4] = [
     "ไม่เคยดู และไม่ทราบว่ามีซีรีส์นี้",
 ];
 
+/// The next public event, for the thank-you screen.
+#[derive(Clone, Default, Deserialize)]
+struct UpcomingEvent {
+    name: String,
+    slug: String,
+    #[serde(default)]
+    event_start_ms: i64,
+    #[serde(default)]
+    location: String,
+}
+
+#[derive(Clone, Default, Deserialize)]
+struct UpcomingResponse {
+    #[serde(default)]
+    events: Vec<UpcomingEvent>,
+}
+
 /// Only the display name, which the post-event upsert overwrites.
 #[derive(Clone, Deserialize)]
 struct MyRegistration {
@@ -237,6 +254,10 @@ pub fn Feedback() -> impl IntoView {
     // Signed in by construction: the page redirects to /login otherwise.
     let auth_state = RwSignal::new(AuthState::Checking);
     let (user_role, set_user_role) = signal(String::new());
+    // Fetched with everything else so the thank-you screen can invite the
+    // reader to the next event instead of ending the conversation
+    // (`.issues/110`).
+    let (upcoming, set_upcoming) = signal(Vec::<UpcomingEvent>::new());
     let next_topics = RwSignal::new(String::new());
     let latent_space = RwSignal::new(String::new());
 
@@ -261,6 +282,10 @@ pub fn Feedback() -> impl IntoView {
             && let Some(first) = rows.into_iter().find(|r| !r.name.trim().is_empty())
         {
             set_name.set(first.name);
+        }
+
+        if let Ok(page) = crate::api::api_get_json::<UpcomingResponse>("/public/events").await {
+            set_upcoming.set(page.events);
         }
 
         let events =
@@ -419,6 +444,27 @@ pub fn Feedback() -> impl IntoView {
                     <div class="card fb-notice">
                         <h1>"ขอบคุณครับ"</h1>
                         <p>{format!("บันทึกความเห็นของคุณแล้ว {saved} งาน")}</p>
+                        // Close the loop rather than the conversation. Someone
+                        // who just did the programme a favour is the best
+                        // audience the next event will get (`.issues/110`).
+                        {move || match upcoming.get().first() {
+                            None => view! { <div></div> }.into_any(),
+                            Some(next) => {
+                                let when = crate::utils::format_event_day(next.event_start_ms);
+                                let line = [when, next.location.clone()]
+                                    .into_iter()
+                                    .filter(|p| !p.is_empty())
+                                    .collect::<Vec<_>>()
+                                    .join(" · ");
+                                view! {
+                                    <a class="fb-next-event" href=format!("/e/{}", next.slug)>
+                                        <span class="fb-next-label">"งานถัดไป"</span>
+                                        <span class="fb-next-name">{next.name.clone()}</span>
+                                        <span class="fb-next-meta">{line}</span>
+                                    </a>
+                                }.into_any()
+                            }
+                        }}
                         <div class="fb-done-actions">
                             // A link to `/feedback` from `/feedback` is a no-op:
                             // the router matches the same route and nothing
@@ -452,8 +498,20 @@ pub fn Feedback() -> impl IntoView {
                     view! {
                         <header class="card">
                             <h1>"ขอความเห็นจากงานที่คุณเข้าร่วม"</h1>
+                            // The stake, which lived only in the covering email.
+                            // Whoever clicks the link loses it, and this page
+                            // then asks a favour without saying what the favour
+                            // buys — the single cheapest thing that moves a
+                            // response rate (`.issues/110`).
+                            <p class="fb-stake">
+                                "เรากำลังสรุปว่าจะจัดอะไรต่อในไตรมาสหน้า "
+                                "และคำตอบของคุณคือสิ่งที่ใช้ตัดสิน"
+                            </p>
                             <p>
-                                "ใช้เวลาประมาณ 2 นาที ข้ามข้อไหนก็ได้ "
+                                // "2 นาที" next to eleven sessions is a promise
+                                // the page cannot keep. Price the unit the
+                                // reader actually commits to — one event.
+                                "หนึ่งงานใช้เวลาไม่ถึงนาที ข้ามข้อไหนก็ได้ "
                                 "คำตอบไปที่ทีมงานโดยตรง ไม่เปิดเผยชื่อในรายงาน"
                             </p>
                             // Only shown to people with more than one session,
@@ -523,12 +581,33 @@ pub fn Feedback() -> impl IntoView {
 
 
                         <div class="fb-submit-bar">
-                            <button class="btn btn-primary" prop:disabled=busy on:click=submit>
+                            // Nothing to send is not a state worth submitting.
+                            // The button used to accept an empty form, run
+                            // eleven POSTs that each skipped an empty payload,
+                            // and show "บันทึกความเห็นของคุณแล้ว 0 งาน" — a
+                            // thank-you for nothing (`.issues/110`).
+                            <button
+                                class="btn btn-primary"
+                                prop:disabled=move || {
+                                    busy || !blocks.get().iter().any(|b| !b.already && block_answered(b))
+                                }
+                                on:click=submit
+                            >
                                 {move || match busy {
                                     true => "กำลังส่ง…",
                                     false => "ส่งความเห็น",
                                 }}
                             </button>
+                            <Show
+                                when=move || {
+                                    !blocks.get().iter().any(|b| !b.already && block_answered(b))
+                                }
+                                fallback=|| ()
+                            >
+                                // Says what is missing rather than leaving a
+                                // greyed-out button to be interpreted.
+                                <p class="fb-submit-hint">"เลือกความพึงพอใจอย่างน้อยหนึ่งงานก่อนส่ง"</p>
+                            </Show>
                         </div>
                     }.into_any()
                 }
