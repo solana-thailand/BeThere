@@ -789,4 +789,3 @@ pub async fn get_admin_feedback(
     let path = format!("/admin/feedback{query}");
     super::api_get_json(&path).await
 }
-

@@ -24,11 +24,7 @@ use axum::{
     Extension,
     extract::{Query, State},
 };
-use event_checkin_domain::models::{
-    api::AdminFeedbackResponse,
-    auth::Claims,
-    error::AppError,
-};
+use event_checkin_domain::models::{api::AdminFeedbackResponse, auth::Claims, error::AppError};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -185,11 +181,11 @@ pub async fn admin_feedback_handler(
         .iter()
         .any(|email| email.eq_ignore_ascii_case(&claims.email));
     let staff_role = crate::auth::get_staff_role(&claims.email, &state).await;
-    let is_global_admin_or_org = is_super_admin
-        || matches!(staff_role.as_deref(), Some("admin" | "organizer"));
+    let is_global_admin_or_org =
+        is_super_admin || matches!(staff_role.as_deref(), Some("admin" | "organizer"));
 
-    let is_all_scope = query.scope.as_deref() == Some("all")
-        || query.event_id.as_deref() == Some("all");
+    let is_all_scope =
+        query.scope.as_deref() == Some("all") || query.event_id.as_deref() == Some("all");
     let is_series_scope = query.scope.as_deref() == Some("series")
         || query
             .event_id
@@ -204,10 +200,14 @@ pub async fn admin_feedback_handler(
             // Filter to only events this person has organizer access to
             let metas = crate::db::events::list_event_meta_page(db, Some(&claims.email), None, 100)
                 .await
-                .map_err(|e| AppError::Internal(format!("failed to fetch accessible events: {e}")))?;
+                .map_err(|e| {
+                    AppError::Internal(format!("failed to fetch accessible events: {e}"))
+                })?;
             let ids: Vec<String> = metas.events.into_iter().map(|e| e.id).collect();
             if ids.is_empty() {
-                return Err(AppError::Forbidden("You do not have access to any events.".into()).into());
+                return Err(
+                    AppError::Forbidden("You do not have access to any events.".into()).into(),
+                );
             }
             Some(ids)
         };
@@ -225,7 +225,7 @@ pub async fn admin_feedback_handler(
         .map_err(AppError::Internal)?;
 
         tracing::info!(
-            admin_email = %state.log_fingerprint(&claims.email),
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
             respondents = feedback_data.total_respondents,
             events_count = feedback_data.events_included.len(),
             "Cross-event feedback dashboard fetched (all events)"
@@ -246,47 +246,46 @@ pub async fn admin_feedback_handler(
     let event = resolve_event_with_access(&state, &claims, raw_event_id).await?;
     let detected_series = extract_series_key(&event.name);
 
-    if is_series_scope
-        && let Some(ref series_title) = detected_series {
-            // Find all events belonging to this series
-            let all_metas = crate::db::events::list_events_as_meta(db)
-                .await
-                .map_err(AppError::Internal)?;
-
-            let matching_ids: Vec<String> = all_metas
-                .into_iter()
-                .filter(|m| {
-                    m.name
-                        .to_lowercase()
-                        .starts_with(&series_title.to_lowercase())
-                })
-                .map(|m| m.id)
-                .collect();
-
-            let target_slug = format!("series-{}", slugify(series_title));
-            let title = format!("{series_title} (Series)");
-
-            let feedback_data = crate::db::feedback::get_admin_feedback(
-                db,
-                crate::db::feedback::FeedbackFilterScope {
-                    target_id: &target_slug,
-                    title: &title,
-                    series_name: Some(series_title.clone()),
-                    filter_event_ids: Some(&matching_ids),
-                },
-            )
+    if is_series_scope && let Some(ref series_title) = detected_series {
+        // Find all events belonging to this series
+        let all_metas = crate::db::events::list_events_as_meta(db)
             .await
             .map_err(AppError::Internal)?;
 
-            tracing::info!(
-                admin_email = %state.log_fingerprint(&claims.email),
-                series = %series_title,
-                respondents = feedback_data.total_respondents,
-                events_count = feedback_data.events_included.len(),
-                "Series feedback dashboard fetched"
-            );
+        let matching_ids: Vec<String> = all_metas
+            .into_iter()
+            .filter(|m| {
+                m.name
+                    .to_lowercase()
+                    .starts_with(&series_title.to_lowercase())
+            })
+            .map(|m| m.id)
+            .collect();
 
-            return Ok(ApiOk::new(feedback_data));
+        let target_slug = format!("series-{}", slugify(series_title));
+        let title = format!("{series_title} (Series)");
+
+        let feedback_data = crate::db::feedback::get_admin_feedback(
+            db,
+            crate::db::feedback::FeedbackFilterScope {
+                target_id: &target_slug,
+                title: &title,
+                series_name: Some(series_title.clone()),
+                filter_event_ids: Some(&matching_ids),
+            },
+        )
+        .await
+        .map_err(AppError::Internal)?;
+
+        tracing::info!(
+            identity_fingerprint = %state.log_fingerprint(&claims.email),
+            series = %series_title,
+            respondents = feedback_data.total_respondents,
+            events_count = feedback_data.events_included.len(),
+            "Series feedback dashboard fetched"
+        );
+
+        return Ok(ApiOk::new(feedback_data));
     }
 
     // Default: Single event scope
@@ -304,7 +303,7 @@ pub async fn admin_feedback_handler(
     .map_err(AppError::Internal)?;
 
     tracing::info!(
-        admin_email = %state.log_fingerprint(&claims.email),
+        identity_fingerprint = %state.log_fingerprint(&claims.email),
         event_id = %event.id,
         respondents = feedback_data.total_respondents,
         "Admin feedback dashboard fetched (single event)"

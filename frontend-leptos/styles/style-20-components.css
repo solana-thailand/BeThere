@@ -185,6 +185,11 @@
     animation: dep2-dot-pulse 1.2s ease-in-out infinite;
 }
 
+/* --- Feedback (admin → Feedback section) --- */
+.admin-feedback-page {
+    padding-bottom: 3rem;
+}
+
 /* --- Campaigns (admin → Campaigns section) --- */
 .admin-campaigns-page {
     display: flex;
