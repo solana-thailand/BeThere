@@ -30,6 +30,7 @@ enum AdminSection {
     Deposits,
     Escrow,
     Cancellation,
+    Feedback,
     Quiz,
     FormBuilder,
     Adventure,
@@ -138,7 +139,7 @@ fn generate_csv(attendees: &[AttendeeListItem]) -> String {
 }
 
 /// Trigger CSV file download in browser using proper web_sys APIs.
-fn download_csv(filename: &str, content: &str) {
+pub(crate) fn download_csv(filename: &str, content: &str) {
     use js_sys::{Array, Uint8Array};
 
     let window = match web_sys::window() {
@@ -1154,6 +1155,19 @@ pub fn Admin() -> impl IntoView {
                     </div>
                     </Show>
 
+                    // ── Group 4: Post-Event ──
+                    <div class="admin-sidebar-group">
+                        <div class="admin-sidebar-group-label">"Post-Event"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Feedback
+                            on:click=move |_| set_active_section.set(AdminSection::Feedback)
+                        >
+                            <span class="admin-sidebar-icon"><Icon icon=IconName::Star class="icon-sm"/></span>
+                            "Feedback & Survey"
+                        </button>
+                    </div>
+
                     // Quick stats at bottom of sidebar
                     <div class="admin-sidebar-stats">
                         {move || {
@@ -2019,6 +2033,14 @@ pub fn Admin() -> impl IntoView {
                         set_toast=set_toast
                         active_event_id=active_event_id
                         set_pending_promote_event=set_pending_promote_event
+                    />
+                </Show>
+
+                // Feedback section (Issue #113)
+                <Show when=move || active_section.get() == AdminSection::Feedback fallback=|| view! { <div></div> }>
+                    <crate::pages::admin_feedback::AdminFeedback
+                        set_toast=set_toast
+                        active_event_id=active_event_id
                     />
                 </Show>
                 </main>

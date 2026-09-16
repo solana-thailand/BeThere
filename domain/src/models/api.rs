@@ -532,3 +532,81 @@ pub struct QuizStatusResponse {
     /// Percentage required to pass.
     pub passing_threshold_percent: u8,
 }
+
+// ---------------------------------------------------------------------------
+// Feedback / Post-Event Survey API models (Issue #113)
+// ---------------------------------------------------------------------------
+
+/// Distribution count for a specific satisfaction rating label.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct FeedbackRatingDistribution {
+    pub label: String,
+    pub count: usize,
+    pub percentage: f64,
+}
+
+/// Aggregated stats for one satisfaction dimension (e.g. content, venue).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct FeedbackDimensionStats {
+    pub key: String,
+    pub title: String,
+    pub total_answers: usize,
+    /// Average score on a 1.0 - 3.0 scale (1 = ไม่พึงพอใจ, 2 = พึงพอใจ, 3 = พึงพอใจมาก).
+    pub average_score: f64,
+    /// Percentage of respondents answering positive ("พึงพอใจ" or "พึงพอใจมาก").
+    pub positive_percentage: f64,
+    pub distribution: Vec<FeedbackRatingDistribution>,
+}
+
+/// Count and percentage for an option (e.g. online attendance reason, continuation interest).
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct FeedbackOptionCount {
+    pub option: String,
+    pub count: usize,
+    pub percentage: f64,
+}
+
+/// Individual attendee feedback response row.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct FeedbackRespondentRow {
+    pub email: String,
+    pub name: String,
+    pub participation_type: String,
+    pub is_checked_in: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub answered_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub satisfaction_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub satisfaction_venue: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub satisfaction_catering: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub satisfaction_promotion: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub online_watched: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latent_space_continue: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_topics: Option<String>,
+}
+
+/// Full feedback dashboard response for `GET /api/admin/feedback?event_id={id}`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct AdminFeedbackResponse {
+    pub event_id: String,
+    pub event_name: String,
+    pub total_respondents: usize,
+    pub onsite_respondents: usize,
+    pub online_respondents: usize,
+    pub dimensions: Vec<FeedbackDimensionStats>,
+    pub online_watched: Vec<FeedbackOptionCount>,
+    pub latent_space_continue: Vec<FeedbackOptionCount>,
+    pub respondents: Vec<FeedbackRespondentRow>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub csv: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+}

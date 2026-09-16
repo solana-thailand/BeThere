@@ -15,14 +15,25 @@
 //! So the form gets its own source at its own grain. Eligibility still has one
 //! definition, in `feedback_eligible_events`; it is simply keyed to enrolment
 //! rather than to a queued message.
+//!
+//! Also provides `GET /api/admin/feedback` (Issue #113) for event organizers
+//! and admins to inspect survey results, sentiment metrics, and CSV exports.
 
-use axum::{Extension, extract::State};
-use event_checkin_domain::models::{auth::Claims, error::AppError};
+use axum::{
+    Extension,
+    extract::{Query, State},
+};
+use event_checkin_domain::models::{
+    api::AdminFeedbackResponse,
+    auth::Claims,
+    error::AppError,
+};
 use serde::Serialize;
 
 use crate::{
     db::d1_safe::safe_all_rows,
     error::{ApiOk, WorkerError},
+    handlers::ext::{EventIdQuery, resolve_event_with_access},
     state::AppState,
 };
 
@@ -92,4 +103,35 @@ pub async fn my_feedback_events(
         "feedback events listed"
     );
     Ok(ApiOk::new(rows))
+}
+
+/// GET /api/admin/feedback?event_id={id}
+///
+/// Fetches aggregated survey statistics, satisfaction breakdown, online viewership,
+/// continuation sentiment, individual responses, and pre-built CSV for an event.
+#[worker::send]
+pub async fn admin_feedback_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<AdminFeedbackResponse>, WorkerError> {
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
+
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database unavailable".into()))?;
+
+    let feedback_data = crate::db::feedback::get_admin_feedback(db, &event.id, &event.name)
+        .await
+        .map_err(AppError::Internal)?;
+
+    tracing::info!(
+        admin_email = %state.log_fingerprint(&claims.email),
+        event_id = %event.id,
+        respondents = feedback_data.total_respondents,
+        "Admin feedback dashboard fetched"
+    );
+
+    Ok(ApiOk::new(feedback_data))
 }
