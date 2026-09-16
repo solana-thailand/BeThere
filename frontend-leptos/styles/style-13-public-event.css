@@ -115,6 +115,20 @@
     font-size: 0.95rem;
 }
 
+.pe-map-link {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.pe-map-link:hover {
+    color: var(--accent-hover);
+    text-decoration: underline;
+}
+
 .pe-detail-secondary {
     color: var(--text-secondary);
     font-size: 0.9rem;

@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use crate::error::ApiOk;
 use crate::state::AppState;
 use event_checkin_domain::models::error::AppError;
-use event_checkin_domain::models::event::EventVisibility;
+use event_checkin_domain::models::event::{EventVisibility, safe_map_url};
 
 /// `GET /api/public/events`
 ///
@@ -213,6 +213,7 @@ pub async fn get_public_event(
         "require_photo_consent": config.require_photo_consent,
         "description": config.description,
         "location": config.location,
+        "location_map_url": safe_map_url(&config.location_map_url),
         "created_at": config.created_at,
         "dev_mode": state.config.dev_mode,
         // Capacity info for frontend gating

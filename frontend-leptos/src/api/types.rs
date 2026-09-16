@@ -383,6 +383,9 @@ pub struct AttendeeData {
     /// Event location (venue name, address, or "Online").
     #[serde(default)]
     pub event_location: String,
+    /// Venue map link (https only, sanitized by the Worker). Empty = no link.
+    #[serde(default)]
+    pub event_location_map_url: String,
     /// Event tagline / subtitle.
     #[serde(default)]
     pub event_tagline: String,

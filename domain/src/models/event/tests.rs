@@ -42,6 +42,7 @@ fn make_event() -> EventConfig {
         max_refundable_deposits: 0,
         description: String::new(),
         location: String::new(),
+        location_map_url: String::new(),
         video_url: String::new(),
         visibility: EventVisibility::Public,
         event_format: EventFormat::InPerson,

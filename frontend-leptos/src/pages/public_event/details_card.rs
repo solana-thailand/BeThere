@@ -1,5 +1,6 @@
 use super::types::*;
 use crate::icons::{Icon, IconName};
+use event_checkin_domain::models::event::safe_map_url;
 use leptos::prelude::*;
 
 pub fn details_card(
@@ -9,6 +10,8 @@ pub fn details_card(
 ) -> AnyView {
     let has_location = !data.location.is_empty();
     let location = data.location.clone();
+    // The Worker already filters to https; re-check since this becomes an href.
+    let location_map_url = data.location_map_url.as_deref().and_then(safe_map_url);
     let date_str = format_event_date(data.event_start_ms);
     let time_str = if data.time_tba {
         "Time TBA".to_string()
@@ -58,10 +61,23 @@ pub fn details_card(
             // would just be noise.
             {if has_location {
                 let loc = location.clone();
+                let map_link = location_map_url.clone().map(|href| view! {
+                    <a
+                        href=href
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="pe-map-link"
+                    >
+                        "Open in Google Maps ↗"
+                    </a>
+                });
                 view! {
                     <div class="pe-detail-row">
                         <span><Icon icon=IconName::Pin class="icon-sm icon-muted" /></span>
-                        <span class="pe-detail-text">{loc}</span>
+                        <span class="pe-detail-text">
+                            {loc}
+                            {map_link}
+                        </span>
                     </div>
                 }.into_any()
             } else {

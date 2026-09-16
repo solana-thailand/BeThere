@@ -156,6 +156,7 @@ pub async fn seed_from_config(
         dev_profile_enabled: false,
         community_links: vec![],
         calendar_subscribe_url: String::new(),
+        location_map_url: String::new(),
         poster_url: String::new(),
         recap_published: false,
         post_event_registration_open: false,
