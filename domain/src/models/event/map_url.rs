@@ -28,7 +28,7 @@ pub fn normalize_map_url(raw: &str) -> Result<String, String> {
 
     match url.strip_prefix("https://") {
         Some(rest) if !rest.is_empty() && !rest.starts_with('/') => {}
-        _ => return Err("map link must start with https://".to_string()),
+        _ => return Err("map link must be a secure (https) web address".to_string()),
     }
 
     if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
