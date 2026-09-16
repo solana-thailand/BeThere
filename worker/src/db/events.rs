@@ -94,6 +94,8 @@ pub struct D1EventRow {
     pub form_config: Option<String>,
     // Columns added for organization calendar subscribe
     pub calendar_subscribe_url: Option<String>,
+    // Columns added by migration 0041 (venue map link)
+    pub location_map_url: Option<String>,
     // Columns added by migration 0019 (event poster)
     pub poster_url: Option<String>,
     // Columns added by migration 0020 (Plan 008 — denormalized recap flag).
@@ -312,6 +314,7 @@ impl D1EventRow {
             )
             .unwrap_or_default(),
             calendar_subscribe_url: self.calendar_subscribe_url.clone().unwrap_or_default(),
+            location_map_url: self.location_map_url.clone().unwrap_or_default(),
             poster_url: self.poster_url.clone().unwrap_or_default(),
             recap_published: self.recap_published.unwrap_or(0) != 0,
             post_event_registration_open: self.post_event_registration_open.unwrap_or(0) != 0,
@@ -528,7 +531,7 @@ pub async fn upsert_event(
          in_person_capacity, online_capacity, \
          online_open_mode, online_registration_open, \
          deposit_deadline_hours, updated_by, dev_profile_enabled, community_links, \
-         calendar_subscribe_url, poster_url, recap_published) \
+         calendar_subscribe_url, poster_url, recap_published, location_map_url) \
          VALUES (?, ?, ?, ?, ?, \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
@@ -547,7 +550,7 @@ pub async fn upsert_event(
          {in_person_capacity}, {online_capacity}, \
          ?, {online_registration_open}, \
          {deposit_deadline_hours}, ?, {dev_profile_enabled}, ?, \
-         ?, ?, {recap_published}) \
+         ?, ?, {recap_published}, ?) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -595,7 +598,8 @@ pub async fn upsert_event(
          community_links = excluded.community_links, \
          calendar_subscribe_url = excluded.calendar_subscribe_url, \
          poster_url = excluded.poster_url, \
-         recap_published = excluded.recap_published",
+         recap_published = excluded.recap_published, \
+         location_map_url = excluded.location_map_url",
         event_start_ms = config.event_start_ms,
         event_end_ms = config.event_end_ms,
         deposit_enabled = config.deposit_enabled as i32,
@@ -660,6 +664,7 @@ pub async fn upsert_event(
         D1Type::Text(&community_links_json),
         D1Type::Text(&config.calendar_subscribe_url),
         D1Type::Text(&config.poster_url),
+        D1Type::Text(&config.location_map_url),
     ];
 
     db.prepare(&sql)

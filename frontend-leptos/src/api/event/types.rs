@@ -143,6 +143,8 @@ pub struct EventDetail {
     #[serde(default)]
     pub location: String,
     #[serde(default)]
+    pub location_map_url: String,
+    #[serde(default)]
     pub video_url: String,
     #[serde(default)]
     pub created_at: String,
@@ -285,6 +287,8 @@ pub struct CreateEventBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
     #[serde(default)]
+    pub location_map_url: String,
+    #[serde(default)]
     pub video_url: String,
     // Capacity settings
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -392,6 +396,8 @@ pub struct UpdateEventBody {
     pub require_photo_consent: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location_map_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub video_url: Option<String>,
     // Capacity settings

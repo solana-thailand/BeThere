@@ -187,6 +187,7 @@ pub async fn duplicate_event(
         max_refundable_deposits: source.max_refundable_deposits,
         description: source.description.clone(),
         location: source.location.clone(),
+        location_map_url: source.location_map_url.clone(),
         video_url: source.video_url.clone(),
         event_format: source.event_format.clone(),
         require_contact_info: source.require_contact_info,

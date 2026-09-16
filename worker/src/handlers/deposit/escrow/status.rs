@@ -267,6 +267,7 @@ pub async fn confirm_escrow_init_handler(
             dev_profile_enabled: None,
             community_links: None,
             calendar_subscribe_url: None,
+            location_map_url: None,
         };
 
         event_store::update_event(kv, d1, &event.id, &update_req, &claims.email)

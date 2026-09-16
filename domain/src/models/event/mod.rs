@@ -10,6 +10,7 @@ mod config;
 mod defaults;
 mod enums;
 mod form;
+mod map_url;
 mod requests;
 mod responses;
 mod sheet_name;
@@ -20,6 +21,7 @@ mod tests;
 pub use config::{CommunityLink, EventConfig, EventIndex, EventMeta};
 pub use enums::{EscrowStatus, EventFormat, EventStatus, EventVisibility, OnlineOpenMode};
 pub use form::{FormFieldConfig, FormFieldType, RegistrationFormConfig};
+pub use map_url::{MAX_MAP_URL_CHARS, normalize_map_url, safe_map_url};
 pub use requests::{CreateEventRequest, DuplicateEventRequest, UpdateEventRequest};
 pub use responses::{
     CreateEventResponse, EventDetailResponse, EventListResponse, UpdateEventResponse,

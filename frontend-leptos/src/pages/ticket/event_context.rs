@@ -1,6 +1,7 @@
 //! Event context badge — shows event image, tagline, location, and link.
 
 use crate::utils;
+use event_checkin_domain::models::event::safe_map_url;
 use leptos::prelude::*;
 
 /// Event context card showing event badge image, tagline, location, and sessions link.
@@ -15,6 +16,9 @@ pub fn EventContext(
     /// Event location (empty = hidden)
     #[prop(into)]
     location: String,
+    /// Venue map link (empty = location shown as plain text)
+    #[prop(optional, into)]
+    location_map_url: String,
     /// External event page URL (empty = hidden)
     #[prop(into)]
     event_link: String,
@@ -59,9 +63,20 @@ pub fn EventContext(
             }}
             {if !location.is_empty() {
                 let loc = location.clone();
+                let map_link = safe_map_url(&location_map_url).map(|href| view! {
+                    " "
+                    <a
+                        href=href
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="ticket-event-link"
+                    >
+                        "Map ↗"
+                    </a>
+                });
                 view! {
                     <p class="ticket-event-location">
-                        "📍 " {utils::escape_html(&loc)}
+                        "📍 " {utils::escape_html(&loc)} {map_link}
                     </p>
                 }.into_any()
             } else {

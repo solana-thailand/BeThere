@@ -4,7 +4,7 @@ use worker::KvStore;
 
 use event_checkin_domain::models::event::{
     CreateEventRequest, DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus,
-    EventConfig, EventIndex, EventStatus, normalize_sheet_name,
+    EventConfig, EventIndex, EventStatus, normalize_map_url, normalize_sheet_name,
 };
 
 use crate::event_store::read::get_event_index;
@@ -47,6 +47,8 @@ pub async fn create_event(
             return Err("event_end_ms must be after event_start_ms".to_string());
         }
     }
+
+    let location_map_url = normalize_map_url(&req.location_map_url)?;
 
     // SEC-003: Max deposit cap ($1,000 USDC = 1_000_000_000 smallest units, 6 decimals)
     const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
@@ -147,6 +149,7 @@ pub async fn create_event(
         max_refundable_deposits: req.max_refundable_deposits,
         description: req.description.trim().to_string(),
         location: req.location.trim().to_string(),
+        location_map_url,
         video_url: req.video_url.trim().to_string(),
         event_format: req.event_format.clone(),
         require_contact_info: req.require_contact_info,

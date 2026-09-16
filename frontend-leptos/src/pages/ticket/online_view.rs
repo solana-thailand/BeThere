@@ -32,6 +32,7 @@ pub fn OnlineView(
         nft_image_url,
         event_tagline,
         event_location,
+        event_location_map_url,
         event_link,
         deposit_enabled,
         deposit_info,
@@ -132,6 +133,7 @@ pub fn OnlineView(
                 nft_image_url=nft_image_url.clone()
                 tagline=event_tagline.clone()
                 location=event_location.clone()
+                location_map_url=event_location_map_url.clone()
                 event_link=event_link.clone()
             />
 
