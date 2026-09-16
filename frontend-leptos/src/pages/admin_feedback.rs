@@ -2,7 +2,7 @@
 //!
 //! Visualizes attendee satisfaction ratings (Content, Venue, Catering, Promotion),
 //! online viewing habits, continuation interest, individual qualitative feedback,
-//! and provides one-click CSV export.
+//! and provides one-click CSV export with cross-event and series aggregation.
 
 use leptos::prelude::*;
 
@@ -20,24 +20,44 @@ pub fn AdminFeedback(
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (search_query, set_search_query) = signal(String::new());
     let (filter_type, set_filter_type) = signal("all".to_string());
+    let (scope, set_scope) = signal("event".to_string()); // "event" | "series" | "all"
+    let (series_name, set_series_name) = signal(None::<String>);
 
-    // Load feedback data when active event or refresh counter changes
+    // Reset scope to "event" whenever active event changes
+    let tracked_event_for_reset = active_event_id;
+    Effect::new(move |_| {
+        let _ = tracked_event_for_reset.get();
+        set_scope.set("event".to_string());
+        set_series_name.set(None);
+    });
+
+    // Load feedback data when active event, scope, or refresh counter changes
     let tracked_event_id = active_event_id;
     Effect::new(move |_| {
         let _ = refresh_counter.get();
+        let current_scope = scope.get();
         let eid = tracked_event_id.get();
 
-        if eid.is_none() {
+        if current_scope != "all" && eid.is_none() {
             set_feedback_data.set(None);
             return;
         }
 
-        let eid_val = eid.unwrap();
+        let eid_val = eid.clone();
         set_loading.set(true);
 
         leptos::task::spawn_local(async move {
-            match api::get_admin_feedback(Some(&eid_val)).await {
+            let res = match current_scope.as_str() {
+                "all" => api::get_admin_feedback(None, Some("all")).await,
+                "series" => api::get_admin_feedback(eid_val.as_deref(), Some("series")).await,
+                _ => api::get_admin_feedback(eid_val.as_deref(), Some("event")).await,
+            };
+
+            match res {
                 Ok(data) => {
+                    if data.series_name.is_some() {
+                        set_series_name.set(data.series_name.clone());
+                    }
                     set_feedback_data.set(Some(data));
                     set_loading.set(false);
                 }
@@ -79,12 +99,12 @@ pub fn AdminFeedback(
         }
     };
 
-    let has_event = move || active_event_id.get().is_some();
+    let has_event = move || scope.get() == "all" || active_event_id.get().is_some();
 
     view! {
         <div class="admin-feedback-page" style="padding-bottom: 3rem;">
             // Section Header
-            <div class="admin-section-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+            <div class="admin-section-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem;">
                 <div>
                     <h3 style="display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 1.25rem;">
                         <Icon icon=IconName::Star />
@@ -118,10 +138,82 @@ pub fn AdminFeedback(
                 </div>
             </div>
 
+            // Aggregation Scope Selector Bar
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; padding: 0.6rem 0.85rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 0.5rem;">
+                <div style="display: flex; align-items: center; gap: 0.6rem; font-size: 0.8125rem; color: #94a3b8;">
+                    <span style="font-weight: 600; color: #fff;">"Scope:"</span>
+                    <div style="display: inline-flex; border-radius: 0.375rem; overflow: hidden; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.3);">
+                        <button
+                            class="btn btn-sm"
+                            style=move || if scope.get() == "event" { "background: var(--color-primary, #6366f1); color: #fff; font-weight: 600;" } else { "background: transparent; color: #cbd5e1;" }
+                            on:click=move |_| set_scope.set("event".to_string())
+                        >
+                            "This Event"
+                        </button>
+                        <Show when=move || series_name.get().is_some() fallback=|| view! { <div></div> }>
+                            <button
+                                class="btn btn-sm"
+                                style=move || if scope.get() == "series" { "background: var(--color-primary, #6366f1); color: #fff; font-weight: 600;" } else { "background: transparent; color: #cbd5e1;" }
+                                on:click=move |_| set_scope.set("series".to_string())
+                                title="Aggregate feedback across all parts in this series"
+                            >
+                                {move || format!("Series: {}", series_name.get().unwrap_or_default())}
+                            </button>
+                        </Show>
+                        <button
+                            class="btn btn-sm"
+                            style=move || if scope.get() == "all" { "background: var(--color-primary, #6366f1); color: #fff; font-weight: 600;" } else { "background: transparent; color: #cbd5e1;" }
+                            on:click=move |_| set_scope.set("all".to_string())
+                            title="Aggregate feedback across all events"
+                        >
+                            "All Events"
+                        </button>
+                    </div>
+                </div>
+
+                <div style="font-size: 0.8125rem; color: #94a3b8;">
+                    {move || {
+                        if let Some(ref data) = feedback_data.get() {
+                            if data.events_included.len() > 1 {
+                                format!("Aggregated {} events • {} total submissions", data.events_included.len(), data.total_respondents)
+                            } else {
+                                format!("Viewing: {}", data.event_name)
+                            }
+                        } else {
+                            String::new()
+                        }
+                    }}
+                </div>
+            </div>
+
+            // Included sessions pill list (when aggregating multiple events)
+            <Show when=move || feedback_data.get().is_some_and(|d| d.events_included.len() > 1) fallback=|| view! { <div></div> }>
+                {move || {
+                    let events = feedback_data.get().map(|d| d.events_included).unwrap_or_default();
+                    view! {
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem; padding: 0.75rem 1rem; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.2); border-radius: 0.5rem;">
+                            <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: #38bdf8; display: flex; align-items: center; gap: 0.35rem;">
+                                <span>"📊"</span> "Included Sessions in this Aggregation"
+                            </div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                {events.into_iter().map(|ev| {
+                                    view! {
+                                        <span class="badge badge-sm" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 0.35rem 0.6rem; color: #fff; font-size: 0.75rem;">
+                                            <strong style="color: #38bdf8; margin-right: 0.35rem;">{ev.respondent_count}</strong>
+                                            {ev.event_name}
+                                        </span>
+                                    }
+                                }).collect::<Vec<_>>()}
+                            </div>
+                        </div>
+                    }
+                }}
+            </Show>
+
             // No event selected state
             <Show when=move || !has_event() fallback=|| view! { <div></div> }>
                 <div class="admin-empty-state" style="padding: 3rem 1rem; text-align: center; background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1); border-radius: 0.75rem;">
-                    <p style="color: var(--color-text-muted, #94a3b8);">"Select an event from the top selector to inspect survey responses."</p>
+                    <p style="color: var(--color-text-muted, #94a3b8);">"Select an event from the top selector or choose 'All Events' above to inspect survey responses."</p>
                 </div>
             </Show>
 
@@ -138,6 +230,7 @@ pub fn AdminFeedback(
                 {move || {
                     let data = feedback_data.get().unwrap_or_default();
                     let total = data.total_respondents;
+                    let is_multi_event = data.events_included.len() > 1;
 
                     if total == 0 {
                         return view! {
@@ -177,6 +270,7 @@ pub fn AdminFeedback(
                             }
                             r.name.to_lowercase().contains(&q)
                                 || r.email.to_lowercase().contains(&q)
+                                || r.event_name.as_deref().unwrap_or("").to_lowercase().contains(&q)
                                 || r.comment.as_deref().unwrap_or("").to_lowercase().contains(&q)
                                 || r.next_topics.as_deref().unwrap_or("").to_lowercase().contains(&q)
                         }).collect::<Vec<_>>()
@@ -389,11 +483,11 @@ pub fn AdminFeedback(
 
                                         <input
                                             type="text"
-                                            placeholder="Search by name, email, or comments..."
+                                            placeholder="Search by name, email, session, or comments..."
                                             prop:value=move || search_query.get()
                                             on:input=move |ev| set_search_query.set(event_target_value(&ev))
                                             class="form-control"
-                                            style="padding: 0.35rem 0.75rem; font-size: 0.8125rem; border-radius: 0.375rem; width: 240px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff;"
+                                            style="padding: 0.35rem 0.75rem; font-size: 0.8125rem; border-radius: 0.375rem; width: 260px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff;"
                                         />
                                     </div>
                                 </div>
@@ -418,10 +512,18 @@ pub fn AdminFeedback(
                                                 let is_onsite = r.participation_type.to_lowercase().contains("in_person") || r.participation_type.to_lowercase().contains("in-person") || r.participation_type.to_lowercase().contains("onsite");
                                                 let badge_cls = if is_onsite { "badge badge-sm badge-success" } else { "badge badge-sm badge-neutral" };
                                                 let mode_label = if is_onsite { "Onsite" } else { "Online" };
+                                                let ev_name = r.event_name.clone();
 
                                                 view! {
                                                     <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); vertical-align: top;">
                                                         <td style="padding: 0.6rem 0.75rem;">
+                                                            <Show when=move || is_multi_event && ev_name.is_some() fallback=|| view! { <div></div> }>
+                                                                <div style="margin-bottom: 0.25rem;">
+                                                                    <span class="badge badge-sm" style="background: rgba(99, 102, 241, 0.2); border: 1px solid rgba(99, 102, 241, 0.4); color: #a5b4fc; font-size: 0.7rem; padding: 0.15rem 0.45rem;">
+                                                                        {r.event_name.clone().unwrap_or_default()}
+                                                                    </span>
+                                                                </div>
+                                                            </Show>
                                                             <div style="font-weight: 600; color: #fff;">{r.name}</div>
                                                             <div style="font-size: 0.75rem; color: #94a3b8;">{r.email}</div>
                                                         </td>

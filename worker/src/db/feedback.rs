@@ -1,10 +1,10 @@
 //! D1 queries and data aggregations for event feedback / post-event survey (Issue #113).
 
-use std::collections::BTreeMap;
 use event_checkin_domain::models::api::{
-    AdminFeedbackResponse, FeedbackDimensionStats, FeedbackOptionCount,
+    AdminFeedbackResponse, FeedbackDimensionStats, FeedbackEventIncluded, FeedbackOptionCount,
     FeedbackRatingDistribution, FeedbackRespondentRow,
 };
+use std::collections::BTreeMap;
 use worker::D1Database;
 use worker::d1::D1Type;
 
@@ -26,47 +26,153 @@ fn escape_csv(s: &str) -> String {
     }
 }
 
+/// Scope definition for feedback queries: single event, series, or all events.
+pub struct FeedbackFilterScope<'a> {
+    pub target_id: &'a str,
+    pub title: &'a str,
+    pub series_name: Option<String>,
+    pub filter_event_ids: Option<&'a [String]>,
+}
+
 pub async fn get_admin_feedback(
     db: &D1Database,
-    event_id: &str,
-    event_name: &str,
+    scope: FeedbackFilterScope<'_>,
 ) -> Result<AdminFeedbackResponse, String> {
-    let sql = "SELECT \
-        r.developer_email, \
-        r.field_key, \
-        r.field_value, \
-        r.answered_at, \
-        COALESCE(a.name, '') AS name, \
-        COALESCE(a.participation_type, 'in_person') AS participation_type, \
-        (CASE WHEN a.checked_in_at IS NOT NULL AND a.checked_in_at <> '' THEN 1 ELSE 0 END) AS is_checked_in \
-        FROM registration_responses r \
-        LEFT JOIN attendees a \
-          ON a.event_id = r.event_id \
-         AND LOWER(a.email) = LOWER(r.developer_email) \
-        WHERE r.event_id = ?1 \
-          AND r.field_key LIKE 'post.%' \
-        ORDER BY r.answered_at DESC, r.developer_email ASC";
+    // If an explicit empty list was passed, return an empty response immediately.
+    if let Some(ids) = scope.filter_event_ids
+        && ids.is_empty()
+    {
+        return Ok(AdminFeedbackResponse {
+            event_id: scope.target_id.to_string(),
+            event_name: scope.title.to_string(),
+            series_name: scope.series_name,
+            events_included: Vec::new(),
+            total_respondents: 0,
+            onsite_respondents: 0,
+            online_respondents: 0,
+            dimensions: Vec::new(),
+            online_watched: Vec::new(),
+            latent_space_continue: Vec::new(),
+            respondents: Vec::new(),
+            csv: None,
+            filename: None,
+        });
+    }
 
-    let stmt = db.prepare(sql);
-    let bound = stmt
-        .bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 get_admin_feedback bind: {e:?}"))?;
+    let rows = match scope.filter_event_ids {
+        Some(ids) if ids.len() == 1 => {
+            let sql = "SELECT \
+                r.event_id, \
+                r.developer_email, \
+                r.field_key, \
+                r.field_value, \
+                r.answered_at, \
+                COALESCE(a.name, '') AS name, \
+                COALESCE(a.participation_type, 'in_person') AS participation_type, \
+                (CASE WHEN a.checked_in_at IS NOT NULL AND a.checked_in_at <> '' THEN 1 ELSE 0 END) AS is_checked_in, \
+                COALESCE(e.name, r.event_id) AS event_name \
+                FROM registration_responses r \
+                LEFT JOIN attendees a \
+                  ON a.event_id = r.event_id \
+                 AND LOWER(a.email) = LOWER(r.developer_email) \
+                LEFT JOIN events e \
+                  ON e.id = r.event_id \
+                WHERE r.event_id = ?1 \
+                  AND r.field_key LIKE 'post.%' \
+                ORDER BY r.answered_at DESC, r.developer_email ASC";
+            let stmt = db.prepare(sql);
+            let bound = stmt
+                .bind_refs(&[D1Type::Text(&ids[0])])
+                .map_err(|e| format!("D1 get_admin_feedback bind: {e:?}"))?;
+            safe_all_rows(&bound)
+                .await
+                .map_err(|e| format!("D1 get_admin_feedback safe_all_rows: {e}"))?
+        }
+        Some(ids) => {
+            let placeholders = (1..=ids.len())
+                .map(|i| format!("?{i}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let sql = format!(
+                "SELECT \
+                r.event_id, \
+                r.developer_email, \
+                r.field_key, \
+                r.field_value, \
+                r.answered_at, \
+                COALESCE(a.name, '') AS name, \
+                COALESCE(a.participation_type, 'in_person') AS participation_type, \
+                (CASE WHEN a.checked_in_at IS NOT NULL AND a.checked_in_at <> '' THEN 1 ELSE 0 END) AS is_checked_in, \
+                COALESCE(e.name, r.event_id) AS event_name \
+                FROM registration_responses r \
+                LEFT JOIN attendees a \
+                  ON a.event_id = r.event_id \
+                 AND LOWER(a.email) = LOWER(r.developer_email) \
+                LEFT JOIN events e \
+                  ON e.id = r.event_id \
+                WHERE r.event_id IN ({placeholders}) \
+                  AND r.field_key LIKE 'post.%' \
+                ORDER BY r.answered_at DESC, r.developer_email ASC"
+            );
+            let stmt = db.prepare(&sql);
+            let binds: Vec<D1Type> = ids.iter().map(|id| D1Type::Text(id.as_str())).collect();
+            let bound = stmt
+                .bind_refs(&binds)
+                .map_err(|e| format!("D1 get_admin_feedback bind: {e:?}"))?;
+            safe_all_rows(&bound)
+                .await
+                .map_err(|e| format!("D1 get_admin_feedback safe_all_rows: {e}"))?
+        }
+        None => {
+            let sql = "SELECT \
+                r.event_id, \
+                r.developer_email, \
+                r.field_key, \
+                r.field_value, \
+                r.answered_at, \
+                COALESCE(a.name, '') AS name, \
+                COALESCE(a.participation_type, 'in_person') AS participation_type, \
+                (CASE WHEN a.checked_in_at IS NOT NULL AND a.checked_in_at <> '' THEN 1 ELSE 0 END) AS is_checked_in, \
+                COALESCE(e.name, r.event_id) AS event_name \
+                FROM registration_responses r \
+                LEFT JOIN attendees a \
+                  ON a.event_id = r.event_id \
+                 AND LOWER(a.email) = LOWER(r.developer_email) \
+                LEFT JOIN events e \
+                  ON e.id = r.event_id \
+                WHERE r.field_key LIKE 'post.%' \
+                ORDER BY r.answered_at DESC, r.developer_email ASC";
+            let stmt = db.prepare(sql);
+            safe_all_rows(&stmt)
+                .await
+                .map_err(|e| format!("D1 get_admin_feedback safe_all_rows: {e}"))?
+        }
+    };
 
-    let rows = safe_all_rows(&bound)
-        .await
-        .map_err(|e| format!("D1 get_admin_feedback safe_all_rows: {e}"))?;
-
-    // Group by email
+    // Group by (event_id, email) so multiple event submissions by the same person remain distinct
     let mut respondents_map: BTreeMap<String, FeedbackRespondentRow> = BTreeMap::new();
+    let mut events_map: BTreeMap<String, (String, usize)> = BTreeMap::new();
 
     for row in rows {
+        let event_id = row
+            .get("event_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        let event_name = row
+            .get("event_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
         let email = row
             .get("developer_email")
             .and_then(|v| v.as_str())
             .unwrap_or_default()
             .trim()
             .to_lowercase();
-        if email.is_empty() {
+        if email.is_empty() || event_id.is_empty() {
             continue;
         }
 
@@ -100,12 +206,33 @@ pub async fn get_admin_feedback(
         let is_checked_in = row
             .get("is_checked_in")
             .and_then(|v| v.as_i64())
-            .unwrap_or(0) == 1;
+            .unwrap_or(0)
+            == 1;
 
-        let entry = respondents_map.entry(email.clone()).or_insert_with(|| {
+        let respondent_key = format!("{event_id}:{email}");
+        let entry = respondents_map.entry(respondent_key).or_insert_with(|| {
+            let display_name = if event_name.is_empty() {
+                event_id.clone()
+            } else {
+                event_name.clone()
+            };
+            events_map
+                .entry(event_id.clone())
+                .or_insert((display_name, 0))
+                .1 += 1;
             FeedbackRespondentRow {
+                event_id: Some(event_id.clone()),
+                event_name: Some(if event_name.is_empty() {
+                    event_id.clone()
+                } else {
+                    event_name.clone()
+                }),
                 email: email.clone(),
-                name: if name.is_empty() { email.clone() } else { name.clone() },
+                name: if name.is_empty() {
+                    email.clone()
+                } else {
+                    name.clone()
+                },
                 participation_type: if participation_type.is_empty() {
                     "in_person".to_string()
                 } else {
@@ -152,6 +279,17 @@ pub async fn get_admin_feedback(
         .count();
     let online_respondents = total_respondents.saturating_sub(onsite_respondents);
 
+    // Build list of events included
+    let mut events_included: Vec<FeedbackEventIncluded> = events_map
+        .into_iter()
+        .map(|(eid, (ename, count))| FeedbackEventIncluded {
+            event_id: eid,
+            event_name: ename,
+            respondent_count: count,
+        })
+        .collect();
+    events_included.sort_by_key(|b| std::cmp::Reverse(b.respondent_count));
+
     // Build dimensions
     let dimension_defs = [
         (CONTENT_KEY, "ด้านเนื้อหา (Content)"),
@@ -187,7 +325,8 @@ pub async fn get_admin_feedback(
                 if v.contains("พึงพอใจมาก") {
                     count_high += 1;
                     score_sum += 3.0;
-                } else if v == "พึงพอใจ" || (v.contains("พึงพอใจ") && !v.contains("ไม่")) {
+                } else if v == "พึงพอใจ" || (v.contains("พึงพอใจ") && !v.contains("ไม่"))
+                {
                     count_med += 1;
                     score_sum += 2.0;
                 } else if v.contains("ไม่พึงพอใจ") {
@@ -300,11 +439,16 @@ pub async fn get_admin_feedback(
     latent_space_continue.sort_by_key(|b| std::cmp::Reverse(b.count));
 
     // Build CSV
+    let has_multiple_events = events_included.len() > 1;
     let mut csv_lines = Vec::with_capacity(respondents.len() + 1);
-    csv_lines.push("Email,Name,Participation,Checked In,Answered At,Content Satisfaction,Venue Satisfaction,Catering Satisfaction,Promotion Satisfaction,Online Watched,Series Continuation,Comment,Next Topics".to_string());
+    if has_multiple_events {
+        csv_lines.push("Event,Email,Name,Participation,Checked In,Answered At,Content Satisfaction,Venue Satisfaction,Catering Satisfaction,Promotion Satisfaction,Online Watched,Series Continuation,Comment,Next Topics".to_string());
+    } else {
+        csv_lines.push("Email,Name,Participation,Checked In,Answered At,Content Satisfaction,Venue Satisfaction,Catering Satisfaction,Promotion Satisfaction,Online Watched,Series Continuation,Comment,Next Topics".to_string());
+    }
 
     for r in &respondents {
-        let line = format!(
+        let base_line = format!(
             "{},{},{},{},{},{},{},{},{},{},{},{},{}",
             escape_csv(&r.email),
             escape_csv(&r.name),
@@ -320,15 +464,26 @@ pub async fn get_admin_feedback(
             escape_csv(r.comment.as_deref().unwrap_or("")),
             escape_csv(r.next_topics.as_deref().unwrap_or("")),
         );
-        csv_lines.push(line);
+        if has_multiple_events {
+            let ev_display = r
+                .event_name
+                .as_deref()
+                .or(r.event_id.as_deref())
+                .unwrap_or("");
+            csv_lines.push(format!("{},{}", escape_csv(ev_display), base_line));
+        } else {
+            csv_lines.push(base_line);
+        }
     }
     let csv_content = csv_lines.join("\r\n");
-    let safe_event_slug = event_id.replace(['/', '\\', ' ', ':'], "-");
-    let filename = format!("feedback-{safe_event_slug}.csv");
+    let safe_target = scope.target_id.replace(['/', '\\', ' ', ':'], "-");
+    let filename = format!("feedback-{safe_target}.csv");
 
     Ok(AdminFeedbackResponse {
-        event_id: event_id.to_string(),
-        event_name: event_name.to_string(),
+        event_id: scope.target_id.to_string(),
+        event_name: scope.title.to_string(),
+        series_name: scope.series_name,
+        events_included,
         total_respondents,
         onsite_respondents,
         online_respondents,
