@@ -765,18 +765,28 @@ pub async fn get_cancel_status(event_id: &str) -> Result<CancelStatusResponse, A
 // ===== Feedback Admin (Issue #113) =====
 
 pub use event_checkin_domain::models::api::{
-    AdminFeedbackResponse, FeedbackDimensionStats, FeedbackOptionCount,
+    AdminFeedbackResponse, FeedbackDimensionStats, FeedbackEventIncluded, FeedbackOptionCount,
     FeedbackRatingDistribution, FeedbackRespondentRow,
 };
 
-/// GET /api/admin/feedback?event_id={id} — post-event survey analytics and responses.
+/// GET /api/admin/feedback?event_id={id}&scope={scope} — post-event survey analytics and responses.
 pub async fn get_admin_feedback(
     event_id: Option<&str>,
+    scope: Option<&str>,
 ) -> Result<AdminFeedbackResponse, ApiError> {
-    let path = match event_id {
-        Some(eid) => format!("/admin/feedback?event_id={eid}"),
-        None => "/admin/feedback".to_string(),
+    let mut params = Vec::new();
+    if let Some(eid) = event_id {
+        params.push(format!("event_id={eid}"));
+    }
+    if let Some(sc) = scope {
+        params.push(format!("scope={sc}"));
+    }
+    let query = if params.is_empty() {
+        String::new()
+    } else {
+        format!("?{}", params.join("&"))
     };
+    let path = format!("/admin/feedback{query}");
     super::api_get_json(&path).await
 }
 

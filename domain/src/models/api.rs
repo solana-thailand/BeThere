@@ -537,6 +537,14 @@ pub struct QuizStatusResponse {
 // Feedback / Post-Event Survey API models (Issue #113)
 // ---------------------------------------------------------------------------
 
+/// Summary of an individual event included in a cross-event or series aggregation.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct FeedbackEventIncluded {
+    pub event_id: String,
+    pub event_name: String,
+    pub respondent_count: usize,
+}
+
 /// Distribution count for a specific satisfaction rating label.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct FeedbackRatingDistribution {
@@ -569,6 +577,10 @@ pub struct FeedbackOptionCount {
 /// Individual attendee feedback response row.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct FeedbackRespondentRow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event_name: Option<String>,
     pub email: String,
     pub name: String,
     pub participation_type: String,
@@ -598,6 +610,10 @@ pub struct FeedbackRespondentRow {
 pub struct AdminFeedbackResponse {
     pub event_id: String,
     pub event_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub series_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events_included: Vec<FeedbackEventIncluded>,
     pub total_respondents: usize,
     pub onsite_respondents: usize,
     pub online_respondents: usize,
