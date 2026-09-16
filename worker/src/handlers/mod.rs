@@ -355,10 +355,7 @@ pub fn routes(state: AppState) -> Router<()> {
             get(adventure::get_admin_adventure).put(adventure::put_admin_adventure),
         )
         // Admin feedback dashboard (protected — organizer inspects survey results & sentiment)
-        .route(
-            "/admin/feedback",
-            get(feedback::admin_feedback_handler),
-        )
+        .route("/admin/feedback", get(feedback::admin_feedback_handler))
         // Event management (protected — admin/organizer CRUD)
         .route(
             "/events",

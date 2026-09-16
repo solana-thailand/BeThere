@@ -102,7 +102,7 @@ pub fn AdminFeedback(
     let has_event = move || scope.get() == "all" || active_event_id.get().is_some();
 
     view! {
-        <div class="admin-feedback-page" style="padding-bottom: 3rem;">
+        <div class="admin-feedback-page">
             // Section Header
             <div class="admin-section-header" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem;">
                 <div>
@@ -486,7 +486,7 @@ pub fn AdminFeedback(
                                             placeholder="Search by name, email, session, or comments..."
                                             prop:value=move || search_query.get()
                                             on:input=move |ev| set_search_query.set(event_target_value(&ev))
-                                            class="form-control"
+                                            class="form-input"
                                             style="padding: 0.35rem 0.75rem; font-size: 0.8125rem; border-radius: 0.375rem; width: 260px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); color: #fff;"
                                         />
                                     </div>

@@ -131,6 +131,12 @@ const ALLOWED_INTERPOLATIONS: &[AllowedInterpolation] = &[
                  whose values are all bound; `in_person_case` is a `&'static str` \
                  literal and `where_clause` is built only from those two.",
     },
+    AllowedInterpolation {
+        file: "src/db/feedback.rs",
+        placeholders: &["placeholders"],
+        reason: "`WHERE r.event_id IN (…)` is a join of generated `?N` markers \
+                 formatted only from `usize` integer indices; every event id is bound.",
+    },
     // -- Integers and bools: a number cannot carry SQL. ---------------------
     AllowedInterpolation {
         file: "src/db/events.rs",
