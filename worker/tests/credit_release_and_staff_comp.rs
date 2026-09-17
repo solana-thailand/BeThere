@@ -43,12 +43,21 @@ fn pub_async_fns(source: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// Position of the first ledger sum, bare or aliased (`SUM(l.delta)` since the
+/// person-aware readers join `person_emails`).
+fn first_sum(body: &str) -> Option<usize> {
+    ["SUM(delta)", "SUM(l.delta)"]
+        .iter()
+        .filter_map(|needle| body.find(needle))
+        .min()
+}
+
 #[test]
 fn every_balance_read_releases_ended_applies_first() {
     let ledger = read("src/db/credit_ledger.rs");
     let readers: Vec<_> = pub_async_fns(&ledger)
         .into_iter()
-        .filter(|(name, body)| name != "release_ended_applies" && body.contains("SUM(delta)"))
+        .filter(|(name, body)| name != "release_ended_applies" && first_sum(body).is_some())
         .collect();
     assert!(
         readers.len() >= 5,
@@ -61,7 +70,7 @@ fn every_balance_read_releases_ended_applies_first() {
             .unwrap_or_else(|| {
                 panic!("{name} reads a balance without releasing ended events first")
             });
-        let sum = body.find("SUM(delta)").expect("filtered on SUM(delta)");
+        let sum = first_sum(&body).expect("filtered on a ledger sum");
         assert!(release < sum, "{name} must release before it sums");
     }
 }

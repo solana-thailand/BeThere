@@ -86,14 +86,14 @@ pub async fn github_link_start(
 }
 
 /// How long a social-link state param stays valid.
-const GITHUB_STATE_TTL_SECS: i64 = 600;
+pub(crate) const GITHUB_STATE_TTL_SECS: i64 = 600;
 
 /// Build a signed state param `{email}|{expires_unix}|{hmac_hex}`, domain-
 /// separated by `tag`. The HMAC (keyed with the JWT secret) covers email +
 /// expiry, so a callback can trust the email WITHOUT a session cookie — which
 /// matters for third-party redirect flows (GitHub OAuth, Telegram widget)
 /// where SameSite cookies may not survive the cross-site hop.
-async fn sign_link_state(
+pub(crate) async fn sign_link_state(
     tag: &str,
     email: &str,
     expires: i64,
@@ -107,7 +107,11 @@ async fn sign_link_state(
 }
 
 /// Verify a signed state param for `tag` and return the embedded email.
-async fn verify_link_state(tag: &str, state: &str, secret: &str) -> Result<String, &'static str> {
+pub(crate) async fn verify_link_state(
+    tag: &str,
+    state: &str,
+    secret: &str,
+) -> Result<String, &'static str> {
     // rsplitn: sig and expiry cannot contain '|', the email theoretically could
     let mut parts = state.rsplitn(3, '|');
     let _sig_hex = parts.next().ok_or("malformed")?;

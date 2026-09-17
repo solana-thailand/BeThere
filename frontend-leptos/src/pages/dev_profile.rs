@@ -121,6 +121,9 @@ pub fn DevProfile() -> impl IntoView {
         }
     });
 
+    // Emails linked to this person (plan 025) — they share rolling credit.
+    let (linked_emails, set_linked_emails) = signal(Vec::<String>::new());
+
     // Social-link result banner, fed by ?linked= / ?error= from the OAuth
     // callback redirect. (is_success, message)
     let (link_banner, set_link_banner) = signal(None::<(bool, String)>);
@@ -129,7 +132,9 @@ pub fn DevProfile() -> impl IntoView {
         && let Ok(url) = web_sys::Url::new(&href)
     {
         let params = url.search_params();
-        let banner = if let Some(linked) = params.get("linked") {
+        let banner = if let Some(result) = params.get("email_link") {
+            Some(api::email_link_result_message(&result))
+        } else if let Some(linked) = params.get("linked") {
             let msg = match linked.as_str() {
                 "github" => "GitHub account linked and verified!".to_string(),
                 "telegram" => "Telegram account linked and verified!".to_string(),
@@ -194,6 +199,11 @@ pub fn DevProfile() -> impl IntoView {
             }
 
             set_state.set(ProfileState::LoadingProfile);
+
+            match api::get_linked_emails().await {
+                Ok(emails) => set_linked_emails.set(emails),
+                Err(e) => log::warn!("[profile] linked emails fetch failed: {}", e.message),
+            }
 
             match api::get_my_profile().await {
                 Ok(profile) => {
@@ -416,6 +426,49 @@ pub fn DevProfile() -> impl IntoView {
                                 ().into_any()
                             }}
                         </div>
+
+                        // Linked emails (plan 025) — Google sessions only.
+                        {if is_wallet_identity {
+                            ().into_any()
+                        } else {
+                            view! {
+                                <div class="dev-profile-field">
+                                    <label class="dev-profile-label">"Other emails"</label>
+                                    {move || {
+                                        let others: Vec<String> = linked_emails
+                                            .get()
+                                            .into_iter()
+                                            .filter(|e| !e.eq_ignore_ascii_case(&raw_email))
+                                            .collect();
+                                        match others.is_empty() {
+                                            true => view! {
+                                                <span class="dev-profile-hint">"None linked."</span>
+                                            }.into_any(),
+                                            false => others
+                                                .into_iter()
+                                                .map(|e| view! { <div class="dev-profile-readonly">{e}</div> })
+                                                .collect::<Vec<_>>()
+                                                .into_any(),
+                                        }
+                                    }}
+                                    <span class="dev-profile-hint">
+                                        "Registered with another email too, like a work address? Link it so your deposit credit works with both."
+                                    </span>
+                                    <div class="dev-profile-social-actions">
+                                        <a href="/api/auth/email-link" rel="external" class="dev-profile-social-connect-btn"
+                                            on:click=move |ev| {
+                                                ev.prevent_default();
+                                                if let Some(win) = web_sys::window() {
+                                                    let _ = win.location().set_href("/api/auth/email-link");
+                                                }
+                                            }
+                                        >
+                                            "Add another email (Google) →"
+                                        </a>
+                                    </div>
+                                </div>
+                            }.into_any()
+                        }}
 
                         // Display Name
                         <div class="dev-profile-field">
