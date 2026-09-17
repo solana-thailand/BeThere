@@ -211,7 +211,35 @@ Phase 2
 Phase 3 (only if needed)
 - [ ] 7.10 Canonical session email (primary) across email-keyed tables.
 
-## 8. Definition of done
+## 8. Deploy (owner)
+
+Prod D1 is at `0042` (checked 2026-09-18), so `0043_person_emails.sql` has to be
+applied. **Migration first, then the worker** — the new SQL references
+`person_emails`, so a worker deployed ahead of the table would error on every
+credit read. It fails closed (no credit granted, errors in the log), but every
+registration that should auto-apply credit would break until the table exists.
+
+```sh
+# 1. Back up prod D1 first (contains PII — keep the dump out of git)
+npx wrangler d1 export bethere-db --remote --output backup-$(date +%Y%m%d).sql
+
+# 2. Migration — staging, then prod
+cd worker
+npx wrangler d1 migrations apply bethere-db-staging --remote
+npx wrangler d1 migrations apply bethere-db --remote
+
+# 3. Worker + frontend (worker/deploy.sh does NOT apply migrations)
+./deploy.sh            # staging first, then prod, per the usual gate
+```
+
+Rollback: roll the worker back to the previous version. Leave the table — it is
+additive, and code that predates it never reads it. No data needs undoing,
+because nothing writes `person_emails` until someone links.
+
+After the prod deploy, the #122 attendee links their two emails from the profile
+page, and Apply Credit appears on their RTM #6 roster row.
+
+## 9. Definition of done
 
 - The #122 attendee's ฿500 is spendable from their RTM #6 row without any
   hand-written ledger row.
