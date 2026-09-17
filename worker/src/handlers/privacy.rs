@@ -311,7 +311,8 @@ pub async fn delete_request(
 ///
 /// Self-service marketing opt-out (PDPA right to withdraw consent).
 /// The user's email is taken from the JWT. Sets `consent_marketing = false`
-/// across all attendee rows for that email.
+/// across all attendee rows for that email and `consent_outreach = 0` on the
+/// developer profile, matching the address case-insensitively (#116, #117).
 #[worker::send]
 pub async fn unsubscribe_marketing(
     State(state): State<AppState>,
@@ -325,11 +326,17 @@ pub async fn unsubscribe_marketing(
     );
 
     let mut rows_updated: usize = 0;
+    let mut profiles_updated: usize = 0;
 
+    // Both stores hold the same checkbox; a withdrawal that lands in one and
+    // not the other must not report success (#117).
     if let Some(db) = state.d1.as_deref() {
         rows_updated = crate::db::attendees::set_marketing_consent(db, &email, false)
             .await
             .map_err(|e| AppError::Internal(format!("set_marketing_consent failed: {e}")))?;
+        profiles_updated = crate::db::developers::withdraw_outreach_consent(db, &email)
+            .await
+            .map_err(|e| AppError::Internal(format!("withdraw_outreach_consent failed: {e}")))?;
     }
 
     // Audit log
@@ -341,7 +348,10 @@ pub async fn unsubscribe_marketing(
                 &email,
                 crate::audit_store::AuditAction::MarketingUnsubscribed,
                 &email,
-                &format!("Marketing consent withdrawn: {rows_updated} attendee rows updated"),
+                &format!(
+                    "Marketing consent withdrawn: {rows_updated} attendee rows, \
+                     {profiles_updated} developer profiles updated"
+                ),
             ),
             state.d1.as_deref(),
         )
@@ -351,6 +361,7 @@ pub async fn unsubscribe_marketing(
     tracing::info!(
         subject_fingerprint = %subject_fingerprint,
         rows_updated,
+        profiles_updated,
         "PDPA marketing unsubscribe completed"
     );
 
@@ -358,6 +369,7 @@ pub async fn unsubscribe_marketing(
         "status": "completed",
         "email": email,
         "rows_updated": rows_updated,
+        "profiles_updated": profiles_updated,
     })))
 }
 

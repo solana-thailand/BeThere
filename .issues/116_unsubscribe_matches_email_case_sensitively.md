@@ -1,6 +1,6 @@
 # 116 — Marketing unsubscribe matches email case-sensitively
 
-**Status:** Open — latent, not live
+**Status:** Fixed on `fix/116-unsubscribe-email-case` (2026-09-17); not deployed
 **Found:** 2026-09-17, `.handovers/137` §4.7 (DevRel), confirmed against the code
 **Severity:** Medium (PDPA s.19 withdrawal) if it ever fires; nothing fires it today
 
@@ -28,7 +28,7 @@ the handler reports success with `changes = 0` while the opt-in stays on.
 A withdrawal that misses is the failure PDPA cares most about, and the handler
 cannot tell it apart from "nothing to withdraw".
 
-## Proposed fix (not applied)
+## Fix
 
 - `WHERE LOWER(email) = LOWER(?)` — uses the existing 0030 index, so no scan.
 - Before shipping, count prod rows with `email <> LOWER(email)`; if any exist,
@@ -41,3 +41,19 @@ cannot tell it apart from "nothing to withdraw".
 
 Normalising stored emails (a data migration) — the match should be robust
 without it.
+
+## Resolution (2026-09-17)
+
+- `set_marketing_consent` now matches `WHERE LOWER(email) = LOWER(?)`.
+  `EXPLAIN QUERY PLAN` in SQLite: `SEARCH attendees USING INDEX
+  idx_attendees_email_nocase`; a mixed-case row and its lowercase twin are both
+  withdrawn, other addresses untouched.
+- Prod pre-check (read-only count): **0 of 481** attendee rows have
+  `email <> LOWER(email)`, so no withdrawal ever missed and the `.issues/115`
+  audit does not need a re-run.
+- Guard: `worker/tests/marketing_consent_guard.rs`
+  `withdrawal_matches_email_case_insensitively`; mutation-checked (restoring
+  `WHERE email = ?` fails it).
+- Fixing this surfaced the sibling store the same withdrawal never touched:
+  `.issues/117`.
+
