@@ -34,7 +34,7 @@ pub(super) async fn verify_online_quest_completion(
     }
 
     // Check quiz status first
-    match crate::quiz::get_quiz_status(d1, kv, event_id, claim_token).await {
+    match crate::quiz::get_quiz_status(d1, kv, event_id, claim_token, quiz_enabled).await {
         Ok(QuizStatus::Passed) => true,
         Ok(QuizStatus::NotRequired) => {
             // Quiz not configured — check adventure (D1 only)
