@@ -106,6 +106,9 @@ APPLY_SPEND_SQL = concat_after(
     "db/credit_coverage.rs", "let spend = db", opener=".prepare(concat!("
 )
 QUEUE_SQL = concat_after("db/contacts.rs", "pub async fn credit_refund_requests(")
+CLAIMED_ELSEWHERE_SQL = concat_after(
+    "db/person.rs", "const CLAIMED_ELSEWHERE_SQL: &str = "
+)
 
 GMAIL = "person@gmail.com"
 WORK = "person@work.example"
@@ -282,6 +285,52 @@ class PersonEmailsTests(unittest.TestCase):
         )
         row = self.db.execute(QUEUE_SQL).fetchone()
         self.assertEqual((row["email"], row["credit_thb"]), (WORK, 1000))
+
+
+    # -- one badge per person per event ----------------------------------
+
+    def attendee(self, attendee_id, email, claimed_at=None):
+        self.db.execute(
+            """INSERT INTO attendees (id, event_id, email, claimed_at)
+               VALUES (?, 'e1', ?, ?)""",
+            (attendee_id, email, claimed_at),
+        )
+
+    def claimed_elsewhere(self, email, attendee_id):
+        row = self.db.execute(
+            CLAIMED_ELSEWHERE_SQL, ("e1", email, attendee_id)
+        ).fetchone()
+        return None if row is None else row["claimed_at"]
+
+    def test_linked_second_row_cannot_claim_a_second_badge(self):
+        self.attendee("a-gmail", GMAIL, claimed_at="2026-09-18T00:00:00Z")
+        self.attendee("a-work", WORK)
+        # Unlinked: two emails are two people, so nothing blocks the second row.
+        self.assertIsNone(self.claimed_elsewhere(WORK, "a-work"))
+        self.link(GMAIL, WORK)
+        self.assertEqual(
+            self.claimed_elsewhere(WORK, "a-work"), "2026-09-18T00:00:00Z"
+        )
+
+    def test_a_row_never_blocks_itself_and_an_unclaimed_sibling_is_fine(self):
+        self.attendee("a-gmail", GMAIL)
+        self.attendee("a-work", WORK, claimed_at="2026-09-18T00:00:00Z")
+        self.link(GMAIL, WORK)
+        # The claiming row itself is excluded...
+        self.assertIsNone(self.claimed_elsewhere(WORK, "a-work"))
+        # ...but its linked sibling sees the claim.
+        self.assertEqual(
+            self.claimed_elsewhere(GMAIL, "a-gmail"), "2026-09-18T00:00:00Z"
+        )
+        # An empty string is "not claimed", not a claim.
+        self.db.execute("UPDATE attendees SET claimed_at='' WHERE id='a-work'")
+        self.assertIsNone(self.claimed_elsewhere(GMAIL, "a-gmail"))
+
+    def test_a_different_person_in_the_same_event_never_blocks(self):
+        self.attendee("a-other", OTHER, claimed_at="2026-09-18T00:00:00Z")
+        self.attendee("a-work", WORK)
+        self.link(GMAIL, WORK)
+        self.assertIsNone(self.claimed_elsewhere(WORK, "a-work"))
 
 
 if __name__ == "__main__":

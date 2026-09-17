@@ -220,7 +220,28 @@ pub async fn register_attendee(
     // so the frontend can redirect to the correct step (deposit/ticket) instead of
     // showing an error. This handles the case where localStorage is cleared or the
     // attendee uses a different device.
-    if let Some(existing) = attendees.iter().find(|a| a.email.to_lowercase() == email) {
+    // A person who linked a second email (plan 025) is the same registrant, so
+    // their own row is found under either address instead of creating a second
+    // one. Own email first; the linked set only matters when that misses. D1
+    // unreachable ⇒ exact-email behaviour, never a wrongly blocked registration.
+    let person_emails: Vec<String> = match state.d1.as_deref() {
+        Some(db) => crate::db::person::emails_of(db, &email)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(error = %e, "linked-email dedup lookup failed — exact email only");
+                vec![email.clone()]
+            }),
+        None => vec![email.clone()],
+    };
+    let existing_row = attendees
+        .iter()
+        .find(|a| a.email.to_lowercase() == email)
+        .or_else(|| {
+            attendees
+                .iter()
+                .find(|a| person_emails.contains(&a.email.to_lowercase()))
+        });
+    if let Some(existing) = existing_row {
         // SECURITY (#1, IDOR): a wallet session that merely TYPED this email has
         // NOT proven ownership (credit_identity_ok is false unless the wallet is
         // bound to it). Returning the existing attendee's claim_token / api_id /

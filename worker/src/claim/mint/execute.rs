@@ -270,6 +270,30 @@ pub async fn execute_claim(
         return Err(AppError::Validation("NFT has already been claimed".into()));
     }
 
+    // 6b. One badge per PERSON per event: a second attendee row under another
+    //     email the attendee deliberately linked (plan 025) must not claim again.
+    //     Best-effort — it reads the D1 attendee mirror, so a missing row means
+    //     no extra block, never a false one. Unlinked emails are unaffected.
+    if let Some(db) = state.d1.as_deref() {
+        match crate::db::person::claimed_elsewhere(db, &event.id, &attendee.email, &attendee.api_id)
+            .await
+        {
+            Ok(Some(claimed_at)) => {
+                tracing::warn!(
+                    claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
+                    claimed_at = %claimed_at,
+                    "claim blocked: this person already claimed under a linked email"
+                );
+                return Err(AppError::Validation(
+                    "You have already claimed this event's badge with another of your linked emails."
+                        .into(),
+                ));
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!(error = %e, "linked-email claim check failed — not blocking"),
+        }
+    }
+
     // 7. Resolve the recipient wallet SERVER-SIDE. The client never dictates the
     //    mint destination for the locked or linked cases — it can only supply an
     //    explicit override wallet, which is the sole case a client address is used.

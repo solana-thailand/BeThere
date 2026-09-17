@@ -148,6 +148,48 @@ pub async fn link_google(
     })
 }
 
+/// SQL behind [`claimed_elsewhere`]. Kept as a constant so the SQLite
+/// behaviour test runs the real statement.
+pub(crate) const CLAIMED_ELSEWHERE_SQL: &str = concat!(
+    "SELECT a.claimed_at AS claimed_at FROM attendees a \
+     WHERE a.event_id = ?1 AND a.id <> ?3 \
+       AND a.claimed_at IS NOT NULL AND a.claimed_at <> '' \
+       AND LOWER(a.email) IN ",
+    person_emails_of!("?2"),
+    " LIMIT 1"
+);
+
+/// When another attendee row of the SAME person already claimed this event's
+/// badge, its `claimed_at`. One badge per person per event, so linking two
+/// emails cannot double a claim (plan 025 §5.2).
+///
+/// Reads the D1 attendee mirror, which the claim writer updates. A row missing
+/// from the mirror makes this return `None`, so it is a second line of defence
+/// on top of the per-row `claimed_at` check, not a replacement for it. It can
+/// only ever fire for emails someone deliberately linked.
+pub async fn claimed_elsewhere(
+    db: &D1Database,
+    event_id: &str,
+    email: &str,
+    attendee_id: &str,
+) -> Result<Option<String>, String> {
+    let email_lc = email.trim().to_lowercase();
+    let stmt = db
+        .prepare(CLAIMED_ELSEWHERE_SQL)
+        .bind_refs(&[
+            D1Type::Text(event_id),
+            D1Type::Text(&email_lc),
+            D1Type::Text(attendee_id),
+        ])
+        .map_err(|e| format!("D1 person claimed_elsewhere bind: {e:?}"))?;
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows.into_iter().next().and_then(|v| {
+        v.get("claimed_at")
+            .and_then(|x| x.as_str())
+            .map(str::to_string)
+    }))
+}
+
 /// Every email of `email`'s person, lowercased and sorted; just `[email]` when
 /// it is not linked.
 pub async fn emails_of(db: &D1Database, email: &str) -> Result<Vec<String>, String> {
