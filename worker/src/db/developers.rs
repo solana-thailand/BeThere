@@ -589,6 +589,36 @@ pub(crate) async fn clear_developer_pii(db: &D1Database, email: &str) -> Result<
     Ok(())
 }
 
+/// Withdraw outreach consent on the developer profile (PDPA marketing opt-out).
+///
+/// Registration writes the one marketing checkbox to both
+/// `attendees.consent_marketing` and this column, and the contacts export reads
+/// this column, so a withdrawal that clears only the attendee rows leaves the
+/// person listed as contactable (#117). `consent_outreach = 1` lets the partial
+/// index `idx_dev_profiles_consent` serve the case-insensitive match.
+/// Returns the number of profiles changed.
+pub(crate) async fn withdraw_outreach_consent(
+    db: &D1Database,
+    email: &str,
+) -> Result<usize, String> {
+    let result = db
+        .prepare(
+            "UPDATE developer_profiles SET consent_outreach = 0, updated_at = datetime('now') \
+             WHERE consent_outreach = 1 AND LOWER(email) = LOWER(?1)",
+        )
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 withdraw_outreach_consent bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 withdraw_outreach_consent: {e:?}"))?;
+    Ok(result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0))
+}
+
 /// Delete all registration responses for a developer (PDPA right to erasure).
 pub(crate) async fn delete_developer_responses(
     db: &D1Database,

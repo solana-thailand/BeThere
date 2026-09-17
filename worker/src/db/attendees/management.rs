@@ -249,6 +249,10 @@ pub(crate) async fn upsert_attendee_full(
 
 /// Set marketing consent for all attendee rows matching an email.
 /// Used for PDPA marketing opt-out (unsubscribe).
+///
+/// The match is case-insensitive on both sides, like every other
+/// attendee-by-email path (`idx_attendees_email_nocase`): a withdrawal that
+/// misses a mixed-case row reports success while the opt-in stays on (#116).
 pub(crate) async fn set_marketing_consent(
     db: &D1Database,
     email: &str,
@@ -259,7 +263,7 @@ pub(crate) async fn set_marketing_consent(
          consent_marketing = {consent}, \
          consent_marketing_at = datetime('now'), \
          updated_at = datetime('now') \
-         WHERE email = ?"
+         WHERE LOWER(email) = LOWER(?)"
     );
     let result = db
         .prepare(&sql)

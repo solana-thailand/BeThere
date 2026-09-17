@@ -127,3 +127,63 @@ fn clients_state_what_they_asked_and_nothing_else() {
         "a pre-ticked marketing box is not consent (PDPA s.19)"
     );
 }
+
+/// Issue 116. Withdrawal must match an address the way every other
+/// attendee-by-email path does, or a mixed-case row is written by the
+/// case-insensitive upserts and then silently skipped by the unsubscribe,
+/// which still reports success.
+#[test]
+fn withdrawal_matches_email_case_insensitively() {
+    let management = read("src/db/attendees/management.rs");
+    let body = function(&management, "set_marketing_consent");
+    assert!(
+        body.contains("WHERE LOWER(email) = LOWER(?)"),
+        "set_marketing_consent must match LOWER(email) = LOWER(?)"
+    );
+    assert!(
+        !body.contains("WHERE email = ?"),
+        "a case-sensitive match misses mixed-case rows"
+    );
+}
+
+/// Issue 117. Registration writes the one marketing checkbox to
+/// `attendees.consent_marketing` *and* `developer_profiles.consent_outreach`,
+/// and the contacts export reads the latter. Unsubscribing must clear both,
+/// or the person stays listed as contactable after withdrawing.
+#[test]
+fn withdrawal_clears_the_developer_profile_too() {
+    let developers = read("src/db/developers.rs");
+    let body = function(&developers, "withdraw_outreach_consent");
+    for needle in [
+        "SET consent_outreach = 0",
+        "WHERE consent_outreach = 1 AND LOWER(email) = LOWER(?1)",
+    ] {
+        assert!(
+            body.contains(needle),
+            "withdraw_outreach_consent: missing `{needle}`"
+        );
+    }
+    let privacy = read("src/handlers/privacy.rs");
+    let handler = &privacy[privacy
+        .find("pub async fn unsubscribe_marketing(")
+        .expect("unsubscribe_marketing exists")..];
+    let handler = &handler[..handler
+        .find("\n}\n")
+        .expect("unsubscribe_marketing has a body")];
+    for call in [
+        "db::attendees::set_marketing_consent(db, &email, false)",
+        "db::developers::withdraw_outreach_consent(db, &email)",
+    ] {
+        let at = handler
+            .find(call)
+            .unwrap_or_else(|| panic!("unsubscribe_marketing must call `{call}`"));
+        let after = handler[at + call.len()..].trim_start();
+        let is_propagated = after
+            .strip_prefix(".await")
+            .is_some_and(|rest| rest.trim_start().starts_with(".map_err"));
+        assert!(
+            is_propagated,
+            "`{call}` must be awaited and its error propagated, not swallowed"
+        );
+    }
+}

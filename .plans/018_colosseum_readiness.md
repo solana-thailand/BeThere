@@ -1,6 +1,7 @@
 # Plan 018 — Colosseum Readiness (Assessment)
 
-> **Status:** Assessment complete; two gaps open, one blocking question unanswered.
+> **Status:** Assessment complete; deck visually confirmed (§5.8). Open items are
+> all founder decisions: §4.2, §5.6b, and the blocking §5 eligibility question.
 > **Source of truth:** `What_Wins_Colosseum_2026.pptx` — Gui Bibeau, Lead Product
 > Engineer, Solana Foundation. 16 slides + speaker notes. Downloaded 2026-08-21
 > to `~/Downloads/`; **not** committed here (third-party deck, not ours to
@@ -366,6 +367,35 @@ line was flagged from a grep hit without reading the enclosing function.
 `567+ tests` on 17. That is a text check, **not** the visual confirmation
 `.plans/002` requires. One look at the deck closes the DoD item.
 
+### 5.8 Visual confirmation — done, and it found nine defects (2026-09-17)
+
+The deck was exported to PNG through Keynote (`osascript` → `export … as slide
+images`; the deck's font is Helvetica Neue, native on macOS, so this is what a
+Mac presenter sees) and all 17 slides were looked at. The `567+` / `50.3K` /
+`7.8K` / `88 KB` numbers render correctly. But the text read-back had passed a
+deck with **nine layout defects**, all older than §5.7 and all invisible to a
+check that reads strings rather than pixels:
+
+| Slide | Defect | Fix in `scripts/make_pitch_deck.py` |
+|---|---|---|
+| 3 | SDG 12.3 footnote straddled the hero card's bottom border | top 6.45 → 6.15 |
+| 4 | "Refund + cNFT" wrapped onto its body text | pillar headline 36 → 32 pt |
+| 5 | Bottom card row touched and overlapped the no-show bar | `card_h` 2.2 → 2.05 |
+| 7 | Stacked subtitle boxes put the wrapped "→" on top of line 2 | one two-line box, arrow leads line 2 |
+| 8 | `rollover_deposit` broke as `rollover_deposi` / `t` | instruction name 12 → 11 pt |
+| 9 | Feed footer "edge-deployed" wrapped below the card | collapsed double spaces |
+| 11 | "OFF-CHAIN (verifiable)" printed over the last on-chain bullet | group step 0.95 → 1.25" |
+| 12 | Title wrapped onto the accent rule and the tier-1 label | "Full event-platform parity — …" → "Platform parity — …" |
+| 17 | Repo URL wrapped onto the card body | label `GITHUB`, headline `solana-thailand/BeThere` |
+
+Several of those spots already carried comments asserting they fit ("stay
+single-line", "without clipping or wrapping") — estimates from character widths
+that never got rendered. The rebuilt deck was re-exported and every slide
+re-checked after the fixes.
+
+Only one change touches wording a judge reads: slide 12's title lost "Full
+event-" to fit one line. The claim is unchanged.
+
 ---
 
 ## 5. Blocking question — eligibility
@@ -417,11 +447,10 @@ checkbox is blocked on a decision, not on engineering.
 - [x] §5.5 payment-rail framing corrected against the prod dataset.
 - [x] §5.6 deck drift measured via `scripts/measure_metrics.py`; deck understates
       total tests by ~2× (250+ claimed vs 489 measured).
-- [~] §5.6a applied and the deck regenerated (2026-09-04, §5.7); §5.6b's
-      baht-vs-USDC framing is still the founder's call. **Visual confirmation of
-      the rebuilt `.pptx` is still outstanding**, per `.plans/002`'s
-      non-negotiable — the text was verified by reading the shapes back out of
-      the file, which is not the same as looking at the slides.
+- [x] §5.6a applied, the deck regenerated (2026-09-04, §5.7) and **visually
+      confirmed** slide by slide via a Keynote export (2026-09-17, §5.8), which
+      found and fixed nine layout defects the text read-back had passed.
+- [ ] §5.6b baht-vs-USDC deposit framing — a positioning call, the founder's.
 - [ ] §4.2 building-in-public decided (A or B). *Prepared with costs; the call
       is the founder's. Not marked complete on a recommendation alone.*
 - [ ] §5 eligibility answered by the organizers. **Still blocking** — none of the
