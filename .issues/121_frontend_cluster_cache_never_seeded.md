@@ -1,6 +1,6 @@
 # 121 — Frontend Solana cluster cache is only seeded on the dev dashboard
 
-**Status:** Fixed on `feature/solana-cluster-cache` (not deployed)
+**Status:** Merged to `develop` (`197126d`, PR #131); staging `e6404cbb`; prod deploy awaits owner go
 **Found:** 2026-09-17, while verifying the prod cluster config (mainnet `HELIUS_RPC_URL` next to `SOLANA_CLUSTER = "devnet"`)
 **Severity:** Low today, High at escrow mainnet cutover
 
@@ -43,5 +43,15 @@ which is **wrong in prod today**: badges live on mainnet).
 ## Verification
 
 wasm32 clippy `-D warnings` clean, `cargo fmt --check` clean, all frontend tests pass.
-Before prod: open a dev profile with a wallet on staging and check the link, and confirm
-`/api/health` is requested once at boot.
+PR #131 CI: all 6 jobs green (incl. playwright e2e).
+
+Staging `e6404cbb`, headless Chromium (2026-09-17):
+- `/` issues exactly one `/api/health` request at boot (before the fix: zero outside the dashboard).
+- `/dashboard` logged out issues three: boot, `DevDashboard`'s own pre-existing on-mount
+  fetch, and a second boot after the full-page redirect to `/login?next=/dashboard`.
+  The dashboard refetch is redundant but harmless (dev-only page); left as is.
+- Not checked in a browser: the `/profile` wallet link. The page needs SIWS sign-in, and
+  staging's `nft_cluster` is `devnet`, so it cannot tell the clusters apart anyway. The prod
+  split is covered by `prod_split_keeps_escrow_and_badge_clusters_apart`.
+
+After the prod deploy: signed in, `/profile` wallet link should carry `?cluster=mainnet-beta`.
