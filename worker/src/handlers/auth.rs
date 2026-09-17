@@ -57,8 +57,19 @@ pub async fn auth_url(
 #[worker::send]
 pub async fn auth_callback(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Query(query): Query<CallbackQuery>,
 ) -> Response {
+    // An email-link round trip (plan 025) must never fall through to a login:
+    // that would switch the session to the email being added.
+    let email_link_state = query
+        .state
+        .as_deref()
+        .and_then(|s| s.strip_prefix(crate::handlers::email_link::STATE_PREFIX));
+    if email_link_state.is_some() && (query.error.is_some() || query.code.is_none()) {
+        return Redirect::to("/profile?email_link=cancelled").into_response();
+    }
+
     // Check for OAuth error from Google
     if let Some(ref error) = query.error {
         tracing::warn!("oauth callback error: {error}");
@@ -75,9 +86,23 @@ pub async fn auth_callback(
         Ok(info) => info,
         Err(ref e) => {
             tracing::error!("oauth callback failed: {e}");
-            return Redirect::to("/login?error=auth_failed").into_response();
+            return match email_link_state {
+                Some(_) => Redirect::to("/profile?email_link=error"),
+                None => Redirect::to("/login?error=auth_failed"),
+            }
+            .into_response();
         }
     };
+
+    if let Some(signed_state) = email_link_state {
+        return crate::handlers::email_link::finish(
+            &state,
+            &headers,
+            signed_state,
+            &user_info.email,
+        )
+        .await;
+    }
 
     // Resolve role using the same hierarchy as auth_me:
     // super_admin → organizer → staff → attendee

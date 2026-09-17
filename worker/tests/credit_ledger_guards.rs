@@ -116,9 +116,68 @@ fn on_conflict_repeats_partial_index_predicate() {
 fn balance_read_is_org_scoped() {
     let src = ledger_src();
     assert!(
-        src.contains("email = ?1 AND organization_id = ?2 AND currency = ?3"),
-        "balance() must be scoped by (email, organization_id, currency) — dropping \
+        src.contains(
+            "person_emails_of!(\"?1\"),\n        \" AND organization_id = ?2 AND currency = ?3\""
+        ),
+        "balance() must be scoped by (person, organization_id, currency) — dropping \
          organization_id would let one org's credit cover another org's deposit (Issue #029)"
+    );
+}
+
+/// Plan 025: a balance belongs to the person, not one email. Every reader and
+/// both spend guards must resolve the linked set through the one shared
+/// fragment; a reader left on `email = ?1` hides a linked email's credit from
+/// the roster (issue #122) or, in the payout queue, shows the organizer less
+/// than the reversal removes.
+#[test]
+fn credit_reads_and_spends_resolve_the_person() {
+    let ledger = ledger_src();
+    for fn_name in ["try_spend", "balance", "positive_balances"] {
+        let start = ledger
+            .find(&format!("pub async fn {fn_name}("))
+            .unwrap_or_else(|| panic!("{fn_name} exists"));
+        let body = &ledger[start..];
+        let body = &body[..body.find("\n}\n").expect("fn ends")];
+        assert!(
+            body.contains("person_emails_of!(\"?1\")") && !body.contains("WHERE email = ?1"),
+            "{fn_name} must sum over the person's emails"
+        );
+    }
+    for fn_name in ["liability", "thb_balances_by_email"] {
+        let start = ledger
+            .find(&format!("pub async fn {fn_name}("))
+            .unwrap_or_else(|| panic!("{fn_name} exists"));
+        let body = &ledger[start..];
+        let body = &body[..body.find("\n}\n").expect("fn ends")];
+        assert!(
+            body.contains("LEFT JOIN person_emails p ON p.email = l.email")
+                && body.contains("COALESCE(p.person_id, l.email)"),
+            "{fn_name} must group holders by person"
+        );
+    }
+    assert!(
+        ledger.contains("GROUP BY COALESCE(p.person_id, l.email), l.organization_id, l.currency"),
+        "reconcile's negative-balance alarm must be per person — a linked email's own \
+         sum is legitimately negative"
+    );
+
+    let coverage = coverage_src();
+    assert!(
+        coverage.contains("crate::db::person::person_emails_of!(\"?1\")"),
+        "the atomic apply guard must spend from the person's balance"
+    );
+
+    let contacts_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/db/contacts.rs");
+    let contacts = fs::read_to_string(&contacts_path).expect("contacts.rs readable");
+    let queue = &contacts[contacts
+        .find("pub async fn credit_refund_requests(")
+        .expect("payout queue exists")..];
+    assert_eq!(
+        queue
+            .matches("person_emails_of!(\"LOWER(c.email)\")")
+            .count(),
+        2,
+        "both payout-queue currencies must sum the contact's person, matching the reversal"
     );
 }
 

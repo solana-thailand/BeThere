@@ -1,6 +1,8 @@
 # 122 — Rolling credit is invisible when the attendee registers with a different email
 
-**Status:** open. The design gap is confirmed from prod data; the fix is an owner decision.
+**Status:** fix built locally 2026-09-18 (option C, phase 1) on
+`feature/linked-emails`; **not deployed**, so this attendee is still stuck.
+Design and remaining tasks: [plan 025](../.plans/025_linked_emails_one_person.md).
 **Found:** 2026-09-17, when the owner reported that Apply Credit could not be
 selected for one attendee on the RTM #6 in-person admin roster
 **Severity:** medium (a paying returner is stranded at the deposit step, and
@@ -47,8 +49,12 @@ and the roster gives no hint of the cause.
   both, or a bound wallet). Cost: build time, plus an abuse surface, because
   staff could move anyone's credit.
 
-Recommendation: **A** now if the attendee is reachable before the event,
-otherwise **B**. Build **C** only if this happens again.
+Chosen: **C** (owner, 2026-09-18), in the "shared credit only" shape — linked
+emails share a credit balance; sessions, roles and every other email-keyed
+record are untouched. Once deployed, this attendee signs in with the credited
+email, presses "Add another email" on the profile page, signs in with the work
+email (its domain is Google Workspace, so Google can prove it), and Apply Credit
+then appears on their RTM #6 roster row.
 
 Cheap, ungated improvement either way: when `credit_thb = 0`, the roster could
 flag a row whose *name* matches a credit holder under another email, so staff

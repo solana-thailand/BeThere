@@ -391,18 +391,25 @@ pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest>
     {
         return Vec::new();
     }
-    let sql = "\
-         SELECT \
+    // Summed over the contact's person (every linked email), matching the
+    // person-wide `positive_balances` the reversal removes.
+    let sql = concat!(
+        "SELECT \
            c.email                                    AS email, \
            COALESCE(c.name, '')                       AS name, \
            COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
-                     WHERE l.email = LOWER(c.email) AND l.currency = 'thb'),  0) AS credit_thb, \
+                     WHERE l.currency = 'thb' AND l.email IN ",
+        crate::db::person::person_emails_of!("LOWER(c.email)"),
+        "), 0) AS credit_thb, \
            COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
-                     WHERE l.email = LOWER(c.email) AND l.currency = 'usdc'), 0) AS credit_usdc, \
+                     WHERE l.currency = 'usdc' AND l.email IN ",
+        crate::db::person::person_emails_of!("LOWER(c.email)"),
+        "), 0) AS credit_usdc, \
            COALESCE(c.credit_refund_requested_at, '') AS requested_at \
          FROM contacts c \
          WHERE c.credit_refund_requested = 1 \
-         ORDER BY c.credit_refund_requested_at DESC";
+         ORDER BY c.credit_refund_requested_at DESC"
+    );
 
     let stmt = db.prepare(sql);
     match safe_all_rows(&stmt).await {

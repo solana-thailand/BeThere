@@ -9,6 +9,7 @@ pub mod community;
 pub mod contacts;
 pub mod dashboard;
 pub mod deposit;
+pub mod email_link;
 pub mod escrow_index;
 pub mod event_series;
 pub mod events;
@@ -275,6 +276,9 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // Social account linking (auth-guarded — user must be logged in)
         .route("/auth/github", get(social_link::github_link_start))
+        // Linked emails (plan 025): add a Google-proven email to this person.
+        .route("/auth/email-link", get(email_link::start))
+        .route("/auth/linked-emails", get(email_link::linked_emails))
         .route("/auth/telegram/verify", post(social_link::telegram_verify))
         // Signed state for the Telegram widget's data-auth-url (auth-guarded).
         .route("/auth/telegram/state", get(social_link::telegram_state))

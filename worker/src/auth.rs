@@ -110,6 +110,17 @@ async fn sha256_hex(data: &[u8]) -> String {
 /// Build the Google OAuth 2.0 authorization URL.
 /// This URL redirects the user to Google's consent screen.
 pub fn get_auth_url(state: &AppState, redirect: Option<&str>) -> String {
+    build_auth_url(state, redirect, "consent")
+}
+
+/// Google OAuth URL that always shows the account chooser — for adding a
+/// second email to a person (`handlers::email_link`), where silently reusing
+/// the browser's current Google account would just link the same email.
+pub fn get_account_chooser_auth_url(state: &AppState, oauth_state: &str) -> String {
+    build_auth_url(state, Some(oauth_state), "select_account consent")
+}
+
+fn build_auth_url(state: &AppState, redirect: Option<&str>, prompt: &str) -> String {
     let config = &state.config.google_oauth;
     let mut serializer = form_urlencoded::Serializer::new(String::new());
     serializer
@@ -118,7 +129,7 @@ pub fn get_auth_url(state: &AppState, redirect: Option<&str>) -> String {
         .append_pair("response_type", "code")
         .append_pair("scope", "openid email profile")
         .append_pair("access_type", "offline")
-        .append_pair("prompt", "consent");
+        .append_pair("prompt", prompt);
 
     if let Some(redirect) = redirect {
         serializer.append_pair("state", redirect);
@@ -402,18 +413,21 @@ pub async fn require_identity(
 
 /// Extract JWT from Authorization header or cookie.
 pub fn extract_token_from_request(req: &Request) -> Option<String> {
+    extract_token_from_headers(req.headers())
+}
+
+/// Extract JWT from Authorization header or cookie, for handlers outside the
+/// auth middleware that only have the headers.
+pub fn extract_token_from_headers(headers: &axum::http::HeaderMap) -> Option<String> {
     // Try Authorization header first (for API clients)
-    if let Some(auth_header) = req
-        .headers()
-        .get("Authorization")
-        .and_then(|v| v.to_str().ok())
+    if let Some(auth_header) = headers.get("Authorization").and_then(|v| v.to_str().ok())
         && let Some(token) = auth_header.strip_prefix("Bearer ")
     {
         return Some(token.to_string());
     }
 
     // Try cookie (for browser sessions)
-    for cookie_header in req.headers().get_all("cookie").iter() {
+    for cookie_header in headers.get_all("cookie").iter() {
         if let Ok(cookie_str) = cookie_header.to_str() {
             for cookie in cookie_str.split(';') {
                 let cookie = cookie.trim();

@@ -19,6 +19,7 @@ pub mod jwt_blacklist;
 pub mod nft_mint_jobs;
 pub mod onchain_events;
 pub mod organizations;
+pub mod person;
 pub mod quiz;
 pub mod readiness;
 pub mod thb_deposits;
