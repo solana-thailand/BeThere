@@ -603,7 +603,7 @@ pub async fn register_attendee(
             participation_type: &participation_type,
             consent_given: body.consent_given.unwrap_or(false),
             photo_consent_given: body.photo_consent_given.unwrap_or(false),
-            consent_marketing: body.consent_marketing.unwrap_or(false),
+            consent_marketing: body.consent_marketing,
             profile_fields,
             redactor: state.log_redactor(),
         })

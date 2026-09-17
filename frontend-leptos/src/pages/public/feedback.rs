@@ -499,6 +499,12 @@ pub fn Feedback() -> impl IntoView {
                 let body = PostEventRegisterBody {
                     name: who.clone(),
                     consent_given: true,
+                    // This page never asks about marketing, so it states
+                    // nothing: `None` keeps whatever answer the attendee row
+                    // already holds. It used to fall through `..Default` to
+                    // the same `None`, which the worker read as "no" and
+                    // dated — one withdrawal per event answered (Issue 115).
+                    consent_marketing: None,
                     profile_fields: Some(answers),
                     ..Default::default()
                 };

@@ -180,7 +180,7 @@ pub async fn register_post_event(
             participation_type: ParticipationType::Retrospective.as_str(),
             consent_given: body.consent_given.unwrap_or(false),
             photo_consent_given: false,
-            consent_marketing: body.consent_marketing.unwrap_or(false),
+            consent_marketing: body.consent_marketing,
             profile_fields,
             redactor: state.log_redactor(),
         })
