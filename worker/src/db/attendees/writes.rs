@@ -3,6 +3,34 @@
 use worker::D1Database;
 use worker::d1::D1Type;
 
+/// `consent_marketing` as a bind value: `NULL` when the submission did not ask.
+///
+/// The column has three meaningful states and `Option<bool>` carries all
+/// three to here: `Some(true)` opt-in, `Some(false)` a stated no, `None` the
+/// form never showed the question. `unwrap_or(false)` collapsed the last into
+/// the second, and because both upserts then overwrote *and re-dated* the
+/// stored answer, answering the post-event survey — which asks nothing about
+/// marketing — recorded a dated withdrawal once per event answered (Issue 115).
+/// Binding `NULL` lets both upserts keep what is stored, with the same SQL:
+///
+/// - insert: `COALESCE(?, 0)` and `CASE WHEN ? IS NULL THEN NULL ELSE
+///   datetime('now') END` — unasked is `0` (the column is `NOT NULL`) with
+///   **no date**, the pre-field "never answered" state, not a refusal;
+/// - conflict: `COALESCE(?, attendees.consent_marketing)` and the `_at`
+///   column kept unless an answer was stated — the "an omitted field does not
+///   erase the stored one" rule the contact columns and `claim_token` already
+///   follow in these statements.
+///
+/// Spelled out in each statement rather than spliced in: the SQL
+/// interpolation guard allows no `{…}` here, and should not have to.
+fn consent_bind(consent_marketing: Option<bool>) -> D1Type<'static> {
+    match consent_marketing {
+        Some(true) => D1Type::Integer(1),
+        Some(false) => D1Type::Integer(0),
+        None => D1Type::Null,
+    }
+}
+
 /// Insert or update an attendee row in D1.
 ///
 /// Used during registration dual-write. If the attendee already exists
@@ -22,19 +50,19 @@ pub(crate) async fn upsert_attendee(
     claim_token: Option<&str>,
     notify_verified_email: bool,
 ) -> Result<(), String> {
-    let cm = consent_marketing.unwrap_or(false);
     let stmt = db.prepare(
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
          contact_channel, contact_handle, consent_marketing, consent_marketing_at, claim_token, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, datetime('now'), ?10, datetime('now'), datetime('now')) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, COALESCE(?9, 0), \
+         CASE WHEN ?9 IS NULL THEN NULL ELSE datetime('now') END, ?10, datetime('now'), datetime('now')) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, \
          approval_status = excluded.approval_status, \
          participation_type = excluded.participation_type, \
          contact_channel = excluded.contact_channel, \
          contact_handle = excluded.contact_handle, \
-         consent_marketing = excluded.consent_marketing, \
-         consent_marketing_at = excluded.consent_marketing_at, \
+         consent_marketing = COALESCE(?9, attendees.consent_marketing), \
+         consent_marketing_at = CASE WHEN ?9 IS NULL THEN attendees.consent_marketing_at ELSE datetime('now') END, \
          claim_token = COALESCE(attendees.claim_token, excluded.claim_token), \
          updated_at = datetime('now')",
     );
@@ -48,7 +76,7 @@ pub(crate) async fn upsert_attendee(
             D1Type::Text(participation_type),
             D1Type::Text(contact_channel),
             D1Type::Text(contact_handle),
-            D1Type::Integer(if cm { 1 } else { 0 }),
+            consent_bind(consent_marketing),
             D1Type::Text(claim_token.unwrap_or("")),
         ])
         .map_err(|e| format!("D1 upsert_attendee bind: {e:?}"))?;
@@ -114,17 +142,17 @@ pub(crate) async fn upsert_post_event_attendee(
     contact_handle: &str,
     consent_marketing: Option<bool>,
 ) -> Result<String, String> {
-    let cm = consent_marketing.unwrap_or(false);
     let stmt = db.prepare(
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
          contact_channel, contact_handle, consent_marketing, consent_marketing_at, registration_phase, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, 'post_event_registered', ?5, ?6, ?7, ?8, datetime('now'), 'post_event', datetime('now'), datetime('now')) \
+         VALUES (?1, ?2, ?3, ?4, 'post_event_registered', ?5, ?6, ?7, COALESCE(?8, 0), \
+         CASE WHEN ?8 IS NULL THEN NULL ELSE datetime('now') END, 'post_event', datetime('now'), datetime('now')) \
          ON CONFLICT (event_id, LOWER(email)) WHERE participation_type <> 'walkin' DO UPDATE SET \
          name = excluded.name, \
          contact_channel = COALESCE(NULLIF(excluded.contact_channel, ''), attendees.contact_channel), \
          contact_handle = COALESCE(NULLIF(excluded.contact_handle, ''), attendees.contact_handle), \
-         consent_marketing = excluded.consent_marketing, \
-         consent_marketing_at = excluded.consent_marketing_at, \
+         consent_marketing = COALESCE(?8, attendees.consent_marketing), \
+         consent_marketing_at = CASE WHEN ?8 IS NULL THEN attendees.consent_marketing_at ELSE datetime('now') END, \
          updated_at = datetime('now') \
          RETURNING id",
     );
@@ -137,7 +165,7 @@ pub(crate) async fn upsert_post_event_attendee(
             D1Type::Text(participation_type),
             D1Type::Text(contact_channel),
             D1Type::Text(contact_handle),
-            D1Type::Integer(if cm { 1 } else { 0 }),
+            consent_bind(consent_marketing),
         ])
         .map_err(|e| format!("D1 upsert_post_event_attendee bind: {e:?}"))?
         .all()

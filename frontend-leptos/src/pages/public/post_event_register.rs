@@ -107,7 +107,10 @@ pub fn PostEventRegister() -> impl IntoView {
     let (would_return, set_would_return) = signal(String::new());
     let (comment, set_comment) = signal(String::new());
     let (consent_given, set_consent_given) = signal(false);
-    let (consent_marketing, set_consent_marketing) = signal(true);
+    // Unticked, as on the registration form (`public_event/page.rs`): a
+    // pre-ticked box is not consent under PDPA s.19, and now that an unticked
+    // box is sent as a stated no, a pre-tick would record a yes nobody gave.
+    let (consent_marketing, set_consent_marketing) = signal(false);
 
     // Auth gate on mount — same pattern as the dev profile editor.
     {
@@ -405,7 +408,7 @@ pub fn PostEventRegister() -> impl IntoView {
                                         contact_channel: opt_str(contact_channel.get()),
                                         contact_handle: opt_str(contact_handle.get()),
                                         consent_given: true,
-                                        consent_marketing: if consent_marketing.get() { Some(true) } else { None },
+                                        consent_marketing: Some(consent_marketing.get()),
                                         experience_level: opt_str(experience_level.get()),
                                         tech_stack: opt_str(tech_stack.get()),
                                         interests: opt_str(interests.get()),

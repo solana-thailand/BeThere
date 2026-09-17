@@ -524,7 +524,7 @@ pub fn registration_form(
                                                     deposit_agreed: if deposit_val { Some(true) } else { None },
                                                     consent_given: if consent_val { Some(true) } else { None },
                                                     photo_consent_given: if photo_consent_val { Some(true) } else { None },
-                                                    consent_marketing: if reg_consent_marketing.get() { Some(true) } else { None },
+                                                    consent_marketing: Some(reg_consent_marketing.get()),
                                                     experience_level,
                                                     tech_stack,
                                                     interests,
