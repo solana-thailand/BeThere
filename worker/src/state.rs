@@ -22,7 +22,7 @@ struct CachedBindings {
     /// Raw JS handle to the R2 binding. `worker` 0.8.x's `get` builder sends a
     /// `range: null` option that makes R2 throw internal error 10001 on every
     /// get (even missing keys). We call `bucket.get(key)` directly via this raw
-    /// object (no options) to bypass that bug. See `storage::get_bytes`.
+    /// object (no options) to bypass that bug. See `storage::get_object`.
     r2_raw: Option<js_sys::Object>,
     event_do: Option<ObjectNamespace>,
     auth_rate_limiter: Option<Arc<RateLimiter>>,

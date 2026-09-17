@@ -15,7 +15,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::{StatusCode, header},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use worker::{Bucket, Result};
@@ -114,15 +114,26 @@ pub async fn put_bytes(
     Ok(key.to_string())
 }
 
-/// Read bytes from R2 by key. Returns `None` if the key doesn't exist.
+/// An R2 object that has been located but whose body has not been read.
+///
+/// Split from reading the body so a caller can answer a conditional request
+/// from the entity tag alone. For a 3.9 MB poster, a revalidation that matches
+/// used to copy the whole object into WASM memory and send it again; now it
+/// costs one R2 lookup and a 304.
+pub struct R2Found {
+    /// R2's `httpEtag` — already quoted, ready for an `ETag` header.
+    pub http_etag: Option<String>,
+    obj: js_sys::Object,
+}
+
+/// Locate an R2 object by key. Returns `None` if the key doesn't exist.
 ///
 /// Calls the R2 `get` binding **directly** via the raw JS handle instead of
 /// `worker::Bucket::get`, because the `worker` 0.8.x get builder always sends
 /// `{ onlyIf: null, range: null }`, and the `range: null` makes R2 throw
 /// internal error 10001 on every get (even for missing keys). Calling
-/// `bucket.get(key)` with no options avoids the bug. The body stream is
-/// materialized via `new Response(body).arrayBuffer()`.
-pub async fn get_bytes(bucket: &js_sys::Object, key: &str) -> Result<Option<Vec<u8>>> {
+/// `bucket.get(key)` with no options avoids the bug.
+pub async fn get_object(bucket: &js_sys::Object, key: &str) -> Result<Option<R2Found>> {
     use wasm_bindgen::JsCast;
     use wasm_bindgen_futures::JsFuture;
 
@@ -145,10 +156,23 @@ pub async fn get_bytes(bucket: &js_sys::Object, key: &str) -> Result<Option<Vec<
         return Ok(None);
     }
 
-    let r2_obj = js_sys::Object::from(value);
+    let obj = js_sys::Object::from(value);
+    let http_etag = js_sys::Reflect::get(&obj, &JsString::from("httpEtag"))
+        .ok()
+        .and_then(|v| v.as_string())
+        .filter(|e| !e.is_empty());
+    Ok(Some(R2Found { http_etag, obj }))
+}
+
+/// Materialize a located object's body via `new Response(body).arrayBuffer()`.
+pub async fn read_body(found: &R2Found) -> Result<Vec<u8>> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+
+    let r2_obj = &found.obj;
 
     // body is a ReadableStream (or undefined if the object has no body).
-    let body = js_sys::Reflect::get(&r2_obj, &JsString::from("body"))
+    let body = js_sys::Reflect::get(r2_obj, &JsString::from("body"))
         .map_err(|e| worker::Error::RustError(format!("R2 object.body access failed: {e:?}")))?;
     if body.is_null() || body.is_undefined() {
         return Err(worker::Error::RustError(
@@ -167,7 +191,45 @@ pub async fn get_bytes(bucket: &js_sys::Object, key: &str) -> Result<Option<Vec<
     let arr = js_sys::Uint8Array::new(&ab);
     let mut out = vec![0u8; arr.length() as usize];
     arr.copy_to(&mut out);
-    Ok(Some(out))
+    Ok(out)
+}
+
+/// Who may keep a copy of a served object.
+///
+/// Chosen by the route, because only the route knows what the bytes are. The
+/// serving path used to hard-code `public, max-age=86400` for every prefix, so
+/// staff-only THB payment slips and refund receipts went out marked `public` —
+/// which under RFC 9111 §3.5 is precisely the directive that lets a shared
+/// cache store a response to an authenticated request (`.issues/114`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Visibility {
+    /// Marketing assets anyone may see: posters, badges.
+    Public,
+    /// Personal or financial documents: never stored by any cache.
+    Private,
+}
+
+impl Visibility {
+    pub fn cache_control(self) -> &'static str {
+        match self {
+            Self::Public => "public, max-age=86400",
+            Self::Private => "private, no-store",
+        }
+    }
+}
+
+/// Does an `If-None-Match` header match this entity tag? (RFC 9110 §13.1.2)
+///
+/// Weak comparison, which is what `If-None-Match` specifies: a `W/` prefix on
+/// either side is ignored. `*` matches any existing representation. The header
+/// may list several tags separated by commas.
+pub fn if_none_match_hits(header: &str, etag: &str) -> bool {
+    let opaque = |tag: &str| tag.trim().trim_start_matches("W/").to_string();
+    let wanted = opaque(etag);
+    header
+        .split(',')
+        .map(str::trim)
+        .any(|candidate| candidate == "*" || (!candidate.is_empty() && opaque(candidate) == wanted))
 }
 
 /// Delete an object from R2 by key.
@@ -208,32 +270,44 @@ pub fn content_type_from_filename(filename: &str) -> &'static str {
 
 /// GET /api/storage/slips/{event_id}/{attendee_id}
 ///
-/// Serves a THB payment slip image from R2.
+/// Serves a THB payment slip image from R2. Staff-only financial document.
 #[worker::send]
 pub async fn serve_slip(
     State(state): State<AppState>,
     Path((event_id, attendee_id)): Path<(String, String)>,
 ) -> Response {
-    serve_r2_object(&state, &format!("{PREFIX_SLIPS}{event_id}/{attendee_id}")).await
+    let key = format!("{PREFIX_SLIPS}{event_id}/{attendee_id}");
+    serve_r2_object(&state, &key, Visibility::Private, None).await
 }
 
 /// GET /api/storage/refunds/{event_id}/{attendee_id}
 ///
-/// Serves a refund transfer receipt image from R2.
+/// Serves a refund transfer receipt image from R2. Staff-only financial document.
 #[worker::send]
 pub async fn serve_refund(
     State(state): State<AppState>,
     Path((event_id, attendee_id)): Path<(String, String)>,
 ) -> Response {
-    serve_r2_object(&state, &format!("{PREFIX_REFUNDS}{event_id}/{attendee_id}")).await
+    let key = format!("{PREFIX_REFUNDS}{event_id}/{attendee_id}");
+    serve_r2_object(&state, &key, Visibility::Private, None).await
 }
 
 /// GET /api/storage/badges/{event_id}
 ///
 /// Serves an event badge SVG from R2.
 #[worker::send]
-pub async fn serve_badge(State(state): State<AppState>, Path(event_id): Path<String>) -> Response {
-    serve_r2_object(&state, &badge_key(&event_id)).await
+pub async fn serve_badge(
+    State(state): State<AppState>,
+    Path(event_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    serve_r2_object(
+        &state,
+        &badge_key(&event_id),
+        Visibility::Public,
+        if_none_match(&headers),
+    )
+    .await
 }
 
 /// GET /api/storage/posters/{event_id}
@@ -242,8 +316,19 @@ pub async fn serve_badge(State(state): State<AppState>, Path(event_id): Path<Str
 /// image extensions (.png/.jpg/.webp/.svg) so the served path is extension-agnostic,
 /// letting organizers re-upload in a different format without changing the stored URL.
 #[worker::send]
-pub async fn serve_poster(State(state): State<AppState>, Path(event_id): Path<String>) -> Response {
-    serve_r2_object(&state, &format!("{PREFIX_POSTERS}{event_id}")).await
+pub async fn serve_poster(
+    State(state): State<AppState>,
+    Path(event_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    let key = format!("{PREFIX_POSTERS}{event_id}");
+    serve_r2_object(&state, &key, Visibility::Public, if_none_match(&headers)).await
+}
+
+fn if_none_match(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(header::IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
 }
 
 /// Internal: serve an R2 object by key, trying common image extensions if
@@ -252,9 +337,17 @@ pub async fn serve_poster(State(state): State<AppState>, Path(event_id): Path<St
 /// Distinguishes "key not found" (HTTP 404) from an actual R2 error
 /// (HTTP 500). Previously *any* R2 error was masked as 404, which hid
 /// failures like the `worker` 0.8.x get-options `null`-serialization bug.
-async fn serve_r2_object(state: &AppState, key: &str) -> Response {
+///
+/// `if_none_match` is honoured only for [`Visibility::Public`]: a private
+/// document carries no validator, so there is nothing for a client to match.
+async fn serve_r2_object(
+    state: &AppState,
+    key: &str,
+    visibility: Visibility,
+    if_none_match: Option<&str>,
+) -> Response {
     // Reads use the RAW R2 handle to bypass the worker 0.8.x get-options bug
-    // (see get_bytes). Head/exists use the typed Bucket, which is unaffected.
+    // (see get_object). Head/exists use the typed Bucket, which is unaffected.
     let Some(bucket_raw) = state.r2_raw.as_ref() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -278,19 +371,48 @@ async fn serve_r2_object(state: &AppState, key: &str) -> Response {
     let mut last_error: Option<String> = None;
 
     for candidate in &candidates {
-        match get_bytes(bucket_raw, candidate).await {
-            Ok(Some(bytes)) => {
+        match get_object(bucket_raw, candidate).await {
+            Ok(Some(found)) => {
                 let content_type = content_type_from_key(candidate);
+                let cache_control = visibility.cache_control();
+                let etag = match visibility {
+                    Visibility::Public => found.http_etag.as_deref(),
+                    Visibility::Private => None,
+                };
+                // A matching validator means the client already holds these
+                // bytes: answer before the body is copied into WASM memory.
+                if let (Some(etag), Some(wanted)) = (etag, if_none_match)
+                    && if_none_match_hits(wanted, etag)
+                {
+                    tracing::debug!(key = %candidate, "R2 object not modified");
+                    return (
+                        StatusCode::NOT_MODIFIED,
+                        [(header::CACHE_CONTROL, cache_control), (header::ETAG, etag)],
+                    )
+                        .into_response();
+                }
+                let bytes = match read_body(&found).await {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        tracing::warn!(key = %candidate, error = ?e, "R2 body read error");
+                        last_error = Some(format!("{e:?}"));
+                        continue;
+                    }
+                };
                 tracing::info!(key = %candidate, content_type = %content_type, size = bytes.len(), "serving R2 object");
-                return (
+                let mut response = (
                     StatusCode::OK,
                     [
                         (header::CONTENT_TYPE, content_type),
-                        (header::CACHE_CONTROL, "public, max-age=86400"),
+                        (header::CACHE_CONTROL, cache_control),
                     ],
                     bytes,
                 )
                     .into_response();
+                if let Some(value) = etag.and_then(|e| header::HeaderValue::from_str(e).ok()) {
+                    response.headers_mut().insert(header::ETAG, value);
+                }
+                return response;
             }
             Ok(None) => {
                 tracing::debug!(key = %candidate, "R2 object not found, trying next extension");
@@ -300,7 +422,7 @@ async fn serve_r2_object(state: &AppState, key: &str) -> Response {
                 // Record the error but keep trying other extensions — a
                 // transient/serialization error on one key shouldn't mask a
                 // valid object stored under a different extension.
-                tracing::warn!(key = %candidate, error = ?e, "R2 get_bytes error");
+                tracing::warn!(key = %candidate, error = ?e, "R2 get error");
                 last_error = Some(format!("{e:?}"));
                 continue;
             }
