@@ -81,6 +81,22 @@ top-level GET redirect.
   (always the primary) touches every email-keyed table and is Phase 3, only if
   needed.
 
+### 3.2 Known gaps in v1
+
+- **No unlink.** A link is permanent until an admin path exists (gated on §6.1).
+  That matters for a **work mailbox**: whoever controls it later — after the
+  person leaves the company — can sign in and spend that person's credit. Google
+  proof is proof of control *now*, not forever. Mitigation today is that only the
+  attendee can link, and the amounts are one deposit (฿500). If an unlink lands,
+  it must refuse to leave any email's own ledger sum negative, or money is
+  stranded on the wrong side.
+- **Two rows in one event that predate the link** still hold two deposits, and
+  each can spend credit under its own `apply:{event}:{email}` key. That is
+  correct — two registrations, two deposits — but it means §5.1's dedup only
+  prevents *new* duplicates.
+- **`start` is not rate-limited.** It only redirects to Google and writes
+  nothing, so the cost of abuse is a redirect.
+
 ## 4. Effects (Phase 1 — money first)
 
 1. **Credit balance:** `credit_ledger::balance`, `positive_balances` and
