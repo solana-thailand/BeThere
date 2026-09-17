@@ -279,8 +279,14 @@ pub async fn execute_claim(
     //     Best-effort — it reads the D1 attendee mirror, so a missing row means
     //     no extra block, never a false one.
     if let Some(db) = state.d1.as_deref() {
-        match crate::db::person::claimed_elsewhere(db, &event.id, &attendee.email, &attendee.api_id, token)
-            .await
+        match crate::db::person::claimed_elsewhere(
+            db,
+            &event.id,
+            &attendee.email,
+            &attendee.api_id,
+            token,
+        )
+        .await
         {
             Ok(Some(claimed_at)) => {
                 tracing::warn!(
@@ -289,8 +295,7 @@ pub async fn execute_claim(
                     "claim blocked: this person already claimed on another registration"
                 );
                 return Err(AppError::Validation(
-                    "You have already claimed this event's badge on another registration."
-                        .into(),
+                    "You have already claimed this event's badge on another registration.".into(),
                 ));
             }
             Ok(None) => {}

@@ -190,8 +190,7 @@ fn credit_reads_and_spends_resolve_the_person() {
         .find("pub(crate) async fn clear_credit_refund_requested(")
         .expect("flag clear exists")..];
     assert!(
-        clear[..clear.find("\n}\n").expect("fn ends")]
-            .contains("person_emails_of!(\"?1\")"),
+        clear[..clear.find("\n}\n").expect("fn ends")].contains("person_emails_of!(\"?1\")"),
         "clearing the flag must clear the whole person, or a sibling flag re-queues \
          a request for credit that was already paid back"
     );
