@@ -146,7 +146,7 @@ pub fn Landing() -> impl IntoView {
                 <p class="landing-hero-desc">
                     {move || match persona.get() {
                         0 => "Put down a deposit to reserve your spot. Show up, check in, and get every cent back — take a quick quiz to unlock a digital badge you own forever.".to_string(),
-                        1 => "Set a deposit for your event. Track check-ins live. No-shows auto-payout to you. Attendees who show up get refunded.".to_string(),
+                        1 => "Set a deposit for your event. Track check-ins live. Attendees who show up get their deposit back.".to_string(),
                         _ => "Open the scanner on any phone, point it at an attendee's QR code, and the check-in is recorded. No app to install, no training.".to_string(),
                     }}
                 </p>
@@ -163,8 +163,8 @@ pub fn Landing() -> impl IntoView {
                         <div class="landing-stat-stub-label">"Refund Guarantee"</div>
                     </div>
                     <div class="landing-stat-stub">
-                        <div class="landing-stat-stub-value stub-poppy">"Instant"</div>
-                        <div class="landing-stat-stub-label">"PromptPay & Solana Payouts"</div>
+                        <div class="landing-stat-stub-value stub-poppy">"฿0"</div>
+                        <div class="landing-stat-stub-label">"Cost To Attend"</div>
                     </div>
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value">"< 1s"</div>
@@ -286,7 +286,7 @@ pub fn Landing() -> impl IntoView {
                                 </div>
                                 <div class="landing-timeline-body">
                                     <div class="landing-timeline-title">"Get your full refund"</div>
-                                    <div class="landing-timeline-desc">"Your deposit is refunded on-chain automatically, plus you receive a compressed NFT badge you own forever."</div>
+                                    <div class="landing-timeline-desc">"Your deposit comes back after the event, as a refund or as credit for next time, plus a compressed NFT badge you own forever."</div>
                                 </div>
                             </div>
                         </div>
@@ -430,7 +430,7 @@ pub fn Landing() -> impl IntoView {
                         "Bring deposit-backed events to your community"
                     </h2>
                     <p class="landing-faq-a">
-                        "Stop losing money to no-shows. Set a deposit, track check-ins live, and auto-refund attendees who show up."
+                        "Stop losing seats to no-shows. Set a deposit, track check-ins live, and give attendees their deposit back when they show up."
                     </p>
                     {move || {
                         let state = auth_state.get();

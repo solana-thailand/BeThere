@@ -33,7 +33,7 @@ Four layers, with a deliberate source-of-truth split:
 | Layer | Binding | Used for |
 |---|---|---|
 | **Google Sheets** | service account | Human-readable master for attendees + contacts. Organizers live in the sheet. `worker/src/sheets/` (reads, `write/`, `bg_sync/`). |
-| **D1** (SQLite) | `DB` | Structured mirror + source of truth for money-critical rows: `thb_deposits`, `contacts` (incl. rolling credit), `attendees`, claim locks, audit, escrow index, campaigns, developers. `worker/src/db/`. |
+| **D1** (SQLite) | `DB` | Structured mirror + source of truth for money-critical rows: `thb_deposits`, `contacts`, `credit_ledger` (rolling credit), `attendees`, claim locks, audit, escrow index, campaigns, developers. `worker/src/db/`. |
 | **KV** | `EVENTS`, `QUIZ` | Event registry + per-event config cache, deposit-status mirror, SIWS nonces, claim locks, session progress. `worker/src/event_store/`, `storage.rs`. |
 | **Durable Objects** | `EVENT_DO` | Serialized ACID writes (check-in, claim-lock finalize) per event; syncs the changed row back to D1. `worker/src/durable_objects/event_do/`. |
 | **R2** | `ASSETS_BUCKET` | NFT badges, posters, THB slip images, refund proofs. `worker/src/storage.rs`. |

@@ -419,7 +419,7 @@ pub fn registration_form(
                                                     "I agree to the "
                                                     <a href="/privacy" target="_blank" class="pe-ext-link">"Privacy Policy"</a>
                                                     {if show_deposit {
-                                                        format!(" and authorize the {} commitment deposit (refunded upon check-in).", dep_label).into_any()
+                                                        format!(" and authorize the {} commitment deposit (returned after the event when you attend).", dep_label).into_any()
                                                     } else {
                                                         " for registration, check-in, and NFT issuance.".into_any()
                                                     }}
