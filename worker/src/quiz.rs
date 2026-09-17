@@ -549,10 +549,11 @@ pub async fn submit_quiz(
 
 /// Determine the quiz status for a claim token.
 ///
-/// - `NotRequired` — no quiz config
+/// - `NotRequired` — `quiz_enabled` is off, or no quiz config
 /// - `NotStarted`  — quiz exists, attendee hasn't attempted
 /// - `InProgress`  — quiz exists, attempted but not yet passed
 /// - `Passed`      — quiz passed, claim unlocked
+///
 /// `quiz_enabled` is `events.quiz_enabled` — the organizer's switch. It is
 /// resolved HERE, not only at the call sites, so a new caller cannot reopen the
 /// gate the flag is supposed to close: consulting the config alone let a
