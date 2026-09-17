@@ -249,6 +249,17 @@ pub async fn register_attendee(
         .ok()
         .flatten();
 
+        // Staff who registered before the comp wrote a deposit status have only
+        // the `thb_deposits` row, so every page that reads the status sent them
+        // back to the deposit page. Repair on re-entry.
+        let deposit = match deposit {
+            None if deposit_waived && config.deposit_enabled && existing.is_in_person() => {
+                let now = chrono::Utc::now().to_rfc3339();
+                record_staff_comp(&state, &event_id, &existing.api_id, &existing.name, &now).await
+            }
+            other => other,
+        };
+
         // Check if deposit deadline expired — attendee may have been auto-switched to Online
         let deadline_expired = deposit.is_none()
             && config.deposit_deadline_hours.is_some()
@@ -502,36 +513,10 @@ pub async fn register_attendee(
         }
     }
 
-    // Staff/organizer comp: record a waived deposit (฿0, verified, not
-    // refundable) so the ticket flow proceeds without a real or faked payment.
-    // Marked distinctly (STAFF_COMP_WAIVED / ฿0) so refund + held-as-credit
-    // tooling never treats it as cash.
+    // Staff/organizer comp: record a waived deposit so the ticket flow proceeds
+    // without a real or faked payment.
     if deposit_waived && config.deposit_enabled && !is_online_participation(&participation_type) {
-        let comp = event_checkin_domain::models::deposit::ThbDeposit {
-            event_id: event_id.clone(),
-            attendee_id: api_id.clone(),
-            amount_thb: 0,
-            slip_url: Some("STAFF_COMP_WAIVED".to_string()),
-            verified: true,
-            verified_at: Some(now.clone()),
-            verified_by: Some("SYSTEM_STAFF_WAIVE".to_string()),
-            uploaded_at: now.clone(),
-            refunded: false,
-            refunded_at: None,
-            held_as_credit: false,
-            held_as_credit_at: None,
-            attendee_name: Some(name.to_string()),
-            bank_account: None,
-            bank_name: None,
-            account_name: None,
-            refund_proof_url: None,
-        };
-        if let Some(kv_store) = kv
-            && let Err(e) =
-                crate::event_store::save_thb_deposit(kv_store, &comp, state.d1.as_deref()).await
-        {
-            tracing::warn!(%api_id, attendee_fingerprint = %attendee_fingerprint, error = %e, "staff comp deposit record save failed");
-        }
+        record_staff_comp(&state, &event_id, &api_id, name, &now).await;
     }
 
     // 8. Resolve column mapping
@@ -791,6 +776,78 @@ pub async fn register_attendee(
         next_step,
         wallet_linked,
     }))
+}
+
+/// Record a staff / organizer / super-admin comp: a ฿0 `thb_deposits` row
+/// marked `STAFF_COMP_WAIVED` (so refund and hold-as-credit tooling never treat
+/// it as cash) **and** a verified, non-refundable deposit status.
+///
+/// The status is what the next-step router, the ticket page and the deposit
+/// deadline read. Writing only the `thb_deposits` row made the first
+/// registration land on the ticket, and every later visit on the deposit page
+/// (and, past `deposit_deadline_hours`, a switch to Online). Returns the status
+/// when it was saved. Best-effort: a failure logs and the attendee sees the
+/// deposit page, repaired on their next registration attempt.
+async fn record_staff_comp(
+    state: &AppState,
+    event_id: &str,
+    api_id: &str,
+    name: &str,
+    now: &str,
+) -> Option<event_checkin_domain::models::deposit::DepositStatus> {
+    use event_checkin_domain::models::deposit::{DepositMethod, DepositStatus, ThbDeposit};
+    let comp = ThbDeposit {
+        event_id: event_id.to_string(),
+        attendee_id: api_id.to_string(),
+        amount_thb: 0,
+        slip_url: Some("STAFF_COMP_WAIVED".to_string()),
+        verified: true,
+        verified_at: Some(now.to_string()),
+        verified_by: Some("SYSTEM_STAFF_WAIVE".to_string()),
+        uploaded_at: now.to_string(),
+        refunded: false,
+        refunded_at: None,
+        held_as_credit: false,
+        held_as_credit_at: None,
+        attendee_name: Some(name.to_string()),
+        bank_account: None,
+        bank_name: None,
+        account_name: None,
+        refund_proof_url: None,
+    };
+    if let Some(kv) = state.events_kv.as_ref()
+        && let Err(e) = crate::event_store::save_thb_deposit(kv, &comp, state.d1.as_deref()).await
+    {
+        tracing::warn!(%api_id, %event_id, error = %e, "staff comp deposit record save failed");
+        return None;
+    }
+    let status = DepositStatus {
+        attendee_id: api_id.to_string(),
+        event_id: event_id.to_string(),
+        method: DepositMethod::Thb,
+        amount: 0,
+        currency: "THB".to_string(),
+        tx_signature: None,
+        verified: true,
+        deposited_at: now.to_string(),
+        wallet_address: None,
+        deposit_order: 0,
+        refundable: false,
+        rejected: false,
+    };
+    match crate::event_store::save_deposit_status_with_fallback(
+        state.events_kv.as_ref(),
+        state.d1.as_deref(),
+        &status,
+    )
+    .await
+    {
+        Ok(()) => Some(status),
+        Err(e) => {
+            tracing::warn!(%api_id, %event_id, error = %e, "staff comp deposit status save failed");
+            None
+        }
+    }
 }
 
 /// Resolve participation type based on event format and user selection.
