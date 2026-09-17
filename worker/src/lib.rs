@@ -30,7 +30,9 @@ mod sheets;
 mod solana;
 mod solana_escrow;
 mod state;
-mod storage;
+// Public for the same reason as `db` above: `worker/tests/r2_cache_policy.rs`
+// drives `Visibility` and `if_none_match_hits` directly (`.issues/114`).
+pub mod storage;
 mod virtual_checkin;
 
 // Export DO class for workers-rs macro registration
