@@ -708,7 +708,8 @@ pub fn DevProfile() -> impl IntoView {
                                         } else {
                                             addr_str.clone()
                                         };
-                                        let solscan_url = format!("https://solscan.io/account/{addr_str}?cluster=devnet");
+                                        // The wallet holds attendance badges, so link the badge cluster.
+                                        let solscan_url = crate::utils::solscan_address_url(&addr_str, &crate::utils::get_nft_cluster());
                                         view! {
                                             <div style="display:flex;gap:6px;align-items:center;">
                                                 <a href=solscan_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn">

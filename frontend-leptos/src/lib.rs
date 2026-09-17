@@ -70,6 +70,13 @@ pub fn App() -> impl IntoView {
     // the __bethere_build_tag import also forces a fresh JS-glue content hash).
     leptos::logging::log!("[bethere] frontend build {}", __bethere_build_tag());
 
+    // Seed the Solana network cache once. Without this, get_cluster() stayed on
+    // its "devnet" fallback on every page except the dev dashboard, so the
+    // SEC-014 wallet guard and explorer links would ignore a mainnet cutover.
+    leptos::task::spawn_local(async {
+        utils::fetch_cluster().await;
+    });
+
     view! {
         <Router>
             <Title text="BeThere — Event Check-In" />
