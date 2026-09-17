@@ -23,10 +23,59 @@ pub const REASON_HOLD: &str = "hold";
 /// Audit reason label for a refund reversal (organizer paid the held credit back
 /// out-of-band → remove it from the ledger).
 pub const REASON_REFUND: &str = "refund";
-/// Model B: rolling credit RETURNED to the attendee on check-in — attending
-/// honours the commitment, so the ฿ rolls back to their balance for the next
-/// event (a no-show simply never triggers this, forfeiting it). +delta.
+/// Rolling credit RETURNED to the attendee after the event it was applied to.
+/// +delta, keyed `return:{event_id}:{email}` by both writers, so the two can
+/// never double-return:
+///
+/// - check-in writes it early (attendance, same day);
+/// - [`release_ended_applies`] writes it for every apply whose event has
+///   ended, **attended or not**.
+///
+/// Credit is the attendee's cash the organizer still holds, so it stays theirs
+/// until it is actually paid back (`refund`). An apply only locks it for one
+/// event at a time; a no-show does not forfeit it (owner rule, 2026-09-17 —
+/// the earlier "no-show forfeits" Model B silently took ฿500 from two people).
 pub const REASON_RETURN: &str = "return";
+
+/// Set-based, idempotent release of every applied credit whose event has ended
+/// and has no `return` yet. Shared by [`release_ended_applies`] and the atomic
+/// apply batch (`db::credit_coverage`), so a spend always sees released credit.
+///
+/// `INSERT … SELECT` with an upsert needs the `WHERE` it has here (SQLite parse
+/// rule). An event with no end time, or whose row is gone, stays locked: an
+/// unknown end is not a past end.
+pub(crate) const RELEASE_ENDED_APPLIES_SQL: &str = "INSERT INTO credit_ledger \
+     (email, organization_id, currency, delta, reason, event_id, deposit_id, note) \
+     SELECT a.email, a.organization_id, a.currency, -a.delta, 'return', a.event_id, \
+            'return:' || a.event_id || ':' || a.email, 'event_ended' \
+     FROM credit_ledger a JOIN events e ON e.id = a.event_id \
+     WHERE a.reason = 'apply' AND a.delta < 0 \
+       AND e.event_end_ms > 0 \
+       AND e.event_end_ms <= CAST(strftime('%s', 'now') AS INTEGER) * 1000 \
+       AND NOT EXISTS (SELECT 1 FROM credit_ledger r WHERE r.reason = 'return' \
+                       AND r.event_id = a.event_id AND r.email = a.email) \
+     ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING";
+
+/// Record the `return` for every applied credit whose event has ended.
+///
+/// Called at the top of every balance read in this module (and in the payout
+/// queue), so no reader can see a balance that still counts an ended event's
+/// lock — the same number the payout reversal removes. Errors propagate: a
+/// reader that silently skipped this would under-report credit, and the
+/// reversal would then pay out less than the attendee is owed.
+pub async fn release_ended_applies(db: &D1Database) -> Result<usize, String> {
+    let result = db
+        .prepare(RELEASE_ENDED_APPLIES_SQL)
+        .run()
+        .await
+        .map_err(|e| format!("D1 credit_ledger release_ended_applies: {e:?}"))?;
+    Ok(result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0))
+}
 
 /// Record a signed credit movement.
 ///
@@ -98,6 +147,7 @@ pub async fn try_spend(
     event_id: &str,
     deposit_id: &str,
 ) -> Result<bool, String> {
+    release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
     let currency_lc = currency.to_lowercase();
     let sql = "INSERT INTO credit_ledger \
@@ -140,6 +190,7 @@ pub async fn balance(
     organization_id: &str,
     currency: &str,
 ) -> Result<i64, String> {
+    release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
     let currency_lc = currency.to_lowercase();
     let sql = "SELECT COALESCE(SUM(delta), 0) AS bal FROM credit_ledger \
@@ -185,6 +236,7 @@ pub struct CreditBucket {
 /// to the payout reversal, so the organizer pays the cash out and the attendee
 /// keeps spendable credit. Enumerate instead of guessing (plan 022 §6).
 pub async fn positive_balances(db: &D1Database, email: &str) -> Result<Vec<CreditBucket>, String> {
+    release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
     let sql = "SELECT organization_id, currency, COALESCE(SUM(delta), 0) AS balance \
                FROM credit_ledger WHERE email = ?1 \
@@ -220,6 +272,7 @@ pub struct OrgLiability {
 /// correct source for the admin liability chip (the old one summed a D1 column
 /// that hold never wrote, so it always read zero).
 pub async fn liability(db: &D1Database) -> Result<Vec<OrgLiability>, String> {
+    release_ended_applies(db).await?;
     let sql = "SELECT organization_id, currency, \
                       COALESCE(SUM(delta), 0) AS balance, \
                       COUNT(DISTINCT email)   AS holders \
@@ -242,6 +295,7 @@ pub async fn thb_balances_by_email(
     db: &D1Database,
     organization_id: &str,
 ) -> Result<HashMap<String, i64>, String> {
+    release_ended_applies(db).await?;
     let sql = "SELECT email, COALESCE(SUM(delta), 0) AS bal FROM credit_ledger \
                WHERE organization_id = ?1 AND currency = 'thb' \
                GROUP BY email HAVING SUM(delta) > 0";
@@ -286,13 +340,17 @@ pub async fn emails_applied_credit(
         .collect())
 }
 
-/// Delete the Model-B credit-return entry for (event, email) — used on undo-
-/// check-in so a subsequent re-check-in re-adds it (keeps the rolling balance
-/// correct across corrections). No-op when none exists.
+/// Delete the credit-return entry for (event, email) — used on undo-check-in
+/// so a subsequent re-check-in re-adds it. No-op when none exists, and a no-op
+/// once the event has ended: from then on the credit is returned regardless of
+/// attendance, so undoing a check-in must not take it back.
 pub async fn remove_return(db: &D1Database, event_id: &str, email: &str) -> Result<(), String> {
     let email_lc = email.to_lowercase();
     let sql = "DELETE FROM credit_ledger WHERE reason = 'return' \
-               AND event_id = ?1 AND email = ?2";
+               AND event_id = ?1 AND email = ?2 \
+               AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = ?1 \
+                   AND e.event_end_ms > 0 \
+                   AND e.event_end_ms <= CAST(strftime('%s', 'now') AS INTEGER) * 1000)";
     db.prepare(sql)
         .bind_refs(&[D1Type::Text(event_id), D1Type::Text(&email_lc)])
         .map_err(|e| format!("D1 credit_ledger remove_return bind: {e:?}"))?
@@ -359,6 +417,9 @@ async fn count_query(db: &D1Database, sql: &str) -> Result<i64, String> {
 /// (`phantom_holds`, `double_settled`, `negative_balances`). Only the first was
 /// checked originally, which left every over-payment path silent.
 pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
+    // Materialise releases first so `negative_balances` and the daily run (the
+    // backstop for balances nobody has read yet) both see ended events returned.
+    release_ended_applies(db).await?;
     // Before the atomic coverage workflow, credit-backed THB registrations were
     // written with method='thb'. Repair only an exact ledger + marker + amount
     // match, and refuse any attendee/event that also has a cash deposit row.

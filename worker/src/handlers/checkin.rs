@@ -254,11 +254,11 @@ pub async fn check_in(
         .await;
     }
 
-    // Model B — roll rolling credit back on attendance. If this attendee got in
-    // with a CREDIT-covered deposit, checking in honours the commitment, so the ฿
-    // returns to their balance for the next event (a no-show simply never triggers
-    // this, forfeiting it). In-person only; cash + staff-comp deposits are
-    // unaffected. Idempotent per (event, attendee) so undo→redo stays correct.
+    // Return rolling credit early on attendance. If this attendee got in with a
+    // CREDIT-covered deposit, the ฿ goes back to their balance now instead of
+    // when the event ends (`credit_ledger::release_ended_applies`, which returns
+    // it attended or not, under the same key). In-person only; cash + staff-comp
+    // deposits are unaffected. Idempotent per (event, attendee).
     if !query.online
         && let (Some(db), Some(kv)) = (state.d1.as_deref(), state.events_kv.as_ref())
         && let Ok(Some(dep)) =
@@ -431,9 +431,9 @@ pub async fn undo_check_in(
         .await;
     }
 
-    // Model B — undo the credit return so a subsequent re-check-in re-adds it
-    // (keeps the rolling balance correct across corrections). Only relevant for a
-    // credit-covered deposit; best-effort.
+    // Undo the early credit return so a re-check-in re-adds it. A no-op once the
+    // event has ended (the credit is returned regardless of attendance then).
+    // Only relevant for a credit-covered deposit; best-effort.
     if let (Some(db), Some(kv_ref)) = (state.d1.as_deref(), state.events_kv.as_ref())
         && let Ok(Some(dep)) =
             crate::event_store::get_thb_deposit(kv_ref, &event.id, &attendee.api_id, Some(db)).await

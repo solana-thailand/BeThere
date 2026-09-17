@@ -382,6 +382,15 @@ pub struct CreditRefundRequest {
 /// here and only here: the flag is on the contact, and `reverse_held_credit`
 /// reverses every bucket, so the displayed total is exactly what gets reversed.
 pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest> {
+    // The reversal (`positive_balances`) releases ended events' credit before it
+    // reads; show the organizer the same number, or they pay out less than is
+    // removed.
+    if crate::db::credit_ledger::release_ended_applies(db)
+        .await
+        .is_err()
+    {
+        return Vec::new();
+    }
     let sql = "\
          SELECT \
            c.email                                    AS email, \

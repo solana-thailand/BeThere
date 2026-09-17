@@ -85,7 +85,10 @@ pub async fn apply(db: &D1Database, input: &ApplyCredit<'_>) -> Result<ApplyCred
         ])
         .map_err(|e| format!("D1 atomic credit spend bind: {e:?}"))?;
 
-    let mut statements = vec![spend];
+    // Release ended events' locks inside the same transaction, so the spend
+    // guard's balance counts credit returned after the event it was applied to.
+    let release = db.prepare(crate::db::credit_ledger::RELEASE_ENDED_APPLIES_SQL);
+    let mut statements = vec![release, spend];
     if currency == "thb" {
         // thb_deposits predates its composite uniqueness invariant. The batch's
         // preceding ledger write serializes this workflow; NOT EXISTS keeps the
@@ -175,7 +178,7 @@ pub async fn apply(db: &D1Database, input: &ApplyCredit<'_>) -> Result<ApplyCred
         .await
         .map_err(|e| format!("D1 atomic credit coverage batch: {e:?}"))?;
     let newly_spent = results
-        .first()
+        .get(1)
         .and_then(|r| r.meta().ok().flatten())
         .and_then(|m| m.changes)
         .unwrap_or(0)
