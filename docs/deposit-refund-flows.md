@@ -111,9 +111,10 @@ record; KV is a mirror (`worker/src/db/thb_deposits.rs:1-4`).
 
 ## 2. Registration credit auto-apply (rolling credit)
 
-A held THB deposit from a *previous* event becomes **rolling credit** on the
-contact, and is spent automatically the next time that person registers for a
-deposit-gated event.
+A held THB deposit from a *previous* event becomes **rolling credit** in the
+D1 `credit_ledger`, and is applied automatically the next time that person
+registers for a deposit-gated event. The apply locks it for that event only; it
+returns at check-in or event end (rules: [deposit-commitment-model.md](deposit-commitment-model.md) §3.2).
 
 Flow in `worker/src/handlers/register/signup.rs`:
 
@@ -216,7 +217,10 @@ off-chain (Sheets/D1) state the organizer keeps in sync with the on-chain
   atomically moves a verified deposit from a past event's escrow to a new event
   from the **same organizer** (both escrows must exist; organizer wallets must
   match). No off-chain "hold" is allowed for USDC — the on-chain move is the
-  only settleable path, preventing double-credit (`hold_credit.rs:97`).
+  only settleable path, preventing double-credit (`hold_credit.rs:97`). The
+  program only rolls over a **checked-in** deposit, unlike THB credit (which
+  survives a no-show since #118). `CreditUsdc` exists in the ledger and enum but
+  nothing writes a USDC hold today.
 - Organizer lifecycle (staff): `escrow/init`, `mark-checked-in`,
   `deactivate-event`, `close-event`, `claim-forfeited` (batch, excludes
   refunded wallets and checked-in PDAs, and drops indexer-lag ghosts via
@@ -244,8 +248,8 @@ deposit.
   (`hold_credit.rs:139`): if settle succeeds but the credit increment fails, no
   money is created (admin reconciles); the reverse would allow infinite credit
   via retry.
-- On success, `increment_credit` on the contacts sheet, audit
-  `DepositHeldAsCredit`. The credit is then auto-applied at the next
+- On success, a `hold` entry in `credit_ledger` (authoritative; the contacts
+  sheet is a display mirror), audit `DepositHeldAsCredit`. The credit is then auto-applied at the next
   registration (§2).
 
 ### 4.2 Request return of held credit (attendee → organizer)
@@ -315,19 +319,15 @@ never mislabels a ฿ deposit as USDC.
 |---|---|---|---|---|---|
 | **USDC** | `POST /api/deposit/usdc` → Solana Pay; wallet signs `deposit` TX | Automatic — TX confirmed on-chain + signer cross-check (`/confirm` poll or `/webhook`) | `POST /api/escrow/refund` (refund+close, atomic); `/escrow/rollover-deposit` to move to next event; `/escrow/close-deposit` to reclaim rent | **Attendee** signs every money-moving TX; organizer only runs escrow lifecycle | **On-chain** (attendee-signed; escrow program is source of truth) |
 | **THB** | `POST /api/deposit/thb/upload` (slip + bank info → R2); or admin `/thb/admin-upload` | **Organizer** approves `POST /api/deposit/thb/verify` | Hold: attendee `POST /api/deposit/hold` (→ rolling credit, auto-applied next event). Request-return: attendee `POST /api/deposit/request-credit-refund` (flag only). Cash refund: organizer `POST /api/refund/mark/{id}` (+ `/batch-thb`, `/manual`) | Upload + hold + request-return = **attendee**; verify + cash refund = **organizer** | **Manual** (bank transfer; D1 CAS settlement + Sheets mirror) |
-| **Rolling credit** (`CreditThb`/`CreditUsdc`) | Auto-applied at registration (`signup.rs` §5c/§7b) from a prior held balance | Recorded as a pre-verified `ThbDeposit` (`SYSTEM_ROLLING_CREDIT`) | Exit via `request-credit-refund` (organizer pays out through THB tooling) | System applies; attendee requests exit; organizer pays out | **Manual** (balance on the contact) |
+| **Rolling credit** (`CreditThb`/`CreditUsdc`) | Auto-applied at registration (`signup.rs` §5c/§7b) from a prior held balance | Recorded as a pre-verified `ThbDeposit` (`SYSTEM_ROLLING_CREDIT`) | Exit via `request-credit-refund` (organizer pays out through THB tooling) | System applies; attendee requests exit; organizer pays out | **Manual** (D1 `credit_ledger`) |
 
 ---
 
 ## 7. Notes / inconsistencies worth flagging
 
-- **Credit-detection heuristic on the deposit page.** `already_deposited.rs:103`
-  decides `is_credit` by looking for the substring `"CREDIT"` in the deposit's
-  `tx_signature` or `wallet_address`. But the auto-applied credit record written
-  by `signup.rs:421` marks the credit via `slip_url =
-  "ROLLING_CREDIT_AUTO_APPLIED"` (and `verified_by = "SYSTEM_ROLLING_CREDIT"`),
-  not those fields. Worth verifying the credit label actually renders for
-  auto-applied credit deposits, or align the detection on `DepositMethod::Credit*`.
+- ~~**Credit-detection heuristic on the deposit page.**~~ Resolved:
+  `already_deposited.rs` now keys `is_credit` on `DepositMethod::CreditThb |
+  CreditUsdc` first, with the old string checks only as a fallback.
 - **Slip size message vs check.** `slip_upload.rs:22-58` caps the encoded data
   URL at `5 * 1024 * 1024` and the doc-comment says "decoded ≤ 5MB, encoded ≤
   7MB", but the user-facing error says "max 3MB". Cosmetic, but the three

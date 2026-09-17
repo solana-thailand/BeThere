@@ -36,6 +36,12 @@ silently destroyed money (incident 2026-08-14):
   (฿5,000 restored, idempotent).
 
 ### Model B — rolling lifecycle (the intended economics)
+
+> ⚠️ **Superseded 2026-09-17 (#118).** A no-show no longer forfeits credit: an
+> apply's `return` is also written when the event ends, attended or not, and undo
+> check-in can't remove it after that. Current rules:
+> [deposit-commitment-model.md](deposit-commitment-model.md) §3.2. The bullets
+> below are kept as history.
 - **Apply** (auto at registration or admin) → ledger `−฿` (a commitment).
 - **Check-in** → ledger `+฿` (`REASON_RETURN`, in-person, `is_credit_covered()`,
   idempotent) → rolls to the next event. **No-show never returns → forfeited.**
