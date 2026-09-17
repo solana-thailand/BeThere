@@ -1,7 +1,8 @@
 # Plan 019 — Ontime Rundown → Public Agenda (Import)
 
-> **Status:** Spec. Phase 1 is implementable today against shipped code; Phase 2 is
-> gated on one product decision (§6.1).
+> **Status:** Phase 1 shipped (`0d07da6`, verified 2026-08-23). Phase 2 is gated on
+> owner decisions §6.1 (product) and §6.3 (licence). Evidence for 6.1 was gathered
+> 2026-09-17 (§6.4).
 > **Motivation:** organizers already author a per-session rundown in Ontime for
 > every event. BeThere's public event page shows none of it, so attendees cannot
 > see the schedule and the data gets re-typed by hand.
@@ -243,12 +244,40 @@ Do not repeat it here.
       sessions later gain per-session check-in, speaker pages, or "which talks did
       I attend". If the agenda is only ever *read*, Phase 1's text is the correct
       end state and Phase 2 should be declined.
+      **Blocked on owner product decision.** Evidence for it is in §6.4.
 - [ ] **6.2 Are decks public or attendee-gated?** The poster path is public, the
       slip path is attendee-scoped; slides could reasonably be either. Decides
       whether `session_asset_key` objects are served openly or behind auth.
+      **Blocked on 6.1.** It only matters if Phase 2 goes ahead. If 6.1 declines
+      Phase 2, close this as moot.
 - [ ] **6.3 BeThere's licence.** Unset today, which means all-rights-reserved —
       so nobody can legally use or contribute, and the GPL-adjacency question in
       §2 cannot be answered. Prerequisite for publishing anything here.
+      **Blocked on owner decision (needs someone who can give legal advice).**
+      Re-checked 2026-09-17: still no `LICENSE` file, and GitHub reports
+      `licenseInfo: null` for `solana-thailand/BeThere`, which is a **public**
+      repository. The code is readable by anyone but licensed to no one.
+
+### 6.4 Evidence for 6.1 — what organizers actually publish (2026-09-17)
+
+Read from the public API only (`GET /api/public/events`, `/public/events/past`,
+`/public/event/{slug}`). No private data.
+
+- **One public event is listed:** *Road to Mainnet #6 (Bangkok)*, `active`.
+  `/public/events/past` returns none, because no recap has been published.
+- **Its description carries a hand-typed agenda:** two sessions, written as
+  `13:20: Open Floor — "…" by Ozone`. That is **not** the importer's output
+  shape (`HH:MM  Title — Presenter`, §3), so the Phase 1 import was not used,
+  or its output was rewritten. `ontime/` has no CSV for #6.
+- **The agenda is read-only content:** a time, a title and a speaker, with
+  nothing an attendee does per session.
+
+What this suggests, without deciding it: organizers do want an agenda on the
+page (demand confirmed), but n=1 shows nothing that would need sessions as
+entities. That leans toward **declining Phase 2** for now. It also raises a
+smaller Phase 1 question worth asking the organizer: why was the importer not
+used for #6? Possible reasons are no Ontime rundown yet, the output format, or
+the button not being found.
 
 ---
 
@@ -259,4 +288,5 @@ Do not repeat it here.
 - [x] The four latent bugs identified before implementation (§5).
 - [x] Phase 1 implemented (`0d07da6`) and its acceptance list green (§3),
       verified in a browser against staging rather than by code trace.
-- [ ] §6 decisions taken.
+- [ ] §6 decisions taken. **Blocked on owner decisions** 6.1 (product) and
+      6.3 (licence). 6.2 follows from 6.1. Evidence for 6.1 is in §6.4.
