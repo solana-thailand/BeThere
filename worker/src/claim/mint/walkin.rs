@@ -48,6 +48,35 @@ pub(super) async fn execute_walkin_claim(
         return Err(AppError::Validation("NFT has already been claimed".into()));
     }
 
+    // One badge per PERSON per event (plan 025 §5.2) — the pre-registered path
+    // runs the same check. Without it here, someone whose registered row already
+    // claimed could mint a second badge through a walk-in row. The walk-in
+    // record has no row id, so the claiming row is excluded by its token.
+    if let Some(db) = state.d1.as_deref() {
+        match crate::db::person::claimed_elsewhere(
+            db,
+            &event.id,
+            &walkin.email,
+            "",
+            &walkin.claim_token,
+        )
+        .await
+        {
+            Ok(Some(claimed_at)) => {
+                tracing::warn!(
+                    claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
+                    claimed_at = %claimed_at,
+                    "walk-in claim blocked: this person already claimed on another registration"
+                );
+                return Err(AppError::Validation(
+                    "You have already claimed this event's badge on another registration.".into(),
+                ));
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!(error = %e, "walk-in linked-email claim check failed — not blocking"),
+        }
+    }
+
     // Claim dedup lock
     if let Some(kv) = kv
         && let Err(e) = acquire_claim_lock(

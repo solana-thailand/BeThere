@@ -325,12 +325,16 @@ pub(crate) async fn clear_credit_refund_requested(
     db: &D1Database,
     email: &str,
 ) -> Result<(), String> {
+    // Clears every email of the person: the reversal is person-wide, so a
+    // sibling flag left set would re-queue a request for credit that is already
+    // paid back and now reads ฿0.
     let email_lower = email.to_lowercase();
-    let stmt = db.prepare(
+    let stmt = db.prepare(concat!(
         "UPDATE contacts \
          SET credit_refund_requested = 0, credit_refund_requested_at = NULL \
-         WHERE email = ?1",
-    );
+         WHERE LOWER(email) IN ",
+        crate::db::person::person_emails_of!("?1")
+    ));
     stmt.bind_refs(&[D1Type::Text(&email_lower)])
         .map_err(|e| format!("D1 clear_credit_refund_requested bind: {e:?}"))?
         .run()
@@ -393,6 +397,12 @@ pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest>
     }
     // Summed over the contact's person (every linked email), matching the
     // person-wide `positive_balances` the reversal removes.
+    //
+    // ONE ROW PER PERSON. The amount is now the person's whole balance, so two
+    // flagged linked emails would otherwise show that balance twice and the
+    // organizer would pay it out twice (the second ledger reversal no-ops, and
+    // nothing downstream notices). The surviving row is the latest request,
+    // ties broken by email, and clearing it clears the person's other flags.
     let sql = concat!(
         "SELECT \
            c.email                                    AS email, \
@@ -408,6 +418,14 @@ pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest>
            COALESCE(c.credit_refund_requested_at, '') AS requested_at \
          FROM contacts c \
          WHERE c.credit_refund_requested = 1 \
+           AND NOT EXISTS (SELECT 1 FROM contacts c2 \
+             WHERE c2.credit_refund_requested = 1 \
+               AND LOWER(c2.email) <> LOWER(c.email) \
+               AND LOWER(c2.email) IN ",
+        crate::db::person::person_emails_of!("LOWER(c.email)"),
+        " AND (COALESCE(c2.credit_refund_requested_at, '') > COALESCE(c.credit_refund_requested_at, '') \
+                 OR (COALESCE(c2.credit_refund_requested_at, '') = COALESCE(c.credit_refund_requested_at, '') \
+                     AND LOWER(c2.email) < LOWER(c.email)))) \
          ORDER BY c.credit_refund_requested_at DESC"
     );
 

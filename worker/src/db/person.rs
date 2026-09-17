@@ -152,7 +152,7 @@ pub async fn link_google(
 /// behaviour test runs the real statement.
 pub(crate) const CLAIMED_ELSEWHERE_SQL: &str = concat!(
     "SELECT a.claimed_at AS claimed_at FROM attendees a \
-     WHERE a.event_id = ?1 AND a.id <> ?3 \
+     WHERE a.event_id = ?1 AND a.id <> ?3 AND COALESCE(a.claim_token, '') <> ?4 \
        AND a.claimed_at IS NOT NULL AND a.claimed_at <> '' \
        AND LOWER(a.email) IN ",
     person_emails_of!("?2"),
@@ -160,18 +160,22 @@ pub(crate) const CLAIMED_ELSEWHERE_SQL: &str = concat!(
 );
 
 /// When another attendee row of the SAME person already claimed this event's
-/// badge, its `claimed_at`. One badge per person per event, so linking two
-/// emails cannot double a claim (plan 025 §5.2).
+/// badge, its `claimed_at`. One badge per person per event, so a second
+/// registration cannot double a claim (plan 025 §5.2).
+///
+/// The claiming row is excluded by `attendee_id` **or** `claim_token`, because
+/// the walk-in path has only the token (its record carries no row id). Pass an
+/// empty string for whichever one you lack.
 ///
 /// Reads the D1 attendee mirror, which the claim writer updates. A row missing
 /// from the mirror makes this return `None`, so it is a second line of defence
-/// on top of the per-row `claimed_at` check, not a replacement for it. It can
-/// only ever fire for emails someone deliberately linked.
+/// on top of the per-row `claimed_at` check, not a replacement for it.
 pub async fn claimed_elsewhere(
     db: &D1Database,
     event_id: &str,
     email: &str,
     attendee_id: &str,
+    claim_token: &str,
 ) -> Result<Option<String>, String> {
     let email_lc = email.trim().to_lowercase();
     let stmt = db
@@ -180,6 +184,7 @@ pub async fn claimed_elsewhere(
             D1Type::Text(event_id),
             D1Type::Text(&email_lc),
             D1Type::Text(attendee_id),
+            D1Type::Text(claim_token),
         ])
         .map_err(|e| format!("D1 person claimed_elsewhere bind: {e:?}"))?;
     let rows = safe_all_rows(&stmt).await?;
