@@ -544,6 +544,18 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
       submission now updates the one row and returns its real id; a seeded
       `approved` / `in_person` / `pre_event` row keeps all three fields.
 
+      **Amended by `.issues/115` (2026-09-17).** The consent half of that update
+      used to be `consent_marketing = excluded.consent_marketing` plus a fresh
+      `consent_marketing_at`, so a resubmission that did not *ask* about
+      marketing (the `/feedback` survey posts here once per event) recorded a
+      dated withdrawal. The rule is now three-state: `Some(true)` / `Some(false)`
+      overwrite and re-date, as described above, and keep `attendees` and
+      `developer_profiles.consent_outreach` in agreement; a submission that
+      **omits** the field keeps the stored answer and its date
+      (`COALESCE(?9, attendees.consent_marketing)`, `db/attendees/writes.rs`)
+      and leaves `consent_outreach` untouched. The "withdraw on resubmit" case
+      above still withdraws — only an unasked form no longer does.
+
       **Defect 2 — a failed write reported success (fixed, `2f25910`).** Every D1
       write in this handler was warn-and-continue. That is defensible in
       `signup.rs`, where Sheets is the primary store and D1 a mirror — but this

@@ -158,11 +158,12 @@ pub(crate) async fn upsert_attendee_full(
     sheet_row_index: Option<i32>,
 ) -> Result<(), String> {
     // Map an Option<&str> to a D1 bind, falling back to an empty string.
-    // We intentionally do NOT use `D1Type::Null` — the rest of this module
-    // binds empty strings for optionals (D1's `bind_refs` rejects `Null` with
-    // "D1_TYPE_ERROR: Type 'object' not supported"). To preserve the
+    // Optionals bind as empty strings, the convention in this module. To keep
     // "empty ⇒ keep existing value" semantics on conflict, the SQL wraps each
     // preserve-column in `COALESCE(NULLIF(excluded.X, ''), attendees.X)`.
+    // (`D1Type::Null` does bind on worker 0.8.1 — `db/audit.rs`,
+    // `db/credit_ledger.rs` and `db/attendees/writes.rs` use it in prod — so
+    // this idiom is a style choice, not a workaround.)
     // Declared as a named fn (not a closure) so a single lifetime `'a` ties
     // the borrowed input to the returned `D1Type<'a>`.
     fn opt_text<'a>(opt: Option<&'a str>) -> D1Type<'a> {
@@ -211,8 +212,8 @@ pub(crate) async fn upsert_attendee_full(
     );
 
     // sheet_row_index is 1-based (sheet row 2+), so 0 is a safe "unset" sentinel.
-    // Avoids `D1Type::Null` (rejected by `bind_refs`); the ON CONFLICT clause
-    // treats 0 as "preserve existing".
+    // The ON CONFLICT clause treats 0 as "preserve existing", matching the
+    // empty-string idiom above.
     let sheet_row_bind = D1Type::Integer(sheet_row_index.unwrap_or(0));
 
     stmt.bind_refs(&[
