@@ -164,9 +164,18 @@ Phase 1 (target: deployed before 2026-09-27)
       Apply Credit shows on B's roster row and spends once.
 
 Phase 2
-- [ ] 7.6 Person-aware registration dedup.
-- [ ] 7.7 Person-aware claim guard.
-- [ ] 7.8 Per-event recipient-wallet uniqueness (gated on 6.2).
+- [x] 7.6 Person-aware registration dedup (`register/signup.rs`): the person's
+      own email is matched first, a linked sibling row second, so registering
+      with the second email returns the existing registration instead of opening
+      a duplicate. A D1 failure degrades to exact-email dedup, never a block.
+- [x] 7.7 Person-aware claim guard (`db::person::claimed_elsewhere`, wired into
+      `claim/mint/execute.rs` between the per-row `claimed_at` check and the
+      mint): one badge per person per event. Best-effort — it reads the D1
+      attendee mirror, so a missing row means no extra block, never a false one.
+      Guards in `worker/tests/linked_email_guards.rs`; SQL behaviour in
+      `test_person_emails.py`.
+- [ ] 7.8 Per-event recipient-wallet uniqueness (gated on 6.2). This is the
+      part that bites a farmer who never links; 7.6/7.7 only bind linked emails.
 - [ ] 7.9 Possible-duplicate roster flag (gated on 6.3).
 
 Phase 3 (only if needed)
