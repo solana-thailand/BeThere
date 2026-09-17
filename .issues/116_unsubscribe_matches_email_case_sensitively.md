@@ -1,6 +1,6 @@
 # 116 — Marketing unsubscribe matches email case-sensitively
 
-**Status:** Fixed on `fix/116-unsubscribe-email-case` (2026-09-17); not deployed
+**Status:** Deployed — prod `b5269410` (2026-09-17; staging `9c73d72c`; rollback `8ba9e1f5`; D1 backup `~/bethere-backups/bethere-db-20260917-pre-114-116-117.sql`)
 **Found:** 2026-09-17, `.handovers/137` §4.7 (DevRel), confirmed against the code
 **Severity:** Medium (PDPA s.19 withdrawal) if it ever fires; nothing fires it today
 

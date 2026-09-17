@@ -1,6 +1,6 @@
 # 114 — R2 objects cached as `public` regardless of what they are
 
-**Status:** fixed on `fix/114-r2-cache-policy`
+**Status:** Deployed — prod `b5269410` (2026-09-17; staging `9c73d72c`; rollback `8ba9e1f5`; D1 backup `~/bethere-backups/bethere-db-20260917-pre-114-116-117.sql`)
 
 ## Found
 
@@ -50,3 +50,7 @@ curl -sI -H 'Authorization: Bearer <staff>' .../slips/<e>/<a>   # private, no-st
 ## Not in scope
 
 The poster's size itself (3.9 MB PNG on the landing page) — `.issues/108`.
+
+## Prod verification (2026-09-17)
+
+RTM #6 poster on `b5269410`: 200 `public, max-age=86400` + ETag `"6eacf7b8…"`; 304 on `If-None-Match`. Slips not probed on prod (needs a staff token); covered by `worker/tests/r2_cache_policy.rs` and the staging check.

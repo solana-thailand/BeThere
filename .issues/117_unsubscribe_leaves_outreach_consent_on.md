@@ -1,6 +1,6 @@
 # 117 — Marketing unsubscribe leaves `developer_profiles.consent_outreach` on
 
-**Status:** Fixed on `fix/116-unsubscribe-email-case` (2026-09-17); not deployed. One prod row needs an owner decision (below).
+**Status:** Deployed — prod `b5269410` (2026-09-17; staging `9c73d72c`; rollback `8ba9e1f5`; D1 backup `~/bethere-backups/bethere-db-20260917-pre-114-116-117.sql`). One prod row still needs an owner decision (below).
 **Found:** 2026-09-17, while fixing `.issues/116`
 **Severity:** Medium (PDPA s.19 withdrawal incomplete)
 
@@ -53,3 +53,7 @@ changing anything. Do not bulk-reset (compare handover 137 §4.8).
 
 - Whether the profile toggle and the marketing checkbox should stay one
   consent or become two named purposes (a product/PDPA wording decision).
+
+## Staging verification (2026-09-17, `9c73d72c`)
+
+Seeded a `Ratchapon.POC@gmail.com` attendee row (mixed case) plus an opted-in profile for the dev-token identity, then called the endpoint: `{"rows_updated":3,"profiles_updated":1}`. The mixed-case row and the profile were both withdrawn. Test row deleted and the pre-existing staging values restored. Prod smoke: unauthenticated call → 401.
