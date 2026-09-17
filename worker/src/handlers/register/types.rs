@@ -147,7 +147,10 @@ pub(super) struct DeveloperData<'a> {
     pub(super) participation_type: &'a str,
     pub(super) consent_given: bool,
     pub(super) photo_consent_given: bool,
-    pub(super) consent_marketing: bool,
+    /// `None` when the submitting form did not ask. Nothing marketing-related
+    /// is written then — not the profile's `consent_outreach`, not a response
+    /// row — because an unasked question has no answer to record (Issue 115).
+    pub(super) consent_marketing: Option<bool>,
     /// Dynamic profile fields (key, value) pairs from form config.
     pub(super) profile_fields: Vec<(String, String)>,
     /// Mints the keyed fingerprint this struct's `email` is logged under

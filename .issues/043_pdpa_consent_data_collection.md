@@ -1,7 +1,7 @@
 # 043 — PDPA Consent & Data Collection
 
 > **Date**: 2026-05-28
-> **Status**: 📋 Planned
+> **Status**: ✅ Implemented (phases A–E, backend + frontend). Consent-write rule amended by `.issues/115`.
 > **Priority**: P1 (pre-mainnet — legal compliance)
 > **Depends on**: None (can be done anytime)
 > **Related**: `.issues/016_attendee_google_auth.md` (attendee identity)
@@ -53,7 +53,15 @@ Added mandatory consent checkbox + optional marketing consent to the registratio
 | `consent_given` — mandatory data collection consent | ✅ Done |
 | `photo_consent_given` — per-event photo/media consent | ✅ Done |
 | `consent_marketing` — optional future event marketing consent | ✅ Backend (field added to `RegisterRequest`, D1 migration `0005`) |
-| Frontend checkbox for marketing consent | 📋 Next (Phase A frontend) |
+| Frontend checkbox for marketing consent | ✅ Done (`353e2ce`) — unticked by default |
+
+**Three-state rule (`.issues/115`, 2026-09-17).** `consent_marketing` is
+`Some(true)` ticked, `Some(false)` shown and unticked, `None` not asked. Only
+`Some` writes: an unasked form (the `/feedback` survey) keeps the stored answer
+*and its date*, instead of recording a withdrawal. The marketing box is
+unticked by default on **both** forms — main registration and post-event
+registration, which had shipped pre-ticked. A pre-ticked box is not consent
+(s.19).
 
 ### Phase B: Photo/Media Consent (Optional, Per-Event)
 
@@ -84,7 +92,7 @@ Public `/privacy` page with 11-section PDPA-compliant notice. Frontend Leptos pa
 | `worker/src/sheets/write.rs` | `clear_sheet_cells_batch` — Google Sheets batch clear | ✅ |
 | `worker/src/audit_store.rs` | `AuditAction::DataDeletionRequested` | ✅ |
 | Time-gate: deletion only available after event ends | ✅ PDPA §38 exemption |
-| Frontend (Phase D UI) | "Request Data Deletion" section | 📋 Next |
+| Frontend (Phase D UI) | `/data-privacy` deletion request section | ✅ `353e2ce` |
 
 **Time-gate design:**
 
@@ -108,8 +116,8 @@ Response includes `blocked_events` with `event_id`, `event_name`, `event_end_ms`
 | `worker/src/handlers/register.rs` | `consent_marketing` field on `RegisterRequest` | ✅ |
 | `worker/src/audit_store.rs` | `AuditAction::MarketingUnsubscribed` | ✅ |
 | `worker/src/handlers/mod.rs` | Route wired in attendee-authed router | ✅ |
-| Frontend marketing consent checkbox | Registration form | 📋 Next |
-| Frontend unsubscribe UI | "Unsubscribe from marketing" section | 📋 Next |
+| Frontend marketing consent checkbox | Registration + post-event forms | ✅ `353e2ce`; three-state per `.issues/115` |
+| Frontend unsubscribe UI | `/data-privacy` "Unsubscribe from marketing" | ✅ `353e2ce` |
 
 **Two consent layers:**
 
@@ -164,10 +172,10 @@ Response includes `blocked_events` with `event_id`, `event_name`, `event_end_ms`
 | B | Photo/media consent | ~3.5h | ✅ Done |
 | C | Privacy policy page | ~2.75h | ✅ Done |
 | D | Data retention & deletion (time-gated) | ~4h | ✅ Done |
-| E | Marketing consent & unsubscribe | ~2h | ✅ Backend done |
-| Frontend | Marketing checkbox + unsubscribe UI + deletion UI | ~3h | 📋 Next |
+| E | Marketing consent & unsubscribe | ~2h | ✅ Done |
+| Frontend | Marketing checkbox + unsubscribe UI + deletion UI | ~3h | ✅ Done (`353e2ce`, `/data-privacy`) |
 | **Total backend** | | **~15.25h** | |
-| **Remaining** | | **~3h frontend** | |
+| **Remaining** | | **none** | |
 
 ## References
 

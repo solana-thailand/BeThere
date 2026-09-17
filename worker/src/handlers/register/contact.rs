@@ -121,13 +121,21 @@ pub(super) async fn write_developer_data(data: &DeveloperData<'_>) {
         tracing::warn!(attendee_fingerprint = %attendee_fingerprint, error = %e, "D1 developer display_name upsert failed (non-fatal)");
     }
 
-    // 1b. Upsert consent_outreach from marketing consent
-    let consent_val = if *consent_marketing { "1" } else { "0" };
-    if let Err(e) =
-        crate::db::developers::upsert_developer_field(d1, email, "consent_outreach", consent_val)
-            .await
-    {
-        tracing::warn!(attendee_fingerprint = %attendee_fingerprint, error = %e, "D1 developer consent_outreach upsert failed (non-fatal)");
+    // 1b. Upsert consent_outreach from marketing consent — only when the form
+    //     asked. The post-event survey does not, and writing "0" for it erased
+    //     the profile's standing answer once per survey submitted (Issue 115).
+    if let Some(consent) = consent_marketing {
+        let consent_val = if *consent { "1" } else { "0" };
+        if let Err(e) = crate::db::developers::upsert_developer_field(
+            d1,
+            email,
+            "consent_outreach",
+            consent_val,
+        )
+        .await
+        {
+            tracing::warn!(attendee_fingerprint = %attendee_fingerprint, error = %e, "D1 developer consent_outreach upsert failed (non-fatal)");
+        }
     }
 
     // 1c. Upsert dynamic profile fields.
@@ -166,12 +174,14 @@ pub(super) async fn write_developer_data(data: &DeveloperData<'_>) {
             },
             false,
         ),
-        (
-            "consent_marketing",
-            if *consent_marketing { "true" } else { "false" },
-            false,
-        ),
     ];
+    if let Some(consent) = consent_marketing {
+        responses.push((
+            "consent_marketing",
+            if *consent { "true" } else { "false" },
+            false,
+        ));
+    }
 
     // Dynamic answers. `is_profile_field` records whether the answer *also*
     // updated `developer_profiles` — so an event-scoped `post.` answer, which
