@@ -472,6 +472,20 @@ mod tests {
         );
     }
 
+    /// A real devnet account written by the deployed program (`HcQtePa1…`,
+    /// fetched 2026-09-17): checked in, not refunded. Adjacent `[82]`/`[83]`
+    /// flags that differ are what separates correct offsets from off-by-one.
+    #[test]
+    fn decode_attendee_deposit_real_devnet_account() {
+        let data = B64
+            .decode("AgHwx6E8/ZVyNJcIqWYR6npH4nkwJfKYtzaBlrkd1JyrPhltP81jJWZeJZVteVqr25dAdH+h6/MJw9jWfD+9l/suQEIPAAAAAAA7vhVqAAAAAAEA/wAAAAAAAAAAAAAA")
+            .unwrap();
+        assert_eq!(
+            decode_attendee_deposit(&data).unwrap(),
+            AttendeeDepositView { version: 1, amount: 1_000_000, checked_in: true, refunded: false }
+        );
+    }
+
     #[test]
     fn decode_attendee_deposit_rejects_wrong_discriminator() {
         let mut data = vec![0u8; ATTENDEE_DEPOSIT_MIN_LEN];

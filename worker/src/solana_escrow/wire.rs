@@ -981,6 +981,35 @@ mod tests {
         assert_ne!(legacy[83], 0, "old offsets would have read refunded = true");
     }
 
+    /// Real devnet `AttendeeDeposit` accounts written by the deployed program
+    /// (`C6HDeZES…`), fetched 2026-09-17. Synthetic bytes only prove the decoder
+    /// matches `state.rs`; these prove it matches what the program writes.
+    /// `HcQtePa1…`: checked in, not refunded — the exact state the old
+    /// offsets decoded as "refunded".
+    const REAL_CHECKED_IN_UNREFUNDED: &str = "AgHwx6E8/ZVyNJcIqWYR6npH4nkwJfKYtzaBlrkd1JyrPhltP81jJWZeJZVteVqr25dAdH+h6/MJw9jWfD+9l/suQEIPAAAAAAA7vhVqAAAAAAEA/wAAAAAAAAAAAAAA";
+    /// `2h8zLaXX…`: checked in and refunded.
+    const REAL_CHECKED_IN_REFUNDED: &str = "AgHwx6E8/ZVyNJcIqWYR6npH4nkwJfKYtzaBlrkd1JyrPuN/4L7ts3+Y9LSCK9uTOkW2aucc07P2uq8gIp84/fZ/QEIPAAAAAABTpxZqAAAAAAEB/wAAAAAAAAAAAAAA";
+
+    fn real_bytes(b64: &str) -> Vec<u8> {
+        use base64::Engine as _;
+        base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .expect("fixture base64")
+    }
+
+    #[test]
+    fn decodes_real_devnet_accounts() {
+        let unrefunded = decode_attendee_deposit(&real_bytes(REAL_CHECKED_IN_UNREFUNDED))
+            .expect("real unrefunded account decodes");
+        assert_eq!(unrefunded.amount, 1_000_000);
+        assert!(!unrefunded.refunded);
+
+        let refunded = decode_attendee_deposit(&real_bytes(REAL_CHECKED_IN_REFUNDED))
+            .expect("real refunded account decodes");
+        assert_eq!(refunded.amount, 1_000_000);
+        assert!(refunded.refunded);
+    }
+
     #[test]
     fn rejects_unknown_version() {
         let mut d = make_deposit(15_000_000, false);

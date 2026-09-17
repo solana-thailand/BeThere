@@ -1,8 +1,10 @@
 # 074 — The devnet e2e decodes `AttendeeDeposit` at pre-`version` offsets, so step 9 verifies nothing
 
-Status: **fixed locally** — offsets corrected, assertions moved into the shell,
-and the false-green reproduced before and after. Closing it fully needs a real
-devnet run. Found while converting the `python3 -c` interpolation sites listed
+Status: **fixed; offsets verified against the deployed program 2026-09-17.** All
+38 real devnet `AttendeeDeposit` accounts decode correctly, and 38/38 PDAs
+re-derive from the decoded fields (see below). The real-byte fixture tests pass
+(worker `wire::tests` 7/7, flow-harness 5/5, 2026-09-18). A full script run is still outstanding and is blocked
+on devnet USDC, as tracked in #084. Found while converting the `python3 -c` interpolation sites listed
 as deferred work in [073](073_signing_keypair_in_process_argv.md).
 
 ## What happened
@@ -100,9 +102,47 @@ on one path while a twin keeps the bug is a recurring shape here.)
 
 ## Remaining
 
-A real devnet run. All verification above used synthetic account bytes; nothing
-proves the corrected offsets match what the deployed program actually writes,
-only that they match the program source and the flow-harness decoder.
+~~A real devnet run.~~ The open question was whether the corrected offsets
+match what the deployed program writes. That is now answered from real chain
+data (below) without needing a fresh deposit. A full end-to-end run of
+`e2e_devnet_test.sh` is still outstanding, but it is a script-level check, not
+an offset check, and it is blocked on devnet USDC with the #084 gate.
+
+## Verification against real devnet accounts — 2026-09-17
+
+`getProgramAccounts` on the deployed program `C6HDeZES…` with a 96-byte +
+discriminator-2 filter returned **38** `AttendeeDeposit` accounts, created
+between 2026-05-26 and 2026-09-13. The full program has 91 accounts, all version
+1: 53 `EventEscrow` and 38 `AttendeeDeposit`. None use the 84-byte layout.
+
+Each account was decoded with the canonical offsets and checked against
+independent on-chain facts rather than plausibility:
+
+| check | canonical offsets | old pre-`version` offsets |
+|---|---|---|
+| `find_program_address(["deposit", event, attendee])` == account address | **38/38** | 0/38 |
+| derived bump == byte `[84]` | 38/38 | — |
+| `event` field is a live `EventEscrow` of the program | 37/38 ¹ | 0/38 |
+| `checked_in`/`refunded` bytes are 0 or 1 | 38/38 | — |
+| padding `[85..96]` all zero | 38/38 | — |
+
+¹ The one miss (`GeiMUECT…`) points at `DVpYsycx…`, an escrow with transaction
+history that has since been closed. The deposit is refunded and its PDA still
+derives from that event key, so the offsets are correct there too.
+
+The PDA match is the decisive check: the address can only re-derive if bytes
+`[2..34]` and `[34..66]` really are `attendee` and `event`. Amounts decode to
+round values (1, 10 or 15 USDC; two accounts hold 10 base units). States seen:
+25 not checked in, 12 checked in and refunded, and **1 checked in but not
+refunded** (`HcQtePa1…`). That last one is the exact state this issue's
+false-green depended on, and it exists on chain. On that account the old decoder
+reads `amount=256000046`, and byte `[82]` = 1 is what it treated as "refunded".
+
+The script's own `decode_deposit` helper, extracted verbatim, was run on real
+base64 for all three states (`HcQtePa1…`, `2h8zLaXX…`, `2ngtttvm…`), and every
+field matched. Two of those accounts are now pinned as regression fixtures:
+`worker/src/solana_escrow/wire.rs` (`decodes_real_devnet_accounts`) and
+`flow-harness/src/chain.rs` (`decode_attendee_deposit_real_devnet_account`).
 
 ## Follow-up
 
