@@ -809,10 +809,12 @@ def slide_02_problem(prs) -> None:
     # SDG 12.3 impact tie-in — fewer no-shows -> less over-catering -> less
     # food waste. Rests on the well-sourced 30-40% no-show stat (docs/sources.md).
     # Subtle one-liner so it reads as an impact footnote, not a competing hero.
+    # Top 6.15, not 6.45: at 6.45 the 0.4" box straddled the card's bottom
+    # border (6.60) in Keynote.
     add_text(
         s,
         Inches(0.9),
-        Inches(6.45),
+        Inches(6.15),
         Inches(5),
         Inches(0.4),
         "🌱 SDG 12.3 · fewer no-shows → less over-catering → less food waste",
@@ -922,9 +924,9 @@ def slide_03_solution(prs) -> None:
             color=color,
             bold=True,
         )
-        # 36pt (down from 42pt) — fits the widest header "Refund + cNFT"
-        # (3.96" at 42pt → 3.40" at 36pt) inside the 3.5"-wide pillar box
-        # without clipping or wrapping to a second line.
+        # 32pt. The 36pt estimate (3.40" in a 3.5" box) left no room for the
+        # text-frame margins, and Keynote wrapped "Refund + cNFT" onto the
+        # body text; rendered and checked at 32pt.
         add_text(
             s,
             x + Inches(0.3),
@@ -932,7 +934,7 @@ def slide_03_solution(prs) -> None:
             Inches(3.5),
             Inches(1.0),
             big,
-            size=36,
+            size=32,
             color=TEXT_LIGHT,
             bold=True,
         )
@@ -997,7 +999,7 @@ def slide_04_demo_flow(prs) -> None:
     ]
     # 6 cards in a 2x3 grid
     card_w = Inches(3.9)
-    card_h = Inches(2.2)
+    card_h = Inches(2.05)
     gap_x = Inches(0.25)
     gap_y = Inches(0.3)
     start_x = Inches(0.6)
@@ -1061,8 +1063,9 @@ def slide_04_demo_flow(prs) -> None:
         )
 
     # Bottom: no-show path
-    # Grid now ends at 6.50 (start_y 1.80 + 2 rows of 2.2 + gap 0.3);
-    # bar at 6.50 ends at 7.10 → 0.40" clearance from 7.5" slide bottom.
+    # Grid ends at 6.20 (start_y 1.80 + 2 rows of 2.05 + gap 0.3), leaving a
+    # 0.30" gutter above the bar; at card_h 2.2 the grid ended exactly on the
+    # bar's top edge and the rounded corners overlapped it.
     card(
         s,
         Inches(0.6),
@@ -1205,23 +1208,16 @@ def slide_05_architecture(prs) -> None:
         color=TEXT_LIGHT,
         bold=True,
     )
+    # One box, two lines, arrow leading line 2: "program →" does not fit the
+    # 3.6in box at 13pt, and as two stacked boxes the wrapped "→" landed on top
+    # of the second line's text in Keynote.
     add_text(
         s,
         Inches(8.85),
         Inches(3.25),
         Inches(3.6),
-        Inches(0.5),
-        "Shared types flow from on-chain program →",
-        size=13,
-        color=TEXT_MUTED,
-    )
-    add_text(
-        s,
-        Inches(8.85),
-        Inches(3.55),
-        Inches(3.6),
-        Inches(0.5),
-        "edge worker → WASM frontend.",
+        Inches(0.8),
+        "Shared types flow from on-chain program\n→ edge worker → WASM frontend.",
         size=13,
         color=TEXT_MUTED,
     )
@@ -1293,8 +1289,8 @@ def slide_06_escrow(prs) -> None:
             bold=True,
             font=FONT_MONO,
         )
-        # name (mono) — 12pt so long names (mark_checked_in,
-        # claim_forfeited, rollover_deposit) stay single-line
+        # name (mono) — 11pt so the longest name, rollover_deposit, stays
+        # single-line; at 12pt Keynote broke it as "rollover_deposi / t"
         add_text(
             s,
             x + Inches(0.15),
@@ -1302,7 +1298,7 @@ def slide_06_escrow(prs) -> None:
             step_w - Inches(0.3),
             Inches(0.6),
             name,
-            size=12,
+            size=11,
             color=TEXT_LIGHT,
             bold=True,
             font=FONT_MONO,
@@ -1602,7 +1598,7 @@ def slide_07_dashboard(prs) -> None:
         Inches(6.85),
         Inches(3.6),
         Inches(0.25),
-        "Updated 1s ago  ·  2.5s polling  ·  edge-deployed",
+        "Updated 1s ago · 2.5s polling · edge-deployed",
         size=9,
         color=TEXT_DIM,
         font=FONT_MONO,
@@ -1909,7 +1905,9 @@ def slide_09_security(prs) -> None:
             bullet_color=color,
             line_spacing=1.25,
         )
-        yy += Inches(0.95)
+        # 4 bullets at 11pt x 1.25 need ~1.2"; 0.95 put the next label on
+        # top of the last bullet.
+        yy += Inches(1.25)
 
     page_number(s)
 
@@ -1920,7 +1918,9 @@ def slide_10_competitive(prs) -> None:
     header(
         s,
         "Competitive Landscape",
-        "Full event-platform parity — plus trustless money & credentials.",
+        # Must fit one line at 32pt in 12": the longer "Full event-platform
+        # parity — …" wrapped onto the accent rule and the tier-1 label.
+        "Platform parity — plus trustless money & credentials.",
     )
 
     # Shared column geometry (total width = 12.1")
@@ -2473,8 +2473,10 @@ def slide_14_qa(prs) -> None:
     cards = [
         ("DEMO", "/dashboard/live", "Live aggregate dashboard\n(project at the door)"),
         (
-            "REPO",
-            "github.com/solana-thailand/BeThere",
+            # The label carries "github.com" so the path fits the 3.45in
+            # headline at 18pt; the full URL wrapped onto the body text.
+            "GITHUB",
+            "solana-thailand/BeThere",
             f"100% Rust · open source\n{TESTS_PASSING} tests · devnet-deployed",
         ),
         (
