@@ -185,7 +185,7 @@ trustless rail (§6).
 | **Reversibility** | Anything can be fixed by an admin (also: anything can go wrong by an admin) | Mistakes are permanent. Rules can only change by a program upgrade |
 | **Audit** | D1 ledger + daily reconcile + Slack alert | Chain state; invariant `deposited = refunded + forfeited` |
 | **Cost** | Free (bank transfers), organizer's time | Rent for accounts (reclaimed on close) + tx fees |
-| **Where it's live** | Every RTM event | One demo event (islanddao). Prod config pairs a mainnet RPC URL with `SOLANA_CLUSTER = "devnet"`: verify the cluster before any pitch claim |
+| **Where it's live** | Every RTM event | One demo event (islanddao), **on devnet**. Verified 2026-09-17 via prod `/api/health`: escrow `devnet`, badges (Crossmint + Helius RPC) `mainnet-beta`. The split is deliberate (commit `8265d13`, badges-only mainnet launch; no mainnet escrow program yet). Pitch USDC escrow as a devnet demo, badges as mainnet |
 
 ### 6.2 What each is better at
 
