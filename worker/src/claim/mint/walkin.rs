@@ -73,7 +73,9 @@ pub(super) async fn execute_walkin_claim(
                 ));
             }
             Ok(None) => {}
-            Err(e) => tracing::warn!(error = %e, "walk-in linked-email claim check failed — not blocking"),
+            Err(e) => {
+                tracing::warn!(error = %e, "walk-in linked-email claim check failed — not blocking")
+            }
         }
     }
 
