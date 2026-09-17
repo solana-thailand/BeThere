@@ -1,6 +1,6 @@
 # 115 — Answering the post-event survey withdraws marketing consent
 
-**Status:** Fixed on `fix/115-feedback-erases-marketing-consent` — not merged, not deployed
+**Status:** Resolved — PR #122 merged to `develop` (`015a5a4`), deployed to production 2026-09-17 (worker version `8ba9e1f5`)
 **Found:** 2026-09-14, by DevRel, in production (`solana-thailand-devrel-helper/reports/phase-2/CONSENT-GATE.md`)
 **Severity:** High — PDPA: the consent record must be accurate. The bug wrote dated withdrawals nobody made, and erased opt-ins that were made.
 
@@ -67,8 +67,12 @@ the original four had never answered the question at all.
 
 ## 4. Remaining
 
-- [ ] Review, merge to `develop`, deploy (owner). Back up D1 first.
-- [ ] After deploy, confirm with DevRel's `./scripts/recipients.py --audit`: a
-      survey submission must no longer add a withdrawal.
-- [ ] DevRel's watchdog `tests/test_recipients.py::TestTheBugIsStillThere` reads
-      `develop` and will fail on merge — expected; update `CONSENT-GATE.md` then.
+- [x] CI green on #122; merged (rebase) to `develop`.
+- [x] Staging `8d0ddf85`, end to end against `flow-084-lifecycle`: opt-in stored
+      and dated; survey-only submission left answer, date and `consent_outreach`
+      untouched; stated no stored and re-dated. Staging row restored to opted-in.
+- [x] Prod D1 backed up (`~/bethere-backups/bethere-db-20260917-pre-115.sql`),
+      deployed `8ba9e1f5`; served wasm byte-identical to the local build.
+- [x] DevRel baseline at deploy: 165 may receive · 11 withdrawn · 71 never answered.
+- [ ] Watch `./scripts/recipients.py --audit` after the next real survey
+      submission: the withdrawn count must not rise.
