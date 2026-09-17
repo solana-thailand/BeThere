@@ -161,7 +161,10 @@ Phase 1 (target: deployed before 2026-09-27)
       the matching session cookie — see §3.1.
 - [ ] 7.4 Admin link/unlink endpoint (gated on 6.1) + audit_log.
 - [ ] 7.5 Staging verification: two Google accounts, hold on A, register with B,
-      Apply Credit shows on B's roster row and spends once.
+      Apply Credit shows on B's roster row and spends once. **Needs the owner** —
+      it requires signing in to two real Google accounts in a browser, which no
+      agent can do. Everything below it is automated instead: the SQL runs
+      against the production migrations in `test_person_emails.py`.
 
 Phase 2
 - [x] 7.6 Person-aware registration dedup (`register/signup.rs`): the person's

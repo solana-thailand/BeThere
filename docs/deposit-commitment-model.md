@@ -77,6 +77,12 @@ organizer. → decision D1 in §5.
 - Registering for the next event **applies** it automatically: the deposit is
   covered, no payment step. That needs a Google login with the same email (or a
   wallet already linked to it), in-person, and credit ≥ the deposit.
+- **A person can hold several emails** (`person_emails`, plan 025 / issue #122,
+  built 2026-09-18 — check it is deployed before relying on it). Emails linked by
+  signing in to both with Google share one balance, so credit earned under a
+  personal address is spendable when registering with a work address. An email
+  nobody linked is its own person and behaves exactly as before. Ledger rows stay
+  per email; only balances and the spend guards resolve the linked set.
 - **Rule since 2026-09-17 (#118): credit is never forfeited by a no-show.**
   An apply only locks the credit for that one event. It comes back at check-in,
   or when the event ends, whichever is first. It stays the attendee's money until
