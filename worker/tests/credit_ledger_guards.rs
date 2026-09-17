@@ -176,8 +176,24 @@ fn credit_reads_and_spends_resolve_the_person() {
         queue
             .matches("person_emails_of!(\"LOWER(c.email)\")")
             .count(),
-        2,
-        "both payout-queue currencies must sum the contact's person, matching the reversal"
+        3,
+        "the payout queue resolves the person three times: the THB sum, the USDC \
+         sum (both must match what the reversal removes) and the one-row-per-person \
+         filter"
+    );
+    assert!(
+        queue.contains("AND NOT EXISTS (SELECT 1 FROM contacts c2"),
+        "the payout queue must collapse to ONE row per person — the amount is the \
+         person's whole balance, so two flagged linked emails would be paid twice"
+    );
+    let clear = &contacts[contacts
+        .find("pub(crate) async fn clear_credit_refund_requested(")
+        .expect("flag clear exists")..];
+    assert!(
+        clear[..clear.find("\n}\n").expect("fn ends")]
+            .contains("person_emails_of!(\"?1\")"),
+        "clearing the flag must clear the whole person, or a sibling flag re-queues \
+         a request for credit that was already paid back"
     );
 }
 

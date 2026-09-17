@@ -106,6 +106,10 @@ APPLY_SPEND_SQL = concat_after(
     "db/credit_coverage.rs", "let spend = db", opener=".prepare(concat!("
 )
 QUEUE_SQL = concat_after("db/contacts.rs", "pub async fn credit_refund_requests(")
+CLEAR_FLAG_SQL = concat_after(
+    "db/contacts.rs", "pub(crate) async fn clear_credit_refund_requested(",
+    opener="db.prepare(concat!(",
+)
 CLAIMED_ELSEWHERE_SQL = concat_after(
     "db/person.rs", "const CLAIMED_ELSEWHERE_SQL: &str = "
 )
@@ -289,16 +293,30 @@ class PersonEmailsTests(unittest.TestCase):
 
     # -- one badge per person per event ----------------------------------
 
-    def attendee(self, attendee_id, email, claimed_at=None):
+    def attendee(
+        self,
+        attendee_id,
+        email,
+        claimed_at=None,
+        claim_token=None,
+        participation_type="in_person",
+    ):
         self.db.execute(
-            """INSERT INTO attendees (id, event_id, email, claimed_at)
-               VALUES (?, 'e1', ?, ?)""",
-            (attendee_id, email, claimed_at),
+            """INSERT INTO attendees (id, event_id, email, claimed_at, claim_token,
+                   participation_type)
+               VALUES (?, 'e1', ?, ?, ?, ?)""",
+            (
+                attendee_id,
+                email,
+                claimed_at,
+                claim_token or f"tok-{attendee_id}",
+                participation_type,
+            ),
         )
 
-    def claimed_elsewhere(self, email, attendee_id):
+    def claimed_elsewhere(self, email, attendee_id="", claim_token=""):
         row = self.db.execute(
-            CLAIMED_ELSEWHERE_SQL, ("e1", email, attendee_id)
+            CLAIMED_ELSEWHERE_SQL, ("e1", email, attendee_id, claim_token)
         ).fetchone()
         return None if row is None else row["claimed_at"]
 
@@ -326,11 +344,75 @@ class PersonEmailsTests(unittest.TestCase):
         self.db.execute("UPDATE attendees SET claimed_at='' WHERE id='a-work'")
         self.assertIsNone(self.claimed_elsewhere(GMAIL, "a-gmail"))
 
+    def test_walkin_row_is_excluded_by_its_claim_token(self):
+        """The walk-in path has no row id, so it excludes itself by token."""
+        self.attendee("a-registered", GMAIL, claimed_at="2026-09-18T00:00:00Z")
+        # Only a walk-in may repeat an email in one event
+        # (idx_attendees_unique_event_email), which is exactly the path that
+        # skipped the check before.
+        self.attendee(
+            "a-walkin", GMAIL, claim_token="tok-walkin", participation_type="walkin"
+        )
+        # The walk-in row does not block itself...
+        self.assertEqual(
+            self.claimed_elsewhere(GMAIL, "", "tok-walkin"), "2026-09-18T00:00:00Z"
+        )
+        # ...and when it is the only row that claimed, its own token excludes it.
+        self.db.execute("DELETE FROM attendees WHERE id='a-registered'")
+        self.db.execute(
+            "UPDATE attendees SET claimed_at='2026-09-18T01:00:00Z' WHERE id='a-walkin'"
+        )
+        self.assertIsNone(self.claimed_elsewhere(GMAIL, "", "tok-walkin"))
+
     def test_a_different_person_in_the_same_event_never_blocks(self):
         self.attendee("a-other", OTHER, claimed_at="2026-09-18T00:00:00Z")
         self.attendee("a-work", WORK)
         self.link(GMAIL, WORK)
         self.assertIsNone(self.claimed_elsewhere(WORK, "a-work"))
+
+
+    # -- payout queue collapses to one row per person ---------------------
+
+    def request_refund(self, email, requested_at):
+        self.db.execute(
+            """INSERT INTO contacts (email, name, credit_refund_requested,
+                   credit_refund_requested_at) VALUES (?, 'P', 1, ?)""",
+            (email, requested_at),
+        )
+
+    def test_two_linked_emails_requesting_a_refund_show_as_one_row(self):
+        self.ledger(GMAIL, 500, "hold", deposit_id="e1:a")
+        self.ledger(WORK, 500, "hold", deposit_id="e1:b")
+        self.link(GMAIL, WORK)
+        self.request_refund(GMAIL, "2026-09-18T00:00:00Z")
+        self.request_refund(WORK, "2026-09-18T01:00:00Z")
+        rows = self.db.execute(QUEUE_SQL).fetchall()
+        # One row, the latest request, showing the person's whole balance once —
+        # paying both rows would double the payout.
+        self.assertEqual(
+            [(r["email"], r["credit_thb"]) for r in rows], [(WORK, 1000)]
+        )
+
+    def test_unlinked_requesters_each_keep_their_own_row(self):
+        self.ledger(GMAIL, 500, "hold", deposit_id="e1:a")
+        self.ledger(OTHER, 700, "hold", deposit_id="e1:b")
+        self.request_refund(GMAIL, "2026-09-18T00:00:00Z")
+        self.request_refund(OTHER, "2026-09-18T01:00:00Z")
+        rows = self.db.execute(QUEUE_SQL).fetchall()
+        self.assertEqual(
+            sorted((r["email"], r["credit_thb"]) for r in rows),
+            [(GMAIL, 500), (OTHER, 700)],
+        )
+
+    def test_clearing_the_flag_clears_the_whole_person(self):
+        self.link(GMAIL, WORK)
+        self.request_refund(GMAIL, "2026-09-18T00:00:00Z")
+        self.request_refund(WORK, "2026-09-18T01:00:00Z")
+        self.db.execute(CLEAR_FLAG_SQL, (WORK,))
+        still_flagged = self.db.execute(
+            "SELECT COUNT(*) AS n FROM contacts WHERE credit_refund_requested=1"
+        ).fetchone()["n"]
+        self.assertEqual(still_flagged, 0)
 
 
 if __name__ == "__main__":

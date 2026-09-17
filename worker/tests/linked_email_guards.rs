@@ -63,10 +63,26 @@ fn claim_blocks_a_second_badge_for_the_same_person() {
          mirror is a second line of defence, not the source of truth)"
     );
 
+    // The walk-in path returns before the pre-registered checks, so it needs
+    // its own copy or a person could claim twice: once on the registered row,
+    // once on a walk-in row. Walk-ins are the only rows that may repeat an
+    // email in one event (idx_attendees_unique_event_email).
+    let walkin = read("src/claim/mint/walkin.rs");
+    let walkin_check = walkin
+        .find("crate::db::person::claimed_elsewhere(")
+        .expect("walk-in claims must run the person-level check too");
+    let lock = walkin
+        .find("acquire_claim_lock(")
+        .expect("walk-in claim takes the dedup lock");
+    assert!(
+        walkin_check < lock,
+        "the walk-in person check must run before the lock and the mint"
+    );
+
     let person_src = read("src/db/person.rs");
     for needle in [
         "a.claimed_at IS NOT NULL AND a.claimed_at <> ''",
-        "a.id <> ?3",
+        "a.id <> ?3 AND COALESCE(a.claim_token, '') <> ?4",
         "person_emails_of!(\"?2\")",
     ] {
         assert!(

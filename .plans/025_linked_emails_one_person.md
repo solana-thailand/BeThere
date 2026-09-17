@@ -193,6 +193,17 @@ Phase 2
       attendee mirror, so a missing row means no extra block, never a false one.
       Guards in `worker/tests/linked_email_guards.rs`; SQL behaviour in
       `test_person_emails.py`.
+- [x] 7.7b Self-review fixes (2026-09-18), all three found by reviewing this
+      branch's own diff:
+      - the **walk-in** claim path returns before the pre-registered checks, so
+        it needed its own person check — otherwise a claimed registered row could
+        still mint a second badge through a walk-in row;
+      - the payout queue showed **one row per flagged email** while each row now
+        carries the person's whole balance, so two flagged linked emails would
+        have been paid out twice. It collapses to one row per person (latest
+        request), and clearing the flag clears the person's other flags;
+      - the claim message said "linked emails" even when it fired on a second
+        row under the same unlinked address (only walk-ins can create one).
 - [ ] 7.8 Per-event recipient-wallet uniqueness (gated on 6.2). This is the
       part that bites a farmer who never links; 7.6/7.7 only bind linked emails.
 - [ ] 7.9 Possible-duplicate roster flag (gated on 6.3).
