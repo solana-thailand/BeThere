@@ -127,6 +127,12 @@ Flow in `worker/src/handlers/register/signup.rs`:
   an email, so it is only spendable by a Google-verified session *or* a wallet
   session whose wallet is already bound to that email (Plan 017). A wallet
   session that merely *types* an email cannot drain another email's credit.
+- **Linked emails (plan 025)** — The balance read is the *person's*: every email
+  linked to the session's email via `person_emails`, resolved by the single
+  `person_emails_of!` fragment (`db::person`). Linking needs a Google sign-in on
+  both addresses, so this widens whose credit you can spend only to emails the
+  same human proved. `credit_identity_ok` is unchanged — the session must still
+  prove the email it is registering with.
 - **Attendee first** — Persist the attendee to D1 **fatally** *before* spending any
   credit (so credit is never consumed for a reservation that didn't durably save).
 - **Atomic auto-apply** — One idempotent D1 batch conditionally spends the
