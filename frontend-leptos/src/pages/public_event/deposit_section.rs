@@ -35,10 +35,18 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
         (false, true) => format!("Pay {usdc_display}"),
         (false, false) => "Pay deposit".to_string(),
     };
-    let back_label = if show_thb { "Refund or credit" } else { "Claim to wallet" };
+    let back_label = if show_thb {
+        "Refund or credit"
+    } else {
+        "Claim to wallet"
+    };
     let free_detail = match (show_thb, show_usdc) {
-        (true, true) => "Attend and the whole deposit comes back: PromptPay as a refund or as credit for your next event, USDC claimed back to your wallet.",
-        (true, false) => "Attend and the whole deposit comes back, as a refund or as credit for your next event.",
+        (true, true) => {
+            "Attend and the whole deposit comes back: PromptPay as a refund or as credit for your next event, USDC claimed back to your wallet."
+        }
+        (true, false) => {
+            "Attend and the whole deposit comes back, as a refund or as credit for your next event."
+        }
         (false, _) => "Attend and claim the whole deposit back to your wallet after the event.",
     };
 
