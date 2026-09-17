@@ -1,6 +1,6 @@
 # 109 — `/discover` sent ticket-holders to a page saying the event had ended
 
-**Status:** fixed 2026-09-14, **not deployed**
+**Status:** fixed 2026-09-14; deployed to prod 2026-09-14 at `bc062fc` (`worker/scripts/.preflight-bypass.log` entry 19); still present in current prod `8a3d6d9d`.
 **Found:** 2026-09-14, owner review
 **Severity:** medium — it is the defect that made `/discover` unfit to be the
 post-login home

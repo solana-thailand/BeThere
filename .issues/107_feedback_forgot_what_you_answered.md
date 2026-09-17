@@ -1,6 +1,6 @@
 # 107 — The form forgot what you had already answered
 
-**Status:** fixed 2026-09-14, **not deployed**
+**Status:** fixed 2026-09-14; deployed to prod 2026-09-14 at `6bb6345` (`worker/scripts/.preflight-bypass.log` entry 17); still present in current prod `8a3d6d9d`.
 **Found:** 2026-09-14, by the organizer actually filling the form in
 **Severity:** high — it is the page 206 people are about to be emailed a link to
 

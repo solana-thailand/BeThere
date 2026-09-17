@@ -1,6 +1,6 @@
 # 084 — The production preflight gate has never been satisfiable
 
-**Status:** partially fixed 2026-09-13 — the wiring drifts are fixed and proven; a 6/6 green run is still not demonstrated
+**Status:** partially fixed 2026-09-13; claim contract fixed in `.issues/088`. A 6/6 green run is still not demonstrated. Blocked on devnet USDC for the harness wallet (Circle faucet captcha needs a human).
 **Found:** 2026-09-13, attempting the first prod deploy since the gate landed
 **Severity:** high (either prod cannot be deployed, or the gate gets bypassed
 routinely and stops meaning anything)
@@ -268,3 +268,35 @@ Circle faucet captcha again.
 `claim` is unrelated to any of this — the Worker does not return a `status`
 field on the claim payload. Harness expectation vs. current API; one of the two
 is stale and it needs a decision, not a fixture.
+
+
+---
+
+## Status check — 2026-09-17
+
+### The interim became the normal path
+
+`worker/scripts/.preflight-bypass.log` holds **29** production deploys from
+2026-09-13 to 2026-09-17 (`c94f17d` to `4c5e8f2`). Every one used `--force`, and
+`flow-harness/results/.last-green` has never existed. This is the "gate is
+theatre" outcome the Interim section warned about. The later entries (22–24, 28, 29) no
+longer even cite this issue.
+
+### What is left
+
+| item | state |
+|---|---|
+| fixture/flow wiring (one run, one fixture) | fixed 2026-09-13 |
+| `.issues/085` exact on-chain event id | fixed, deployed |
+| claim flow `status` field | fixed in `.issues/088`; `a_payload_without_status_is_accepted` guards it |
+| refund flows vs on-chain `event_end` | **open**: needs a short-window fixture (`event_end = now + ~2 min`), then wait it out |
+| harness wallet devnet USDC | **blocked**: 0 USDC, and the Circle faucet needs a human to solve its captcha |
+| bypass audit log only on one laptop | **awaiting owner decision**: tracking it (a `.gitignore` negation) was proposed 2026-09-17; it would publish deploy reasons and local backup paths to the remote |
+
+### Next step once USDC is available
+
+1. Fund the harness attendee wallet with devnet USDC (at least 10).
+2. Seed with a ~2 minute `event_end`, initialize the escrow, and deposit.
+3. Wait past `event_end`, then run the full suite so it writes `.last-green`.
+4. Record the run here, then deploy the next release **without** `--force`.
+
