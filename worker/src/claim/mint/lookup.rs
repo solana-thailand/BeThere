@@ -179,6 +179,7 @@ pub async fn lookup_claim(
             state.events_kv.as_ref().or(state.quiz_kv.as_ref()),
             &event.id,
             token,
+            event.quiz_enabled,
         )
         .await
         .unwrap_or(QuizStatus::NotRequired);

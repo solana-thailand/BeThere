@@ -81,7 +81,7 @@ def generate_quiz_config(event_id, questions, passing_score=80, max_attempts=3):
             "questions": questions,
             "passing_score_percent": passing_score,
             "max_attempts": max_attempts,
-            "per_attempt_timer_seconds": 300
+            "time_limit_seconds": 300
         }, separators=(',', ':'))
     }
 
@@ -124,7 +124,7 @@ def main():
         "questions": questions,
         "passing_score_percent": args.passing_score,
         "max_attempts": args.max_attempts,
-        "per_attempt_timer_seconds": 300
+        "time_limit_seconds": 300
     }
 
     json_path = os.path.join(args.output_dir, f"quiz_{args.event_id}.json")

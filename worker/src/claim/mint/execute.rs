@@ -200,7 +200,7 @@ pub async fn execute_claim(
         if !event.quiz_enabled {
             return Some(QuizStatus::NotRequired);
         }
-        crate::quiz::get_quiz_status(d1_ref, quiz_kv, &event.id, token)
+        crate::quiz::get_quiz_status(d1_ref, quiz_kv, &event.id, token, event.quiz_enabled)
             .await
             .ok()
     };
