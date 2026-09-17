@@ -1,6 +1,6 @@
 # 119 — Comped staff and organizers are sent back to the deposit page
 
-**Status:** Fixed on `fix/credit-release-and-staff-comp` (2026-09-17); not deployed
+**Status:** Deployed — prod `8a3d6d9d` (2026-09-17; staging `20bf192d`; migration 0042 applied; rollback `b5269410`; D1 backup `~/bethere-backups/bethere-db-20260917-pre-118-119.sql`)
 **Found:** 2026-09-17, owner report (registered free for RTM #6, then every later visit went to the deposit page)
 **Severity:** Medium (organizer UX; with `deposit_deadline_hours` it can also move them to Online)
 
@@ -32,3 +32,13 @@ would also switch them to Online.
 `worker/tests/credit_release_and_staff_comp.rs`
 `staff_comp_writes_the_status_the_router_reads`, mutation-checked (dropping the
 status save fails it).
+
+## Verification
+
+- **Staging `20bf192d`:** the dev-token super-admin registered for
+  `flow-071-window-20260913` and got the ticket. The return visit
+  (`GET /api/my-registration/…`) also returned ticket, and the ticket data showed a
+  verified deposit, a QR, and `deadline_expired: false`. Test registration removed.
+- **Prod:** migration 0042 added the RTM #6 comp status (฿0, verified,
+  non-refundable). The RTM #5 comp's existing status is unchanged.
+

@@ -1,6 +1,6 @@
 # 118 — A no-show (or a failed check-in write) forfeits rolling credit
 
-**Status:** Fixed on `fix/credit-release-and-staff-comp` (2026-09-17); not deployed
+**Status:** Deployed — prod `8a3d6d9d` (2026-09-17; staging `20bf192d`; migration 0042 applied; rollback `b5269410`; D1 backup `~/bethere-backups/bethere-db-20260917-pre-118-119.sql`)
 **Found:** 2026-09-17, owner report while RTM #6 registration was open
 **Severity:** High (attendee money silently taken; 2 people, ฿500 each)
 
@@ -58,7 +58,7 @@ ledger trail.
   (release removed from `balance`, from the payout queue, the batch index
   reverted, the undo guard removed; each fails).
 
-## Remaining — owner decision
+## PARIPOL RTM #6 (owner chose: use credit, refund the slip)
 
 PARIPOL's RTM #6 registration already has a pending (unverified) slip. The atomic
 apply refuses to replace a cash deposit (`ConflictingDeposit`), and no admin
@@ -68,3 +68,22 @@ pending cash record and applying credit; if they actually transferred ฿500 for
 
 Also seen: ปอนด์ บางนา's RTM #4 cash deposit (฿500, verified, online) is neither
 refunded nor held. Out of scope here.
+
+**Done 2026-09-17:**
+1. Saved the pending rows (they carry the refund bank details) to
+   `~/bethere-backups/paripol-rtm6-pending-slip-20260917.json` (outside git,
+   mode 600). The slip image stays in R2 at
+   `/api/storage/slips/…-5-bangkok-copy/01a0aaef-…`.
+2. Removed `thb_deposits` id 56 and its `deposit_statuses` row, guarded on
+   `verified=0 AND refunded=0 AND held_as_credit=0`.
+3. Ran the release statement on prod: 2 rows. All 10 THB credit holders now read ฿500.
+
+**Owner still to do:** press **Apply Credit** for PARIPOL on the RTM #6 roster
+(the button shows now), and transfer back the ฿500 they sent for #6.
+
+## Staging verification (`20bf192d`)
+
+Planted a hold plus an apply on an ended event for the dev identity: the raw
+ledger read ฿0, `GET /api/deposit/credit-balance` returned ฿500 twice, and
+exactly one `event_ended` return row was written. Test rows removed.
+
