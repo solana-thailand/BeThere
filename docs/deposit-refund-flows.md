@@ -1,9 +1,17 @@
 # Deposit, Refund & Rolling-Credit Model
 
-> ⚠️ **Rolling-credit section partly superseded (2026-08-15).** Credit now lives in
-> the D1 **`credit_ledger`** (not the Contacts sheet) and rolls on check-in
-> ("Model B"). See [HANDOVER-2026-08-15-credit-and-security.md](HANDOVER-2026-08-15-credit-and-security.md)
-> for the current model. The USDC/THB deposit + refund mechanics below still hold.
+> ⚠️ **Rolling-credit section partly superseded.** Credit lives in the D1
+> **`credit_ledger`** (not the Contacts sheet) since 2026-08-15.
+>
+> **Rule since 2026-09-17: a no-show does not forfeit credit.** Credit is the
+> attendee's cash the organizer still holds, so it stays theirs until it is paid
+> back. Registering applies (locks) it for that one event. It comes back as a
+> `return` entry at check-in, or when the event ends, whichever is first
+> (`credit_ledger::release_ended_applies`, run before every balance read and
+> inside the atomic apply). The 2026-08-15 "Model B" in
+> [HANDOVER-2026-08-15-credit-and-security.md](HANDOVER-2026-08-15-credit-and-security.md)
+> forfeited credit on a no-show; that part no longer holds. The USDC/THB deposit
+> and refund mechanics below still hold.
 
 BeThere runs a **dual-track RSVP deposit**: attendees back their in-person spot
 with either on-chain **USDC** (Solana escrow, attendee-signed) or off-chain
