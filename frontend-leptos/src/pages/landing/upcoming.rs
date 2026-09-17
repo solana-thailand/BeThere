@@ -21,6 +21,14 @@ struct PublicEventItem {
     location: String,
     #[serde(default)]
     nft_image_url: String,
+    /// Marketing poster, served from R2 as `/api/storage/posters/{event_id}`.
+    ///
+    /// First tier of the same fallback `event_hero` and the past-events card
+    /// use. Without it this card showed `nft_image_url` — which for every event
+    /// so far is the generic `badge-hd.svg` — so the one upcoming event on the
+    /// landing page was unrecognisable (`.issues/094`).
+    #[serde(default)]
+    poster_url: String,
 }
 
 #[derive(Clone, Deserialize, Default)]
@@ -126,22 +134,15 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                         <div class="landing-events-grid">
                             {evts.into_iter().map(|evt| {
                                 let event_url = format!("/e/{}", evt.slug);
-                                let date_str = if evt.event_start_ms > 0 {
-                                    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
-                                    d.set_time(evt.event_start_ms as f64);
-                                    if evt.time_tba {
-                                        // Date only — show just the date, time is TBA
-                                        let opts = js_sys::Object::new();
-                                        let _ = js_sys::Reflect::set(&opts, &"year".into(), &"numeric".into());
-                                        let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
-                                        let _ = js_sys::Reflect::set(&opts, &"day".into(), &"numeric".into());
-                                        let date_part = d.to_locale_string("en-US", &opts).as_string().unwrap_or_default();
-                                        format!("{date_part} · Time TBA")
-                                    } else {
-                                        d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
+                                let date_str = match (evt.event_start_ms > 0, evt.time_tba) {
+                                    (false, _) => "Date TBA".to_string(),
+                                    (true, true) => format!(
+                                        "{} · Time TBA",
+                                        crate::utils::format_event_day(evt.event_start_ms)
+                                    ),
+                                    (true, false) => {
+                                        crate::utils::format_event_datetime(evt.event_start_ms)
                                     }
-                                } else {
-                                    "Date TBA".to_string()
                                 };
                                 let deposit_badge = if evt.deposit_enabled {
                                     view! { <span class="landing-inline-icon"><Icon icon=IconName::Coin class="icon-xs"/>" Deposit required"</span> }.into_any()
@@ -149,12 +150,19 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                                     view! { <span class="landing-inline-icon"><Icon icon=IconName::TicketFree class="icon-xs"/>" Free entry"</span> }.into_any()
                                 };
 
-                                let badge_img = if !evt.nft_image_url.is_empty() {
+                                // Poster first, badge second — the same order
+                                // `event_hero` and `past_events` already use.
+                                let (image_url, image_alt) = if !evt.poster_url.is_empty() {
+                                    (evt.poster_url.clone(), "Event poster")
+                                } else {
+                                    (evt.nft_image_url.clone(), "Event badge")
+                                };
+                                let badge_img = if !image_url.is_empty() {
                                     view! {
                                         <div class="landing-event-badge-img">
                                             <img
-                                                src=evt.nft_image_url.clone()
-                                                alt="Event badge"
+                                                src=image_url
+                                                alt=image_alt
                                             />
                                         </div>
                                     }.into_any()

@@ -62,6 +62,7 @@ pub struct EventForm {
     pub refund_deadline_hours: String,
     pub max_refundable_deposits: String,
     pub location: String,
+    pub location_map_url: String,
     pub video_url: String,
     pub in_person_capacity: String,
     pub online_capacity: String,
@@ -202,6 +203,7 @@ pub fn default_form() -> EventForm {
         refund_deadline_hours: String::new(),
         max_refundable_deposits: String::new(),
         location: String::new(),
+        location_map_url: String::new(),
         video_url: String::new(),
         in_person_capacity: String::new(),
         online_capacity: String::new(),
@@ -295,6 +297,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
             String::new()
         },
         location: detail.location.clone(),
+        location_map_url: detail.location_map_url.clone(),
         video_url: detail.video_url.clone(),
         in_person_capacity: detail
             .in_person_capacity
@@ -698,6 +701,7 @@ pub fn EventFormComponent(
                 } else {
                     Some(current_form.location.trim().to_string())
                 },
+                location_map_url: current_form.location_map_url.trim().to_string(),
                 video_url: current_form.video_url.trim().to_string(),
                 in_person_capacity: current_form.in_person_capacity.trim().parse::<u32>().ok(),
                 online_capacity: current_form.online_capacity.trim().parse::<u32>().ok(),
@@ -948,6 +952,8 @@ pub fn EventFormComponent(
                 } else {
                     Some(current_form.location.trim().to_string())
                 },
+                // Always sent so clearing the field removes the link.
+                location_map_url: Some(current_form.location_map_url.trim().to_string()),
                 video_url: Some(current_form.video_url.trim().to_string()),
                 in_person_capacity: Some(
                     current_form.in_person_capacity.trim().parse::<u32>().ok(),
@@ -1211,6 +1217,17 @@ pub fn EventFormComponent(
                             on:input=move |ev| set_form.update(|f| f.location = event_target_value(&ev))
                         />
                         <span class="quiz-setting-hint">"Venue name and address for in-person events"</span>
+                    </div>
+                    <div class="quiz-setting-item event-form-span-full">
+                        <label class="quiz-field-label">"Google Maps Link"<span class="field-optional-badge">"Optional"</span></label>
+                        <input
+                            type="url"
+                            class="quiz-number-input"
+                            placeholder="e.g. https://maps.app.goo.gl/abc123"
+                            prop:value=move || form.get().location_map_url
+                            on:input=move |ev| set_form.update(|f| f.location_map_url = event_target_value(&ev))
+                        />
+                        <span class="quiz-setting-hint">"Google Maps → Share → Copy link. Attendees tap the location to open the map"</span>
                     </div>
                     <div class="quiz-setting-item event-form-span-full">
                         <label class="quiz-field-label">"Video / Livestream URL"<span class="field-optional-badge">"Optional"</span></label>

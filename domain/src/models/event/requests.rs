@@ -110,6 +110,9 @@ pub struct CreateEventRequest {
     /// Event location (venue name, address, or "Online").
     #[serde(default)]
     pub location: String,
+    /// Map link for the venue (e.g. a Google Maps share URL).
+    #[serde(default)]
+    pub location_map_url: String,
     /// YouTube/live stream/recording URL.
     #[serde(default)]
     pub video_url: String,
@@ -286,6 +289,9 @@ pub struct UpdateEventRequest {
     /// New event location.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    /// New venue map link. Empty string clears it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location_map_url: Option<String>,
     /// YouTube/live stream/recording URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub video_url: Option<String>,

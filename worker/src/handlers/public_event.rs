@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use crate::error::ApiOk;
 use crate::state::AppState;
 use event_checkin_domain::models::error::AppError;
-use event_checkin_domain::models::event::EventVisibility;
+use event_checkin_domain::models::event::{EventVisibility, safe_map_url};
 
 /// `GET /api/public/events`
 ///
@@ -56,6 +56,12 @@ pub async fn list_public_events(
                     "tagline": e.tagline,
                     "location": e.location,
                     "nft_image_url": e.nft_image_url,
+                    // The past-events payload below has always carried this and
+                    // the upcoming one never did, so the landing page's only
+                    // event card fell through to `nft_image_url` — a generic
+                    // `badge-hd.svg` — for events that have a real poster in R2
+                    // (`.issues/094`).
+                    "poster_url": e.poster_url,
                     "created_at": e.created_at,
                     "in_person_capacity": e.in_person_capacity,
                     "online_capacity": e.online_capacity,
@@ -207,6 +213,7 @@ pub async fn get_public_event(
         "require_photo_consent": config.require_photo_consent,
         "description": config.description,
         "location": config.location,
+        "location_map_url": safe_map_url(&config.location_map_url),
         "created_at": config.created_at,
         "dev_mode": state.config.dev_mode,
         // Capacity info for frontend gating

@@ -1,0 +1,424 @@
+/* Combined post-event feedback page (.issues/091, .issues/094).
+ *
+ * The form's whole job is to be answerable in one sitting: recognise the event,
+ * four taps, next event. Everything here serves that — the poster so the reader
+ * knows which event they are rating, and a segmented scale instead of stacked
+ * radio fieldsets so one event reads as four rows rather than a wall.
+ */
+
+/* The page was `layout-col-center`, whose `align-items: center` sizes every
+ * child to its own content and centres it independently — so a block with a
+ * longer event name came out wider than the one below it and the cards walked
+ * down the page in a staircase. Sections here are full width; the only thing
+ * centred is the page itself. */
+.fb-page {
+    padding-top: 1.5rem;
+    padding-bottom: 3rem;
+}
+
+.fb-page > * {
+    margin-bottom: 1rem;
+}
+
+.fb-notice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.fb-event {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* Poster + name + date/venue, as one tappable link to the event's own page. */
+.fb-event-head {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    text-decoration: none;
+    color: inherit;
+    /* Sits above the questions it labels, so it carries the separator. */
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.fb-event-head:hover .fb-event-meta h2 {
+    color: var(--accent);
+}
+
+/* Small on purpose. This is a memory jog, not the hero of the page — the
+ * questions are. 4:5 matches every poster the programme has produced. */
+/* Bigger than a favicon on purpose. These posters are dark, dense and mostly
+ * black; at 56px the title band is unreadable and the thumbnail stops doing the
+ * one job it has. */
+.fb-event-poster {
+    width: 72px;
+    /* Reserved before the image arrives, so eleven rows do not reflow as three
+     * megabytes of PNG land one by one. */
+    background: var(--bg-void);
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.fb-event-meta {
+    min-width: 0;
+}
+
+.fb-event-meta h2 {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.3;
+    transition: color 0.15s ease;
+}
+
+.fb-event-meta .subtitle {
+    margin: 0.25rem 0 0;
+    font-size: 0.8125rem;
+}
+
+/* One dimension per row: label left, choices right. Wraps to two lines on
+ * narrow phones rather than squeezing the choices below tap size. */
+.fb-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.fb-row-label {
+    font-size: 0.9375rem;
+    color: var(--text-heading);
+}
+
+.fb-scale {
+    display: flex;
+    gap: 0.375rem;
+    margin-left: auto;
+}
+
+.fb-choice {
+    /* 44px min height is the tap target this form lives or dies on — most of
+     * these answers arrive on a phone. */
+    min-height: 44px;
+    padding: 0 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition:
+        border-color 0.15s ease,
+        background 0.15s ease,
+        color 0.15s ease;
+}
+
+.fb-choice:hover {
+    border-color: var(--border-hover);
+    color: var(--text-heading);
+}
+
+.fb-choice.is-selected {
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+
+/* Reveals the textarea. A collapsed affordance keeps the default form short;
+ * most people rate and move on. */
+/* Was `--text-secondary` on a dark card, which read as disabled rather than as
+ * the one optional action on the block. */
+.fb-add-comment {
+    align-self: flex-start;
+    padding: 0.375rem 0;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--accent);
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.fb-add-comment:hover {
+    color: var(--accent);
+}
+
+/* The closing single-choice question. Its options are full Thai sentences, so
+ * they stack full width — the three-across segmented scale used for the
+ * satisfaction rows would wrap each one into an unreadable column. */
+.fb-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    border: none;
+    padding: 0;
+    margin: 1rem 0 0;
+}
+
+.fb-options legend {
+    padding: 0;
+    margin-bottom: 0.5rem;
+}
+
+.fb-option {
+    min-height: 44px;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition:
+        border-color 0.15s ease,
+        background 0.15s ease,
+        color 0.15s ease;
+}
+
+.fb-option:hover {
+    border-color: var(--border-hover);
+    color: var(--text-heading);
+}
+
+.fb-option.is-selected {
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+    color: var(--accent);
+}
+
+@media (max-width: 480px) {
+    /* Below this the label and a three-button scale cannot share a line without
+     * the buttons dropping under 44px. Stack instead of shrink. */
+    .fb-row {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.375rem;
+    }
+
+    .fb-scale {
+        margin-left: 0;
+    }
+
+    .fb-choice {
+        flex: 1;
+    }
+}
+
+/* Collapsed sessions (.issues/103).
+ *
+ * 123 of 206 people have exactly one session and never see this. The 29 with
+ * four or more are the regulars, and for them the difference between a list and
+ * a stack of open cards is the difference between a form and a chore. */
+.fb-event.is-collapsed {
+    padding: 0.625rem 0.75rem;
+}
+
+.fb-event.is-collapsed .fb-event-head {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.fb-event.is-collapsed .fb-event-poster {
+    width: 44px;
+}
+
+/* The header is a button now, not a link — nothing on this form is persisted
+ * until submit, so navigating away from a half-filled block discards it. */
+.fb-event-head {
+    width: 100%;
+    background: none;
+    border: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.fb-tick {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 1rem;
+    color: var(--success);
+}
+
+.fb-chevron {
+    margin-left: auto;
+    flex-shrink: 0;
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+}
+
+.fb-progress {
+    margin: 0.75rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+/* Shown on /login only when `next` is the survey (.issues/106). The two sign-in
+ * buttons are equally prominent and one of them cannot answer it. */
+.login-method-note {
+    margin: 0;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* Already answered on an earlier visit, as opposed to typed in this one. The
+ * distinction matters: "ตอบแล้ว" claims the answer is stored (.issues/107). */
+.fb-badge {
+    margin-left: auto;
+    flex-shrink: 0;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    color: var(--success);
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.fb-done-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 1rem;
+}
+
+.landing-nav-brand {
+    text-decoration: none;
+}
+
+/* Holds the slot for an event with no poster so every title starts at the same
+ * x. Dashed rather than solid: it reads as "nothing here", not as a failed
+ * image (.issues/108). */
+.fb-event-poster--empty {
+    border-style: dashed;
+    background: transparent;
+}
+
+/* The submit button sat below eleven rows. Anyone who answered the first block
+ * and wanted to stop had to scroll past everything they had chosen not to do.
+ * Sticky keeps the exit in reach at the point they decide to take it. */
+.fb-submit-bar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    padding: 0.75rem 0 1rem;
+    margin-top: 0.5rem;
+    background: linear-gradient(to bottom, transparent, var(--bg) 35%);
+}
+
+/* The closing single-choice options rendered as full-width bordered boxes with
+ * the label inside, which reads as an empty text input rather than something to
+ * pick. A leading marker makes the affordance obvious without a radio. */
+.fb-option::before {
+    content: "○";
+    margin-right: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.fb-option.is-selected::before {
+    content: "●";
+    color: var(--accent);
+}
+
+/* What the favour buys. Sits above the mechanics because someone deciding
+ * whether to start reads the reason first (.issues/110). */
+.fb-stake {
+    margin: 0.5rem 0 0.75rem;
+    padding-left: 0.75rem;
+    border-left: 2px solid var(--accent-border);
+    color: var(--text-heading);
+}
+
+.fb-submit-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
+/* The next event, offered once the favour is done. A card rather than a link so
+ * it reads as an invitation and not as a footnote. */
+.fb-next-event {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1875rem;
+    width: 100%;
+    margin-top: 1rem;
+    padding: 0.875rem 1rem;
+    text-align: left;
+    text-decoration: none;
+    background: var(--bg-void);
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius);
+    transition: border-color 0.15s ease;
+}
+
+.fb-next-event:hover {
+    border-color: var(--accent);
+}
+
+.fb-next-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent);
+}
+
+.fb-next-name {
+    font-weight: 600;
+    color: var(--text-heading);
+}
+
+.fb-next-meta {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.fb-submit-bar {
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Shown when a draft was recovered. Without it the reader meets answers they do
+ * not remember giving and wonders what else the page decided for them
+ * (.issues/111). */
+.fb-restored {
+    margin: 0.75rem 0 0;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--success-bright);
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    border-radius: var(--radius-sm);
+}
+
+/* "I cannot remember this one" — the reason a retrospective survey gets
+ * abandoned. Sits inside the open block, above the questions, because that is
+ * where the reader is when they get stuck (.issues/112). */
+.fb-recall {
+    display: block;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-bottom: 1px dashed var(--border);
+    padding-bottom: 0.625rem;
+}
+
+.fb-recall:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent-border);
+}

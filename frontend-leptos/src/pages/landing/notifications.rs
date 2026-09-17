@@ -10,6 +10,8 @@ struct InboxItem {
     id: i64,
     title: String,
     body: String,
+    #[serde(default)]
+    kind: String,
     event_name: String,
     action_url: String,
     action_label: String,
@@ -183,7 +185,18 @@ pub(super) fn NotificationInbox() -> impl IntoView {
                         view! {
                             <article class="attendee-inbox-item" class:attendee-inbox-item--unread=unread>
                                 <div class="attendee-inbox-copy">
-                                    <span class="attendee-inbox-event">{item.event_name}</span>
+                                    // The survey row stands for every session
+                                    // this person attended (migration 0038), and
+                                    // the event it is filed under is whichever
+                                    // enrolled them first. Naming it says
+                                    // "How were the sessions?" above one event
+                                    // of eleven (`.issues/107`).
+                                    {match item.kind.as_str() {
+                                        "survey" => view! { <div></div> }.into_any(),
+                                        _ => view! {
+                                            <span class="attendee-inbox-event">{item.event_name}</span>
+                                        }.into_any(),
+                                    }}
                                     <h3>{item.title}</h3>
                                     <p>{item.body}</p>
                                 </div>

@@ -261,6 +261,9 @@ pub struct EventConfig {
     /// Event location (venue name, address, or "Online").
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub location: String,
+    /// Map link for the venue (e.g. a Google Maps share URL). Empty = no link.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub location_map_url: String,
     /// YouTube/live stream/recording URL for the event.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub video_url: String,
@@ -540,6 +543,7 @@ impl EventConfig {
             max_refundable_deposits: 0,
             description: String::new(),
             location: String::new(),
+            location_map_url: String::new(),
             video_url: String::new(),
             event_format: EventFormat::InPerson,
             require_contact_info: true,

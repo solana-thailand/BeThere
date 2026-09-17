@@ -4,7 +4,7 @@ use worker::KvStore;
 
 use event_checkin_domain::models::event::{
     DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus, EventConfig,
-    UpdateEventRequest, normalize_sheet_name,
+    UpdateEventRequest, normalize_map_url, normalize_sheet_name,
 };
 
 use crate::event_store::read::get_event_index;
@@ -257,6 +257,9 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     }
     if let Some(ref v) = req.location {
         config.location = v.trim().to_string();
+    }
+    if let Some(ref v) = req.location_map_url {
+        config.location_map_url = normalize_map_url(v)?;
     }
     if let Some(ref v) = req.video_url {
         config.video_url = v.trim().to_string();

@@ -281,7 +281,80 @@ pub fn is_in_person(participation_type: &str) -> bool {
 /// online registration. Keep this separate from `is_in_person` so callers do
 /// not accidentally classify it as online by negation.
 pub fn is_retrospective(participation_type: &str) -> bool {
-    participation_type.trim().eq_ignore_ascii_case("retrospective")
+    participation_type
+        .trim()
+        .eq_ignore_ascii_case("retrospective")
+}
+
+/// Format an epoch-millisecond instant as a short local date — `13 Sep 2026`.
+///
+/// The landing card formats its own date inline with `js_sys::Date` and also
+/// handles `time_tba`; this is the date-only half, for surfaces that are
+/// recalling an event that has already happened, where the start time is not
+/// the useful part and "Time TBA" can no longer be true.
+/// Format an epoch-millisecond instant as a short local date and 24-hour time —
+/// `27 Sep 2026, 13:00`.
+///
+/// The landing card used to call `to_locale_string` with **no options**, which
+/// renders the browser's default: `9/27/2026, 1:00:00 PM`. Seconds are noise on
+/// an event date, and `9/27` is ambiguous to the Thai-majority audience this is
+/// written for — `en-GB` puts the day first and names the month.
+pub fn format_event_datetime(ms: i64) -> String {
+    if ms <= 0 {
+        return String::new();
+    }
+    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+    d.set_time(ms as f64);
+    let opts = js_sys::Object::new();
+    for (key, value) in [
+        ("year", "numeric"),
+        ("month", "short"),
+        ("day", "numeric"),
+        ("hour", "2-digit"),
+        ("minute", "2-digit"),
+    ] {
+        let _ = js_sys::Reflect::set(&opts, &key.into(), &value.into());
+    }
+    let _ = js_sys::Reflect::set(&opts, &"hour12".into(), &false.into());
+    d.to_locale_string("en-GB", &opts)
+        .as_string()
+        .unwrap_or_default()
+}
+
+/// Split an instant into the day number and a short uppercase month —
+/// `("27", "SEPT")` — for the date chip on `/discover`.
+///
+/// Here rather than in the component for the reason `.issues/104` records: the
+/// same `to_locale_string` call written per surface diverges silently, and had
+/// already done so three times before this one was added.
+pub fn format_event_day_parts(ms: i64) -> (String, String) {
+    if ms <= 0 {
+        return (String::new(), String::new());
+    }
+    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+    d.set_time(ms as f64);
+    let opts = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
+    let month = d
+        .to_locale_string("en-GB", &opts)
+        .as_string()
+        .unwrap_or_default();
+    (d.get_date().to_string(), month.to_uppercase())
+}
+
+pub fn format_event_day(ms: i64) -> String {
+    if ms <= 0 {
+        return String::new();
+    }
+    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+    d.set_time(ms as f64);
+    let opts = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(&opts, &"year".into(), &"numeric".into());
+    let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
+    let _ = js_sys::Reflect::set(&opts, &"day".into(), &"numeric".into());
+    d.to_locale_string("en-GB", &opts)
+        .as_string()
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

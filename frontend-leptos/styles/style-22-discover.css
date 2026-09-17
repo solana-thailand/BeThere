@@ -1,0 +1,185 @@
+/* /discover — what is on, and what I am part of (.issues/096).
+ *
+ * A list, not a landing page. Every row is one tap, and the date chip on the
+ * left is what makes a mixed page scannable: colour says past-or-coming before
+ * the reader parses a single digit.
+ */
+
+.dv-page {
+    padding-top: 1.5rem;
+    padding-bottom: 3rem;
+}
+
+.dv-head h1 {
+    margin: 0;
+    font-size: 1.75rem;
+}
+
+/* The shared `.subtitle` is `text-align: center`, which is right on the pages
+ * that use it under a centred hero and wrong here — it sat centred beneath a
+ * left-aligned h1. Overridden rather than dropping the class, which also
+ * carries the size, colour and line-height this needs. */
+.dv-head .subtitle {
+    margin: 0.25rem 0 0;
+    text-align: left;
+}
+
+.dv-section {
+    margin-top: 2rem;
+}
+
+.dv-section-title {
+    margin: 0 0 0.625rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+}
+
+.dv-empty {
+    margin: 0;
+    padding: 1.25rem;
+    text-align: center;
+    color: var(--text-secondary);
+    background: var(--bg-void);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+}
+
+.dv-row {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    text-decoration: none;
+    color: inherit;
+    background: var(--bg-void);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition:
+        border-color 0.15s ease,
+        transform 0.15s ease;
+}
+
+.dv-row:hover {
+    border-color: var(--border-hover);
+    /* Barely there on purpose — enough to confirm the whole row is the target,
+     * not so much that a list of eight rows feels like it is moving. */
+    transform: translateY(-1px);
+}
+
+/* The chip is the navigation aid. Fixed width so every row's title starts on
+ * the same x — a ragged left edge is what makes a list feel like a jumble. */
+.dv-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    background: var(--accent-bg);
+    border: 1px solid var(--accent-border);
+    line-height: 1.1;
+}
+
+.dv-chip-month {
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+}
+
+.dv-chip-day {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-heading);
+}
+
+/* Past events go grey. This is the whole trick: the reader sorts the page
+ * without reading it. */
+.dv-chip.is-past {
+    background: transparent;
+    border-color: var(--border);
+}
+
+.dv-chip.is-past .dv-chip-month {
+    color: var(--text-secondary);
+}
+
+.dv-chip.is-past .dv-chip-day {
+    color: var(--text-secondary);
+}
+
+.dv-row-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1875rem;
+    min-width: 0;
+    flex: 1;
+}
+
+.dv-row-title {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    /* One line. A three-line title turns the list back into a wall. */
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dv-row-meta {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dv-pill {
+    flex-shrink: 0;
+    padding: 0.1875rem 0.5rem;
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.dv-thumb {
+    width: 40px;
+    aspect-ratio: 4 / 5;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+    /* The status pill is the first thing to go: the chip, the title and the
+     * thumbnail all carry more meaning per pixel. */
+    .dv-pill {
+        display: none;
+    }
+
+    .dv-thumb {
+        width: 34px;
+    }
+}
+
+/* Shown only to a signed-out visitor, who otherwise sees one public list and no
+ * indication that two more sections exist for them. */
+.dv-signin-hint {
+    margin: 0.5rem 0 0;
+    padding: 0.875rem 1rem;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    background: var(--bg-void);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+}

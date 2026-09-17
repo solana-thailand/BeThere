@@ -28,14 +28,16 @@
 //!
 //! Unknown shapes fall back to the raw body as the message with no code.
 
-use reqwest::header::{AUTHORIZATION, COOKIE, HeaderMap, HeaderValue};
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, COOKIE};
 use reqwest::{Client, Method, Response, StatusCode};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use url::Url;
 
+use domain::models::auth::{
+    WalletNonceRequest, WalletNonceResponse, WalletVerifyRequest, WalletVerifyResponse,
+};
 use domain::models::deposit::{DepositStatusResponse, UsdcDepositResponse};
-use domain::models::auth::{WalletNonceRequest, WalletNonceResponse, WalletVerifyRequest, WalletVerifyResponse};
 use solana_sdk::signer::Signer;
 
 use crate::context::StagingContext;
@@ -123,10 +125,21 @@ pub struct AuthSessionResponse {
 /// worker response deserialises without breaking the harness.
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct ClaimResponse {
-    #[serde(default)]
-    pub status: String,
+    /// Whether the badge has already been claimed.
     #[serde(default)]
     pub claimed: bool,
+    /// RFC 3339 check-in timestamp, empty when the attendee never checked in.
+    /// Claim eligibility is derived from this plus [`Self::nft_available`] —
+    /// the API has no single `status` field and never had one (.issues/088).
+    #[serde(default)]
+    pub checked_in_at: String,
+    /// Whether the event is configured to mint at all (Crossmint credentials,
+    /// collection, host). False means "nothing to claim", not "not eligible".
+    #[serde(default)]
+    pub nft_available: bool,
+    /// Present only once claimed.
+    #[serde(default)]
+    pub claimed_at: Option<String>,
     #[serde(default)]
     pub message: Option<String>,
 }
@@ -290,11 +303,17 @@ impl WorkerClient {
     }
 
     /// `GET /api/auth/me` — plan 006 SIWS regression baseline.
-    pub async fn probe_auth_session(&self, ctx: &StagingContext) -> HarnessResult<AuthSessionResponse> {
+    pub async fn probe_auth_session(
+        &self,
+        ctx: &StagingContext,
+    ) -> HarnessResult<AuthSessionResponse> {
         let url = ctx.auth_session_url()?;
         let resp = self.send_request(Method::GET, url, None).await?;
         if resp.status() == StatusCode::UNAUTHORIZED {
-            return Ok(AuthSessionResponse { authenticated: false, email: None });
+            return Ok(AuthSessionResponse {
+                authenticated: false,
+                email: None,
+            });
         }
         let value = self.decode_json_value(resp).await?;
         let mut session: AuthSessionResponse = serde_json::from_value(value)?;
@@ -308,19 +327,29 @@ impl WorkerClient {
         let wallet_address = ctx.payer_pubkey().to_string();
         eprintln!("   SIWS: requesting nonce");
         let nonce: WalletNonceResponse = self
-            .post_json(ctx.auth_wallet_nonce_url()?, &WalletNonceRequest {
-                wallet_address: wallet_address.clone(),
-            })
+            .post_json(
+                ctx.auth_wallet_nonce_url()?,
+                &WalletNonceRequest {
+                    wallet_address: wallet_address.clone(),
+                },
+            )
             .await?;
-        let signature = ctx.payer.as_ref().sign_message(nonce.message.as_bytes()).to_string();
+        let signature = ctx
+            .payer
+            .as_ref()
+            .sign_message(nonce.message.as_bytes())
+            .to_string();
         eprintln!("   SIWS: verifying signed nonce");
         let verified: WalletVerifyResponse = self
-            .post_json(ctx.auth_wallet_verify_url()?, &WalletVerifyRequest {
-                wallet_address,
-                signature,
-                message: nonce.message,
-                nonce: nonce.nonce,
-            })
+            .post_json(
+                ctx.auth_wallet_verify_url()?,
+                &WalletVerifyRequest {
+                    wallet_address,
+                    signature,
+                    message: nonce.message,
+                    nonce: nonce.nonce,
+                },
+            )
             .await?;
         eprintln!("   SIWS: session established");
         if !verified.authenticated || verified.token.is_empty() {
@@ -340,9 +369,7 @@ impl WorkerClient {
     /// GET a JSON body, deserialising into `T` on 2xx, mapping non-2xx to
     /// [`WorkerError`].
     async fn get_json<T: DeserializeOwned>(&self, url: Url) -> HarnessResult<T> {
-        let resp = self
-            .send_request(Method::GET, url, None)
-            .await?;
+        let resp = self.send_request(Method::GET, url, None).await?;
         self.decode_or_error(resp).await
     }
 
@@ -364,9 +391,11 @@ impl WorkerClient {
         url: Url,
         body: &B,
     ) -> HarnessResult<T> {
-        let bearer = self.auth_bearer.as_deref().ok_or_else(|| HarnessError::Config(
-            "deposit signature recording requires an auto-created SIWS session".to_string(),
-        ))?;
+        let bearer = self.auth_bearer.as_deref().ok_or_else(|| {
+            HarnessError::Config(
+                "deposit signature recording requires an auto-created SIWS session".to_string(),
+            )
+        })?;
         let serialized = serde_json::to_string(body)?;
         let resp = self
             .http
@@ -416,7 +445,8 @@ impl WorkerClient {
     /// Deserialise a 2xx response, or turn a non-2xx into a [`WorkerError`].
     async fn decode_or_error<T: DeserializeOwned>(&self, resp: Response) -> HarnessResult<T> {
         if resp.status().is_success() {
-            return serde_json::from_value(self.decode_json_value(resp).await?).map_err(HarnessError::from);
+            return serde_json::from_value(self.decode_json_value(resp).await?)
+                .map_err(HarnessError::from);
         }
         let status = resp.status();
         let body_text = resp.text().await.unwrap_or_default();
@@ -429,9 +459,13 @@ impl WorkerClient {
         let value: Value = resp.json().await.map_err(HarnessError::from)?;
         if value.get("success").is_some() {
             if value.get("success").and_then(Value::as_bool) == Some(true) {
-                return value.get("data").cloned().ok_or_else(|| HarnessError::Decode("successful API response missing data".to_string()));
+                return value.get("data").cloned().ok_or_else(|| {
+                    HarnessError::Decode("successful API response missing data".to_string())
+                });
             }
-            return Err(HarnessError::Decode("API response reported success=false".to_string()));
+            return Err(HarnessError::Decode(
+                "API response reported success=false".to_string(),
+            ));
         }
         Ok(value)
     }
@@ -461,7 +495,10 @@ pub fn parse_worker_error(status: StatusCode, body: &str) -> WorkerError {
         Err(_) => (None, trimmed.to_string()),
     };
     let message = if message.is_empty() {
-        status.canonical_reason().unwrap_or("unknown error").to_string()
+        status
+            .canonical_reason()
+            .unwrap_or("unknown error")
+            .to_string()
     } else {
         message
     };

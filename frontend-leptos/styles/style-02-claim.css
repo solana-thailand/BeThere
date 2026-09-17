@@ -129,6 +129,17 @@
     border: 1px solid var(--danger-border);
 }
 
+.badge-neutral {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+.badge-sm {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.45rem;
+}
+
 .status-badge-dot {
     width: 0.4rem;
     height: 0.4rem;

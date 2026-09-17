@@ -113,6 +113,7 @@ pub fn AdminEventSelector(
     set_refresh_counter: WriteSignal<u32>,
 ) -> impl IntoView {
     let (open, set_open) = signal(false);
+    let (opened_at, set_opened_at) = signal(0.0);
     let (query, set_query) = signal(String::new());
     let search_ref = NodeRef::<leptos::html::Input>::new();
 
@@ -182,6 +183,10 @@ pub fn AdminEventSelector(
             if !open.get() {
                 return;
             }
+            // Ignore synthetic layout/focus scroll events immediately after opening
+            if js_sys::Date::now() - opened_at.get() < 300.0 {
+                return;
+            }
             // Skip scrolls originating inside the dropdown panel itself.
             if let Some(target) = ev.target()
                 && let Some(el) = target.dyn_ref::<web_sys::Element>()
@@ -243,10 +248,13 @@ pub fn AdminEventSelector(
                 class="admin-evt-trigger"
                 on:click=move |ev| {
                     ev.stop_propagation();
-                    set_open.update(|o| *o = !*o);
-                    if !open.get() {
+                    let next = !open.get();
+                    if next {
+                        set_opened_at.set(js_sys::Date::now());
+                    } else {
                         set_query.set(String::new());
                     }
+                    set_open.set(next);
                 }
             >
                 {move || match selected.get() {

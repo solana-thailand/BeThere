@@ -732,6 +732,7 @@ mod tests {
             max_refundable_deposits: 0,
             description: String::new(),
             location: String::new(),
+            location_map_url: String::new(),
             video_url: String::new(),
             calendar_subscribe_url: String::new(),
             community_links: vec![],

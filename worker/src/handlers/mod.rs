@@ -13,6 +13,7 @@ pub mod escrow_index;
 pub mod event_series;
 pub mod events;
 pub mod ext;
+pub mod feedback;
 pub mod health;
 pub mod metadata;
 pub mod notifications;
@@ -183,6 +184,10 @@ pub fn routes(state: AppState) -> Router<()> {
 
     let attendee_no_store = Router::new()
         .route("/my-notifications", get(notifications::my_list))
+        // The sessions this person can still rate. Separate from the
+        // notification because the message is per person and the form is
+        // per (person, event) — see `.issues/102`.
+        .route("/my-feedback-events", get(feedback::my_feedback_events))
         .route(
             "/my-notifications/read-all",
             post(notifications::my_read_all),
@@ -330,7 +335,9 @@ pub fn routes(state: AppState) -> Router<()> {
         // Admin quiz management (protected — organizer sets questions)
         .route(
             "/admin/quiz",
-            get(quiz::get_admin_quiz).post(quiz::put_quiz),
+            get(quiz::get_admin_quiz)
+                .post(quiz::put_quiz)
+                .delete(quiz::delete_admin_quiz),
         )
         // Individual quiz question CRUD (Issue 034 Phase 2)
         .route("/admin/quiz/questions", post(quiz::add_quiz_question))
@@ -347,6 +354,8 @@ pub fn routes(state: AppState) -> Router<()> {
             "/admin/adventure",
             get(adventure::get_admin_adventure).put(adventure::put_admin_adventure),
         )
+        // Admin feedback dashboard (protected — organizer inspects survey results & sentiment)
+        .route("/admin/feedback", get(feedback::admin_feedback_handler))
         // Event management (protected — admin/organizer CRUD)
         .route(
             "/events",

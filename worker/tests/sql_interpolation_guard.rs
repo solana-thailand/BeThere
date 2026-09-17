@@ -81,6 +81,16 @@ const ALLOWED_INTERPOLATIONS: &[AllowedInterpolation] = &[
                  bound; `&'static str` admits only compile-time literals.",
     },
     AllowedInterpolation {
+        file: "src/db/events.rs",
+        placeholders: &["PUBLIC_EVENT_COLUMNS"],
+        reason: "A column list is a set of identifiers, which SQLite cannot bind. \
+                 It is a `const &'static str` with no parameters, so there is no \
+                 call site that could put a value into it. Shared by both public \
+                 event listings so the two cannot select different columns — \
+                 which is exactly how `poster_url` went missing from one of them \
+                 (.issues/095).",
+    },
+    AllowedInterpolation {
         file: "src/db/attendees/reads.rs",
         placeholders: &["column"],
         reason: "`count_by_status(column: &'static str)` — identifier; the type \
@@ -120,6 +130,12 @@ const ALLOWED_INTERPOLATIONS: &[AllowedInterpolation] = &[
         reason: "`WHERE a.event_id IN (…)` is a join of generated `?N` markers \
                  whose values are all bound; `in_person_case` is a `&'static str` \
                  literal and `where_clause` is built only from those two.",
+    },
+    AllowedInterpolation {
+        file: "src/db/feedback.rs",
+        placeholders: &["placeholders"],
+        reason: "`WHERE r.event_id IN (…)` is a join of generated `?N` markers \
+                 formatted only from `usize` integer indices; every event id is bound.",
     },
     // -- Integers and bools: a number cannot carry SQL. ---------------------
     AllowedInterpolation {

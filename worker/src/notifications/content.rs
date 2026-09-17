@@ -1,4 +1,4 @@
-use super::Notification;
+use super::{Notification, policy::NotificationKind};
 use event_checkin_domain::models::event::EventConfig;
 use serde::Serialize;
 
@@ -20,36 +20,87 @@ fn clean(s: &str) -> String {
     s.replace(['\r', '\n'], " ")
 }
 
+/// Everything a message body is rendered from. Grouped rather than passed
+/// positionally so a new field cannot be silently swapped with `online` or
+/// `needs_deposit` at a call site.
+pub struct Render<'a> {
+    pub job: &'a Notification,
+    pub kind: NotificationKind,
+    pub event: &'a EventConfig,
+    pub email: &'a str,
+    pub name: &'a str,
+    pub online: bool,
+    pub needs_deposit: bool,
+    pub base: &'a str,
+}
+
 pub fn render(
-    job: &Notification,
-    event: &EventConfig,
-    email: &str,
-    name: &str,
-    online: bool,
-    needs_deposit: bool,
-    base: &str,
-) -> Result<Message, String> {
-    let title = match job.kind.as_str() {
-        "registration" => "Your registration is saved",
-        "reminder" => "Your event is coming up",
-        "deposit_confirmed" => "Your deposit is confirmed",
-        "deposit_rejected" => "Your payment slip needs attention",
-        _ => return Err("unknown notification kind".into()),
+    Render {
+        job,
+        kind,
+        event,
+        email,
+        name,
+        online,
+        needs_deposit,
+        base,
+    }: &Render<'_>,
+) -> Message {
+    let title = match *kind {
+        NotificationKind::Registration => "Your registration is saved",
+        NotificationKind::Reminder => "Your event is coming up",
+        NotificationKind::DepositConfirmed => "Your deposit is confirmed",
+        NotificationKind::DepositRejected => "Your payment slip needs attention",
+        NotificationKind::Survey => "How were the sessions?",
     };
+
+    // The survey is the one kind whose row no longer stands for an event.
+    // `dedup_key` is per person (migration 0038), so the event this row happens
+    // to be filed under is whichever one enrolled them first — of up to twelve.
+    // Every event-shaped part of the message below is therefore wrong for it:
+    // the subject would name one of twelve, When/Where would describe a session
+    // that is over, and "Your ticket" would link to a past event's ticket.
+    //
+    // So it gets its own message rather than the shared one with a different
+    // title. `/feedback` enumerates the sessions; the mail does not try to.
+    if *kind == NotificationKind::Survey {
+        let feedback = format!("{base}/feedback");
+        let name = clean(name);
+        return Message {
+            to: (*email).into(),
+            subject: format!("{title} — Solana Developer Thailand"),
+            text: format!(
+                "Hi {name},\n\nThank you for coming to the sessions you attended this year.\n\nWe are writing up what to run next, and the one thing we do not have is what you thought. It takes about two minutes, every question is skippable, and answers go to the organising team — nothing is attributed by name.\n\nShare your feedback: {feedback}\n\nThe page lists every session you attended, so you only need to open it once.\n\nThis is an event service message from BeThere."
+            ),
+            html: format!(
+                "<h1>{}</h1><p>Hi {},</p><p>Thank you for coming to the sessions you attended this year.</p><p>We are writing up what to run next, and the one thing we do not have is what you thought. It takes about two minutes, every question is skippable, and answers go to the organising team — nothing is attributed by name.</p><p><a href=\"{}\">Share your feedback</a></p><p>The page lists every session you attended, so you only need to open it once.</p><p>This is an event service message from BeThere.</p>",
+                escape(title),
+                escape(&name),
+                escape(&feedback)
+            ),
+        };
+    }
     let id = urlencoding::encode(&job.attendee_id);
     let event_id = urlencoding::encode(&job.event_id);
     let ticket = format!("{base}/ticket/{id}?event_id={event_id}");
-    let action = if needs_deposit {
-        format!("{base}/deposit/{id}?event_id={event_id}")
-    } else {
-        ticket.clone()
-    };
-    let action_label = if job.kind == "deposit_rejected" {
-        "Review your payment and upload a new slip"
-    } else if needs_deposit {
-        "Complete your deposit to secure your spot"
-    } else {
-        "Open your ticket"
+    // The survey's questions are asked by the post-event registration form, not
+    // by the mail — sending someone to their ticket would be a dead end, and
+    // there is nothing left to deposit for an event that is already over.
+    let (action, action_label) = match *kind {
+        // One page for every event this person still owes feedback on, so a
+        // regular attendee follows one link instead of one per event
+        // (`.issues/091`). The single-event route is unchanged and still
+        // serves the QR codes on the recap posters.
+        NotificationKind::Survey => (format!("{base}/feedback"), "Share your feedback"),
+        NotificationKind::DepositRejected => (
+            format!("{base}/deposit/{id}?event_id={event_id}"),
+            "Review your payment and upload a new slip",
+        ),
+        _ if *needs_deposit => (
+            format!("{base}/deposit/{id}?event_id={event_id}"),
+            "Complete your deposit to secure your spot",
+        ),
+        _ => (ticket.clone(), "Open your ticket"),
     };
     let start = chrono::DateTime::from_timestamp_millis(event.event_start_ms);
     let end = chrono::DateTime::from_timestamp_millis(event.event_end_ms);
@@ -60,7 +111,7 @@ pub fn render(
             .map(|d| d.format("%a, %d %b %Y at %H:%M UTC").to_string())
             .unwrap_or_else(|| "See the event page for the time".into())
     };
-    let location = if online {
+    let location = if *online {
         "Online — open your ticket for the session link"
     } else {
         &event.location
@@ -81,7 +132,8 @@ pub fn render(
         escape(action_label),
         escape(&ticket)
     );
-    if !event.time_tba
+    if *kind != NotificationKind::Survey
+        && !event.time_tba
         && let (Some(start), Some(end)) = (start, end)
         && end > start
     {
@@ -105,12 +157,12 @@ pub fn render(
     }
     text.push_str("\nThis is an event service message from BeThere. Sign in with your registration account to open your ticket.");
     html.push_str("<p>This is an event service message from BeThere. Sign in with your registration account to open your ticket.</p>");
-    Ok(Message {
-        to: email.into(),
+    Message {
+        to: (*email).into(),
         subject: format!("{title} — {}", clean(&event.name)),
         text,
         html,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -130,6 +182,7 @@ mod tests {
         .unwrap();
         let event = crate::db::events::D1EventRow {
             name: Some("<Builders>\r\nBcc: test".into()),
+            slug: Some("builders/one".into()),
             event_start_ms: Some(1_800_000_000_000),
             event_end_ms: Some(1_800_003_600_000),
             location: Some("Venue & friends".into()),
@@ -141,16 +194,16 @@ mod tests {
     #[test]
     fn confirmation_has_safe_links_calendar_and_both_bodies() {
         let (job, event) = fixture();
-        let message = render(
-            &job,
-            &event,
-            "a@example.com",
-            "<img src=x>",
-            false,
-            true,
-            "https://bethere.example",
-        )
-        .unwrap();
+        let message = render(&Render {
+            job: &job,
+            kind: NotificationKind::Registration,
+            event: &event,
+            email: "a@example.com",
+            name: "<img src=x>",
+            online: false,
+            needs_deposit: true,
+            base: "https://bethere.example",
+        });
         assert!(!message.subject.contains(['\r', '\n']));
         assert!(!message.html.contains("<img"));
         assert!(message.html.contains("&lt;Builders&gt;"));
@@ -167,36 +220,56 @@ mod tests {
     fn online_ticket_and_unknown_time_do_not_offer_payment_or_calendar() {
         let (job, mut event) = fixture();
         event.time_tba = true;
-        let message = render(
-            &job,
-            &event,
-            "a@example.com",
-            "Builder",
-            true,
-            false,
-            "https://bethere.example",
-        )
-        .unwrap();
+        let message = render(&Render {
+            job: &job,
+            kind: NotificationKind::Registration,
+            event: &event,
+            email: "a@example.com",
+            name: "Builder",
+            online: true,
+            needs_deposit: false,
+            base: "https://bethere.example",
+        });
         assert!(!message.text.contains("/deposit/"));
         assert!(!message.text.contains("Add to calendar"));
         assert!(message.text.contains("Time to be announced"));
         assert!(message.text.contains("session link"));
     }
+    /// The survey is the only kind sent after the event: it must point at the
+    /// page that carries the questions, never at a deposit that can no longer be
+    /// paid or a calendar entry for a date that has passed.
+    ///
+    /// That page is `/feedback`, which collects every event this person still
+    /// owes feedback on (`.issues/091`) — deliberately *not* the single-event
+    /// route, so one message does not become one message per event attended.
     #[test]
-    fn reject_unknown_message_kind() {
-        let (mut job, event) = fixture();
-        job.kind = "marketing".into();
-        assert!(
-            render(
-                &job,
-                &event,
-                "a@example.com",
-                "Builder",
-                false,
-                false,
-                "https://bethere.example"
-            )
-            .is_err()
-        );
+    fn survey_points_at_the_combined_feedback_page_not_a_deposit_or_calendar() {
+        let (job, event) = fixture();
+        let message = render(&Render {
+            job: &job,
+            kind: NotificationKind::Survey,
+            event: &event,
+            email: "a@example.com",
+            name: "Builder",
+            online: false,
+            needs_deposit: true, // an unpaid deposit must not hijack a post-event message
+            base: "https://bethere.example",
+        });
+        assert!(message.text.contains("https://bethere.example/feedback"));
+        // The single-event route is still live for the recap QR codes, but a
+        // notification must not send anyone down it — that is the regression
+        // this whole page exists to prevent.
+        assert!(!message.text.contains("/post-event-register"));
+        assert!(!message.text.contains("/deposit/"));
+        assert!(!message.text.contains("Add to calendar"));
+        assert!(message.subject.starts_with("How were the sessions?"));
+        // One row now stands for every session this person attended (migration
+        // 0038), so the message must not claim to be about one of them — not in
+        // the subject, and not as a When/Where/ticket for an event that is over.
+        assert!(!message.subject.contains(&event.name));
+        assert!(!message.text.contains(&event.name));
+        assert!(!message.text.contains("When:"));
+        assert!(!message.text.contains("Where:"));
+        assert!(!message.text.contains("Your ticket:"));
     }
 }

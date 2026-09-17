@@ -34,6 +34,7 @@ pub fn QuizEditor(
     let (import_json, set_import_json) = signal(String::new());
     let (import_mode, set_import_mode) = signal(false); // false = merge, true = replace
     let (confirm_clear_all, set_confirm_clear_all) = signal(false);
+    let (confirm_delete_quiz, set_confirm_delete_quiz) = signal(false);
 
     // Dirty tracking: compare serialized current config vs original
     let is_dirty = Memo::new(move |_| {
@@ -132,6 +133,35 @@ pub fn QuizEditor(
         set_original_config.set(Some(cfg.clone()));
         set_config.set(Some(cfg));
         set_configured.set(true);
+    };
+
+    // Delete entire quiz (admin only)
+    let handle_delete_quiz = move || {
+        let eid = active_event_id.get();
+        set_saving.set(true);
+        leptos::task::spawn_local(async move {
+            match api::delete_admin_quiz(eid.as_deref()).await {
+                Ok(()) => {
+                    set_config.set(None);
+                    set_original_config.set(None);
+                    set_configured.set(false);
+                    components::show_toast(
+                        &set_toast,
+                        "Quiz deleted successfully",
+                        ToastType::Success,
+                    );
+                }
+                Err(e) => {
+                    log::error!("[quiz-editor] delete quiz failed: {e}");
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Delete failed: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+            set_saving.set(false);
+        });
     };
 
     // Validate and save quiz
@@ -448,6 +478,29 @@ pub fn QuizEditor(
                             >
                                 "Export"
                             </button>
+                            {
+                                let is_confirming_del = confirm_delete_quiz;
+                                let set_cdq = set_confirm_delete_quiz;
+                                let do_delete = handle_delete_quiz;
+                                view! {
+                                    <button
+                                        class=move || if is_confirming_del.get() { "btn btn-danger btn-sm" } else { "btn btn-outline btn-sm" }
+                                        disabled=move || saving.get()
+                                        on:click=move |_| {
+                                            if !is_confirming_del.get() {
+                                                set_cdq.set(true);
+                                                let reset = set_confirm_delete_quiz;
+                                                gloo_timers::callback::Timeout::new(3000, move || {
+                                                    reset.set(false);
+                                                }).forget();
+                                            } else {
+                                                set_cdq.set(false);
+                                                do_delete();
+                                            }
+                                        }
+                                    >{move || if is_confirming_del.get() { "⚠ Confirm Delete Quiz" } else { "Delete Quiz" }}</button>
+                                }
+                            }
                             {
                                 let sc = set_config;
                                 let is_confirming = confirm_clear_all;

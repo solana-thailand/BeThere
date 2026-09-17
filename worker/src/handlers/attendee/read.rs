@@ -13,6 +13,7 @@ use crate::error::ApiOk;
 use event_checkin_domain::models::api::AttendeeResponse;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
+use event_checkin_domain::models::event::safe_map_url;
 
 use crate::handlers::ext::{EventIdQuery, resolve_event, resolve_event_with_access, resolve_kv};
 use crate::sheets;
@@ -354,6 +355,7 @@ pub async fn get_public_ticket(
         "video_url": event.video_url,
         "event_link": event.link,
         "event_location": event.location,
+        "event_location_map_url": safe_map_url(&event.location_map_url),
         "event_tagline": event.tagline,
         "nft_image_url": event.nft_image_url,
         "claimed": attendee.claimed_at.is_some(),

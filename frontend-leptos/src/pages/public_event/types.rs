@@ -221,6 +221,9 @@ pub struct PublicEventData {
     pub require_photo_consent: bool,
     pub description: String,
     pub location: String,
+    /// Venue map link — the Worker only sends a safe https URL, else null.
+    #[serde(default)]
+    pub location_map_url: Option<String>,
     pub created_at: String,
     pub dev_mode: bool,
 

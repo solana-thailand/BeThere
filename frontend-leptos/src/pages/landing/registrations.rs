@@ -163,12 +163,16 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                             "ticket" => "View Ticket",
                                             _ => "View",
                                         };
-                                        let date_str = if reg.event_start_ms > 0 {
-                                            let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
-                                            d.set_time(reg.event_start_ms as f64);
-                                            d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
-                                        } else {
-                                            "TBA".to_string()
+                                        // Third copy of this, and the third to
+                                        // be wrong. `to_locale_string` with no
+                                        // options renders the browser default —
+                                        // `8/24/2026, 1:00:00 PM`: seconds on an
+                                        // event date, and a month/day order that
+                                        // is ambiguous to a Thai-majority
+                                        // audience. Shared helper (.issues/104).
+                                        let date_str = match reg.event_start_ms > 0 {
+                                            true => crate::utils::format_event_datetime(reg.event_start_ms),
+                                            false => "TBA".to_string(),
                                         };
                                         let next_url = reg.next_step.url.clone();
                                         let status_tone = match reg.status.as_str() {
