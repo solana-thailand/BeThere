@@ -600,6 +600,14 @@ pub struct CreditRefundRequest {
     pub credit_thb: i64,
     #[serde(default)]
     pub credit_usdc: i64,
+    /// THB the person has applied to an event that has not ended, so it is not
+    /// in `credit_thb` and the payout reversal cannot remove it yet.
+    #[serde(default)]
+    pub locked_thb: i64,
+    /// Name of the last event to release that locked credit (empty when nothing
+    /// is locked).
+    #[serde(default)]
+    pub locked_until: String,
     #[serde(default)]
     pub requested_at: String,
 }
@@ -734,13 +742,38 @@ pub struct HoldDepositResponse {
     pub message: String,
 }
 
+/// One event currently holding a slice of the attendee's credit.
+///
+/// Mirrors the worker's `db::credit_ledger::LockedCredit`. `event_name` is
+/// empty when the D1 events mirror has no row — fall back to `event_id`.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct LockedCredit {
+    #[serde(default)]
+    pub event_id: String,
+    #[serde(default)]
+    pub event_name: String,
+    #[serde(default)]
+    pub currency: String,
+    /// Positive: the amount held against that event.
+    #[serde(default)]
+    pub amount: i64,
+    #[serde(default)]
+    pub event_end_ms: i64,
+}
+
 /// Response for GET /api/deposit/credit-balance — attendee's current rolling credit.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct CreditBalanceResponse {
-    /// THB credit balance.
+    /// THB credit balance — what is spendable/refundable **now**.
     pub credit_thb: u64,
-    /// USDC credit balance.
+    /// USDC credit balance — what is spendable/refundable **now**.
     pub credit_usdc: u64,
+    /// Credit committed to an event that has not ended. Deliberately not part
+    /// of the two balances above: a holder whose whole balance is covering an
+    /// upcoming event would otherwise read "0 credit" and think it is gone
+    /// (issue #120 §2).
+    #[serde(default)]
+    pub locked: Vec<LockedCredit>,
 }
 
 /// POST /api/deposit/hold — hold deposit as rolling credit (THB or USDC).

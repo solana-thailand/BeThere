@@ -348,6 +348,16 @@
     padding: 1rem 1.5rem 2rem;
 }
 
+/* Deposit credit + the way to ask for it back, on every signed-in page rather
+   than only the ticket of the event the deposit was held at (issue #120 §1).
+   Renders nothing at all when there is no credit and no lock. */
+.landing-credit-wallet {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 24px;
+}
+
 .landing-reg-card {
     background: var(--bg-card);
     border-radius: var(--radius);

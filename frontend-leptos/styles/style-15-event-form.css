@@ -455,6 +455,24 @@
     color: var(--text-secondary);
     font-size: 0.75rem;
 }
+/* Credit committed to an event that has not ended (issue #120). Listed under
+   the balance, never added to it — it is the attendee's money, but it cannot
+   be spent or refunded until that event releases it. */
+.ticket-credit-chip-locked {
+    flex-basis: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.ticket-credit-chip-locked-item {
+    color: var(--text-primary);
+    font-size: 0.75rem;
+}
+.ticket-credit-chip-locked-item .ticket-credit-chip-hint {
+    /* Inside a list item this is not a flex item, so the 100% basis above does
+       not apply — the hint reads as a continuation of the same sentence. */
+    display: inline;
+}
 
 /* ===== events inline style extractions (events_page.rs) ===== */
 

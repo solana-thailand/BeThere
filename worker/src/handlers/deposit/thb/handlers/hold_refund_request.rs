@@ -279,8 +279,12 @@ pub struct ClearCreditRefundResponse {
 /// Reverse every positive credit bucket the contact still holds, as the ledger
 /// side of an out-of-band payout.
 ///
-/// Returns `Err` — and therefore aborts the clear — if the buckets cannot be
-/// read or any single reversal cannot be written. That is deliberate: a cleared
+/// The buckets are read by the caller (which also needs them for the locked-
+/// credit guard) and passed in, so the payout decision and the reversal act on
+/// one snapshot rather than two reads that can disagree.
+///
+/// Returns `Err` — and therefore aborts the clear — if any single reversal
+/// cannot be written. That is deliberate: a cleared
 /// flag with an unreversed ledger is a double payout (the attendee has the cash
 /// *and* spendable credit) and nothing downstream detects it, whereas a failed
 /// clear leaves the request in the organizer's queue to retry. The per-bucket
@@ -289,9 +293,9 @@ async fn reverse_held_credit(
     db: &worker::D1Database,
     email: &str,
     requested_at: &str,
+    buckets: &[crate::db::credit_ledger::CreditBucket],
     redactor: LogRedactor<'_>,
 ) -> Result<(), String> {
-    let buckets = crate::db::credit_ledger::positive_balances(db, email).await?;
     for bucket in buckets {
         let key = format!(
             "refund:{}:{}:{}:{}",
@@ -389,7 +393,58 @@ pub async fn clear_credit_refund_request_handler(
     if let Some(requested_at) =
         crate::db::contacts::get_credit_refund_requested_at(db, &body.email).await
     {
-        reverse_held_credit(db, &body.email, &requested_at, redactor)
+        let buckets = crate::db::credit_ledger::positive_balances(db, &body.email)
+            .await
+            .map_err(AppError::Internal)?;
+
+        // Issue #120 §3. Nothing to reverse *and* credit still locked to an
+        // event that has not ended means the organizer is about to clear a
+        // request that pays out nothing: the reversal writes no rows, the flag
+        // goes away, and when the event ends the credit comes back with no open
+        // request and no record that one was ever made. Refuse, keep the flag,
+        // and name the event the money is waiting on. A genuinely empty request
+        // (no balance, nothing locked) still clears — that is the organizer
+        // dismissing a stale row, and it loses nothing.
+        if buckets.is_empty() {
+            let locked = crate::db::credit_ledger::locked_applies(db, &body.email)
+                .await
+                .map_err(AppError::Internal)?;
+            if let Some(last) = locked.first() {
+                // Per currency, not one sum: the ledger is multi-currency, and
+                // a single "1500" spanning THB and USDC is a number that means
+                // nothing to the organizer reading it.
+                let mut totals: std::collections::BTreeMap<&str, i64> =
+                    std::collections::BTreeMap::new();
+                for entry in &locked {
+                    *totals.entry(entry.currency.as_str()).or_default() += entry.amount;
+                }
+                let amount = totals
+                    .iter()
+                    .map(|(currency, total)| format!("{total} {}", currency.to_uppercase()))
+                    .collect::<Vec<_>>()
+                    .join(" + ");
+                tracing::warn!(
+                    staff_fingerprint = %staff_fingerprint,
+                    target_fingerprint = %target_fingerprint,
+                    locked = %amount,
+                    locked_events = locked.len(),
+                    "refused to clear credit refund request — balance is 0 and credit is still locked"
+                );
+                // The events mirror can be missing the row; the id is a slug,
+                // so it still names something the organizer can look up.
+                let event = match last.event_name.is_empty() {
+                    true => last.event_id.clone(),
+                    false => last.event_name.clone(),
+                };
+                return Err(AppError::Conflict(format!(
+                    "nothing to pay out yet — {amount} is covering {event} and returns when \
+                     that event ends. The request stays open until then."
+                ))
+                .into());
+            }
+        }
+
+        reverse_held_credit(db, &body.email, &requested_at, &buckets, redactor)
             .await
             .map_err(AppError::Internal)?;
     }

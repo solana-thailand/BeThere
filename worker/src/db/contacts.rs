@@ -362,6 +362,18 @@ pub struct CreditRefundRequest {
     pub credit_thb: i64,
     #[serde(default)]
     pub credit_usdc: i64,
+    /// THB the person has applied to an event that has not ended yet, so it is
+    /// not in `credit_thb` and the payout reversal cannot remove it. Non-zero
+    /// with `credit_thb == 0` is the "nothing to pay out yet" case: clearing
+    /// the request there reverses nothing and drops it (issue #120 §3), so
+    /// [`crate::handlers::deposit::clear_credit_refund_request_handler`]
+    /// refuses and the organizer sees `locked_until` instead.
+    #[serde(default)]
+    pub locked_thb: i64,
+    /// Name of the last event to release that locked credit (empty when
+    /// nothing is locked, or when the D1 events mirror has no row for it).
+    #[serde(default)]
+    pub locked_until: String,
     #[serde(default)]
     pub requested_at: String,
 }
@@ -415,6 +427,15 @@ pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest>
                      WHERE l.currency = 'usdc' AND l.email IN ",
         crate::db::person::person_emails_of!("LOWER(c.email)"),
         "), 0) AS credit_usdc, \
+           -COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                      WHERE l.currency = 'thb' AND ",
+        crate::db::credit_ledger::unreturned_apply_of!("LOWER(c.email)"),
+        "), 0) AS locked_thb, \
+           COALESCE((SELECT COALESCE(e.name, '') FROM credit_ledger l \
+                     JOIN events e ON e.id = l.event_id \
+                     WHERE ",
+        crate::db::credit_ledger::unreturned_apply_of!("LOWER(c.email)"),
+        " ORDER BY e.event_end_ms DESC LIMIT 1), '') AS locked_until, \
            COALESCE(c.credit_refund_requested_at, '') AS requested_at \
          FROM contacts c \
          WHERE c.credit_refund_requested = 1 \
