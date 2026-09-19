@@ -151,9 +151,10 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
                     // `thb_deposits` has no such constraint, so an event with
                     // two rows for one attendee archived one and deleted both —
                     // 700 THB in the reproduction, reported as success
-                    // (`.issues/127`). The key is per row now, and this compares
-                    // the counts as well, because the next way to lose a row
-                    // will not be the same way.
+                    // (`.issues/127`). The key is per row now, and this checks
+                    // that no live deposit is missing an archive row carrying
+                    // its id — matched, not counted, so it cannot be satisfied
+                    // by an archive that is merely large.
                     Ok(coverage) if coverage.is_complete() => {
                         summary.deposits_archived += coverage.archived as usize;
                         if let Err(e) =
@@ -170,7 +171,7 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
                     Ok(coverage) => tracing::error!(
                         event_id = %event_id,
                         archived = coverage.archived,
-                        live = coverage.live,
+                        unarchived = coverage.unarchived,
                         "D1 THB deposit archive does not cover every live deposit — \
                          deposits NOT deleted, will retry tomorrow"
                     ),

@@ -9,9 +9,10 @@ the Rust source, same harness as `test_person_emails` — against the production
 migrations.
 """
 
+import re
 import unittest
 
-from test_person_emails import WORKER, plain_after
+from test_person_emails import LITERAL, WORKER, plain_after, unescape
 
 ARCHIVE_SQL = plain_after(
     "db/thb_deposits.rs", "pub async fn archive_thb_deposits_for_event("
@@ -19,6 +20,23 @@ ARCHIVE_SQL = plain_after(
 DELETE_SQL = plain_after(
     "db/thb_deposits.rs", "pub async fn delete_thb_deposits_for_event("
 )
+
+
+def coverage_sql():
+    """The coverage SELECT — the archive fn's *second* statement.
+
+    `plain_after` anchors on a substring and takes the next string literal, but
+    every distinctive phrase here lives inside a literal, so anchoring on one
+    would return the anchor itself. Slice the function, then take the literal
+    after `let stmt = db`.
+    """
+    source = (WORKER / "src/db/thb_deposits.rs").read_text()
+    fn = source[source.index("pub async fn archive_thb_deposits_for_event(") :]
+    rest = fn[fn.index("let stmt = db") :]
+    return unescape(re.search(LITERAL, rest).group(1))
+
+
+COVERAGE_SQL = coverage_sql()
 
 EVENT = "road-to-mainnet-2-bangkok-copy"
 SLUG = "road-to-mainnet-3-bangkok"
@@ -76,15 +94,15 @@ class DepositArchiveTests(unittest.TestCase):
             ),
         )
 
+    def coverage(self):
+        """(archived, unarchived) — the real counts the Rust decides on."""
+        row = self.db.execute(COVERAGE_SQL, (EVENT,)).fetchone()
+        return row["archived"], row["unarchived"]
+
     def archive(self):
-        """Run the real archive SQL; return (archived, live) like the Rust does."""
+        """Run the real archive SQL, then report coverage like the Rust does."""
         self.db.executescript(ARCHIVE_SQL.replace("?1", f"'{EVENT}'"))
-        row = self.db.execute(
-            """SELECT (SELECT COUNT(*) FROM thb_deposit_archive WHERE event_id=?1) AS archived,
-                      (SELECT COUNT(*) FROM thb_deposits       WHERE event_id=?1) AS live""",
-            (EVENT,),
-        ).fetchone()
-        return row["archived"], row["live"]
+        return self.coverage()
 
     def rtm3(self):
         """RTM#3's real shape: 11 refunded, 2 held as credit, 1 neither."""
@@ -98,7 +116,7 @@ class DepositArchiveTests(unittest.TestCase):
 
     def test_every_deposit_is_archived_before_the_delete(self):
         self.rtm3()
-        self.assertEqual(self.archive(), (14, 14))
+        self.assertEqual(self.archive(), (14, 0))
         self.db.executescript(DELETE_SQL.replace("?1", f"'{EVENT}'"))
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) AS n FROM thb_deposits").fetchone()["n"], 0
@@ -149,8 +167,8 @@ class DepositArchiveTests(unittest.TestCase):
 
     def test_archiving_twice_does_not_double_the_money(self):
         self.rtm3()
-        self.assertEqual(self.archive(), (14, 14))
-        self.assertEqual(self.archive(), (14, 14))
+        self.assertEqual(self.archive(), (14, 0))
+        self.assertEqual(self.archive(), (14, 0))
         total = self.db.execute(
             "SELECT SUM(amount_thb) AS thb FROM thb_deposit_archive"
         ).fetchone()["thb"]
@@ -162,7 +180,7 @@ class DepositArchiveTests(unittest.TestCase):
         self.rtm3()
         self.archive()
         self.db.execute("DELETE FROM thb_deposit_archive WHERE attendee_id='stranded'")
-        self.assertEqual(self.archive(), (14, 14))
+        self.assertEqual(self.archive(), (14, 0))
 
     # -- one attendee, two deposits (issue #127) -------------------------
 
@@ -173,7 +191,7 @@ class DepositArchiveTests(unittest.TestCase):
         # 0044 keyed the archive on that pair: one row archived, both deleted.
         self.deposit("att-1", 500)
         self.deposit("att-1", 700)
-        self.assertEqual(self.archive(), (2, 2))
+        self.assertEqual(self.archive(), (2, 0))
         total = self.db.execute(
             "SELECT SUM(amount_thb) AS thb FROM thb_deposit_archive"
         ).fetchone()["thb"]
@@ -183,7 +201,7 @@ class DepositArchiveTests(unittest.TestCase):
         self.deposit("att-1", 500)
         self.deposit("att-1", 700)
         self.archive()
-        self.assertEqual(self.archive(), (2, 2))
+        self.assertEqual(self.archive(), (2, 0))
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) AS n FROM thb_deposit_archive").fetchone()["n"],
             2,
@@ -191,19 +209,39 @@ class DepositArchiveTests(unittest.TestCase):
         )
 
     def test_coverage_is_short_when_a_row_is_not_archived(self):
-        # What the delete is gated on. `is_complete()` is `archived >= live`.
+        # What the delete is gated on: `is_complete()` is `unarchived == 0`.
         self.deposit("att-1", 500)
         self.deposit("att-2", 700)
         self.archive()
         self.db.execute("DELETE FROM thb_deposit_archive WHERE attendee_id='att-2'")
-        archived, live = (
-            self.db.execute(
-                """SELECT (SELECT COUNT(*) FROM thb_deposit_archive WHERE event_id=?1) AS a,
-                          (SELECT COUNT(*) FROM thb_deposits       WHERE event_id=?1) AS l""",
-                (EVENT,),
-            ).fetchone()
+        self.assertEqual(
+            self.coverage()[1], 1, "an unarchived live row must be counted as one"
         )
-        self.assertLess(archived, live, "an incomplete archive must not read as complete")
+
+    def test_a_big_archive_does_not_excuse_an_unarchived_row(self):
+        """The reason coverage matches ids instead of comparing totals.
+
+        `archived >= live` asks whether the archive is big enough, which is a
+        different question: rows that correspond to nothing currently live —
+        0044-era rows with a NULL `source_deposit_id`, or rows kept from an
+        earlier purge of an event that has since taken new deposits — inflate
+        `archived` and paper over a genuinely unarchived row.
+        """
+        self.deposit("att-1", 500)
+        self.db.executemany(
+            """INSERT INTO thb_deposit_archive
+                   (event_id, event_slug, attendee_id, amount_thb, uploaded_at, source_deposit_id)
+               VALUES (?, 'slug', ?, 500, '', NULL)""",
+            [(EVENT, "ghost-1"), (EVENT, "ghost-2"), (EVENT, "ghost-3")],
+        )
+        archived, unarchived = self.coverage()
+        self.assertEqual(archived, 3, "three archive rows, none of them the live one")
+        self.assertGreaterEqual(
+            archived, 1, "the old `archived >= live` gate would have passed here"
+        )
+        self.assertEqual(
+            unarchived, 1, "matching by id sees the live deposit is not archived"
+        )
 
     def test_a_rerun_after_a_successful_purge_stays_safe(self):
         # live = 0 against a full archive. `>=` not `==`, or the retry would
@@ -211,9 +249,9 @@ class DepositArchiveTests(unittest.TestCase):
         self.deposit("att-1", 500)
         self.archive()
         self.db.executescript(DELETE_SQL.replace("?1", f"'{EVENT}'"))
-        archived, live = self.archive()
-        self.assertEqual((archived, live), (1, 0))
-        self.assertGreaterEqual(archived, live)
+        archived, unarchived = self.archive()
+        self.assertEqual((archived, unarchived), (1, 0))
+        self.assertEqual(unarchived, 0, "an already-purged event has nothing unmatched")
 
     # -- the archive outlives the event ----------------------------------
 
