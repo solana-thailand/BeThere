@@ -81,6 +81,67 @@ and exactly one test failed. `worker/tests/cleanup_guards.rs` (3) guards the
 gate; reverse-patched to a compiling ungated version, the gate guard failed as
 intended.
 
+## Follow-ups from the DevRel agent's second pass (2026-09-19)
+
+**"14 slip URLs, 13 objects" is not a gap.** All 14 rows had a non-empty
+`slip_url`, but only **13 are R2 paths** — the 14th is a **Google Drive link**,
+so it was never an R2 object to find. 13 R2 paths, 13 objects present: complete.
+That row is `held_as_credit = 1`, one of the two credit holds. No deposit's
+payment evidence is missing; one deposit's evidence simply lives outside our
+storage, which the archive records honestly as `had_slip = 1`.
+
+**The stranded 500 THB is fully identifiable and settleable.** Attendee
+`019ec036-e97d-7e02-9975-9335c649c43d`: verified 2026-06-13, never refunded,
+never held as credit, **checked in**. Their `attendees` row survives with an
+email (the cron does not delete it) and their slip is the 50,918-byte `.png`
+still in R2. So the one genuinely open row from RTM#3 can be chased end to end —
+which is worth doing before anyone decides to delete the orphaned objects.
+
+**Their id-trap rule was wrong in a more useful way than either of us said.**
+They checked all 16 events: 6 have `id == slug`, 10 differ, and there are at
+least three shapes — RTM#2's id is `solana-x-ai-builders-the-road-to-mainnet-2`,
+with neither `-bangkok` nor `-copy`. "Off by one" was never a rule. The only safe
+form is `JOIN events e ON e.id = x.event_id` and read `e.slug`, which is why the
+archive denormalises the slug.
+
+## The drill — staging exercises the cron on 2026-09-20
+
+Their suggestion, taken: the first real run of this mechanism should not be
+RTM#4's 20 rows and 10,000 THB. Staging is seeded with `archive-drill-126`, an
+event whose cutoff passed ~103 days ago, carrying three deposits that mirror
+RTM#3's shape — one refunded, one held as credit, one neither — all with
+`attendee_name` / `bank_account` / `bank_name` / `account_name` filled with
+`DRILL NAME *` / `*BANK` values that are trivially greppable.
+
+Staging's own cron (`0 3 * * *`, so **10:00 ICT on 2026-09-20**) exercises the
+real `run_cleanup` path against real Cloudflare D1 and KV. Expected afterwards:
+
+```sh
+cd worker
+npx wrangler d1 execute DB --env staging --remote --command "
+  SELECT (SELECT COUNT(*) FROM thb_deposits       WHERE event_id='archive-drill-126') AS live,
+         (SELECT COUNT(*) FROM thb_deposit_archive WHERE event_id='archive-drill-126') AS archived,
+         (SELECT SUM(amount_thb) FROM thb_deposit_archive WHERE event_id='archive-drill-126') AS thb,
+         (SELECT SUM(refunded)   FROM thb_deposit_archive WHERE event_id='archive-drill-126') AS refunded,
+         (SELECT SUM(held_as_credit) FROM thb_deposit_archive WHERE event_id='archive-drill-126') AS held"
+```
+
+`live = 0`, `archived = 3`, `thb = 1500`, `refunded = 1`, `held = 1`. Then
+confirm no `DRILL NAME` or `DRILLBANK` value reached the archive, and drop the
+drill event from the staging KV index (`events`) and its `event:` config.
+
+This closes the one thing the tests could not reach: the SQL is proven against
+the production migrations and the gate is proven by a source-scan guard that was
+reverse-patched on compiling code, but **no test exercises `run_cleanup`'s own
+wiring**. Seeding it locally was not possible — `wrangler dev`'s KV lives in a
+miniflare store that `wrangler kv key put --local` does not reach, and creating
+an event through the API needs a live Google sheet the local harness really
+writes to.
+
+The gap is conservative by construction: the delete sits inside the archive's
+`Ok` arm, so a wiring failure means deposits are *not* deleted, never deleted
+unarchived. The drill is to confirm the good path, not to catch a dangerous one.
+
 ## Open — owner's call
 
 1. **The orphaned slips.** 13 RTM#3 bank-slip images are in R2 with nothing left
