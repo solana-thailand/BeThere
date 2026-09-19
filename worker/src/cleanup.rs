@@ -19,6 +19,12 @@
 //! | `event:{id}` (EventConfig)           | event_end + 365 days   |
 //! | `event:{id}:audit` entries            | event_end + 90 days    |
 //! | `event:{id}:audit` (orphaned)         | removed when event not in index |
+//!
+//! The D1 side of the financial window (`thb_deposits`, `deposit_statuses`) is
+//! deleted on the same schedule, **after** the amounts are copied into the
+//! PII-free `thb_deposit_archive` (migration 0044). Keep the money, drop the
+//! people — see `.issues/126` for the run that did only the second half.
+//! R2 slip images are NOT touched by this module (`.issues/126` §3).
 
 use worker::KvStore;
 
@@ -121,16 +127,43 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
             let prefix = format!("event:{event_id}:deposit:thb:");
             summary.thb_deposits_deleted += delete_keys_by_prefix(kv, &prefix).await;
 
-            // Also delete THB deposits from D1
-            if let Some(db) = d1
-                && let Err(e) =
-                    crate::db::thb_deposits::delete_thb_deposits_for_event(db, event_id).await
-            {
-                tracing::warn!(
-                    event_id = %event_id,
-                    error = %e,
-                    "D1 THB deposits cleanup failed"
-                );
+            // Also delete THB deposits from D1 — but ARCHIVE FIRST, and only
+            // delete if the archive succeeded.
+            //
+            // The delete is correct for what this table holds that is personal:
+            // `attendee_name`, `bank_account`, `bank_name`, `account_name`, and
+            // a URL to an image of a bank slip. It was never correct for the
+            // amounts. Before this gate existed the cron took RTM#3's 14
+            // deposits (7,000 THB) on 2026-09-19, one of them neither refunded
+            // nor held as credit, leaving no record in D1 that the money had
+            // ever come in (`.issues/126`). `credit_ledger` survives cleanup but
+            // only sees the credit path — 2 rows against those 14.
+            //
+            // A failed archive must therefore stop the delete, the same way a
+            // failed ledger reversal stops the payout clear: the data is gone
+            // for good either way, so the only recoverable choice is to leave
+            // the rows for tomorrow's run and say so loudly.
+            if let Some(db) = d1 {
+                match crate::db::thb_deposits::archive_thb_deposits_for_event(db, event_id).await {
+                    Ok(archived) => {
+                        summary.deposits_archived += archived as usize;
+                        if let Err(e) =
+                            crate::db::thb_deposits::delete_thb_deposits_for_event(db, event_id)
+                                .await
+                        {
+                            tracing::warn!(
+                                event_id = %event_id,
+                                error = %e,
+                                "D1 THB deposits cleanup failed"
+                            );
+                        }
+                    }
+                    Err(e) => tracing::error!(
+                        event_id = %event_id,
+                        error = %e,
+                        "D1 THB deposit archive failed — deposits NOT deleted, will retry tomorrow"
+                    ),
+                }
             }
         }
 
@@ -235,6 +268,7 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
         claim_locks = summary.claim_locks_deleted,
         deposit_status = summary.deposit_status_deleted,
         thb_deposits = summary.thb_deposits_deleted,
+        deposits_archived = summary.deposits_archived,
         config_keys = summary.config_keys_deleted,
         events_removed = summary.events_removed,
         audit_entries_pruned = summary.audit_entries_pruned,
@@ -443,6 +477,10 @@ pub struct CleanupSummary {
     pub claim_locks_deleted: usize,
     pub deposit_status_deleted: usize,
     pub thb_deposits_deleted: usize,
+    /// Rows the PII-free `thb_deposit_archive` holds for the events touched this
+    /// run. Not "rows inserted": the archive is idempotent, so a re-run reports
+    /// the same coverage rather than zero.
+    pub deposits_archived: usize,
     pub config_keys_deleted: usize,
     pub events_removed: usize,
     pub audit_entries_pruned: usize,
