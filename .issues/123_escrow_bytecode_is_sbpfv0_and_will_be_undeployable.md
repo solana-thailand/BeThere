@@ -1,8 +1,11 @@
 # 123 — The escrow program is SBPFv0, so after SIMD-0500 it can no longer be deployed or upgraded
 
-**Status:** open. Not urgent *today* (SIMD-0500 had not activated on mainnet as of
-2026-09-17) and it breaks nothing that is already running, but it blocks the
-mainnet escrow deployment and every future program upgrade once it does activate.
+**Status:** open, and **further off than this issue first said** — see
+"What the clusters actually say" below. The door SIMD-0500 will close is one the
+network has not opened yet: SBPFv3 deployment is disabled on mainnet, devnet
+**and** testnet, so a v3 build today is an artifact no cluster would accept.
+Nothing already running is affected. Watch with
+`bash scripts/check_sbpf_v3_gate.sh`; act when it says ACTIVATED.
 **Found:** 2026-09-19, from the Anza post the owner sent
 (<https://www.anza.xyz/blog/migrating-solana-programs-to-sbpfv3>).
 **Severity:** medium now, blocking later — no live defect, no money at risk.
@@ -19,6 +22,39 @@ mainnet escrow deployment and every future program upgrade once it does activate
 
 `e_flags` is bytes `0x30..0x34` of the ELF header; `0` is v0. There is no
 `readelf` on this machine, so it was read with a four-line Python struct unpack.
+
+## What the clusters actually say (read 2026-09-19, `solana feature status`)
+
+The first version of this issue was written from the Anza post and inferred the
+urgency. Reading the gate instead:
+
+| cluster | `BUwGLeF3Lxyfv1J1wY8biFHBB2hrk2QhbNftQf3VV3cC` — *SIMD-0178/0179/0189, enable deployment and execution of SBPFv3* |
+|---|---|
+| mainnet | **inactive** |
+| devnet  | **inactive** |
+| testnet | **inactive** |
+
+Also inactive, and both on placeholder `TestFeature…` keys rather than real ones:
+SIMD-0161 (*disables execution of SBPFv0*) and its re-enable counterpart. So v0
+**execution** is not being taken away either.
+
+That reorders the whole issue. SIMD-0500 refuses v0/v1/v2 *deployments*; it
+cannot sensibly activate before the gate that permits v3 deployments, or nothing
+would be deployable at all. Until that gate flips:
+
+- building with `--arch v3` produces something **no cluster will accept**, so
+  doing the migration early does not put us ahead — it puts us on an artifact we
+  cannot deploy;
+- upgrading platform-tools to v1.56+ is a machine-level change that every escrow
+  script and the #084 e2e suite runs against, spent to buy nothing today;
+- the deployed devnet program and any future upgrade of it are both fine.
+
+`scripts/check_sbpf_v3_gate.sh` is the trigger: it reads all three clusters and
+exits 10 when any of them opens. It exits **1**, loudly, if the feature key is no
+longer listed — a grep that finds nothing reads exactly like "still closed", and
+that false calm is the failure mode worth guarding. Both branches were run
+before committing: the real key prints "closed", a key that cannot exist prints
+the loud not-found and exits 1.
 
 ## Why it matters
 
@@ -59,6 +95,9 @@ act — `bethere-escrow/Cargo.toml:20-27` pins exact git revs on purpose.
 
 ## Plan when it is picked up
 
+0. **Check the gate first** — `bash scripts/check_sbpf_v3_gate.sh`. Steps 1-6
+   are wasted, and the toolchain risk is taken for nothing, while it prints
+   "closed".
 1. Install an Agave CLI that ships `cargo-build-sbf` ≥ v4.2.0 / platform-tools
    ≥ v1.56. **Machine-level change** — the current 3.1.10 is what every escrow
    script and the #084 e2e suite runs against, so do it knowingly.
