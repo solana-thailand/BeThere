@@ -46,8 +46,11 @@ pub struct AttendeeRow {
 
 impl AttendeeRow {
     /// Parse a row from Google Sheets values array.
-    /// `values` is the full sheet data (including header row).
-    /// `row_index` is the 1-based row number in the sheet (header is row 1).
+    ///
+    /// `values` holds the **data rows only** — the sole caller fetches `A2:`, so
+    /// `values[0]` is sheet row 2. (This said "including header row", which is
+    /// the opposite; a caller who believed it would read every row off by one.)
+    /// `row_index` is the 1-based row number in the sheet, hence the `- 2`.
     /// `mapping` provides dynamic column resolution; falls back to hardcoded indices.
     pub fn from_sheet_values(
         values: &[Vec<String>],

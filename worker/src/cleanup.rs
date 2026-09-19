@@ -145,8 +145,17 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
             // the rows for tomorrow's run and say so loudly.
             if let Some(db) = d1 {
                 match crate::db::thb_deposits::archive_thb_deposits_for_event(db, event_id).await {
-                    Ok(archived) => {
-                        summary.deposits_archived += archived as usize;
+                    // The archive must cover every live row before any of them
+                    // go. A successful write is not enough on its own: 0044
+                    // keyed the archive on (event_id, attendee_id) while
+                    // `thb_deposits` has no such constraint, so an event with
+                    // two rows for one attendee archived one and deleted both —
+                    // 700 THB in the reproduction, reported as success
+                    // (`.issues/127`). The key is per row now, and this compares
+                    // the counts as well, because the next way to lose a row
+                    // will not be the same way.
+                    Ok(coverage) if coverage.is_complete() => {
+                        summary.deposits_archived += coverage.archived as usize;
                         if let Err(e) =
                             crate::db::thb_deposits::delete_thb_deposits_for_event(db, event_id)
                                 .await
@@ -158,6 +167,13 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
                             );
                         }
                     }
+                    Ok(coverage) => tracing::error!(
+                        event_id = %event_id,
+                        archived = coverage.archived,
+                        live = coverage.live,
+                        "D1 THB deposit archive does not cover every live deposit — \
+                         deposits NOT deleted, will retry tomorrow"
+                    ),
                     Err(e) => tracing::error!(
                         event_id = %event_id,
                         error = %e,
