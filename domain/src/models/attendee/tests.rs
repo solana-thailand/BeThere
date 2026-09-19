@@ -616,3 +616,70 @@ fn test_from_sheet_values_hardcoded_compat() {
     );
     assert_eq!(row.claim_token, Some("tok-legacy".into()));
 }
+
+// ---------------------------------------------------------------------------
+// Blank-cell normalisation
+// ---------------------------------------------------------------------------
+
+/// `checked_in_at` is the column everything downstream reads to decide whether
+/// somebody turned up: `can_check_in`'s AlreadyCheckedIn, the claim token's
+/// replay window, the survey gate, the checked-in counters, and — since the
+/// rolling-credit rules — who is owed money.
+///
+/// Every one of those consumers tests it as an `Option`, and some only as
+/// `.is_some()`. That is safe **only** because this parser trims before it maps
+/// an empty cell to `None`, so `Some("")` and `Some("   ")` can never exist.
+/// The guarantee lives here and is relied on far away, which is exactly the
+/// shape that rots: a sibling repo's snapshot script had the same column read
+/// as truthy-in-Python and turned a no-show into a debt.
+///
+/// A stray space in a Google Sheets cell is not hypothetical — it is what
+/// clearing a cell by typing over it leaves behind.
+#[test]
+fn blank_and_whitespace_only_cells_become_none_not_some_empty() {
+    let mapping = ColumnMapping::hardcoded();
+
+    for blank in ["", " ", "   ", "\t", " \t "] {
+        let mut row: Vec<String> = vec!["".into(); 24];
+        row[mapping.get_or_default(ColumnKey::ApiId)] = "att-1".into();
+        row[mapping.get_or_default(ColumnKey::ApprovalStatus)] = "approved".into();
+        row[mapping.get_or_default(ColumnKey::CheckedInAt)] = blank.into();
+        row[mapping.get_or_default(ColumnKey::ClaimedAt)] = blank.into();
+
+        // `from_sheet_values` indexes `values[row_index - 2]`, so row 2 (the
+        // first data row) is `values[0]` — the slice excludes the header.
+        let parsed = AttendeeRow::from_sheet_values(&[row], 2, &mapping)
+            .expect("a row with an api_id parses");
+
+        assert_eq!(
+            parsed.checked_in_at, None,
+            "a blank checked_in_at ({blank:?}) must be None — as Some it reads as \
+             'attended' to every `.is_some()` consumer, which counts a no-show as \
+             present and, on the credit path, as owed"
+        );
+        assert_eq!(
+            parsed.claimed_at, None,
+            "same rule for claimed_at ({blank:?}) — as Some it reads as 'already \
+             claimed' and silently withholds a badge"
+        );
+    }
+}
+
+/// The other direction, so the test above cannot pass by parsing nothing at all.
+#[test]
+fn a_real_timestamp_survives_parsing() {
+    let mapping = ColumnMapping::hardcoded();
+    let mut row: Vec<String> = vec!["".into(); 24];
+    row[mapping.get_or_default(ColumnKey::ApiId)] = "att-1".into();
+    row[mapping.get_or_default(ColumnKey::ApprovalStatus)] = "approved".into();
+    row[mapping.get_or_default(ColumnKey::CheckedInAt)] = "  2026-06-01T10:00:00Z  ".into();
+
+    let parsed =
+        AttendeeRow::from_sheet_values(&[row], 2, &mapping).expect("a row with an api_id parses");
+
+    assert_eq!(
+        parsed.checked_in_at.as_deref(),
+        Some("2026-06-01T10:00:00Z"),
+        "a real timestamp must survive, trimmed — the window in claim/ttl.rs parses it"
+    );
+}
