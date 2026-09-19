@@ -54,6 +54,9 @@ frontend-leptos/.cargo/
 # Cloudflare Worker
 worker/build/
 worker/.wrangler/
+# `wrangler dev --local --persist-to .wrangler-local` — the local D1/KV/R2 state
+# the offline verification harness runs against. Holds seeded attendee rows.
+worker/.wrangler-local/
 worker/.dev.vars
 
 # Wrangler local state (root level)

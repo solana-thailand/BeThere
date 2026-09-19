@@ -25,6 +25,9 @@
 //!    the only thing `credit_refund_requests` reads, so a swallowed failure —
 //!    or a 0-row UPDATE, which is not an `Err` at all — reports "queued" to the
 //!    attendee while no organizer ever sees the request.
+//! 9. The payout clear REFUSES while credit is still locked to an event that has
+//!    not ended — the reversal would write nothing and the request would vanish
+//!    (issue #120 §3).
 
 use std::fs;
 use std::path::Path;
@@ -282,13 +285,12 @@ fn payout_reversal_fails_closed() {
 
     assert!(
         !body.contains("unwrap_or_default") && !body.contains("unwrap_or("),
-        "reverse_held_credit must not swallow a failed bucket read — an empty list \
-         reverses nothing and the clear still runs (double payout)"
+        "reverse_held_credit must not swallow a write failure — a skipped reversal \
+         still lets the clear run (double payout)"
     );
     assert!(
-        body.matches(".await?").count() >= 2,
-        "both the bucket read and every record() write must use `?` so a failure \
-         aborts the clear"
+        body.contains(".await?"),
+        "every record() write must use `?` so a failure aborts the clear"
     );
 
     // And the handler must actually propagate that error before clearing.
@@ -310,6 +312,58 @@ fn payout_reversal_fails_closed() {
         handler[reversal_at..clear_at].contains("map_err(AppError::Internal)?"),
         "a failed reversal must abort the request — clearing the flag anyway leaves \
          the attendee with the payout AND spendable credit, and nothing detects it"
+    );
+
+    // The bucket read moved to the handler (the locked-credit guard needs the
+    // same snapshot), so the swallow check has to follow it there.
+    let buckets_at = handler
+        .find("positive_balances(")
+        .expect("the clear handler must read the buckets it pays out");
+    assert!(
+        buckets_at < reversal_at,
+        "the buckets must be read before the reversal that consumes them"
+    );
+    assert!(
+        handler[buckets_at..reversal_at].contains("map_err(AppError::Internal)?"),
+        "a failed bucket read must abort the clear — an empty list reverses nothing \
+         and the flag would still be cleared (double payout)"
+    );
+}
+
+/// Issue #120 §3. A holder whose whole balance is applied to an event that has
+/// not ended has an EMPTY `positive_balances`: the reversal writes nothing, the
+/// flag clears, and when the event ends the credit comes back with no open
+/// request and no record one was ever made. The clear must refuse instead —
+/// which it can only do if it asks whether anything is locked.
+#[test]
+fn payout_clear_refuses_while_credit_is_locked() {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/handlers/deposit/thb/handlers/hold_refund_request.rs");
+    let src = fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+    let code = strip_comments(&src);
+    let handler = code
+        .find("pub async fn clear_credit_refund_request_handler")
+        .map(|i| &code[i..])
+        .expect("clear handler must exist");
+    let reversal_at = handler
+        .find("reverse_held_credit(")
+        .expect("the clear handler must call reverse_held_credit");
+    let guard = &handler[..reversal_at];
+
+    assert!(
+        guard.contains("locked_applies("),
+        "the clear handler must read `locked_applies` before reversing — without it \
+         a request against fully-locked credit clears to nothing and disappears"
+    );
+    assert!(
+        guard.contains("AppError::Conflict"),
+        "a locked-credit clear must fail with a 409 that keeps the flag set, not \
+         succeed with an empty reversal"
+    );
+    assert!(
+        !guard.contains("unwrap_or_default") && !guard.contains("unwrap_or("),
+        "a failed locked read must abort the clear — degrading to \"nothing locked\" \
+         re-opens exactly the hole this guard closes"
     );
 }
 

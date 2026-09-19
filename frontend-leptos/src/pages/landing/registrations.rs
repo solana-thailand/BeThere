@@ -8,6 +8,7 @@ use super::notifications::NotificationInbox;
 use crate::api::ApiResponse;
 use crate::components::{StatusBadge, StatusTone};
 use crate::icons::{Icon, IconName};
+use crate::pages::ticket::credit_chip::CreditWallet;
 
 /// Response item from GET /api/my-registrations.
 #[derive(Clone, Deserialize)]
@@ -145,6 +146,13 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                         </div>
 
                         {move || email_verified.get().then(|| view! { <NotificationInbox /> })}
+
+                        // Deposit credit, and the way to ask for it back. The
+                        // ticket page only shows this on the event the deposit
+                        // was held at, so a holder whose credit has rolled on
+                        // to a later event had no reachable exit (issue #120).
+                        // Renders nothing when there is no credit and no lock.
+                        <CreditWallet />
 
                         {if has_regs {
                             view! {

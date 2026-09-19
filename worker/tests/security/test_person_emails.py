@@ -23,27 +23,48 @@ def unescape(body):
     return re.sub(r"\\\n\s*", "", body).replace('\\"', '"')
 
 
-def person_fragment(email_expr):
-    """Expand `person_emails_of!(email_expr)` from its macro definition."""
-    source = (SRC / "db/person.rs").read_text()
-    body = source[source.index("macro_rules! person_emails_of") :]
-    body = body[body.index("concat!(") + len("concat!(") : body.index("\n    };")]
-    parts = []
-    for match in re.finditer(LITERAL + r"|\$email", body):
-        parts.append(email_expr if match.group(1) is None else unescape(match.group(1)))
-    return "".join(parts)
+# Every `concat!`-only SQL macro the worker builds its person-scoped queries
+# from, and the file that defines it. They nest (`unreturned_apply_of!` expands
+# `person_emails_of!`), so the expander below is recursive.
+MACRO_SOURCES = {
+    "person_emails_of": "db/person.rs",
+    "unreturned_apply_of": "db/credit_ledger.rs",
+}
+
+# `name!("literal")` or `name!($param)`, with any path prefix (`crate::db::x::`,
+# `$crate::db::x::`) — group 1 name, group 2 literal argument, group 3 param.
+MACRO_CALL = (
+    r"(?:\$?crate::)?(?:\w+::)*(" + "|".join(MACRO_SOURCES) + r")!\(\s*(?:"
+    + LITERAL + r"|\$(\w+))\s*\)"
+)
 
 
-def expand_concat(args):
-    """Evaluate the literal/`person_emails_of!` pieces of a `concat!(...)`."""
+def macro_body(name):
+    """The body of a `macro_rules! name` whose single arm is one `concat!`."""
+    source = (SRC / MACRO_SOURCES[name]).read_text()
+    body = source[source.index(f"macro_rules! {name}") :]
+    return body[body.index("concat!(") + len("concat!(") : body.index("\n    };")]
+
+
+def expand_concat(args, arg=None):
+    """Evaluate a `concat!(...)` argument list: literals, `$param`
+    placeholders bound to `arg`, and nested macro calls (recursively)."""
     parts = []
-    token = LITERAL + r'|person_emails_of!\(' + LITERAL + r"\)"
+    token = MACRO_CALL + "|" + LITERAL + r"|\$(\w+)"
     for match in re.finditer(token, args):
         if match.group(1) is not None:
-            parts.append(unescape(match.group(1)))
+            inner = unescape(match.group(2)) if match.group(2) is not None else arg
+            parts.append(expand_concat(macro_body(match.group(1)), inner))
+        elif match.group(4) is not None:
+            parts.append(unescape(match.group(4)))
         else:
-            parts.append(person_fragment(unescape(match.group(2))))
+            parts.append(arg)
     return "".join(parts)
+
+
+def person_fragment(email_expr):
+    """Expand `person_emails_of!(email_expr)` from its macro definition."""
+    return expand_concat(macro_body("person_emails_of"), email_expr)
 
 
 def concat_after(path, anchor, opener="concat!("):
@@ -119,7 +140,13 @@ WORK = "person@work.example"
 OTHER = "stranger@gmail.com"
 
 
-class PersonEmailsTests(unittest.TestCase):
+class CreditFixture(unittest.TestCase):
+    """Migrations + the ledger/link/refund-request helpers, no tests of its own.
+
+    `test_locked_credit` builds on this; inheriting `PersonEmailsTests`
+    instead would silently re-run every test in this module.
+    """
+
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         self.db.row_factory = sqlite3.Row
@@ -159,6 +186,15 @@ class PersonEmailsTests(unittest.TestCase):
         ).fetchone()
         return None if row is None else row["person_id"]
 
+    def request_refund(self, email, requested_at):
+        self.db.execute(
+            """INSERT INTO contacts (email, name, credit_refund_requested,
+                   credit_refund_requested_at) VALUES (?, 'P', 1, ?)""",
+            (email, requested_at),
+        )
+
+
+class PersonEmailsTests(CreditFixture):
     # -- linking ---------------------------------------------------------
 
     def test_first_link_creates_one_person_with_the_session_email_primary(self):
@@ -372,13 +408,6 @@ class PersonEmailsTests(unittest.TestCase):
 
 
     # -- payout queue collapses to one row per person ---------------------
-
-    def request_refund(self, email, requested_at):
-        self.db.execute(
-            """INSERT INTO contacts (email, name, credit_refund_requested,
-                   credit_refund_requested_at) VALUES (?, 'P', 1, ?)""",
-            (email, requested_at),
-        )
 
     def test_two_linked_emails_requesting_a_refund_show_as_one_row(self):
         self.ledger(GMAIL, 500, "hold", deposit_id="e1:a")

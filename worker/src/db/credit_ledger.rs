@@ -273,6 +273,88 @@ pub async fn positive_balances(db: &D1Database, email: &str) -> Result<Vec<Credi
         .collect())
 }
 
+/// The SQL predicate selecting one person's **locked** credit rows: an `apply`
+/// (negative) entry whose event has not written its matching `return` yet.
+///
+/// The row alias is fixed to `l` and the `return` probe's to `r`, so the caller
+/// only supplies the email expression (a literal, same contract as
+/// [`person_emails_of!`]). Three readers share it — the attendee's locked-credit
+/// breakdown, the payout queue's `locked_thb`, and the queue's `locked_until` —
+/// and they must agree: the payout guard refuses to clear a ฿0 request while
+/// this predicate still matches, so a drifted copy would either strand a
+/// request or let one be cleared against credit that is about to come back.
+///
+/// [`release_ended_applies`] must run before any of them, or an ended event's
+/// credit still reads as locked.
+macro_rules! unreturned_apply_of {
+    ($email:literal) => {
+        concat!(
+            "l.reason = 'apply' AND l.delta < 0 AND l.email IN ",
+            $crate::db::person::person_emails_of!($email),
+            " AND NOT EXISTS (SELECT 1 FROM credit_ledger r \
+               WHERE r.reason = 'return' AND r.event_id = l.event_id \
+                 AND r.email = l.email)"
+        )
+    };
+}
+pub(crate) use unreturned_apply_of;
+
+/// One event's worth of a person's credit that is currently locked — applied to
+/// a deposit and not yet returned.
+///
+/// `event_name` / `event_end_ms` come from the D1 `events` mirror and are empty
+/// / `0` when the row is missing; the credit is still locked in that case (an
+/// unknown end is not a past end — same rule as [`RELEASE_ENDED_APPLIES_SQL`]).
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+pub struct LockedCredit {
+    #[serde(default)]
+    pub event_id: String,
+    #[serde(default)]
+    pub event_name: String,
+    #[serde(default)]
+    pub currency: String,
+    /// Positive: the amount held against that event.
+    #[serde(default)]
+    pub amount: i64,
+    #[serde(default)]
+    pub event_end_ms: i64,
+}
+
+/// Every event currently holding a slice of this person's credit, newest end
+/// first, across all orgs and currencies.
+///
+/// This is the other half of [`positive_balances`]: that function answers "how
+/// much can be paid back right now", this one answers "how much is temporarily
+/// committed and when does it come back". A holder whose whole balance is
+/// applied to an upcoming event has an empty `positive_balances` and a
+/// non-empty result here — the case issue #120 §3 is about, where clearing the
+/// payout request reverses nothing and silently drops the request.
+pub async fn locked_applies(db: &D1Database, email: &str) -> Result<Vec<LockedCredit>, String> {
+    release_ended_applies(db).await?;
+    let email_lc = email.to_lowercase();
+    let sql = concat!(
+        "SELECT l.event_id AS event_id, \
+                COALESCE(e.name, '') AS event_name, \
+                l.currency AS currency, \
+                -COALESCE(SUM(l.delta), 0) AS amount, \
+                COALESCE(e.event_end_ms, 0) AS event_end_ms \
+         FROM credit_ledger l LEFT JOIN events e ON e.id = l.event_id \
+         WHERE ",
+        unreturned_apply_of!("?1"),
+        " GROUP BY l.event_id, l.currency, e.name, e.event_end_ms \
+         ORDER BY COALESCE(e.event_end_ms, 0) DESC, l.event_id"
+    );
+    let stmt = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(&email_lc)])
+        .map_err(|e| format!("D1 credit_ledger locked_applies bind: {e:?}"))?;
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|v| serde_json::from_value::<LockedCredit>(v).ok())
+        .collect())
+}
+
 /// One row of the org-partitioned liability report.
 #[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
 pub struct OrgLiability {
