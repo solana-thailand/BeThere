@@ -270,25 +270,33 @@ pub async fn set_refund_proof_url(
 /// Delete all THB deposits for an event (cleanup).
 /// How much of an event's deposits the archive covers, as of right now.
 ///
-/// Two counts, not one, because the caller has to decide whether deleting is
-/// safe. `archived` alone cannot answer that: it counts every row the archive
-/// holds for the event, which is what made the 0044 duplicate-pair loss
-/// invisible (one row archived out of two, reported as success, both deleted).
+/// `unarchived` is the one the delete turns on, and it is counted by matching
+/// ids — not by comparing totals. An earlier version compared
+/// `archived >= live`, which is a different question: it asks whether the
+/// archive is *big enough*, and passes whenever `archived` is inflated by rows
+/// that correspond to nothing currently live (0044-era rows carrying a NULL
+/// `source_deposit_id`, or rows kept from an earlier purge of the same event
+/// that has since taken new deposits). It happened to be safe — the
+/// `INSERT … SELECT` in [`archive_thb_deposits_for_event`] is what guarantees
+/// every live id is archived, and the gate was only a backstop — but a check
+/// whose stated meaning is not the one it computes rots the moment someone
+/// changes what else the archive holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ArchiveCoverage {
-    /// Rows the archive holds for this event.
+    /// Rows the archive holds for this event. Reported, not decided on.
     pub archived: i64,
-    /// Rows still live in `thb_deposits` for this event.
-    pub live: i64,
+    /// Live deposits with no archive row carrying their id. **Must be 0 before
+    /// anything is deleted.**
+    pub unarchived: i64,
 }
 
 impl ArchiveCoverage {
     /// Every live deposit has an archived counterpart, so deleting loses nothing.
     ///
-    /// `>=` rather than `==`: a re-run after a successful purge sees `live = 0`
-    /// against a full archive, and that has to stay safe to retry.
+    /// Naturally safe to retry: an event already purged has no live rows, so
+    /// nothing can be unmatched.
     pub fn is_complete(&self) -> bool {
-        self.archived >= self.live
+        self.unarchived == 0
     }
 }
 
@@ -342,7 +350,9 @@ pub async fn archive_thb_deposits_for_event(
     let stmt = db
         .prepare(
             "SELECT (SELECT COUNT(*) FROM thb_deposit_archive WHERE event_id = ?1) AS archived, \
-                    (SELECT COUNT(*) FROM thb_deposits WHERE event_id = ?1) AS live",
+                    (SELECT COUNT(*) FROM thb_deposits d WHERE d.event_id = ?1 \
+                       AND NOT EXISTS (SELECT 1 FROM thb_deposit_archive a \
+                                       WHERE a.source_deposit_id = d.id)) AS unarchived",
         )
         .bind_refs(&[D1Type::Text(event_id)])
         .map_err(|e| format!("D1 archive_thb_deposits count bind: {e:?}"))?;
@@ -357,7 +367,7 @@ pub async fn archive_thb_deposits_for_event(
     };
     Ok(ArchiveCoverage {
         archived: read("archived")?,
-        live: read("live")?,
+        unarchived: read("unarchived")?,
     })
 }
 

@@ -50,11 +50,25 @@ Additive: pre-existing rows carry `source_deposit_id IS NULL`, and SQLite treats
 NULLs as distinct in a UNIQUE index, so they neither conflict nor block. Both
 archives were empty when this was written; the migration does not depend on it.
 
-**And the delete now compares counts.** `archive_thb_deposits_for_event` returns
-`ArchiveCoverage { archived, live }` and the delete runs only when
-`archived >= live`. A successful write is not the same as a complete archive,
-and the next way to lose a row will not be the duplicate-pair way. `>=` not `==`
-so a re-run after a completed purge (`live = 0`) stays safe to retry.
+**And the delete now checks coverage by matching ids.**
+`archive_thb_deposits_for_event` returns `ArchiveCoverage { archived,
+unarchived }`, where `unarchived` counts live deposits with no archive row
+carrying their id, and the delete runs only when it is 0. A successful write is
+not the same as a complete archive, and the next way to lose a row will not be
+the duplicate-pair way.
+
+The first version of this gate was `archived >= live`, and the devrel-helper
+session was right to push on it: that asks whether the archive is *big enough*,
+which is a different question. It passes whenever `archived` is inflated by rows
+corresponding to nothing currently live — 0044-era rows carrying a NULL
+`source_deposit_id`, or rows kept from an earlier purge of an event that has
+since taken new deposits. It was safe in practice, because the `INSERT … SELECT`
+is what actually guarantees every live id is archived and the gate was only a
+backstop. But a check whose stated meaning is not the one it computes rots the
+moment someone changes what else the archive holds, so it now computes the
+stated one. Pinned by a test that builds the inflated case: three archive rows
+for the event, none of them the live deposit — the old form passes, the new one
+reports `unarchived = 1`.
 
 Same reproduction after the fix: `archived 2 rows, 1200 THB`, `complete=true`,
 `MONEY LOST 0 THB`.
