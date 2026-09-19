@@ -113,6 +113,13 @@ RTM#3's shape — one refunded, one held as credit, one neither — all with
 `attendee_name` / `bank_account` / `bank_name` / `account_name` filled with
 `DRILL NAME *` / `*BANK` values that are trivially greppable.
 
+**Extended 2026-09-19 23:20 for `.issues/127`:** a fourth row was added under
+the *same* `attendee_id` as the refunded one (฿700, unrefunded), so the drill
+now carries the duplicate pair that `thb_deposits` allows and 0044 lost. Four
+rows, ฿2,200, three distinct attendees. Under the old key this run would have
+archived 3 and destroyed ฿700; under 0045 all four must survive. That makes the
+drill an end-to-end test of the #127 fix rather than only of the wiring.
+
 Staging's own cron (`0 3 * * *`, so **10:00 ICT on 2026-09-20**) exercises the
 real `run_cleanup` path against real Cloudflare D1 and KV. Expected afterwards:
 
@@ -126,9 +133,14 @@ npx wrangler d1 execute DB --env staging --remote --command "
          (SELECT SUM(held_as_credit) FROM thb_deposit_archive WHERE event_id='archive-drill-126') AS held"
 ```
 
-`live = 0`, `archived = 3`, `thb = 1500`, `refunded = 1`, `held = 1`. Then
-confirm no `DRILL NAME` or `DRILLBANK` value reached the archive, and drop the
-drill event from the staging KV index (`events`) and its `event:` config.
+`live = 0`, `archived = **4**`, `thb = **2200**`, `refunded = 1`, `held = 1`,
+and `COUNT(DISTINCT attendee_id) = 3` with `COUNT(*) = 4` — the pair surviving
+as two rows is the whole point. Then confirm no `DRILL NAME` or `DRILLBANK`
+value reached the archive, and drop the drill event from the staging KV index
+(`events`) and its `event:` config.
+
+If `archived = 3` and `thb = 1500`, the 0045 key did not take effect and ฿700
+was destroyed — that is the failure to look for, not a missing table.
 
 This closes the one thing the tests could not reach: the SQL is proven against
 the production migrations and the gate is proven by a source-scan guard that was
