@@ -11,8 +11,15 @@
 //! (Issue #029 multi-org isolation).
 //!
 //! See migration `0028_credit_ledger.sql`. The sheet stays as a display mirror.
+//!
+//! **Balances are per person, rows are per email.** An email linked to others
+//! (`db::person`, migration `0043`) shares one balance with them: every read and
+//! the spend guard sum over `person_emails_of!`. Rows keep the email that moved
+//! the money, so one email's own sum can go negative while the person's is
+//! not — the person sum is the truth (plan 025).
 
 use super::d1_safe::safe_all_rows;
+use super::person::person_emails_of;
 use std::collections::{HashMap, HashSet};
 use worker::{D1Database, D1Type};
 
@@ -150,12 +157,16 @@ pub async fn try_spend(
     release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
     let currency_lc = currency.to_lowercase();
-    let sql = "INSERT INTO credit_ledger \
-               (email, organization_id, currency, delta, reason, event_id, deposit_id) \
-               SELECT ?1, ?2, ?3, -1 * ?4, 'apply', ?5, ?6 \
-               WHERE (SELECT COALESCE(SUM(delta), 0) FROM credit_ledger \
-                      WHERE email = ?1 AND organization_id = ?2 AND currency = ?3) >= ?4 \
-               ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING";
+    let sql = concat!(
+        "INSERT INTO credit_ledger \
+         (email, organization_id, currency, delta, reason, event_id, deposit_id) \
+         SELECT ?1, ?2, ?3, -1 * ?4, 'apply', ?5, ?6 \
+         WHERE (SELECT COALESCE(SUM(delta), 0) FROM credit_ledger \
+                WHERE email IN ",
+        person_emails_of!("?1"),
+        " AND organization_id = ?2 AND currency = ?3) >= ?4 \
+         ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING"
+    );
     let result = db
         .prepare(sql)
         .bind_refs(&[
@@ -179,7 +190,7 @@ pub async fn try_spend(
     Ok(changes > 0)
 }
 
-/// Current credit balance for `(email, organization_id, currency)`.
+/// Current credit balance for `(email's person, organization_id, currency)`.
 ///
 /// Returns the signed `SUM(delta)` (never negative in practice — apply is gated
 /// on sufficient balance). D1/read errors bubble up so callers can fail closed
@@ -193,8 +204,11 @@ pub async fn balance(
     release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
     let currency_lc = currency.to_lowercase();
-    let sql = "SELECT COALESCE(SUM(delta), 0) AS bal FROM credit_ledger \
-               WHERE email = ?1 AND organization_id = ?2 AND currency = ?3";
+    let sql = concat!(
+        "SELECT COALESCE(SUM(delta), 0) AS bal FROM credit_ledger WHERE email IN ",
+        person_emails_of!("?1"),
+        " AND organization_id = ?2 AND currency = ?3"
+    );
     let stmt = db
         .prepare(sql)
         .bind_refs(&[
@@ -223,8 +237,10 @@ pub struct CreditBucket {
     pub balance: i64,
 }
 
-/// Every bucket in which one email still holds credit, across **all** orgs and
-/// currencies. Only positive buckets are returned — the money still owed to them.
+/// Every bucket in which one email's person still holds credit, across **all**
+/// orgs and currencies. Only positive buckets are returned — the money still
+/// owed to them. The payout reversal writes these amounts back under the
+/// requesting email, which zeroes the person's balance.
 ///
 /// The ledger is org-scoped so Org A's credit can never be spent at Org B, but
 /// two paths are inherently org-blind: the attendee's own balance display and
@@ -238,11 +254,14 @@ pub struct CreditBucket {
 pub async fn positive_balances(db: &D1Database, email: &str) -> Result<Vec<CreditBucket>, String> {
     release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
-    let sql = "SELECT organization_id, currency, COALESCE(SUM(delta), 0) AS balance \
-               FROM credit_ledger WHERE email = ?1 \
-               GROUP BY organization_id, currency \
-               HAVING SUM(delta) > 0 \
-               ORDER BY organization_id, currency";
+    let sql = concat!(
+        "SELECT organization_id, currency, COALESCE(SUM(delta), 0) AS balance \
+         FROM credit_ledger WHERE email IN ",
+        person_emails_of!("?1"),
+        " GROUP BY organization_id, currency \
+         HAVING SUM(delta) > 0 \
+         ORDER BY organization_id, currency"
+    );
     let stmt = db
         .prepare(sql)
         .bind_refs(&[D1Type::Text(&email_lc)])
@@ -251,6 +270,88 @@ pub async fn positive_balances(db: &D1Database, email: &str) -> Result<Vec<Credi
     Ok(rows
         .into_iter()
         .filter_map(|v| serde_json::from_value::<CreditBucket>(v).ok())
+        .collect())
+}
+
+/// The SQL predicate selecting one person's **locked** credit rows: an `apply`
+/// (negative) entry whose event has not written its matching `return` yet.
+///
+/// The row alias is fixed to `l` and the `return` probe's to `r`, so the caller
+/// only supplies the email expression (a literal, same contract as
+/// [`person_emails_of!`]). Three readers share it — the attendee's locked-credit
+/// breakdown, the payout queue's `locked_thb`, and the queue's `locked_until` —
+/// and they must agree: the payout guard refuses to clear a ฿0 request while
+/// this predicate still matches, so a drifted copy would either strand a
+/// request or let one be cleared against credit that is about to come back.
+///
+/// [`release_ended_applies`] must run before any of them, or an ended event's
+/// credit still reads as locked.
+macro_rules! unreturned_apply_of {
+    ($email:literal) => {
+        concat!(
+            "l.reason = 'apply' AND l.delta < 0 AND l.email IN ",
+            $crate::db::person::person_emails_of!($email),
+            " AND NOT EXISTS (SELECT 1 FROM credit_ledger r \
+               WHERE r.reason = 'return' AND r.event_id = l.event_id \
+                 AND r.email = l.email)"
+        )
+    };
+}
+pub(crate) use unreturned_apply_of;
+
+/// One event's worth of a person's credit that is currently locked — applied to
+/// a deposit and not yet returned.
+///
+/// `event_name` / `event_end_ms` come from the D1 `events` mirror and are empty
+/// / `0` when the row is missing; the credit is still locked in that case (an
+/// unknown end is not a past end — same rule as [`RELEASE_ENDED_APPLIES_SQL`]).
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+pub struct LockedCredit {
+    #[serde(default)]
+    pub event_id: String,
+    #[serde(default)]
+    pub event_name: String,
+    #[serde(default)]
+    pub currency: String,
+    /// Positive: the amount held against that event.
+    #[serde(default)]
+    pub amount: i64,
+    #[serde(default)]
+    pub event_end_ms: i64,
+}
+
+/// Every event currently holding a slice of this person's credit, newest end
+/// first, across all orgs and currencies.
+///
+/// This is the other half of [`positive_balances`]: that function answers "how
+/// much can be paid back right now", this one answers "how much is temporarily
+/// committed and when does it come back". A holder whose whole balance is
+/// applied to an upcoming event has an empty `positive_balances` and a
+/// non-empty result here — the case issue #120 §3 is about, where clearing the
+/// payout request reverses nothing and silently drops the request.
+pub async fn locked_applies(db: &D1Database, email: &str) -> Result<Vec<LockedCredit>, String> {
+    release_ended_applies(db).await?;
+    let email_lc = email.to_lowercase();
+    let sql = concat!(
+        "SELECT l.event_id AS event_id, \
+                COALESCE(e.name, '') AS event_name, \
+                l.currency AS currency, \
+                -COALESCE(SUM(l.delta), 0) AS amount, \
+                COALESCE(e.event_end_ms, 0) AS event_end_ms \
+         FROM credit_ledger l LEFT JOIN events e ON e.id = l.event_id \
+         WHERE ",
+        unreturned_apply_of!("?1"),
+        " GROUP BY l.event_id, l.currency, e.name, e.event_end_ms \
+         ORDER BY COALESCE(e.event_end_ms, 0) DESC, l.event_id"
+    );
+    let stmt = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(&email_lc)])
+        .map_err(|e| format!("D1 credit_ledger locked_applies bind: {e:?}"))?;
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|v| serde_json::from_value::<LockedCredit>(v).ok())
         .collect())
 }
 
@@ -273,13 +374,14 @@ pub struct OrgLiability {
 /// that hold never wrote, so it always read zero).
 pub async fn liability(db: &D1Database) -> Result<Vec<OrgLiability>, String> {
     release_ended_applies(db).await?;
-    let sql = "SELECT organization_id, currency, \
-                      COALESCE(SUM(delta), 0) AS balance, \
-                      COUNT(DISTINCT email)   AS holders \
-               FROM credit_ledger \
-               GROUP BY organization_id, currency \
-               HAVING SUM(delta) > 0 \
-               ORDER BY organization_id, currency";
+    // Holders are people, not emails: a linked person counts once.
+    let sql = "SELECT l.organization_id AS organization_id, l.currency AS currency, \
+                      COALESCE(SUM(l.delta), 0) AS balance, \
+                      COUNT(DISTINCT COALESCE(p.person_id, l.email)) AS holders \
+               FROM credit_ledger l LEFT JOIN person_emails p ON p.email = l.email \
+               GROUP BY l.organization_id, l.currency \
+               HAVING SUM(l.delta) > 0 \
+               ORDER BY l.organization_id, l.currency";
     let stmt = db.prepare(sql);
     let rows = safe_all_rows(&stmt).await?;
     Ok(rows
@@ -291,14 +393,22 @@ pub async fn liability(db: &D1Database) -> Result<Vec<OrgLiability>, String> {
 /// THB credit balance keyed by (lowercased) email for one org — holders only.
 /// One query to annotate the admin attendee list's per-row credit (powers the
 /// "Apply Credit" action + a credit badge) without an N+1 per attendee.
+///
+/// Summed per person, then expanded to **every** email of that person — including
+/// emails with no ledger rows, which is exactly the attendee who registered with
+/// a second email (issue #122). Person ids are UUIDs and never collide with an
+/// email key.
 pub async fn thb_balances_by_email(
     db: &D1Database,
     organization_id: &str,
 ) -> Result<HashMap<String, i64>, String> {
     release_ended_applies(db).await?;
-    let sql = "SELECT email, COALESCE(SUM(delta), 0) AS bal FROM credit_ledger \
-               WHERE organization_id = ?1 AND currency = 'thb' \
-               GROUP BY email HAVING SUM(delta) > 0";
+    let sql = "SELECT COALESCE(m.email, b.holder) AS email, b.bal AS bal FROM ( \
+                 SELECT COALESCE(p.person_id, l.email) AS holder, SUM(l.delta) AS bal \
+                 FROM credit_ledger l LEFT JOIN person_emails p ON p.email = l.email \
+                 WHERE l.organization_id = ?1 AND l.currency = 'thb' \
+                 GROUP BY holder HAVING SUM(l.delta) > 0) b \
+               LEFT JOIN person_emails m ON m.person_id = b.holder";
     let stmt = db
         .prepare(sql)
         .bind_refs(&[D1Type::Text(organization_id)])
@@ -370,9 +480,10 @@ pub struct ReconcileReport {
     /// `hold` entry — credit that was converted but never recorded. This is the
     /// exact 2026-08-14 loss signature.
     pub orphan_holds: i64,
-    /// `(email, org, currency)` groups whose net balance is negative — an
-    /// over-spend the atomic `try_spend` guard should make impossible; nonzero
-    /// means an invariant broke.
+    /// `(person, org, currency)` groups whose net balance is negative — an
+    /// over-spend the atomic spend guard should make impossible; nonzero means
+    /// an invariant broke. Per person, not per email: a linked email's own sum
+    /// is legitimately negative after it spends a sibling's credit.
     pub negative_balances: i64,
     /// Deposits settled BOTH ways (`held_as_credit=1 AND refunded=1`) — the
     /// attendee got the cash back *and* keeps spendable credit. The two settle
@@ -458,8 +569,10 @@ pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
     let negative_balances = count_query(
         db,
         "SELECT COUNT(*) AS n FROM (\
-             SELECT SUM(delta) AS bal FROM credit_ledger \
-             GROUP BY email, organization_id, currency HAVING SUM(delta) < 0)",
+             SELECT SUM(l.delta) AS bal \
+             FROM credit_ledger l LEFT JOIN person_emails p ON p.email = l.email \
+             GROUP BY COALESCE(p.person_id, l.email), l.organization_id, l.currency \
+             HAVING SUM(l.delta) < 0)",
     )
     .await?;
     let double_settled = count_query(

@@ -1031,13 +1031,21 @@ pub fn AdminDeposits(
                                     let name = req.name.clone();
                                     let credit_thb = req.credit_thb;
                                     let credit_usdc = req.credit_usdc;
+                                    let locked_thb = req.locked_thb;
+                                    let locked_until = req.locked_until.clone();
                                     let requested_at = req.requested_at.clone();
-                                    (email, name, credit_thb, credit_usdc, requested_at)
+                                    (email, name, credit_thb, credit_usdc, locked_thb, locked_until, requested_at)
                                 }).collect();
 
-                                items.into_iter().map(|(email, name, credit_thb, credit_usdc, requested_at)| {
+                                items.into_iter().map(|(email, name, credit_thb, credit_usdc, locked_thb, locked_until, requested_at)| {
                                     let pending = clear_pending_email.get();
                                     let is_pending = pending.as_deref() == Some(email.as_str());
+                                    // Issue #120 §3. Nothing payable and credit still covering an
+                                    // event that has not ended: clearing would reverse nothing and
+                                    // drop the request. The server refuses this with a 409 — this
+                                    // only saves the organizer the round trip, so a locked bucket
+                                    // the display does not cover (USDC) is still caught there.
+                                    let locked_only = credit_thb == 0 && credit_usdc == 0 && locked_thb > 0;
                                     let display_name = if name.is_empty() { email.clone() } else { name.clone() };
                                     let credit_str = if credit_thb > 0 && credit_usdc > 0 {
                                         format!("{} THB + {} USDC", credit_thb, credit_usdc)
@@ -1064,6 +1072,19 @@ pub fn AdminDeposits(
                                                     <div class="admin-amount-line">
                                                         {format!("Held credit: {}", credit_str)}
                                                     </div>
+                                                    {(locked_thb > 0).then(|| {
+                                                        let event = match locked_until.is_empty() {
+                                                            true => "an event that has not ended".to_string(),
+                                                            false => locked_until.clone(),
+                                                        };
+                                                        view! {
+                                                            <div class="panel-hint">
+                                                                {format!(
+                                                                    "{locked_thb} THB is covering {event} — it returns when that event ends"
+                                                                )}
+                                                            </div>
+                                                        }
+                                                    })}
                                                     <div class="panel-hint">
                                                         {format!("Requested: {}", requested_display)}
                                                     </div>
@@ -1072,13 +1093,19 @@ pub fn AdminDeposits(
                                                     <span class="badge badge-warning">"Refund Requested"</span>
                                                     <button
                                                         class="btn btn-success btn-xs admin-dep-clear-btn"
-                                                        disabled=move || is_pending
+                                                        disabled=move || is_pending || locked_only
+                                                        title=match locked_only {
+                                                            true => "Nothing to pay out yet — the credit is covering an event that has not ended. The request stays open until then.",
+                                                            false => "",
+                                                        }
                                                         on:click=move |_| {
                                                             handle_clear_credit_refund_request(click_email.clone());
                                                         }
                                                     >
                                                         {move || if is_pending {
                                                             view! { <span>"Clearing..."</span> }.into_any()
+                                                        } else if locked_only {
+                                                            view! { <span>"Waiting on event"</span> }.into_any()
                                                         } else {
                                                             view! {
                                                                 <Icon icon=IconName::Check class="icon-sm"/>

@@ -325,12 +325,16 @@ pub(crate) async fn clear_credit_refund_requested(
     db: &D1Database,
     email: &str,
 ) -> Result<(), String> {
+    // Clears every email of the person: the reversal is person-wide, so a
+    // sibling flag left set would re-queue a request for credit that is already
+    // paid back and now reads ฿0.
     let email_lower = email.to_lowercase();
-    let stmt = db.prepare(
+    let stmt = db.prepare(concat!(
         "UPDATE contacts \
          SET credit_refund_requested = 0, credit_refund_requested_at = NULL \
-         WHERE email = ?1",
-    );
+         WHERE LOWER(email) IN ",
+        crate::db::person::person_emails_of!("?1")
+    ));
     stmt.bind_refs(&[D1Type::Text(&email_lower)])
         .map_err(|e| format!("D1 clear_credit_refund_requested bind: {e:?}"))?
         .run()
@@ -358,6 +362,18 @@ pub struct CreditRefundRequest {
     pub credit_thb: i64,
     #[serde(default)]
     pub credit_usdc: i64,
+    /// THB the person has applied to an event that has not ended yet, so it is
+    /// not in `credit_thb` and the payout reversal cannot remove it. Non-zero
+    /// with `credit_thb == 0` is the "nothing to pay out yet" case: clearing
+    /// the request there reverses nothing and drops it (issue #120 §3), so
+    /// [`crate::handlers::deposit::clear_credit_refund_request_handler`]
+    /// refuses and the organizer sees `locked_until` instead.
+    #[serde(default)]
+    pub locked_thb: i64,
+    /// Name of the last event to release that locked credit (empty when
+    /// nothing is locked, or when the D1 events mirror has no row for it).
+    #[serde(default)]
+    pub locked_until: String,
     #[serde(default)]
     pub requested_at: String,
 }
@@ -391,18 +407,48 @@ pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest>
     {
         return Vec::new();
     }
-    let sql = "\
-         SELECT \
+    // Summed over the contact's person (every linked email), matching the
+    // person-wide `positive_balances` the reversal removes.
+    //
+    // ONE ROW PER PERSON. The amount is now the person's whole balance, so two
+    // flagged linked emails would otherwise show that balance twice and the
+    // organizer would pay it out twice (the second ledger reversal no-ops, and
+    // nothing downstream notices). The surviving row is the latest request,
+    // ties broken by email, and clearing it clears the person's other flags.
+    let sql = concat!(
+        "SELECT \
            c.email                                    AS email, \
            COALESCE(c.name, '')                       AS name, \
            COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
-                     WHERE l.email = LOWER(c.email) AND l.currency = 'thb'),  0) AS credit_thb, \
+                     WHERE l.currency = 'thb' AND l.email IN ",
+        crate::db::person::person_emails_of!("LOWER(c.email)"),
+        "), 0) AS credit_thb, \
            COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
-                     WHERE l.email = LOWER(c.email) AND l.currency = 'usdc'), 0) AS credit_usdc, \
+                     WHERE l.currency = 'usdc' AND l.email IN ",
+        crate::db::person::person_emails_of!("LOWER(c.email)"),
+        "), 0) AS credit_usdc, \
+           -COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                      WHERE l.currency = 'thb' AND ",
+        crate::db::credit_ledger::unreturned_apply_of!("LOWER(c.email)"),
+        "), 0) AS locked_thb, \
+           COALESCE((SELECT COALESCE(e.name, '') FROM credit_ledger l \
+                     JOIN events e ON e.id = l.event_id \
+                     WHERE ",
+        crate::db::credit_ledger::unreturned_apply_of!("LOWER(c.email)"),
+        " ORDER BY e.event_end_ms DESC LIMIT 1), '') AS locked_until, \
            COALESCE(c.credit_refund_requested_at, '') AS requested_at \
          FROM contacts c \
          WHERE c.credit_refund_requested = 1 \
-         ORDER BY c.credit_refund_requested_at DESC";
+           AND NOT EXISTS (SELECT 1 FROM contacts c2 \
+             WHERE c2.credit_refund_requested = 1 \
+               AND LOWER(c2.email) <> LOWER(c.email) \
+               AND LOWER(c2.email) IN ",
+        crate::db::person::person_emails_of!("LOWER(c.email)"),
+        " AND (COALESCE(c2.credit_refund_requested_at, '') > COALESCE(c.credit_refund_requested_at, '') \
+                 OR (COALESCE(c2.credit_refund_requested_at, '') = COALESCE(c.credit_refund_requested_at, '') \
+                     AND LOWER(c2.email) < LOWER(c.email)))) \
+         ORDER BY c.credit_refund_requested_at DESC"
+    );
 
     let stmt = db.prepare(sql);
     match safe_all_rows(&stmt).await {

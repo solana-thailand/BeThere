@@ -200,7 +200,7 @@ pub async fn execute_claim(
         if !event.quiz_enabled {
             return Some(QuizStatus::NotRequired);
         }
-        crate::quiz::get_quiz_status(d1_ref, quiz_kv, &event.id, token)
+        crate::quiz::get_quiz_status(d1_ref, quiz_kv, &event.id, token, event.quiz_enabled)
             .await
             .ok()
     };
@@ -268,6 +268,39 @@ pub async fn execute_claim(
         let claimed_at = attendee.claimed_at.as_deref().unwrap_or("unknown");
         tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), claimed_at = %claimed_at, "claim already fulfilled");
         return Err(AppError::Validation("NFT has already been claimed".into()));
+    }
+
+    // 6b. One badge per PERSON per event: a second attendee row under another
+    //     row of the same person must not claim again. That is another email the
+    //     attendee deliberately linked (plan 025) or — for an unlinked email —
+    //     a second row under the SAME address, which only walk-ins can create
+    //     (the unique index blocks the rest). Both are one human, so both are
+    //     blocked, and the message names neither.
+    //     Best-effort — it reads the D1 attendee mirror, so a missing row means
+    //     no extra block, never a false one.
+    if let Some(db) = state.d1.as_deref() {
+        match crate::db::person::claimed_elsewhere(
+            db,
+            &event.id,
+            &attendee.email,
+            &attendee.api_id,
+            token,
+        )
+        .await
+        {
+            Ok(Some(claimed_at)) => {
+                tracing::warn!(
+                    claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
+                    claimed_at = %claimed_at,
+                    "claim blocked: this person already claimed on another registration"
+                );
+                return Err(AppError::Validation(
+                    "You have already claimed this event's badge on another registration.".into(),
+                ));
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!(error = %e, "linked-email claim check failed — not blocking"),
+        }
     }
 
     // 7. Resolve the recipient wallet SERVER-SIDE. The client never dictates the

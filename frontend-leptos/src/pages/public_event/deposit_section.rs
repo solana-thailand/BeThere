@@ -27,6 +27,29 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
     let show_usdc = data.deposit_amount_usdc > 0 && !escrow_closed;
     let show_thb = data.deposit_amount_thb > 0;
 
+    // The journey reads as a sum: pay, show up, check in, get it back = FREE.
+    // "Free" is the net cost of attending, so every line must also say that the
+    // deposit is paid first, or people reach the payment step surprised.
+    let pay_label = match (show_thb, show_usdc) {
+        (true, _) => format!("Pay {} ฿", thb_display.clone().unwrap_or_default()),
+        (false, true) => format!("Pay {usdc_display}"),
+        (false, false) => "Pay deposit".to_string(),
+    };
+    let back_label = if show_thb {
+        "Refund or credit"
+    } else {
+        "Claim to wallet"
+    };
+    let free_detail = match (show_thb, show_usdc) {
+        (true, true) => {
+            "Attend and the whole deposit comes back: PromptPay as a refund or as credit for your next event, USDC claimed back to your wallet."
+        }
+        (true, false) => {
+            "Attend and the whole deposit comes back, as a refund or as credit for your next event."
+        }
+        (false, _) => "Attend and claim the whole deposit back to your wallet after the event.",
+    };
+
     view! {
         <div class="pe-card pe-deposit-card">
             <h2 class="pe-section-title">
@@ -59,7 +82,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                                 <span class="pe-method-amount-val">{usdc}</span>
                             </div>
                             <div class="pe-method-subtext">
-                                "On-Chain automatic escrow deposit via Solana Smart Contract."
+                                "On-chain deposit held by a Solana escrow program, claimed back from your wallet."
                             </div>
                         </div>
                     }.into_any()
@@ -85,7 +108,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
             <div class="pe-refund-list">
                 <div class="pe-refund-item">
                     <span class="pe-check">"✓"</span>
-                    <span class="pe-refund-text">"100% Fully refundable when you attend the event."</span>
+                    <span class="pe-refund-text">"100% back when you attend the event."</span>
                 </div>
                 {if show_usdc {
                     let refund = refund_label.clone();
@@ -93,7 +116,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>
                             <span class="pe-refund-text">
-                                "USDC: Automatic payout via Solana smart contract within "{refund}" after check-in."
+                                "USDC: claim it back from the Solana escrow after the event ends (no-shows have "{refund}" to claim)."
                             </span>
                         </div>
                     }.into_any()
@@ -105,7 +128,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>
                             <span class="pe-refund-text">
-                                "THB: PromptPay transfer returned by organizer post-event."
+                                "PromptPay: the organizer transfers it back after the event, or you keep it as credit for your next event."
                             </span>
                         </div>
                     }.into_any()
@@ -119,23 +142,29 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                 <div>
                     <div class="pe-journey-step-num" style="background: rgba(153,69,255,0.2); border: 1px solid rgba(153,69,255,0.5); color: #fff;">"1"</div>
                     <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">"Reserve"</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">"Lock spot"</div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{pay_label}</div>
                 </div>
                 <div>
                     <div class="pe-journey-step-num" style="background: rgba(20,241,149,0.2); border: 1px solid rgba(20,241,149,0.5); color: #14F195;">"2"</div>
                     <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">"Show Up"</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">"At venue"</div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">"At the venue"</div>
                 </div>
                 <div>
                     <div class="pe-journey-step-num" style="background: rgba(153,69,255,0.2); border: 1px solid rgba(153,69,255,0.5); color: #fff;">"3"</div>
                     <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">"Scan QR"</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">"Verify entry"</div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">"Check in"</div>
                 </div>
                 <div>
                     <div class="pe-journey-step-num" style="background: rgba(20,241,149,0.25); border: 1px solid #14F195; color: #14F195;">"4"</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #14F195;">"100% Refund"</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">"Back to wallet"</div>
+                    <div style="font-size: 0.8rem; font-weight: 700; color: #14F195;">"100% Back"</div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{back_label}</div>
                 </div>
+            </div>
+            <div class="pe-journey-total" role="note">
+                <span class="pe-journey-total-sum">
+                    <span aria-hidden="true">"= "</span>"FREE"
+                </span>
+                <span class="pe-journey-total-detail">{free_detail}</span>
             </div>
 
             // Hybrid note

@@ -549,16 +549,29 @@ pub async fn submit_quiz(
 
 /// Determine the quiz status for a claim token.
 ///
-/// - `NotRequired` — no quiz config
+/// - `NotRequired` — `quiz_enabled` is off, or no quiz config
 /// - `NotStarted`  — quiz exists, attendee hasn't attempted
 /// - `InProgress`  — quiz exists, attempted but not yet passed
 /// - `Passed`      — quiz passed, claim unlocked
+///
+/// `quiz_enabled` is `events.quiz_enabled` — the organizer's switch. It is
+/// resolved HERE, not only at the call sites, so a new caller cannot reopen the
+/// gate the flag is supposed to close: consulting the config alone let a
+/// disabled quiz still block a claim, and 103 people could not claim a badge
+/// (DevRel `reports/phase-2/CLAIM-GATE.md`, fixed in `41a8fb8`). The existing
+/// call sites keep their own early return, which also skips work this function
+/// would do; this is the backstop that makes the rule hold by construction, the
+/// way `get_adventure_status` already does it.
 pub async fn get_quiz_status(
     d1: Option<&D1Database>,
     kv: Option<&KvStore>,
     event_id: &str,
     claim_token: &str,
+    quiz_enabled: bool,
 ) -> Result<QuizStatus, String> {
+    if !quiz_enabled {
+        return Ok(QuizStatus::NotRequired);
+    }
     let config = get_quiz_config(d1, kv, event_id).await?;
     if config.is_none() {
         Ok(QuizStatus::NotRequired)

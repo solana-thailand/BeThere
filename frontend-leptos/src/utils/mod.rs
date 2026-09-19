@@ -11,13 +11,42 @@ use std::cell::RefCell;
 // ---------------------------------------------------------------------------
 
 thread_local! {
-    // Cached cluster string fetched from `/api/health`.
-    // None = not yet fetched; Some("devnet") or Some("mainnet-beta").
-    static CACHED_CLUSTER: RefCell<Option<String>> = const { RefCell::new(None) };
+    // Cached networks fetched from `/api/health`. None = not yet fetched.
+    // Escrow and badge (NFT) clusters differ in prod: badges went mainnet while
+    // escrow stayed on devnet (commit 8265d13), so each link picks its own.
+    static CACHED_NETWORKS: RefCell<Option<SolanaNetworks>> = const { RefCell::new(None) };
 }
 
-/// Fetch the Solana cluster from `/api/health` and cache it.
-/// Returns "devnet" as fallback if the fetch fails.
+/// Clusters reported by `/api/health`: `cluster` (escrow, where user
+/// transactions are signed) and `solana.nft_cluster` (where badges are minted).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SolanaNetworks {
+    pub escrow: String,
+    pub nft: String,
+}
+
+const FALLBACK_CLUSTER: &str = "devnet";
+
+/// Parse the `/api/health` body. Missing fields fall back to devnet; a missing
+/// `nft_cluster` (older worker) falls back to the escrow cluster.
+pub fn parse_health_networks(body: &str) -> SolanaNetworks {
+    let val: serde_json::Value = serde_json::from_str(body).unwrap_or_default();
+    let escrow = val
+        .get("cluster")
+        .and_then(|c| c.as_str())
+        .unwrap_or(FALLBACK_CLUSTER)
+        .to_string();
+    let nft = val
+        .pointer("/solana/nft_cluster")
+        .and_then(|c| c.as_str())
+        .filter(|c| *c != "unknown")
+        .map_or_else(|| escrow.clone(), String::from);
+    SolanaNetworks { escrow, nft }
+}
+
+/// Fetch the Solana networks from `/api/health` and cache them. Called once at
+/// app boot (`App`), so every page's `get_cluster()` sees the real network.
+/// Returns the escrow cluster ("devnet" if the fetch fails).
 pub async fn fetch_cluster() -> String {
     let window = web_sys::window().expect("no window");
     let origin = window
@@ -26,24 +55,37 @@ pub async fn fetch_cluster() -> String {
         .unwrap_or_else(|_| "http://localhost:8787".to_string());
     let url = format!("{origin}/api/health");
 
-    let cluster = async {
+    let body = async {
         let resp = crate::api::fetch::get(&url, &[]).await.ok()?;
-        let body = crate::api::fetch::response_text(&resp).await.ok()?;
-        let val: serde_json::Value = serde_json::from_str(&body).ok()?;
-        val.get("cluster")?.as_str().map(String::from)
+        crate::api::fetch::response_text(&resp).await.ok()
     }
     .await
-    .unwrap_or_else(|| "devnet".to_string());
+    .unwrap_or_default();
+    let networks = parse_health_networks(&body);
+    let escrow = networks.escrow.clone();
 
-    CACHED_CLUSTER.with(|c| *c.borrow_mut() = Some(cluster.clone()));
+    CACHED_NETWORKS.with(|c| *c.borrow_mut() = Some(networks));
 
-    cluster
+    escrow
 }
 
-/// Get the cached cluster, or "devnet" as fallback.
-/// Call `fetch_cluster()` first (in `spawn_local`) before using this.
+/// Escrow cluster (wallet signing, escrow tx links), or "devnet" before the
+/// boot fetch resolves.
 pub fn get_cluster() -> String {
-    CACHED_CLUSTER.with(|c| c.borrow().clone().unwrap_or_else(|| "devnet".to_string()))
+    CACHED_NETWORKS.with(|c| {
+        c.borrow()
+            .as_ref()
+            .map_or_else(|| FALLBACK_CLUSTER.to_string(), |n| n.escrow.clone())
+    })
+}
+
+/// Badge (NFT) cluster, for links to where attendee badges live.
+pub fn get_nft_cluster() -> String {
+    CACHED_NETWORKS.with(|c| {
+        c.borrow()
+            .as_ref()
+            .map_or_else(|| FALLBACK_CLUSTER.to_string(), |n| n.nft.clone())
+    })
 }
 
 /// Build a cluster-aware Solscan transaction URL.

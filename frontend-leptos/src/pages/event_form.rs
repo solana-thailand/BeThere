@@ -1870,7 +1870,7 @@ pub fn EventFormComponent(
                 <div class="dep-info-note">
                     <p class="hint-note">
                         {move || match form.get().event_format {
-                            api::EventFormat::InPerson => "Physical event with deposit commitment. Attendees get 100% refund at check-in.",
+                            api::EventFormat::InPerson => "Physical event with deposit commitment. Attendees get their deposit back when they attend.",
                             api::EventFormat::Online => "Virtual event. No deposit — quest completion serves as virtual check-in.",
                             api::EventFormat::Hybrid => "Both in-person and online tracks. In-person attendees deposit; online attendees complete quests.",
                         }}

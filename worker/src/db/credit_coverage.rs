@@ -57,13 +57,17 @@ pub async fn apply(db: &D1Database, input: &ApplyCredit<'_>) -> Result<ApplyCred
     // The spend guard refuses to consume credit when another payment already
     // owns this attendee/event. Existing matching credit rows are allowed so a
     // retry can heal an incomplete projection from the old multi-write flow.
+    // The balance is the person's (every linked email, `db::person`); the apply
+    // row is still written under the registered email so its return pairs with it.
     let spend = db
-        .prepare(
+        .prepare(concat!(
             "INSERT INTO credit_ledger \
              (email, organization_id, currency, delta, reason, event_id, deposit_id) \
              SELECT ?1, ?2, ?3, -1 * ?4, 'apply', ?5, ?6 \
              WHERE (SELECT COALESCE(SUM(delta), 0) FROM credit_ledger \
-                    WHERE email = ?1 AND organization_id = ?2 AND currency = ?3) >= ?4 \
+                    WHERE email IN ",
+            crate::db::person::person_emails_of!("?1"),
+            " AND organization_id = ?2 AND currency = ?3) >= ?4 \
                AND NOT EXISTS (SELECT 1 FROM deposit_statuses s \
                  WHERE s.event_id = ?5 AND s.attendee_id = ?7 AND s.method <> ?8 \
                    AND NOT (?8='credit_thb' AND s.method='thb' AND EXISTS(SELECT 1 FROM thb_deposits d \
@@ -72,7 +76,7 @@ pub async fn apply(db: &D1Database, input: &ApplyCredit<'_>) -> Result<ApplyCred
                     WHERE event_id = ?5 AND attendee_id = ?7 \
                       AND COALESCE(slip_url, '') <> 'ROLLING_CREDIT_AUTO_APPLIED')) \
              ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING",
-        )
+        ))
         .bind_refs(&[
             D1Type::Text(&email),
             D1Type::Text(input.organization_id),

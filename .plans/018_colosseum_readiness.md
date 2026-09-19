@@ -1,7 +1,9 @@
 # Plan 018 — Colosseum Readiness (Assessment)
 
-> **Status:** Assessment complete; deck visually confirmed (§5.8). Open items are
-> all founder decisions: §4.2, §5.6b, and the blocking §5 eligibility question.
+> **Status:** Assessment complete; deck visually confirmed (§5.8). §5 eligibility
+> answered from Colosseum's published FAQ (§5.1, 2026-09-17): existing products may
+> enter, judged on in-window work only, and the window (Crypto World's Fair,
+> Sep 14 – Oct 12) is **open now**. Open items are founder decisions: §4.2, §5.6b.
 > **Source of truth:** `What_Wins_Colosseum_2026.pptx` — Gui Bibeau, Lead Product
 > Engineer, Solana Foundation. 16 slides + speaker notes. Downloaded 2026-08-21
 > to `~/Downloads/`; **not** committed here (third-party deck, not ours to
@@ -133,7 +135,8 @@ searching before concluding.
 
 - [x] **4.1 Distribution — written from the 15 events' actual provenance.** §4.1 below.
 - [ ] **4.2 Decide on building in public.** Prepared, not decided — §4.2 below.
-      This is a founder's call, not an engineering one.
+      This is a founder's call, not an engineering one. **Blocked on founder
+      decision (A or B)**; the judged window closes Oct 12 (§5.1).
 - [x] **4.3 ICP named in one sentence, from the same data.** §4.3 below.
 
 All figures below come from the prod D1 export taken 2026-08-20 before the
@@ -416,6 +419,48 @@ plausible readings differ enormously in what they imply:
 
 **Do not assume.** Ask, and record the answer here.
 
+### 5.1 Answered by the organizers' published FAQ (2026-09-17)
+
+Colosseum's own hackathon page (<https://colosseum.com/hackathon>, FAQ) answers
+it. Quoted verbatim from the page HTML fetched 2026-09-17, not from a summary:
+
+> *"Teams may begin development before the hackathon, but products are judged
+> only on the work completed between the competition's start and end dates."*
+
+> *"Builders may use pre-existing code, but teams must disclose all relevant
+> past development work in the submission form."*
+
+> *"Colosseum hackathons are for new startups that haven't raised significant
+> outside capital. They're not intended for established companies that have been
+> building the same product for years and have already raised venture funding."*
+
+**So reading 1 applies.** BeThere may enter. The prod history counts as context
+and credibility, but **only work done inside the window is judged**. Reading 2
+(§6's agent surface as a separate new product) is optional, not forced.
+
+**The window is open now.** The live hackathon is **Crypto World's Fair,
+Sep 14 – Oct 12** (page banner, 2026-09-17). The #6 event description on prod
+advertises the same deadline (Solana track, submissions close 12 Oct).
+
+**What the rules require of us, measured:**
+
+| | |
+|---|---|
+| Repo history | 1,300 commits on `develop`, first `639e1dd` 2026-04-21 |
+| Before the window | 1,244 (last: `62296ac`, 2026-09-13 23:47 +07) |
+| Inside the window so far | 56 |
+
+Counts are by committer date, with the window boundary taken as 2026-09-14 00:00
+Bangkok time. Colosseum does not state a timezone on that page, and rebased
+commits carry their rebase date, so treat this as a disclosure baseline, not a
+judged-work ledger. The submission form's disclosure has to say plainly that the
+product predates the window. Misrepresenting development history is the one
+thing the FAQ says Colosseum acts on.
+
+**Two conditions only the founder can confirm:** that BeThere has not raised
+significant outside capital (the grant/prize history belongs in the disclosure),
+and the team roster.
+
 ---
 
 ## 6. Relationship to existing work
@@ -451,10 +496,19 @@ checkbox is blocked on a decision, not on engineering.
       confirmed** slide by slide via a Keynote export (2026-09-17, §5.8), which
       found and fixed nine layout defects the text read-back had passed.
 - [ ] §5.6b baht-vs-USDC deposit framing — a positioning call, the founder's.
+      **Blocked on founder decision:** this is the same question as D5 ("lead
+      with THB or USDC") in `docs/deposit-commitment-model.md`. Decide it once,
+      there. The deck, README and landing copy then follow that doc's §7–§8.
 - [ ] §4.2 building-in-public decided (A or B). *Prepared with costs; the call
       is the founder's. Not marked complete on a recommendation alone.*
-- [ ] §5 eligibility answered by the organizers. **Still blocking** — none of the
-      above matters if an existing product cannot enter.
+      **Blocked on founder decision**, and now time-boxed: the judged window is
+      Sep 14 – Oct 12 (§5.1), so every day undecided is a day of in-window work
+      with no public artifact.
+- [x] §5 eligibility answered by the organizers — via their published FAQ
+      (§5.1, 2026-09-17): existing products may enter; only in-window work is
+      judged; past development must be disclosed. Disclosure baseline measured.
+      *Remaining for the founder: attest to "no significant outside capital" and
+      write the disclosure in the submission form.*
 
 ---
 

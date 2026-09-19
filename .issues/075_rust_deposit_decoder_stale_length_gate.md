@@ -1,8 +1,9 @@
 # 075 — The Worker's `AttendeeDeposit` decoder still gates on the pre-`version` length
 
-Status: **fixed locally** — length gate corrected, schema-version check added in
-both Rust decoders, and the stale-layout mis-decode reproduced before and after.
-Closing it fully needs a real devnet run (same gate as
+Status: **fixed; verified against real devnet accounts 2026-09-17.** Every real
+account passes the length and version gates and decodes correctly. The real-byte
+fixture test `decodes_real_devnet_accounts` passes (2026-09-18). Previously: closing
+it fully needed a real devnet run (same gate as
 [074](074_attendee_deposit_decode_offsets_stale.md)).
 
 Found by the follow-up audit [074](074_attendee_deposit_decode_offsets_stale.md)
@@ -97,9 +98,13 @@ Both directions, by execution:
 
 ## Remaining
 
-- **Devnet run** — all verification used synthetic account bytes. Those prove
-  the gate matches the program source and the flow-harness decoder, *not* that
-  they match what the deployed program writes. Same gate as 074.
+- ~~**Devnet run**~~ — **done 2026-09-17 using existing chain data.** All 38 real
+  `AttendeeDeposit` accounts on the deployed program are 96 bytes,
+  discriminator 2 and version 1, so the length and version gates admit every
+  real account. Their decoded `attendee`/`event` fields re-derive each PDA
+  (38/38). Two real accounts, one refunded and one not, are pinned in
+  `decodes_real_devnet_accounts`. Full evidence is in
+  [074 § Verification against real devnet accounts](074_attendee_deposit_decode_offsets_stale.md).
 - If the escrow program ever ships a v2 account, both decoders must be updated
   before the program upgrade lands, or deposit verification denies everything.
   That is deliberate: denying is the safe direction, and the new `warn!` says so

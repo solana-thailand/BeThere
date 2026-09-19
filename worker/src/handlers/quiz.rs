@@ -268,7 +268,7 @@ pub async fn get_quiz_status(
         }
     };
 
-    let status = quiz::get_quiz_status(d1, kv, eid, &token)
+    let status = quiz::get_quiz_status(d1, kv, eid, &token, event.quiz_enabled)
         .await
         .map_err(|e| {
             tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&token), error = ?e, "quiz status failed");

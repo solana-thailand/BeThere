@@ -1,6 +1,6 @@
 # 108 — The continue button did nothing, and the page fetched 15 MB of posters
 
-**Status:** implemented 2026-09-14, **not deployed**
+**Status:** implemented 2026-09-14; deployed to prod 2026-09-14 at `d79f8ca` (`worker/scripts/.preflight-bypass.log` entry 18); still present in current prod `8a3d6d9d`. Live check 2026-09-17: prod `style-21-feedback-f56d69a652b78fbb.css` carries `.fb-event-poster--empty`.
 **Found:** 2026-09-14, owner's screenshot of the live page plus a report
 **Severity:** medium — one hard bug, the rest is the page 206 people will open
 

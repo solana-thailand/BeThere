@@ -90,7 +90,7 @@ pub fn OnchainEventsPanel(event_id: String) -> impl IntoView {
                             let sig_short = truncate_signature(&e.signature);
                             let amount_str = e.amount.map(format_usdc_amount).unwrap_or_default();
                             let attendee_short = e.attendee.as_ref().map(|a| truncate_address(a)).unwrap_or_default();
-                            let solscan_url = crate::utils::solscan_tx_url(&e.signature, "devnet");
+                            let solscan_url = crate::utils::solscan_tx_url(&e.signature, &crate::utils::get_cluster());
                             let dot_style = format!("background: {}", e.instruction.color());
                             let badge_style = format!("background: {}", e.instruction.color());
 

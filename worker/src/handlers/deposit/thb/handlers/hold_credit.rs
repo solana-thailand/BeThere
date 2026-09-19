@@ -262,6 +262,12 @@ pub async fn hold_deposit_handler(
 pub struct CreditBalanceResponse {
     pub credit_thb: u64,
     pub credit_usdc: u64,
+    /// Credit the caller still owns but that is committed to an event which has
+    /// not ended — it is deliberately **not** counted in `credit_thb` /
+    /// `credit_usdc` (those are what is spendable/refundable now). Without it
+    /// a holder whose whole balance covers an upcoming event reads "0 credit"
+    /// and concludes the money is gone (issue #120 §2).
+    pub locked: Vec<crate::db::credit_ledger::LockedCredit>,
 }
 
 /// Returns the authenticated user's deposit credit balance.
@@ -305,8 +311,25 @@ pub async fn credit_balance_handler(
         None => (0, 0),
     };
 
+    // Same degrade-to-empty rule as the balance above: display only, nothing
+    // spends against it, and a silent failure must still be visible in the log.
+    let locked = match state.d1.as_deref() {
+        Some(db) => crate::db::credit_ledger::locked_applies(db, &claims.email)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    identity_fingerprint = %state.log_fingerprint(&claims.email),
+                    error = %e,
+                    "locked credit read failed — reporting none (display only)"
+                );
+                Vec::new()
+            }),
+        None => Vec::new(),
+    };
+
     Ok(ApiOk::new(CreditBalanceResponse {
         credit_thb,
         credit_usdc,
+        locked,
     }))
 }
