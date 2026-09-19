@@ -147,9 +147,26 @@ fn deposit_delete_requires_the_archive_to_cover_every_live_row() {
     let f = &db[db.find("fn is_complete(").expect("is_complete exists")..];
     let body = &f[..f.find("\n    }").expect("fn ends")];
     assert!(
-        body.contains("self.archived >= self.live"),
-        "coverage is `archived >= live`. `==` would refuse forever on an event \
-         already purged (live = 0 against a full archive), and `>` would let a \
-         short archive through"
+        body.contains("self.unarchived == 0"),
+        "coverage must be decided by MATCHING ids, not by comparing totals. An \
+         `archived >= live` form asks whether the archive is big enough, which \
+         passes whenever `archived` is inflated by rows corresponding to nothing \
+         live — 0044-era rows with a NULL source_deposit_id, or rows kept from an \
+         earlier purge of an event that has since taken new deposits"
+    );
+    assert!(
+        !body.contains(">= self.live"),
+        "the totals comparison must not come back — it reads as the guarantee \
+         while the INSERT … SELECT is what actually provides it"
+    );
+
+    let archive = &db[db
+        .find("pub async fn archive_thb_deposits_for_event(")
+        .expect("archive fn exists")..];
+    let archive = &archive[..archive.find("\n}\n").expect("fn ends")];
+    assert!(
+        archive.contains("a.source_deposit_id = d.id"),
+        "`unarchived` must be counted by joining live rows to archive rows on the \
+         deposit id, or it is measuring something other than what it claims"
     );
 }
