@@ -142,6 +142,14 @@ value reached the archive, and drop the drill event from the staging KV index
 If `archived = 3` and `thb = 1500`, the 0045 key did not take effect and ฿700
 was destroyed — that is the failure to look for, not a missing table.
 
+**What a green drill does not cover.** It starts against an empty archive, so it
+exercises `run_cleanup`'s wiring and the per-row key end to end, and nothing
+else. The coverage gate's interesting case — an archive inflated by rows that
+correspond to nothing live, which an `archived >= live` form would wave through
+— cannot arise here and is covered only by
+`test_a_big_archive_does_not_excuse_an_unarchived_row`. Worth stating so a green
+run is not read as broader assurance than it is.
+
 This closes the one thing the tests could not reach: the SQL is proven against
 the production migrations and the gate is proven by a source-scan guard that was
 reverse-patched on compiling code, but **no test exercises `run_cleanup`'s own
