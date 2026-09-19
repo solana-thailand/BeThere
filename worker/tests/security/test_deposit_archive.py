@@ -77,10 +77,14 @@ class DepositArchiveTests(unittest.TestCase):
         )
 
     def archive(self):
+        """Run the real archive SQL; return (archived, live) like the Rust does."""
         self.db.executescript(ARCHIVE_SQL.replace("?1", f"'{EVENT}'"))
-        return self.db.execute(
-            "SELECT COUNT(*) AS n FROM thb_deposit_archive WHERE event_id=?", (EVENT,)
-        ).fetchone()["n"]
+        row = self.db.execute(
+            """SELECT (SELECT COUNT(*) FROM thb_deposit_archive WHERE event_id=?1) AS archived,
+                      (SELECT COUNT(*) FROM thb_deposits       WHERE event_id=?1) AS live""",
+            (EVENT,),
+        ).fetchone()
+        return row["archived"], row["live"]
 
     def rtm3(self):
         """RTM#3's real shape: 11 refunded, 2 held as credit, 1 neither."""
@@ -94,7 +98,7 @@ class DepositArchiveTests(unittest.TestCase):
 
     def test_every_deposit_is_archived_before_the_delete(self):
         self.rtm3()
-        self.assertEqual(self.archive(), 14)
+        self.assertEqual(self.archive(), (14, 14))
         self.db.executescript(DELETE_SQL.replace("?1", f"'{EVENT}'"))
         self.assertEqual(
             self.db.execute("SELECT COUNT(*) AS n FROM thb_deposits").fetchone()["n"], 0
@@ -145,8 +149,8 @@ class DepositArchiveTests(unittest.TestCase):
 
     def test_archiving_twice_does_not_double_the_money(self):
         self.rtm3()
-        self.assertEqual(self.archive(), 14)
-        self.assertEqual(self.archive(), 14)
+        self.assertEqual(self.archive(), (14, 14))
+        self.assertEqual(self.archive(), (14, 14))
         total = self.db.execute(
             "SELECT SUM(amount_thb) AS thb FROM thb_deposit_archive"
         ).fetchone()["thb"]
@@ -158,7 +162,58 @@ class DepositArchiveTests(unittest.TestCase):
         self.rtm3()
         self.archive()
         self.db.execute("DELETE FROM thb_deposit_archive WHERE attendee_id='stranded'")
-        self.assertEqual(self.archive(), 14)
+        self.assertEqual(self.archive(), (14, 14))
+
+    # -- one attendee, two deposits (issue #127) -------------------------
+
+    def test_two_deposits_for_one_attendee_are_both_archived(self):
+        # `thb_deposits` has no UNIQUE on (event_id, attendee_id) — 0013 makes it
+        # a plain INDEX — and `save_thb_deposit` is read-then-insert-or-update,
+        # so two concurrent uploads for one attendee both take the insert branch.
+        # 0044 keyed the archive on that pair: one row archived, both deleted.
+        self.deposit("att-1", 500)
+        self.deposit("att-1", 700)
+        self.assertEqual(self.archive(), (2, 2))
+        total = self.db.execute(
+            "SELECT SUM(amount_thb) AS thb FROM thb_deposit_archive"
+        ).fetchone()["thb"]
+        self.assertEqual(total, 1200, "both deposits are money; both must survive")
+
+    def test_the_duplicate_pair_is_still_idempotent(self):
+        self.deposit("att-1", 500)
+        self.deposit("att-1", 700)
+        self.archive()
+        self.assertEqual(self.archive(), (2, 2))
+        self.assertEqual(
+            self.db.execute("SELECT COUNT(*) AS n FROM thb_deposit_archive").fetchone()["n"],
+            2,
+            "re-running keys on the source row, so it adds nothing and loses nothing",
+        )
+
+    def test_coverage_is_short_when_a_row_is_not_archived(self):
+        # What the delete is gated on. `is_complete()` is `archived >= live`.
+        self.deposit("att-1", 500)
+        self.deposit("att-2", 700)
+        self.archive()
+        self.db.execute("DELETE FROM thb_deposit_archive WHERE attendee_id='att-2'")
+        archived, live = (
+            self.db.execute(
+                """SELECT (SELECT COUNT(*) FROM thb_deposit_archive WHERE event_id=?1) AS a,
+                          (SELECT COUNT(*) FROM thb_deposits       WHERE event_id=?1) AS l""",
+                (EVENT,),
+            ).fetchone()
+        )
+        self.assertLess(archived, live, "an incomplete archive must not read as complete")
+
+    def test_a_rerun_after_a_successful_purge_stays_safe(self):
+        # live = 0 against a full archive. `>=` not `==`, or the retry would
+        # refuse forever on an event that is already done.
+        self.deposit("att-1", 500)
+        self.archive()
+        self.db.executescript(DELETE_SQL.replace("?1", f"'{EVENT}'"))
+        archived, live = self.archive()
+        self.assertEqual((archived, live), (1, 0))
+        self.assertGreaterEqual(archived, live)
 
     # -- the archive outlives the event ----------------------------------
 
