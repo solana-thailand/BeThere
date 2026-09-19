@@ -268,6 +268,68 @@ pub async fn set_refund_proof_url(
 }
 
 /// Delete all THB deposits for an event (cleanup).
+/// Copy an event's deposits into `thb_deposit_archive`, keeping the money and
+/// dropping the people, and return how many rows the archive now holds for that
+/// event.
+///
+/// This is the half of the retention policy that was missing. The nightly cron
+/// deletes `thb_deposits` 90 days after the refund window closes — correct for
+/// `bank_account`, `attendee_name` and the slip URL, and destructive for the
+/// amounts, which are the only record that the deposits balanced. RTM#3's 14
+/// rows (7,000 THB) went that way on 2026-09-19, one of them neither refunded
+/// nor held (`.issues/126`).
+///
+/// Idempotent: `ON CONFLICT (event_id, attendee_id) DO NOTHING`, so a re-run —
+/// or an event archived twice — cannot double-count the money. The partial-index
+/// rule that bites `credit_ledger` does not apply here, because the unique index
+/// has no `WHERE`.
+///
+/// Returns the **archive** count rather than rows inserted, so the caller can
+/// gate the delete on "the archive covers this event" instead of on "this
+/// particular run wrote something" — a retry after a partial failure has to be
+/// allowed to proceed.
+///
+/// `event_slug` is denormalised from `events` because the archive outlives the
+/// event row. It falls back to the id, which for a duplicated event is the slug
+/// of its source event (`.issues/079`) — wrong-looking but never empty.
+pub async fn archive_thb_deposits_for_event(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<i64, String> {
+    let insert = db
+        .prepare(
+            "INSERT INTO thb_deposit_archive \
+             (event_id, event_slug, attendee_id, amount_thb, verified, verified_at, \
+              uploaded_at, refunded, refunded_at, held_as_credit, held_as_credit_at, \
+              had_slip, had_refund_proof) \
+             SELECT d.event_id, \
+                    COALESCE((SELECT e.slug FROM events e WHERE e.id = d.event_id), d.event_id), \
+                    d.attendee_id, d.amount_thb, d.verified, d.verified_at, \
+                    COALESCE(d.uploaded_at, ''), d.refunded, d.refunded_at, \
+                    COALESCE(d.held_as_credit, 0), d.held_as_credit_at, \
+                    CASE WHEN COALESCE(d.slip_url, '') <> '' THEN 1 ELSE 0 END, \
+                    CASE WHEN COALESCE(d.refund_proof_url, '') <> '' THEN 1 ELSE 0 END \
+             FROM thb_deposits d WHERE d.event_id = ?1 \
+             ON CONFLICT (event_id, attendee_id) DO NOTHING",
+        )
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 archive_thb_deposits bind: {e:?}"))?;
+    insert
+        .run()
+        .await
+        .map_err(|e| format!("D1 archive_thb_deposits run: {e:?}"))?;
+
+    let stmt = db
+        .prepare("SELECT COUNT(*) AS n FROM thb_deposit_archive WHERE event_id = ?1")
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 archive_thb_deposits count bind: {e:?}"))?;
+    let rows = super::d1_safe::safe_all_rows(&stmt).await?;
+    rows.first()
+        .and_then(|v| v.get("n"))
+        .and_then(serde_json::Value::as_i64)
+        .ok_or_else(|| "D1 archive_thb_deposits count returned no row".to_string())
+}
+
 pub async fn delete_thb_deposits_for_event(db: &D1Database, event_id: &str) -> Result<(), String> {
     let stmt = db.prepare("DELETE FROM thb_deposits WHERE event_id = ?1");
     stmt.bind_refs(&[D1Type::Text(event_id)])
