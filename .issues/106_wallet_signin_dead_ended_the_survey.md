@@ -1,6 +1,6 @@
 # 106 — Signing in with a wallet dead-ended the survey
 
-**Status:** fixed 2026-09-14, **not deployed**
+**Status:** fixed 2026-09-14, **verified 2026-09-19**, still **not deployed**
 **Raised by:** DevRel, reviewing the sign-in flow the survey link leads into
 **Severity:** medium — it sits directly on the path 206 people are about to walk
 
@@ -53,10 +53,29 @@ DevRel is also covering this from their end with a line in the survey mail, so
 the same fact now appears at the two points where it matters: before the link is
 clicked, and beside the button.
 
-## Not verified
+## Verified (2026-09-19)
 
-Both halves need a session to exercise — the 403 branch needs a *wallet* session
-specifically, which no account here has. Compiled, linted, formatted.
+Both halves, in a browser against a local `workerd` (the offline harness in
+`wrangler dev --local`), because a Leptos page that compiles and lints can still
+render nothing.
+
+The 403 branch never needed a *wallet* in particular — it is gated on
+`claims.email_verified`, so an HS256 token signed with the local `JWT_SECRET`
+carrying `email_verified: false` reaches exactly the same handler branch. That
+is what a wallet session is, from this endpoint's point of view.
+
+- `GET /api/my-feedback-events` with that session → **403**
+  `Sign in with Google again to give feedback.`
+- `/feedback` with the same session in the cookie renders the `NeedsGoogle`
+  state, in Thai — *"ต้องเข้าสู่ระบบด้วย Google"*, the reason
+  (*"แบบสอบถามผูกกับอีเมลที่คุณใช้ลงทะเบียนงาน…"*) — and a button whose href is
+  `/login?next=/feedback`. No "ส่งไม่สำเร็จ", no English, no dead end.
+- `/login?next=/feedback` shows the Thai subtitle and the line under the wallet
+  button. `/login` with no `next` shows neither — the A/B rules out "the copy is
+  always on", which a one-sided check would not have.
+
+What is still unverified is the *wallet sign-in itself* (the button's own flow),
+which needs a real wallet extension. Nothing on this issue's path depends on it.
 
 ## Related
 
