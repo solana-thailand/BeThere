@@ -253,6 +253,19 @@ deposits table days before an event is the wrong trade.
 **Done when** the migration and the report exist, the report has been run, and
 `.issues/127` names the exact rows.
 
+**STATUS 2026-09-22: DONE (prepare-only, as intended).** `0048` written and
+marked `DO NOT APPLY BEFORE 2026-09-28`; `scripts/verify/thb_duplicate_report.sh`
+written, validated in both directions, and run against production.
+
+**The finding: production has no duplicates at all** — 54 rows, 54 distinct
+pairs, 3 events. So 0048 applies cleanly with no dedupe, which is a much smaller
+job than `.issues/127` feared. Re-run the report right before applying; RTM #6
+adds ~24 rows first.
+
+Bonus, same read-only pass: the 0047 backfill previewed against **real prod
+data** — 37 cash (฿18,500), 14 credit (฿7,000), 3 comp (฿0). That closes the
+caveat in §D that the backfill had only been proven against a local fixture.
+
 ---
 
 ## F. Batch deploy  ·  value: MED  ·  risk: MED
