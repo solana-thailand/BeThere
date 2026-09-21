@@ -196,7 +196,32 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     };
     let d1 = env.d1("DB").ok();
 
-    cleanup::run_cleanup(&events_kv, d1.as_ref()).await;
+    // Daily KV/D1 retention pass. Its failures used to be log-only, so a
+    // malformed event index aborted every nightly run on staging from
+    // 2026-09-19 and stayed invisible for four days. Alert like the other two
+    // nightly reconciles below.
+    let cleanup_summary = cleanup::run_cleanup(&events_kv, d1.as_ref()).await;
+    if !cleanup_summary.is_clean() {
+        tracing::error!(
+            failures = cleanup_summary.failures.len(),
+            "daily cleanup did not complete"
+        );
+        if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
+            && !webhook.is_empty()
+        {
+            let detail = cleanup_summary
+                .failures
+                .iter()
+                .map(|f| f.to_string())
+                .collect::<Vec<_>>()
+                .join("\n• ");
+            let msg = format!(
+                ":rotating_light: BeThere daily cleanup did not complete — {} failure(s):\n• {detail}",
+                cleanup_summary.failures.len()
+            );
+            let _ = middleware::alert::post_slack(&webhook, &msg).await;
+        }
+    }
 
     // Daily credit-ledger reconciliation — the safety net that would have caught
     // the 2026-08-14 silent credit loss on day one. Alerts (Slack) if any held

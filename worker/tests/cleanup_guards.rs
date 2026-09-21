@@ -170,3 +170,92 @@ fn deposit_delete_requires_the_archive_to_cover_every_live_row() {
          deposit id, or it is measuring something other than what it claims"
     );
 }
+
+/// 4. A cleanup phase that fails must be REPORTABLE, not merely logged.
+///
+/// Every abort path in `run_cleanup` used to write to `tracing` and return a
+/// summary that looked identical to a healthy one. On staging a malformed index
+/// entry aborted the whole run every night from 2026-09-19 and nobody knew for
+/// four days — the cron reported success the entire time. A new error site that
+/// forgets to record its failure silently re-opens exactly that hole, so the
+/// count is pinned rather than spot-checked.
+#[test]
+fn every_cleanup_error_site_records_a_failure() {
+    let code = strip_comments(&src("src/cleanup.rs"));
+
+    // Whitespace-free, because rustfmt breaks a long push across three lines
+    // and a literal `failures.push(` search would then miss it — a guard that
+    // silently stops matching is worse than no guard.
+    let dense: String = code.chars().filter(|c| !c.is_whitespace()).collect();
+    let logged = dense.matches("tracing::error!").count();
+    let recorded = dense.matches(".failures.push(").count();
+
+    assert!(
+        logged > 0,
+        "cleanup should still log its failures — the guard reads the wrong file otherwise"
+    );
+    assert_eq!(
+        logged, recorded,
+        "{logged} error site(s) in cleanup.rs but {recorded} recorded failure(s): an \
+         unrecorded abort is invisible to the nightly alert, which is how the \
+         2026-09-19 staging outage lasted four days"
+    );
+}
+
+/// 5. The cron must ACT on a dirty summary.
+///
+/// Recording the failure is half of it; `run_cleanup`'s return value was
+/// discarded at the call site (`cleanup::run_cleanup(..).await;`) for its whole
+/// life. The alert has to fire between the call and the next reconcile, the same
+/// way the credit-ledger and NFT-journal passes do.
+#[test]
+fn cron_alerts_when_cleanup_did_not_complete() {
+    let code = strip_comments(&src("src/lib.rs"));
+
+    let call_at = code
+        .find("run_cleanup(")
+        .expect("the daily cron still runs the cleanup pass");
+    let next_reconcile = code[call_at..]
+        .find("reconcile(")
+        .map(|i| call_at + i)
+        .unwrap_or(code.len());
+    let window = &code[call_at..next_reconcile];
+
+    assert!(
+        window.contains("is_clean()"),
+        "the cron must inspect the cleanup summary — discarding it is what made \
+         four nights of aborted runs indistinguishable from four clean ones"
+    );
+    assert!(
+        window.contains("post_slack"),
+        "a failed cleanup must alert like the other nightly reconciles, not just log"
+    );
+}
+
+/// 6. The alert payload must stay free of raw backend error text.
+///
+/// `post_slack` does not redact, and a D1/KV error string can carry a bound
+/// value straight out of the isolate. `CleanupFailure` is a closed enum for that
+/// reason; a `String` variant would quietly hand the detail to an external
+/// webhook.
+#[test]
+fn cleanup_failures_carry_no_free_form_error_text() {
+    let code = strip_comments(&src("src/cleanup.rs"));
+
+    let start = code
+        .find("pub enum CleanupFailure")
+        .expect("CleanupFailure must exist");
+    let end = start
+        + code[start..]
+            .find("\n}")
+            .expect("CleanupFailure must be a closed enum");
+    let variants = &code[start..end];
+
+    for banned in ["error", "err", "message", "detail", "reason"] {
+        assert!(
+            !variants.to_lowercase().contains(banned),
+            "CleanupFailure carries a `{banned}` field — raw backend error text \
+             reaches Slack unredacted; keep the detail in tracing"
+        );
+    }
+}

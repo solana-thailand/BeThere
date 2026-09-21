@@ -72,6 +72,7 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
         Ok(idx) => idx,
         Err(e) => {
             tracing::error!(error = %e, "cleanup: failed to read event index, aborting");
+            summary.failures.push(CleanupFailure::EventIndexUnreadable);
             return summary;
         }
     };
@@ -168,18 +169,32 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
                             );
                         }
                     }
-                    Ok(coverage) => tracing::error!(
-                        event_id = %event_id,
-                        archived = coverage.archived,
-                        unarchived = coverage.unarchived,
-                        "D1 THB deposit archive does not cover every live deposit — \
-                         deposits NOT deleted, will retry tomorrow"
-                    ),
-                    Err(e) => tracing::error!(
-                        event_id = %event_id,
-                        error = %e,
-                        "D1 THB deposit archive failed — deposits NOT deleted, will retry tomorrow"
-                    ),
+                    Ok(coverage) => {
+                        tracing::error!(
+                            event_id = %event_id,
+                            archived = coverage.archived,
+                            unarchived = coverage.unarchived,
+                            "D1 THB deposit archive does not cover every live deposit — \
+                             deposits NOT deleted, will retry tomorrow"
+                        );
+                        summary
+                            .failures
+                            .push(CleanupFailure::DepositArchiveIncomplete {
+                                event_id: event_id.clone(),
+                                archived: coverage.archived,
+                                unarchived: coverage.unarchived,
+                            });
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            event_id = %event_id,
+                            error = %e,
+                            "D1 THB deposit archive failed — deposits NOT deleted, will retry tomorrow"
+                        );
+                        summary.failures.push(CleanupFailure::DepositArchiveFailed {
+                            event_id: event_id.clone(),
+                        });
+                    }
                 }
             }
         }
@@ -254,6 +269,7 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
         };
         if let Err(e) = save_event_index(kv, &new_index).await {
             tracing::error!(error = %e, "cleanup: failed to save updated event index");
+            summary.failures.push(CleanupFailure::EventIndexUnsaveable);
         }
     }
 
@@ -486,6 +502,53 @@ pub async fn cleanup_onchain_dedup_keys(kv: &KvStore) -> usize {
 // Summary
 // ---------------------------------------------------------------------------
 
+/// A cleanup phase that could not do its job.
+///
+/// Deliberately a closed enum and not a free-form string: these travel to Slack,
+/// and a raw D1/KV error can echo a bound value back out of the isolate. The
+/// detail stays in `tracing`; this is the alertable shape.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CleanupFailure {
+    /// The event index could not be read — the entire run aborted.
+    EventIndexUnreadable,
+    /// The pruned index could not be written back; removals retry tomorrow.
+    EventIndexUnsaveable,
+    /// The archive query failed for one event; its deposits were not deleted.
+    DepositArchiveFailed { event_id: String },
+    /// The archive does not carry every live deposit id, so the delete was
+    /// refused (`.issues/127`). Nothing was lost — but it will repeat nightly.
+    DepositArchiveIncomplete {
+        event_id: String,
+        archived: i64,
+        unarchived: i64,
+    },
+}
+
+impl std::fmt::Display for CleanupFailure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EventIndexUnreadable => {
+                write!(f, "event index unreadable — the whole run aborted")
+            }
+            Self::EventIndexUnsaveable => {
+                write!(f, "pruned event index could not be saved")
+            }
+            Self::DepositArchiveFailed { event_id } => {
+                write!(f, "deposit archive query failed for event {event_id}")
+            }
+            Self::DepositArchiveIncomplete {
+                event_id,
+                archived,
+                unarchived,
+            } => write!(
+                f,
+                "deposit archive incomplete for event {event_id} — {archived} archived, \
+                 {unarchived} live deposit(s) unmatched, delete refused"
+            ),
+        }
+    }
+}
+
 /// Summary of a single cleanup pass — returned for logging/testing.
 #[derive(Debug, Default)]
 pub struct CleanupSummary {
@@ -505,6 +568,20 @@ pub struct CleanupSummary {
     pub onchain_events_deleted: usize,
     pub onchain_dedup_deleted: usize,
     pub jwt_blacklist_deleted: usize,
+    /// Phases that failed this run. Empty on a healthy pass.
+    ///
+    /// Exists because every one of these sites used to write only to `tracing`:
+    /// a malformed index aborted staging's cleanup every night from 2026-09-19
+    /// and nobody knew until someone went looking. The daily cron alerts on a
+    /// non-empty list, matching the credit-ledger and NFT-journal reconciles.
+    pub failures: Vec<CleanupFailure>,
+}
+
+impl CleanupSummary {
+    /// Every phase completed. Mirrors the other nightly reconcile reports.
+    pub fn is_clean(&self) -> bool {
+        self.failures.is_empty()
+    }
 }
 
 // ---------------------------------------------------------------------------
