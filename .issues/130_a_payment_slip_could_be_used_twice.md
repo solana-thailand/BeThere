@@ -109,7 +109,9 @@ clause every unhashed row would have matched every other unhashed row. Unit
 tests cannot see that — it is a property of SQLite, not of the Rust.
 
 ## 6. Remaining
-- [ ] Deploy to staging, then production, with the migration.
+- [x] **Staging: deployed 2026-09-22 ~05:15**, migrations applied, schema read
+      back, endpoint probed (401 / 404 / 200 A-B). `.plans/027` §F.
+- [ ] Production — deliberately left for a waking human; `.plans/027` §F.6 says why.
 - [ ] After one real event in `report` mode with no false positives, decide
       `reject`.
 - [ ] `.issues/129` Gap 1 — the comp action, so a suspected slip has an outcome

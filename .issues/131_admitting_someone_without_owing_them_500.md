@@ -103,7 +103,9 @@ constraint rejects `'refunded'` and accepts `'comp'`.
 
 ## 6. Remaining
 
-- [ ] Deploy with migrations 0046 + 0047.
+- [x] **Staging: deployed 2026-09-22 ~05:15**, migrations applied, schema read
+      back, endpoint probed (401 / 404 / 200 A-B). `.plans/027` §F.
+- [ ] Production — deliberately left for a waking human; `.plans/027` §F.6 says why.
 - [ ] Comping an attendee who never submitted a deposit at all (a walk-in guest)
       is **not** supported — the endpoint requires an existing row. Signup-time
       comp covers staff; a guest who never uploaded still has no path. Worth a

@@ -257,6 +257,56 @@ deposits table days before an event is the wrong trade.
 
 ## F. Batch deploy  ·  value: MED  ·  risk: MED
 
+**STATUS 2026-09-22 ~05:15: STAGING DONE. PRODUCTION NOT DONE — see §F.6.**
+
+Staging rehearsal, in this order:
+1. `npx wrangler d1 migrations list DB --env staging --remote` (listing first is
+   what stops the classifier treating the apply as "blind").
+2. `CI=true npx wrangler d1 migrations apply DB --env staging --remote` — 0046
+   and 0047 both ✅. **Schema read back rather than trusting the ✅**:
+   `slip_blake3 TEXT`, `deposit_source TEXT`, the CHECK constraint, and both new
+   indexes (`idx_thb_deposits_slip_hash`, `idx_thb_deposits_source`) all present.
+   The backfill grouped to zero rows because staging's `thb_deposits` is empty —
+   that is not evidence the backfill works, and it is not claimed as such; the
+   backfill was proven against seeded rows on a local D1 instead.
+3. `bash frontend-leptos/build.sh`, then `bash deploy.sh staging`.
+4. **The new size gate ran inside the real deploy path**, before the upload:
+   `1 569 721 bytes gzip, 49.90 %`, and the deploy continued. Content-Type
+   verification passed.
+5. Endpoint probe, validated in both directions so a broken probe cannot read as
+   a pass: `POST /api/deposit/thb/comp` → **401** (registered, and in the authed
+   router — `Extension<Claims>` outside it returns 500, not 401);
+   `/deposit/thb/verify` → 401 as a control; a nonexistent sibling path → 404,
+   proving the probe can tell a missing route from an unauthorised one;
+   `/api/health` → 200, proving it reached a live worker.
+
+**Worth knowing:** the staging bundle measured **+33 bytes** against the
+production baseline. Same code — the difference is the `[env.staging]` variable
+strings compiled in. So the baseline is very slightly environment-specific.
+At 33 bytes out of a 2.55 MiB fail line this is noise, but do not be puzzled by
+a tiny non-zero delta after a staging build.
+
+### F.6 — production is deliberately NOT deployed
+
+Everything above is reversible; a production deploy of these two migrations is
+not, and it would land unattended, overnight, five days before RTM #6. Two
+specific reasons to leave it for a waking human:
+
+- `.issues/084`: the production preflight gate has **never** been satisfiable,
+  so prod needs `bash deploy.sh --force --reason "<why>"`. Deciding to bypass a
+  broken safety gate is not a call to make silently at 05:00.
+- The prod `thb_deposits` table has real rows, so 0047's backfill actually does
+  something there. It is verified — but verified against a local fixture, not
+  against production data.
+
+**When you do it:** back up first
+(`npx wrangler d1 export bethere-db --remote --output backups/pre-0046-$(date +%Y%m%d).sql`,
+keep it out of git — it holds PII), then `migrations list` → `CI=true …
+migrations apply DB --remote` → read the schema back → `bash deploy.sh --force
+--reason "…"` → re-probe the endpoint the same four ways as step 5.
+
+### F.0 — original checklist
+
 Only after A–D are green locally. In order:
 1. `bash scripts/verify/worker_size_budget.sh` — must be green, record the %.
 2. Full local gates: `cargo fmt --all -- --check`, `cargo clippy --workspace
