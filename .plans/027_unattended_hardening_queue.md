@@ -1,6 +1,23 @@
 # 027 — Unattended hardening queue (2026-09-22 → )
 
 **Owner is asleep. This plan is written to be executed without asking anything.**
+
+> ### State at 2026-09-22 06:20 — read this first
+>
+> **Done and committed to `develop` (7 commits, `a658ded`..`a5fa48b`), nothing in production:**
+> **A** size budget gate · **C** duplicate-slip detection · **D** the comp action ·
+> **E** `.issues/127` prepared (0048 written, deferred, prod measured) ·
+> **F** staging half (deployed, migrations applied, endpoint probed).
+>
+> **Green:** clippy `-D warnings` exit 0 · 759 workspace + 205 frontend tests ·
+> shellcheck · all Python suites · invariants self-test · fmt.
+> **Bundle: 1,569,688 bytes gzip = 49.89 % of the 3 MiB free-plan ceiling**
+> (+12,501 bytes for everything tonight). Headroom ~1.5 MiB.
+>
+> **Next, in order:** **B** (notification staleness — still unstarted) then
+> **G** (slip QR, measure size on a branch first). **F production is
+> deliberately not done** — see §F.6 for why and exactly how to do it.
+> §9 lists what must not be started at all.
 Every item below is *ungated*: no owner decision, no external account, no
 irreversible action. Anything needing the owner stays in `.issues/129` §7 and is
 listed in §9 here as explicitly NOT to be started.
