@@ -89,13 +89,26 @@ wiring (both writers record; both hash before R2; the SQL keeps all four
 narrowing clauses; attendee rejection is mode-gated; admin never rejects; the
 migration stays additive and non-UNIQUE).
 
-Runtime: see §6 — pending.
+Runtime, against real SQLite (`wrangler d1 --local`, fresh store, all 46
+migrations applied in sequence — 0046 applies clean):
+
+| # | case | result |
+|---|---|---|
+| 1 | bob uploads an image alice already used | → `alice` (flagged) |
+| 2 | ivy, sole holder of a hash, re-uploads it | → no match |
+| 3 | carol's unique image | → no match |
+| 4 | **`''` hash vs another `''` hash** | → no match |
+| 5 | same image, different event | → no match |
+| 6 | `NULL` hash vs `NULL` hash (pre-0046 rows) | → no match |
+| 7 | admin grouping over the whole event | → `HASH_A` × 2 distinct attendees (alice's two rows counted once) |
+| 8 | `EXPLAIN QUERY PLAN` | → `SEARCH thb_deposits USING INDEX idx_thb_deposits_slip_hash` |
+
+Cases 4 and 6 are the ones worth having run: this table stores `''` rather than
+SQL NULL for absent text, `'' = ''` is true in SQL, and without the `<> ''`
+clause every unhashed row would have matched every other unhashed row. Unit
+tests cannot see that — it is a property of SQLite, not of the Rust.
 
 ## 6. Remaining
-
-- [ ] Run the four-case behavioural check against `wrangler dev --local`
-      (upload as A → accept; same bytes as B → flagged; same bytes as A again →
-      accept; one-pixel-different as B → accept).
 - [ ] Deploy to staging, then production, with the migration.
 - [ ] After one real event in `report` mode with no false positives, decide
       `reject`.

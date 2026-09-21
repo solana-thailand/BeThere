@@ -9,6 +9,12 @@ listed in §9 here as explicitly NOT to be started.
 
 ## 0. Rules of engagement (read before touching anything)
 
+**Re-ranked 2026-09-22, after writing this:** C and D moved ahead of B. B's
+damage is held back by four independent blockers (`NOTIFICATIONS_ENABLED=0`, no
+caller, empty `NOTIFICATION_FROM`, no `EMAIL` binding), so the code it needs is
+dead on arrival; C and D are live on the deposit path and RTM #6 is on
+2026-09-27. Order actually executed: **A → C → D → B → E → F**.
+
 1. **Additive only.** No behaviour an attendee or organizer sees today may
    change meaning. New columns get defaults; new gates start in report-only
    mode; new env flags default to today's behaviour.
@@ -159,6 +165,15 @@ not hashing something constant).
 
 **Done when** the four cases above pass against `wrangler dev --local`, and the
 admin path is covered by the same test.
+
+**STATUS 2026-09-22: DONE (commit `f01cd24`), not deployed.** Shipped in
+`report` mode. Eight runtime cases verified against real SQLite, including the
+two that only SQLite can show (`''` vs `''`, `NULL` vs `NULL`) and that the
+partial index is actually used. Bundle cost measured by item A: **+7,883 bytes
+gzip, 49.50 % → 49.75 %**. Written up in `.issues/130`. The admin UI shows the
+collision above the Approve button. Deviation from the plan as written: the
+lookup is a targeted SQL query on the new index rather than a Rust scan over
+`list_thb_deposits`, because that read can pull multi-MB data URLs for old rows.
 
 ---
 
