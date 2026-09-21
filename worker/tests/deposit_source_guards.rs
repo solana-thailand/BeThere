@@ -204,3 +204,45 @@ fn the_comp_route_is_in_the_authed_router() {
          instead of 401ing, which reads as a handler bug"
     );
 }
+
+/// A deferred migration must live OUTSIDE `migrations_dir`, because
+/// `wrangler d1 migrations apply` applies every `.sql` it finds there and never
+/// reads the file. `0048` carried a `-- DO NOT APPLY BEFORE 2026-09-28` header
+/// while sitting in `migrations/` for about twenty minutes on 2026-09-22, and
+/// wrangler cheerfully applied it — a small re-enactment of the bug
+/// `.issues/127` is about: a rule written where nothing enforces it.
+///
+/// The directory is the enforcement. This test is what keeps it that way.
+#[test]
+fn deferred_migrations_are_not_in_the_applied_directory() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let deferred: Vec<String> = fs::read_dir(&dir)
+        .expect("migrations dir must exist")
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension().is_some_and(|x| x == "sql"))
+        .filter(|e| {
+            fs::read_to_string(e.path())
+                .map(|body| body.to_uppercase().contains("DO NOT APPLY"))
+                .unwrap_or(false)
+        })
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+
+    assert!(
+        deferred.is_empty(),
+        "these migrations say DO NOT APPLY but sit in the directory wrangler applies from, \
+         where nothing reads that header: {deferred:?}. Move them to \
+         worker/migrations-pending/ — the directory is the enforcement, the comment is only \
+         the explanation."
+    );
+
+    // ...and the deferral directory must actually be holding something, or this
+    // guard is passing because the convention was quietly abandoned.
+    let pending = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations-pending");
+    assert!(
+        pending.join("README.md").exists(),
+        "worker/migrations-pending/README.md is missing — without it the convention is \
+         invisible to the next person, who will put the next deferred migration back in \
+         migrations/ and have it applied"
+    );
+}

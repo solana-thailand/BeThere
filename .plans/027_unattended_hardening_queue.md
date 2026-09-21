@@ -247,8 +247,10 @@ deposits table days before an event is the wrong trade.
   *would* collide, so the dedupe decision is made with the real list in hand.
 - Run the report against prod (read-only) and paste the result into
   `.issues/127`.
-- Mark the migration file `-- DO NOT APPLY BEFORE 2026-09-28` at the top and
-  leave it unreferenced by any runner.
+- Keep the migration OUT of `worker/migrations/`. A `-- DO NOT APPLY` header
+  there enforces nothing: `wrangler d1 migrations apply` applies every `.sql` in
+  `migrations_dir` and never reads the file. Deferred migrations live in
+  `worker/migrations-pending/`, which wrangler does not scan.
 
 **Done when** the migration and the report exist, the report has been run, and
 `.issues/127` names the exact rows.

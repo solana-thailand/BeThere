@@ -93,9 +93,16 @@ which is the property that actually protects the money.
 
 ## 2026-09-22 — the migration is written, verified, and deliberately unapplied
 
-Step 1 above now exists as `worker/migrations/0048_thb_deposits_unique.sql`,
-with `DO NOT APPLY BEFORE 2026-09-28` at the top. It is **not** referenced by
-any runner; applying it is a deliberate act after RTM #6.
+Step 1 above now exists as `worker/migrations-pending/0048_thb_deposits_unique.sql`.
+
+It lives **outside** `migrations_dir` deliberately. `wrangler d1 migrations
+apply` applies every `.sql` in `worker/migrations` and never reads the file, so
+a `-- DO NOT APPLY` header there enforces nothing — 0048 sat in `migrations/`
+for about twenty minutes and wrangler applied it, which is a small re-enactment
+of this very issue: a rule written where nothing enforces it. The directory is
+the enforcement now, guarded by
+`deferred_migrations_are_not_in_the_applied_directory`. To apply it, `git mv` it
+back — see `worker/migrations-pending/README.md`.
 
 **Production, re-measured read-only that day:** 54 rows, 54 distinct
 `(event_id, attendee_id)` pairs, 3 events. **Nothing to dedupe** — the
