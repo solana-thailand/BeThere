@@ -217,6 +217,19 @@ already do via `is_non_cash()` — assert it, do not assume).
 **Done when** an ordinary attendee can be admitted from the admin screen with
 no refund obligation created, and no existing row changed classification.
 
+**STATUS 2026-09-22: DONE, not deployed.** Migration 0047, `deposit_source` on
+`ThbDeposit` with `source()` preferring it, `POST /api/deposit/thb/comp`, and an
+"Admit, no refund owed" button with a two-step confirm. The QR issue was
+extracted to `admit::issue_ticket_qr_if_absent` — it had been written out twice
+inside `slip_verify.rs`, once per `worker_ctx` branch — and comp and approval
+now call the same helper. Migration-day invariant verified against real SQLite
+across all 7 classifier branches including the credit-and-฿0 ordering trap.
+Bundle **+4,618 bytes gzip → 49.89 %**. Written up in `.issues/131`.
+
+Deviation: comping an attendee with **no** deposit row (a walk-in guest) is not
+supported — the endpoint reclassifies an existing deposit. Signup-time comp
+covers staff. Noted as follow-up in `.issues/131` §6 rather than bolted on.
+
 ---
 
 ## E. `.issues/127` — the UNIQUE that cost ฿700  ·  value: MED  ·  risk: MED  ·  size: 0

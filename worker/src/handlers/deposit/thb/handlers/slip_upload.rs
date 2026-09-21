@@ -349,6 +349,10 @@ pub async fn upload_thb_slip_handler(
         account_name: body.account_name.clone(),
         refund_proof_url: None,
         slip_blake3: fingerprint,
+        // Left unrecorded at upload time: nobody has decided anything about this
+        // money yet. `source()` falls back to the sentinels, which classify a
+        // real slip as Cash — exactly as before 0047.
+        deposit_source: None,
     };
 
     event_store::save_thb_deposit(kv, &thb_deposit, d1)

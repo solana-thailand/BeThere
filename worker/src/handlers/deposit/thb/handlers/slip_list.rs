@@ -298,6 +298,7 @@ mod duplicate_slip_tests {
             account_name: None,
             refund_proof_url: None,
             slip_blake3: hash.map(str::to_string),
+            deposit_source: None,
         }
     }
 

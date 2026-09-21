@@ -118,6 +118,22 @@ pub struct VerifySlipRequest {
     pub approved: bool,
 }
 
+/// Request body for `POST /api/deposit/thb/comp` (admin).
+///
+/// Admits the attendee — same ticket QR an approval issues — and records the
+/// deposit as a comp, so no refund is owed. The third option next to
+/// Approve/Reject: before it existed, approving was the only route to a ticket
+/// AND the promise to refund ฿500 (`.issues/129` Gap 1).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CompDepositRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    /// Organizer's note. Stored only in the audit entry; never shown to the
+    /// attendee, who is told nothing beyond receiving their ticket.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 /// Request body for `POST /api/deposit/thb/admin-upload`.
 ///
 /// Mirrors `ThbSlipUploadRequest` plus an `auto_verify` flag (default `true` —
@@ -390,6 +406,15 @@ pub async fn admin_upload_thb_slip(
 /// POST /api/deposit/thb/verify (admin)
 pub async fn verify_thb_slip(body: &VerifySlipRequest) -> Result<serde_json::Value, ApiError> {
     api_post_json("/deposit/thb/verify", body).await
+}
+
+/// POST /api/deposit/thb/comp (admin)
+///
+/// Admit without owing a refund. Refused server-side for a deposit that is
+/// already refunded, already held as rolling credit, or covered by credit
+/// rather than cash — each of those would make an existing money fact untrue.
+pub async fn comp_thb_deposit(body: &CompDepositRequest) -> Result<serde_json::Value, ApiError> {
+    api_post_json("/deposit/thb/comp", body).await
 }
 
 /// GET /api/deposit/thb/pending?event_id=xxx

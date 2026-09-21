@@ -129,37 +129,6 @@ pub async fn verify_thb_slip_handler(
                 event.sheet_name.clone(),
                 Some(kv.clone()),
             ));
-
-            // Auto-generate QR if attendee doesn't have one (approval only).
-            // The QR URL is written to BOTH D1 (inline, source of truth for the
-            // public ticket page, which reads D1-first) and the Google Sheet
-            // (detached, legacy mirror). Without the D1 write the ticket page
-            // would never see the QR even after verification.
-            if body.approved && attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
-                let server_url = &state.config.server.url;
-                let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
-
-                // D1 write — inline so the ticket page sees the QR immediately.
-                if let Some(ref d1) = state.d1
-                    && let Err(e) =
-                        crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url).await
-                {
-                    tracing::warn!(
-                        attendee_id = %attendee.api_id,
-                        error = %e,
-                        "D1 set_qr_url failed on verify (non-fatal)"
-                    );
-                }
-
-                wctx.wait_until(crate::sheets::bg_sync::update_qr_urls(
-                    state.clone(),
-                    vec![(attendee.row_index, qr_url)],
-                    mapping,
-                    event.sheet_id.clone(),
-                    event.sheet_name.clone(),
-                    Some(kv.clone()),
-                ));
-            }
         } else {
             // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
             let ctx = crate::sheets::write::SheetContext {
@@ -181,36 +150,17 @@ pub async fn verify_thb_slip_handler(
             {
                 tracing::warn!(error = %e, "failed to write deposit verification to sheet (non-fatal)");
             }
+        }
 
-            if body.approved && attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
-                let server_url = &state.config.server.url;
-                let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
-
-                // D1 write — inline so the ticket page sees the QR immediately.
-                if let Some(ref d1) = state.d1
-                    && let Err(e) =
-                        crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url).await
-                {
-                    tracing::warn!(
-                        attendee_id = %attendee.api_id,
-                        error = %e,
-                        "D1 set_qr_url failed on verify (non-fatal)"
-                    );
-                }
-
-                if let Err(e) = crate::sheets::write::update_qr_urls(
-                    &[(attendee.row_index, qr_url)],
-                    &mapping,
-                    &state,
-                    &event.sheet_id,
-                    &event.sheet_name,
-                    Some(kv),
-                )
-                .await
-                {
-                    tracing::warn!(error = %e, "failed to auto-generate QR for verified attendee (non-fatal)");
-                }
-            }
+        // Approval is what admits the attendee: the ticket QR is issued here and
+        // nowhere else on this path. One call for both branches above — the
+        // helper picks `wait_until` or a blocking write itself, which is why the
+        // QR block is no longer written out twice (see `admit.rs`).
+        //
+        // The comp action calls the SAME helper, so an attendee let in without a
+        // refund being owed gets an identical ticket (`.issues/129` Gap 1).
+        if body.approved {
+            super::admit::issue_ticket_qr_if_absent(&state, kv, &event, &attendee, &mapping).await;
         }
     }
 

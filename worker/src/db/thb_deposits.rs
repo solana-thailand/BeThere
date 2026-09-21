@@ -5,7 +5,7 @@
 use worker::D1Database;
 use worker::d1::D1Type;
 
-use event_checkin_domain::models::deposit::ThbDeposit;
+use event_checkin_domain::models::deposit::{DepositSource, ThbDeposit};
 
 // ---------------------------------------------------------------------------
 // Read
@@ -140,8 +140,8 @@ pub async fn list_thb_deposits(db: &D1Database, event_id: &str) -> Result<Vec<Th
 /// `raw_sql` convention does not apply here.
 pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
     let stmt = db.prepare(
-        "INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, account_name, refund_proof_url, held_as_credit, held_as_credit_at, slip_blake3) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+        "INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, account_name, refund_proof_url, held_as_credit, held_as_credit_at, slip_blake3, deposit_source) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
     );
     stmt.bind_refs(&[
         D1Type::Text(&deposit.attendee_id),
@@ -162,6 +162,7 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         D1Type::Integer(deposit.held_as_credit as i32),
         D1Type::Text(deposit.held_as_credit_at.as_deref().unwrap_or("")),
         D1Type::Text(deposit.slip_blake3.as_deref().unwrap_or("")),
+        D1Type::Text(deposit_source_str(deposit.deposit_source)),
     ])
     .map_err(|e| format!("D1 insert_thb_deposit bind: {e:?}"))?
     .run()
@@ -190,8 +191,8 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
 /// serialises the whole struct, which is correct — there is no CAS there.
 pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
     let stmt = db.prepare(
-        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, attendee_name = ?6, bank_account = ?7, bank_name = ?8, account_name = ?9, slip_blake3 = ?10 \
-         WHERE event_id = ?11 AND attendee_id = ?12",
+        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, attendee_name = ?6, bank_account = ?7, bank_name = ?8, account_name = ?9, slip_blake3 = ?10, deposit_source = ?11 \
+         WHERE event_id = ?12 AND attendee_id = ?13",
     );
     stmt.bind_refs(&[
         D1Type::Integer(deposit.amount_thb as i32),
@@ -207,6 +208,11 @@ pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         // without the other would leave the previous image's fingerprint
         // attached to the current image.
         D1Type::Text(deposit.slip_blake3.as_deref().unwrap_or("")),
+        // The comp decision is a blanket-update column on purpose: it is set by
+        // the admin comp action through the same read-modify-write every other
+        // non-settlement column uses. The five settlement columns stay out of
+        // this SET list for the reason documented above.
+        D1Type::Text(deposit_source_str(deposit.deposit_source)),
         D1Type::Text(&deposit.event_id),
         D1Type::Text(&deposit.attendee_id),
     ])
@@ -498,5 +504,26 @@ fn row_to_thb_deposit(row: serde_json::Value) -> Result<ThbDeposit, String> {
         // maps both SQL NULL and '' to None. That is the intended reading:
         // "not known", never "not a duplicate".
         slip_blake3: get_opt_str("slip_blake3"),
+        // NULL / '' means "never recorded", and `source()` then falls back to
+        // the legacy sentinels. An unrecognised string is treated the same way
+        // rather than panicking: the CHECK constraint already makes one
+        // impossible, and a read path is the wrong place to discover it.
+        deposit_source: get_opt_str("deposit_source").and_then(|s| match s.as_str() {
+            "cash" => Some(DepositSource::Cash),
+            "credit" => Some(DepositSource::Credit),
+            "comp" => Some(DepositSource::Comp),
+            _ => None,
+        }),
     })
+}
+
+/// The wire/DB spelling of a [`DepositSource`] — the same three strings the
+/// `deposit_source` CHECK constraint allows.
+fn deposit_source_str(source: Option<DepositSource>) -> &'static str {
+    match source {
+        Some(DepositSource::Cash) => "cash",
+        Some(DepositSource::Credit) => "credit",
+        Some(DepositSource::Comp) => "comp",
+        None => "",
+    }
 }

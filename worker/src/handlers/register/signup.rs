@@ -839,6 +839,11 @@ async fn record_staff_comp(
         // honest value: this row can never be anyone's duplicate, and must
         // never be anyone's match either.
         slip_blake3: None,
+        // A staff comp is the one case that HAS always been decided at creation.
+        // Recording it outright means this row no longer depends on anyone
+        // recognising the `STAFF_COMP_WAIVED` / `SYSTEM_STAFF_WAIVE` sentinels —
+        // though `source()` still honours them, for the rows written before 0047.
+        deposit_source: Some(event_checkin_domain::models::deposit::DepositSource::Comp),
     };
     if let Some(kv) = state.events_kv.as_ref()
         && let Err(e) = crate::event_store::save_thb_deposit(kv, &comp, state.d1.as_deref()).await

@@ -317,6 +317,8 @@ pub async fn admin_upload_thb_slip_handler(
         account_name: body.account_name.clone(),
         refund_proof_url: None,
         slip_blake3: fingerprint,
+        // See slip_upload.rs: undecided at upload time.
+        deposit_source: None,
     };
 
     event_store::save_thb_deposit(kv, &thb_deposit, d1)

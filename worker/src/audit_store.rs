@@ -101,6 +101,15 @@ pub enum AuditAction {
     /// LINE/email). Skips the VULN-012 email-match gate (admin-authed +
     /// audited instead). Sibling of `DepositSubmitted` / `DepositVerified`.
     SlipRecordedByAdmin,
+    /// Admin admitted an attendee WITHOUT accepting their payment as cash: the
+    /// deposit is reclassified `comp`, the ticket QR is issued, and no refund
+    /// is owed (`.issues/129` Gap 1).
+    ///
+    /// Separately auditable from `DepositVerified` on purpose. It is the one
+    /// action that hands somebody a ticket while writing off money they claim
+    /// to have sent, so "who decided this, and when" must be answerable without
+    /// inferring it from a deposit's current state.
+    DepositCompedByAdmin,
 
     // Privacy (PDPA)
     DataDeletionRequested,
