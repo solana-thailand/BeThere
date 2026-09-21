@@ -94,6 +94,47 @@ jobs:
         # `deploy.sh` and fail mid-build. --locked mirrors the deploy toolchain.
         run: cargo build -p event-checkin-worker --target wasm32-unknown-unknown --locked --release
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: worker/pnpm-lock.yaml
+
+      - name: Install worker node deps
+        # Needed for `wrangler deploy --dry-run`, which is how the size gate
+        # gets a bundle. The [alias] block in wrangler.toml points esbuild at
+        # exact paths under node_modules, so --frozen-lockfile is required for
+        # those to resolve.
+        working-directory: worker
+        run: pnpm install --frozen-lockfile
+
+      - name: Install wasm-bindgen CLI
+        # Pinned to the crate version; wasm-bindgen's CLI and crate halves must
+        # match exactly or the bindgen step fails with a schema error.
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.118
+
+      - name: Worker upload-size budget
+        # Cloudflare enforces the Worker limit on the COMPRESSED bundle, and
+        # this account is on the free plan: 3 MiB after gzip. Until 2026-09-22
+        # nothing measured it — this job built the wasm and discarded the
+        # number, and deploy.sh had no check at all, so "does it still fit?"
+        # was answered by guessing. Measured 2026-09-22: 1,557,187 bytes gzip,
+        # 49.5% of the ceiling.
+        #
+        # The gate measures wrangler's own dry-run bundle (shim.js + wasm) —
+        # exactly what gets uploaded — and fails at 85% of the ceiling so the
+        # wall is hit in a PR and not during a deploy. Thresholds live in
+        # worker/.size-budget.
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: bash scripts/verify/worker_size_budget.sh
+
   frontend-clippy:
     name: frontend wasm32 clippy + native tests
     runs-on: ubuntu-latest

@@ -142,6 +142,46 @@ check_wasm_bindgen_version() {
   return 0
 }
 
+# ── Worker upload-size budget gate ──────────────────────────────────────────
+# Cloudflare enforces the Worker size limit on the COMPRESSED bundle, and this
+# account is on the free plan: 3 MiB after gzip. Nothing measured that until
+# 2026-09-22 — the first sign of a problem would have been a rejected deploy.
+#
+# The bundle only exists after wrangler runs the [build] command, so gating
+# "before upload" means bundling twice: once with --dry-run to measure, then
+# for real. The second pass is cheap (cargo is warm; only wasm-bindgen and
+# esbuild re-run), and the dry-run doubles as a bundling smoke test — a broken
+# bundle now fails here instead of halfway through an upload.
+#
+# Measured on the dry-run outdir, which is exactly what gets uploaded, rather
+# than on the raw cargo artifact.
+run_size_budget_gate() {
+  local gate="../scripts/verify/worker_size_budget.sh"
+  local outdir rc
+
+  if [ ! -f "$gate" ]; then
+    echo "❌ Size budget gate not found: $gate" >&2
+    echo "   The gate is required — a deploy that cannot measure its own size" >&2
+    echo "   is the situation the gate exists to prevent." >&2
+    return 1
+  fi
+
+  outdir=$(mktemp -d)
+  echo "📏 Measuring worker bundle size (dry-run bundle)..."
+  if ! CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" --dry-run --outdir "$outdir" >/dev/null 2>&1; then
+    echo "❌ Dry-run bundling failed — deploy aborted before upload." >&2
+    echo "   Reproduce with:" >&2
+    echo "     cd worker && npx wrangler deploy ${WRANGLER_ENV_ARGS[*]} --dry-run --outdir /tmp/x" >&2
+    rm -rf "$outdir"
+    return 1
+  fi
+
+  bash "$gate" --dir "$outdir"
+  rc=$?
+  rm -rf "$outdir"
+  return $rc
+}
+
 # ── Post-deploy content-type verification ───────────────────────────────────
 # Find a Python interpreter able to run the PUT-fallback generators.
 # Sets PYTHON_BIN. Requires 3.11+ (tomllib) and the blake3 package.
@@ -309,6 +349,14 @@ else
   if [ -f "../frontend-leptos/_headers" ] && [ -d "${DIST_DIR}" ]; then
     cp -f "../frontend-leptos/_headers" "${DIST_DIR}/_headers"
     echo "📋 Copied _headers to ${DIST_DIR}/_headers for edge asset cache rules."
+  fi
+
+  # Size budget BEFORE upload — a bundle over the free-plan ceiling must never
+  # leave this machine.
+  if ! run_size_budget_gate; then
+    echo "❌ Worker bundle failed the size budget — deploy aborted (nothing uploaded)." >&2
+    restore_pnp
+    exit 1
   fi
 
   # ── Step 1: Try standard wrangler deploy ──
