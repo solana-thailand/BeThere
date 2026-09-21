@@ -156,6 +156,47 @@ pub async fn upload_thb_slip_handler(
     // Validate slip URL for safety (MIME type, size, no SVG/XSS)
     validate_slip_url(&body.slip_url)?;
 
+    // Fingerprint BEFORE the R2 upload: afterwards `slip_url` is a storage path
+    // and the image bytes are gone from this request. `None` for a non-upload
+    // (an external https:// slip) and means "not known", never "not a duplicate".
+    let fingerprint = super::slip_fingerprint::slip_fingerprint(&body.slip_url);
+    let duplicate_of = match (&fingerprint, d1) {
+        (Some(hash), Some(db)) => crate::db::thb_deposits::find_slip_hash_collision(
+            db,
+            &event.id,
+            hash,
+            &body.attendee_id,
+        )
+        .await
+        .map_err(AppError::Internal)?,
+        _ => None,
+    };
+
+    if let Some(other) = &duplicate_of {
+        // The identity of the other attendee is deliberately kept out of the
+        // response and reduced to a fingerprint in the log: "your slip matches
+        // someone else's" must not become a way to enumerate who paid.
+        tracing::warn!(
+            attendee_id = %body.attendee_id,
+            event_id = %event.id,
+            other_attendee_id = %state.log_fingerprint(&other.attendee_id),
+            mode = %state.thb_slip_duplicate_mode,
+            "THB slip is byte-identical to another attendee's slip"
+        );
+    }
+
+    if duplicate_of.is_some()
+        && super::slip_fingerprint::DuplicateMode::parse(Some(&state.thb_slip_duplicate_mode))
+            == super::slip_fingerprint::DuplicateMode::Reject
+    {
+        return Err(AppError::Validation(
+            "this payment slip has already been submitted for this event. If you believe this \
+             is a mistake, contact the organizer."
+                .to_string(),
+        )
+        .into());
+    }
+
     // Upload data URL to R2 if bucket is available (reduces KV storage by ~6x)
     let slip_url = super::maybe_upload_to_r2(
         &state,
@@ -307,6 +348,7 @@ pub async fn upload_thb_slip_handler(
         bank_name: body.bank_name.clone(),
         account_name: body.account_name.clone(),
         refund_proof_url: None,
+        slip_blake3: fingerprint,
     };
 
     event_store::save_thb_deposit(kv, &thb_deposit, d1)

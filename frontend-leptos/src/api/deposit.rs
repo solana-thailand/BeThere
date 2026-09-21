@@ -183,12 +183,23 @@ pub struct ThbDepositInfo {
     pub account_name: Option<String>,
     #[serde(default)]
     pub refund_proof_url: Option<String>,
+    /// BLAKE3 of the uploaded slip image's bytes. `None` for every deposit
+    /// recorded before 2026-09-22 and for slips stored as an external URL.
+    /// Matched against `PendingSlipResponse::duplicate_slip_hashes` to mark a
+    /// row whose image another attendee also submitted.
+    #[serde(default)]
+    pub slip_blake3: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct PendingSlipResponse {
     #[serde(default)]
     pub slips: Vec<ThbDepositInfo>,
+    /// Slip fingerprints carried by more than one attendee in this event.
+    /// Computed server-side over every deposit, including already-approved
+    /// ones, so a new slip matching an approved deposit is still flagged.
+    #[serde(default)]
+    pub duplicate_slip_hashes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]

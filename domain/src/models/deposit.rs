@@ -155,6 +155,26 @@ pub struct ThbDeposit {
     /// R2 URL of the refund transfer receipt (uploaded by admin when marking refund).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub refund_proof_url: Option<String>,
+    /// BLAKE3 of the *decoded image bytes* of the uploaded slip, lowercase hex.
+    ///
+    /// Anyone can upload any image to the deposit page: nothing about a slip is
+    /// checked, so the organizer catches re-used slips by recognising the
+    /// person. This is the cheapest thing that makes the system remember
+    /// instead — two attendees who upload byte-identical images are now
+    /// detectable, and `.issues/129` can build the bank-reference check on top
+    /// rather than starting from nothing.
+    ///
+    /// `None` for every row uploaded before 2026-09-22 and for any slip stored
+    /// as an external URL rather than an upload. A missing hash means *not
+    /// known*, never *not a duplicate* — a comparison against `None` must never
+    /// be read as a clean result.
+    ///
+    /// Hashed from the decoded bytes, not the data URL text: base64 padding,
+    /// MIME-type casing and the `;base64` marker all vary between clients for
+    /// the same image, so hashing the string would miss the duplicate it exists
+    /// to catch.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub slip_blake3: Option<String>,
 }
 
 /// The economic source of a THB deposit — the single classification every
@@ -319,6 +339,19 @@ pub struct VerifySlipRequest {
 pub struct PendingSlipResponse {
     #[serde(default)]
     pub slips: Vec<ThbDeposit>,
+    /// Slip fingerprints that appear on more than one attendee **in this
+    /// event** — i.e. the same image, submitted by two different people.
+    ///
+    /// Computed over every deposit for the event, not just the pending ones, so
+    /// a slip that collides with an already-approved deposit is still flagged.
+    /// The admin screen matches a row's `slip_blake3` against this list;
+    /// carrying the set once rather than a boolean per row keeps `ThbDeposit`
+    /// a record of what was stored rather than a view model.
+    ///
+    /// Empty is the normal case and also the honest answer when no slip has a
+    /// hash yet (everything uploaded before 2026-09-22) — absence of evidence.
+    #[serde(default)]
+    pub duplicate_slip_hashes: Vec<String>,
 }
 
 /// Response for GET /api/refund/queue — THB refunds pending.

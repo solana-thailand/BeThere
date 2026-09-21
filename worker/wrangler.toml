@@ -67,6 +67,18 @@ SHIM
 # Set to 1 only after migration 0030 and verified sender setup (docs/notifications.md).
 NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""
+# What the THB slip upload handlers do when an uploaded payment slip is
+# byte-identical to another attendee's, within the same event (`.issues/129`).
+#   off    — hash and store, do not compare. Escape hatch during an event.
+#   report — record the collision and let the upload through. DEFAULT.
+#   reject — refuse the upload (attendee path only; an organizer uploading on
+#            someone's behalf is never blocked).
+# Starts at `report` on purpose: this is the first pass of a check that can
+# turn a paying attendee away at the door, so it earns `reject` by running
+# over a real event first and producing no false positives. Anything
+# unrecognised also parses as `report`, so a typo here cannot silently
+# disable the check OR silently start rejecting people.
+THB_SLIP_DUPLICATE_MODE = "report"
 SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 # Issue 071: claim/quiz/adventure capability tokens travel in the URL path, so
@@ -290,6 +302,8 @@ CLAIM_TOKEN_TTL_SECS = "2592000"
 # staging-only credentials and resources are deliberately configured.
 NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""
+# Same default as production — staging is where `reject` gets tried first.
+THB_SLIP_DUPLICATE_MODE = "report"
 TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
 # The staging Worker has a HELIUS_API_KEY secret. Use the authenticated Devnet
 # endpoint rather than unauthenticated public RPCs, which may block Cloudflare

@@ -245,6 +245,39 @@ pub async fn admin_upload_thb_slip_handler(
         }
     }
 
+    // 7a. Fingerprint the image BEFORE the R2 upload, while the bytes are still
+    //     in the request. The hash must be recorded on this path too: a slip
+    //     that only ever entered through the admin screen would otherwise be
+    //     invisible to the duplicate check, and the next attendee to submit the
+    //     same image would look like the first.
+    //
+    //     This path WARNS but never rejects, and that asymmetry is deliberate:
+    //     an organizer uploading on someone's behalf is making a decision with
+    //     the context to make it, and blocking them mid-event would be worse
+    //     than the duplicate. The attendee-facing path is the one with a
+    //     `reject` mode. `admin_upload_records_the_hash_but_never_rejects` in
+    //     worker/tests/slip_duplicate_guards.rs holds this in place so it reads
+    //     as a choice rather than a path someone forgot.
+    let fingerprint = super::slip_fingerprint::slip_fingerprint(&body.slip_url);
+    if let (Some(hash), Some(db)) = (&fingerprint, d1)
+        && let Some(other) = crate::db::thb_deposits::find_slip_hash_collision(
+            db,
+            &event.id,
+            hash,
+            &body.attendee_id,
+        )
+        .await
+        .map_err(AppError::Internal)?
+    {
+        tracing::warn!(
+            attendee_id = %body.attendee_id,
+            event_id = %event.id,
+            other_attendee_id = %state.log_fingerprint(&other.attendee_id),
+            admin = %state.log_fingerprint(&claims.email),
+            "admin-uploaded THB slip is byte-identical to another attendee's slip"
+        );
+    }
+
     // 7. Upload slip image to R2 if available (reduces KV storage by ~6x).
     let slip_url = super::maybe_upload_to_r2(
         &state,
@@ -283,6 +316,7 @@ pub async fn admin_upload_thb_slip_handler(
         bank_name: body.bank_name.clone(),
         account_name: body.account_name.clone(),
         refund_proof_url: None,
+        slip_blake3: fingerprint,
     };
 
     event_store::save_thb_deposit(kv, &thb_deposit, d1)

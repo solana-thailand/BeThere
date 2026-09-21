@@ -56,6 +56,59 @@ pub async fn get_thb_deposit(
     Ok(Some(row_to_thb_deposit(row)?))
 }
 
+/// Find another attendee's deposit in the same event whose slip is byte-identical.
+///
+/// The lookup behind the duplicate-slip check (`.issues/129`): anyone can
+/// upload any image to the deposit page, so the only thing distinguishing a
+/// real payer from someone forwarding a friend's slip was the organizer
+/// recognising them.
+///
+/// Three narrowings, each load-bearing:
+///
+/// * `event_id` — scoped to one event, which keeps this on
+///   `idx_thb_deposits_event` and matches what is actually being policed. The
+///   same person paying ฿500 to two events sends two different transfers.
+/// * `attendee_id <> ?` — an attendee re-uploading their own slip after a
+///   rejection is legitimate and must never be flagged.
+/// * `slip_blake3 <> ''` — THE dangerous one. This table stores the empty
+///   string rather than SQL NULL for absent text (see `insert_thb_deposit`),
+///   and `'' = ''` matches. Without this clause, every row with no hash would
+///   be a duplicate of every other row with no hash. The caller also refuses to
+///   run with an empty fingerprint; both guards are deliberate, because either
+///   one alone is a single edit away from matching everything.
+pub async fn find_slip_hash_collision(
+    db: &D1Database,
+    event_id: &str,
+    slip_blake3: &str,
+    excluding_attendee_id: &str,
+) -> Result<Option<ThbDeposit>, String> {
+    if slip_blake3.is_empty() {
+        return Ok(None);
+    }
+
+    let stmt = db
+        .prepare(
+            "SELECT * FROM thb_deposits \
+             WHERE event_id = ?1 AND slip_blake3 = ?2 AND slip_blake3 <> '' AND attendee_id <> ?3 \
+             ORDER BY uploaded_at ASC LIMIT 1",
+        )
+        .bind_refs(&[
+            D1Type::Text(event_id),
+            D1Type::Text(slip_blake3),
+            D1Type::Text(excluding_attendee_id),
+        ])
+        .map_err(|e| format!("D1 find_slip_hash_collision bind: {e:?}"))?;
+
+    let rows = super::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| format!("D1 find_slip_hash_collision: {e}"))?;
+
+    match rows.into_iter().next() {
+        None => Ok(None),
+        Some(row) => row_to_thb_deposit(row).map(Some),
+    }
+}
+
 /// List all THB deposits for an event (newest first).
 ///
 /// Uses `d1_safe::safe_all_rows` — the worker crate's `results()` panics on
@@ -87,8 +140,8 @@ pub async fn list_thb_deposits(db: &D1Database, event_id: &str) -> Result<Vec<Th
 /// `raw_sql` convention does not apply here.
 pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
     let stmt = db.prepare(
-        "INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, account_name, refund_proof_url, held_as_credit, held_as_credit_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+        "INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, account_name, refund_proof_url, held_as_credit, held_as_credit_at, slip_blake3) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
     );
     stmt.bind_refs(&[
         D1Type::Text(&deposit.attendee_id),
@@ -108,6 +161,7 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         D1Type::Text(deposit.refund_proof_url.as_deref().unwrap_or("")),
         D1Type::Integer(deposit.held_as_credit as i32),
         D1Type::Text(deposit.held_as_credit_at.as_deref().unwrap_or("")),
+        D1Type::Text(deposit.slip_blake3.as_deref().unwrap_or("")),
     ])
     .map_err(|e| format!("D1 insert_thb_deposit bind: {e:?}"))?
     .run()
@@ -136,8 +190,8 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
 /// serialises the whole struct, which is correct — there is no CAS there.
 pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
     let stmt = db.prepare(
-        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, attendee_name = ?6, bank_account = ?7, bank_name = ?8, account_name = ?9 \
-         WHERE event_id = ?10 AND attendee_id = ?11",
+        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, attendee_name = ?6, bank_account = ?7, bank_name = ?8, account_name = ?9, slip_blake3 = ?10 \
+         WHERE event_id = ?11 AND attendee_id = ?12",
     );
     stmt.bind_refs(&[
         D1Type::Integer(deposit.amount_thb as i32),
@@ -149,6 +203,10 @@ pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         D1Type::Text(deposit.bank_account.as_deref().unwrap_or("")),
         D1Type::Text(deposit.bank_name.as_deref().unwrap_or("")),
         D1Type::Text(deposit.account_name.as_deref().unwrap_or("")),
+        // Travels with slip_url: a new slip means a new hash, and updating one
+        // without the other would leave the previous image's fingerprint
+        // attached to the current image.
+        D1Type::Text(deposit.slip_blake3.as_deref().unwrap_or("")),
         D1Type::Text(&deposit.event_id),
         D1Type::Text(&deposit.attendee_id),
     ])
@@ -436,5 +494,9 @@ fn row_to_thb_deposit(row: serde_json::Value) -> Result<ThbDeposit, String> {
         bank_name: get_opt_str("bank_name"),
         account_name: get_opt_str("account_name"),
         refund_proof_url: get_opt_str("refund_proof_url"),
+        // Absent on every row uploaded before migration 0046, and `get_opt_str`
+        // maps both SQL NULL and '' to None. That is the intended reading:
+        // "not known", never "not a duplicate".
+        slip_blake3: get_opt_str("slip_blake3"),
     })
 }

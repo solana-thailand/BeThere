@@ -835,6 +835,10 @@ async fn record_staff_comp(
         bank_name: None,
         account_name: None,
         refund_proof_url: None,
+        // A comp has no slip — there is no image and no payment. None is the
+        // honest value: this row can never be anyone's duplicate, and must
+        // never be anyone's match either.
+        slip_blake3: None,
     };
     if let Some(kv) = state.events_kv.as_ref()
         && let Err(e) = crate::event_store::save_thb_deposit(kv, &comp, state.d1.as_deref()).await

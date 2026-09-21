@@ -40,6 +40,14 @@ md-5 = "0.10"
 # One-way, fixed-size correlation IDs for capability values in logs.
 sha2 = "0.10"
 
+# Content fingerprint for uploaded payment slips, so two attendees submitting
+# a byte-identical image stop being indistinguishable (see
+# handlers/deposit/thb/handlers/slip_fingerprint.rs). Costs no bundle size: it
+# is already linked via event-checkin-domain's `wire` feature, and naming it
+# here only makes the worker's own use of it explicit. default-features off
+# drops rayon/std multithreading, which does not exist on wasm32 anyway.
+blake3 = { version = "1", default-features = false }
+
 # URL encoding — WASM-compatible
 urlencoding = "2"
 
