@@ -1,6 +1,6 @@
 # 084 — The production preflight gate has never been satisfiable
 
-**Status:** partially fixed 2026-09-13; claim contract fixed in `.issues/088`. A 6/6 green run is still not demonstrated. Blocked on devnet USDC for the harness wallet (Circle faucet captcha needs a human).
+**Status:** partially fixed 2026-09-13; claim contract fixed in `.issues/088`. A 6/6 green run is still not demonstrated. **The USDC blocker below is stale** — re-checked 2026-09-22: the harness attendee wallet `7ABX2ZyPogms6dvb3f8mTACy3SZUui25DhqYmSY9LSNC` holds **9.99998 devnet USDC / 4.9966 SOL**, and the escrow program `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` is `Executable: true` on devnet. Nothing is waiting on a faucet captcha; what remains is the four contract drifts below.
 **Found:** 2026-09-13, attempting the first prod deploy since the gate landed
 **Severity:** high (either prod cannot be deployed, or the gate gets bypassed
 routinely and stops meaning anything)
