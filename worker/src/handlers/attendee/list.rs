@@ -44,7 +44,14 @@ pub async fn list_attendees(
         "STEP 2: bindings"
     );
 
-    // 1. Fetch sheet-based attendees (D1 fallback when Sheets is unavailable/rate-limited)
+    // 1. Fetch attendees. NOTE the direction: `get_attendees_for_event` is
+    //    D1-FIRST and falls back to Sheets only when D1 returns nothing or
+    //    errors. This comment used to say the opposite ("D1 fallback when
+    //    Sheets is unavailable"), which mattered — it is why a wrong
+    //    `ticket_name` coming out of D1 looked like it could only affect an
+    //    outage path, when in fact it is what every organizer sees on this
+    //    screen every day (.issues/136). The `match` below is the fallback
+    //    for when BOTH are unavailable.
     tracing::info!("STEP 3: before get_attendees_for_event");
     let attendees = match sheets::get_attendees_for_event(
         &state,
