@@ -66,6 +66,24 @@
 > **With that, every item A–H is either done or owner-gated. The queue is
 > empty of ungated engineering work.**
 >
+> **New, out of queue order, and it belongs in this plan: `.issues/135` — a
+> frontend size gate.** Item A measured the worker and stopped there, and the
+> frontend turns out to be the bigger half: **1,765,890 bytes brotli of first
+> load** against a 1,574,034-byte whole-worker bundle, downloaded by every
+> attendee on venue mobile data before their ticket renders, with nothing
+> measuring it. Built because `.issues/134`'s own recommendation could not be
+> costed without it. `scripts/verify/frontend_size_budget.sh` +
+> `frontend-leptos/.size-budget`, wired into CI's `e2e` job, six new guard
+> tests, seven failure paths exercised. **84.20 % of budget, green, 331 KB of
+> headroom.**
+>
+> Two findings fall out of it, neither fixed: **all 22 stylesheets are
+> render-blocking** (a ticket viewer downloads the admin and dashboard sheets),
+> and **Cloudflare compresses on the fly at brotli ~q4 — precompressing at
+> build time would save 380,390 bytes per first load, 21.5 %, for no code
+> change.** That last one is larger than anything left in this queue and it
+> touches the deploy path, so it waits for a waking human.
+>
 > **Blast radius now measured against the live worker (`.issues/133` §10):
 > 13 of the 14 production events with attendees serve `null` — 476 of 514
 > attendee tickets are dead today.** The only event that renders is RTM#6,
