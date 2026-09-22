@@ -1,7 +1,8 @@
 # 136 — D1 serves an attendee's own name as their ticket type, so "Vipada" is a VIP
 
-**Status:** cause found, reproduced, and the misinformation is fixed. The real
-ticket type is **still missing** and needs a D1 column — owner's call, see §6.
+**Status:** **fully fixed.** Cause found, reproduced, wrong information removed,
+and the real ticket tier restored via migration `0050` — built and verified
+end to end 2026-09-23. **Not deployed**; see §6.4.
 **Found:** 2026-09-23, from the owner's report that someone who registered came
 out with VIP status.
 **Severity:** medium-high. No data loss and nothing is destroyed, but it is
@@ -153,51 +154,149 @@ Both sites, deliberately: they are the same defect copied, and a fix landing on
 one of a pair while the sibling keeps the bug is a recurring shape in this repo
 ([[duplicated-state-transition-paths]]).
 
-**This removes wrong information. It does not restore right information.** The
-Ticket row and both badges now render empty for D1-served attendees — which is
-every attendee. That is not a regression: what they showed before was a name,
-so the VIP filter was already returning the wrong people and the Walk-in badge
-already never fired. Blank is strictly more truthful than wrong. But the
-organizer does lose a filter that looked like it worked.
+**This removed wrong information without restoring right information** — the
+Ticket row and both badges rendered empty for every D1-served attendee, which
+is everyone. Not a regression (what they showed was a name, so the VIP filter
+was already returning the wrong people and the Walk-in badge already never
+fired), but the organizer lost a filter that looked like it worked.
 
-## 6. What it needs to actually work — owner's call
+**§6 restores it.** This section is kept as the record of the two-step: the
+mitigation is independently correct and could ship alone if the migration in §6
+is judged too much this close to RTM#6.
 
-Restoring the real ticket type means **D1 needs the column**:
+## 6. Restoring the real ticket tier — built
 
-1. Migration `0050`: `ALTER TABLE attendees ADD COLUMN ticket_name TEXT;`
-2. Populate it at **four** INSERT sites — `db/attendees/writes.rs` (×2),
-   `db/attendees/management.rs`, `db/attendees/walkin.rs` — plus the
-   Sheets→D1 sync, or the column is empty for everyone already registered.
-3. Backfill the existing rows from the Sheet.
-4. Read it: `ticket_name: self.ticket_name.clone().unwrap_or_default()`.
-5. A guard that every writer sets it, because four writers is exactly the
-   shape where one gets missed.
+The first fix removed wrong information without restoring right information.
+This is the rest of it.
 
-**Not started, on purpose.** RTM#6 is 2026-09-27, four days out, and
-`.plans/027` §F.6 already has a production deploy pending with two migrations
-in it (0049 must apply, 0048 is `DO NOT APPLY BEFORE 2026-09-28`) behind a
-preflight gate that `.issues/084` says cannot currently be satisfied. Adding a
-third migration and a backfill to that deploy, unattended, days before the
-event, is not a call to make without the owner. The wrong information is gone
-either way; this is about getting the right information back.
+### 6.1 The column
 
-**Separately worth deciding:** `contains("vip")` is a weak test even against a
-correct `ticket_name` — a ticket type called "VIP Companion" and one called
-"Non-VIP" both match. If a real ticket type ever contains the word, it should
-be an exact comparison against the event's ticket types, not a substring.
+`worker/migrations/0050_attendees_ticket_name.sql` —
+`ALTER TABLE attendees ADD COLUMN ticket_name TEXT;`
+
+**Nullable, no default, deliberately.** Three states have to stay
+distinguishable:
+
+| value | meaning |
+|---|---|
+| `NULL` | nobody has told us — a row written before 0050, or one no writer should invent a tier for |
+| `'Self-Registered'` / `'Walk-in'` | this system minted it |
+| anything else | the organizer's own tier — `VIP`, `Speaker`, `Sponsor`. **This is the case that was lost.** |
+
+A `NOT NULL DEFAULT ''` would collapse "never set" into "set to nothing", and
+the backfill could then no longer tell which rows it still had to visit.
+
+SQLite `ADD COLUMN` is O(1) metadata, so this is safe to apply days before
+RTM#6 — unlike `.issues/127`'s `UNIQUE`, which needs a table rebuild and is why
+that one sits in `migrations-pending/0048`.
+
+### 6.2 The writers, and why they stopped being able to disagree
+
+The two ticket names this system mints were **bare string literals repeated
+across four files**. That is the root cause, not a detail: nothing named them,
+so nothing could check that the Sheets writer and the D1 writer for the *same
+flow* agreed. They now live in
+`domain/src/models/attendee/ticket_name.rs` as `TICKET_NAME_SELF_REGISTERED`
+and `TICKET_NAME_WALK_IN`, and every writer binds the constant.
+
+| writer | ticket_name | why |
+|---|---|---|
+| `db::attendees::upsert_attendee` (self-registration) | `TICKET_NAME_SELF_REGISTERED` | matches the Sheets append in the same flow |
+| `db::attendees::try_insert_walkin` | `TICKET_NAME_WALK_IN` | matches `sheets::write::append`; the admin Walk-in badge compares against this exact string |
+| `db::attendees::upsert_attendee_full` (sheet sync) | passed through from the sheet row | **this is the backfill** |
+| `db::attendees::upsert_post_event_attendee` | **nothing, on purpose** | post-event registrants are leads, excluded from capacity and check-in, and never receive a ticket. Inventing a tier would badge a row that is not an attendee. A guard test pins this down so it reads as a decision. |
+
+On conflict, `ticket_name` is **never overwritten** by the self-registration
+path and is `COALESCE`d on the sync path. A repeat registration must not demote
+someone the organizer has since promoted to `VIP`, and a sync of a sheet with
+no ticket column must not blank a tier that was already recorded.
+
+### 6.3 The backfill is the sync, because SQL cannot reach a spreadsheet
+
+The real tiers live in Google Sheets. No migration can read them. So
+`sync_one_attendee` now carries `a.ticket_name` into `upsert_attendee_full`,
+and **running `POST /api/events/{id}/sync` for an event is the backfill.**
+
+Until that is run for an event, its old rows read `NULL` → empty — which is
+exactly the post-first-fix behaviour, and still strictly better than the name
+they used to show. Nothing regresses by waiting.
+
+### 6.4 What is still owner-gated
+
+**The deploy.** Nothing here is in production. This adds a **third** pending
+migration to the deploy `.plans/027` §F.6 already describes (0049 must apply,
+`migrations-pending/0048` must not before 2026-09-28), four days before RTM#6.
+0050 is the cheapest of the three — one O(1) metadata change, no rebuild, no
+backfill inside the migration — but the decision to deploy at all is yours.
+
+**Running the sync per event** after deploying, to backfill. It reads the
+sheet, so it is an external call, and which events to sync is your call.
+
+### 6.5 Still worth deciding: `contains("vip")` is a weak test
+
+Even with a correct `ticket_name`, `frontend-leptos/src/pages/admin.rs`
+flags a VIP with a substring match. A tier called `VIP Companion` and one
+called `Non-VIP` both match. Not changed here — it needs to compare against the
+event's actual ticket types, and that is a product decision about what tiers
+exist. `domain::is_system_ticket_name` is the start of the vocabulary it would
+need.
 
 ## 7. Verification
 
-- Both new tests pass after the fix; both failed before it, with the message a
-  reader needs.
+### 7.1 The first fix
+
+- Two unit tests in `reads.rs`, written before the fix and confirmed failing.
+- Runtime A/B on both affected endpoints, old build vs fixed build (§4.1).
+- The ticket page rendered in a real browser (§4.2).
+
+### 7.2 The full fix — three tier states, end to end
+
+Migration applied to a clean local D1, three attendees seeded, real
+`wrangler dev --local` worker, both endpoints:
+
+```
+=== admin list (D1-first) ===
+  name='Vipada Srisuk'  ticket_name=''         VIP=False Walk-in=False
+  name='Somchai P.'     ticket_name='VIP'      VIP=True  Walk-in=False
+  name='Walk In Person' ticket_name='Walk-in'  VIP=False Walk-in=True
+```
+
+Three things that all had to be true at once, and now are:
+
+1. **Vipada is not a VIP** — the reported bug.
+2. **Somchai is** — the feature that the first fix removed is back. Without
+   this row the "fix" would just be the blanking, passing quietly.
+3. **The Walk-in badge fires** — it never could before. It compares
+   `eq_ignore_ascii_case("Walk-in")` against a field that held a person's name,
+   so it has been dead since D1 became the read path.
+
+And rendered, not curled:
+
+```
+real VIP tier  status=200 rows=["NAME\nSomchai P.","EMAIL\nr***@example.com","TICKET\nVIP","TYPE\nin_person"]
+no tier        status=200 rows=["NAME\nVipada Srisuk","EMAIL\nv***@example.com","TYPE\nin_person"]
+pageerrors=none
+```
+
+The `TICKET / VIP` row appears when there is a tier and the row is **omitted**
+when there is not — not rendered as an empty row with a dangling label.
+
+### 7.3 Gates
+
 - `cargo clippy --workspace --all-targets -- -D warnings` — exit 0.
-- `cargo test --workspace` — 47 test binaries, 0 failures.
-- Checked that no other consumer relies on the old behaviour: the only other
-  places that build an `Attendee` without a sheet row
-  (`register/tests.rs:127`, `escrow/status.rs:497`) already use
-  `String::new()`, so the fix matches the convention rather than inventing one.
-- Runtime A/B on both affected endpoints, old build vs fixed build (§4.1), and
-  the ticket page rendered in a real browser (§4.2).
+- `cargo test --workspace` — 0 failures.
+- `worker/tests/ticket_name_guards.rs` — 6 guards, two of which were confirmed
+  failing before the code that satisfies them existed.
+- `migration 0050` applied cleanly to a fresh store alongside all 47 others.
+- `shellcheck` clean.
+
+**Not verified:** the walk-in and self-registration *write* paths were not
+fired live. Both call Google Sheets, and `wrangler dev --local` does **not**
+sandbox that — `.dev.vars` holds live service-account credentials, so firing
+them would really write to a real spreadsheet
+([[local-d1-verification-harness]]). They are covered by the guard tests and by
+the compiler, not by a live run. Also unverified: the production row count, as
+§4 notes — `wrangler d1 --remote` is still returning 7403.
 
 ## Related
 
@@ -237,9 +336,33 @@ be an exact comparison against the event's ticket types, not a substring.
 **แต่ยังไม่ได้ข้อมูลที่ถูกต้องกลับมา:** ตอนนี้ช่อง Ticket และป้าย VIP/Walk-in จะว่างเปล่า
 — ซึ่ง**ดีกว่าแสดงผิด** แต่คุณจะเสียตัวกรอง VIP ไป
 
-**ที่ต้องให้คุณตัดสิน:** ถ้าจะให้ประเภทบัตรกลับมาถูกต้อง ต้อง**เพิ่มคอลัมน์ใน D1** (migration 0050)
-+ แก้จุดเขียน 4 จุด + backfill ข้อมูลเก่า — **ผมยังไม่ทำ** เพราะ RTM#6 เหลือ 4 วัน
-และตอนนี้มี migration ค้างอยู่แล้ว 2 ตัวใน deploy ที่ยังไม่ได้ขึ้น
+**ทำต่อจนจบแล้ว — เอาประเภทบัตรจริงกลับมา (migration 0050):**
+
+- **เพิ่มคอลัมน์ `ticket_name` ใน D1** แบบ nullable (แยกให้ออกระหว่าง "ยังไม่มีใครบอก"
+  กับ "ตั้งเป็นค่าว่าง" — ถ้าใช้ `NOT NULL DEFAULT ''` จะแยกไม่ออก แล้ว backfill จะไม่รู้ว่าต้องเติมแถวไหน)
+- **ชื่อบัตรที่ระบบสร้างเอง** (`Self-Registered`, `Walk-in`) เคยเป็น**ข้อความดิบซ้ำกันอยู่ 4 ไฟล์**
+  — นี่คือต้นตอจริง เพราะไม่มีชื่อเรียก เลยไม่มีใครเช็คได้ว่าฝั่ง Sheet กับฝั่ง D1 เขียนตรงกันไหม
+  ตอนนี้ย้ายไปเป็นค่าคงที่ใน `domain` แล้ว + มีเทสบังคับว่าทั้งสองฝั่งต้องใช้ตัวเดียวกัน
+- **backfill = รันคำสั่ง sync** เพราะข้อมูลจริงอยู่ใน Google Sheet ซึ่ง SQL เอื้อมไม่ถึง
+- **ไม่เขียนทับตอน conflict** — คนที่คุณเลื่อนเป็น VIP แล้ว ลงทะเบียนซ้ำจะไม่ถูกลดกลับ
+
+**ทดสอบจริงครบ 3 กรณีพร้อมกัน:**
+
+| | `ticket_name` | ขึ้น VIP | ขึ้น Walk-in |
+|---|---|---|---|
+| วิภาดา (ไม่มีบัตรระบุ) | `''` | **ไม่ขึ้น** ✅ | ไม่ขึ้น |
+| สมชาย (บัตร VIP จริง) | `'VIP'` | **ขึ้น** ✅ | ไม่ขึ้น |
+| คน walk-in | `'Walk-in'` | ไม่ขึ้น | **ขึ้น** ✅ |
+
+ข้อ 2 สำคัญมาก — ถ้าไม่ทดสอบ การ "แก้" ก็จะเป็นแค่การลบทิ้งทั้งหมดแล้วดูเหมือนผ่าน
+และข้อ 3 คือป้าย Walk-in ที่**ไม่เคยทำงานเลย**ตั้งแต่เปลี่ยนมาอ่าน D1 ตอนนี้กลับมาแล้ว
+เปิดหน้าตั๋วในเบราว์เซอร์ด้วย — แถว `TICKET / VIP` ขึ้นเมื่อมีบัตร และ**หายไปทั้งแถว**เมื่อไม่มี
+
+**ที่ยังต้องให้คุณตัดสิน:**
+1. **การ deploy** — ยังไม่ขึ้น prod เลย อันนี้จะเป็น migration ตัวที่ **3** ที่ค้างอยู่ใน deploy
+   (0050 เบาที่สุดในสามตัว: แค่เพิ่มคอลัมน์ ไม่ต้อง rebuild ตาราง ไม่มี backfill ในตัว migration)
+2. **รัน sync ของแต่ละงาน** หลัง deploy เพื่อ backfill — มันอ่าน Google Sheet จริง คุณเลือกว่างานไหนบ้าง
+3. **`contains("vip")` ยังอ่อนอยู่** — บัตรชื่อ "Non-VIP" ก็จะเข้าเงื่อนไข ควรเทียบตรงตัวกับรายการบัตรของงาน
 
 **หมายเหตุ:** ถึงจะแก้คอลัมน์แล้ว การเช็คด้วย `contains("vip")` ก็ยังอ่อนอยู่ดี —
 บัตรชื่อ "Non-VIP" ก็จะเข้าเงื่อนไข ควรเทียบแบบตรงตัวกับรายการประเภทบัตรของงาน
