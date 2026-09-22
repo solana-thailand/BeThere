@@ -87,6 +87,54 @@ API token is needed.
   Attendee deletion, email erasure/change and event deletion remove enrollment and
   delivery records. Ordinary delivery history otherwise follows event retention.
 
+## Age guard and send rate
+
+The queue has never drained, so the first successful dispatch run meets a
+backlog rather than a trickle (`.issues/128`). Two controls bound what that run
+can do, both in `[vars]` and both applying at *send* time, not enqueue time — a
+genuinely delayed message still goes out.
+
+**`NOTIFICATIONS_STALENESS`** — what a run does with a message that has sat past
+its kind's useful life.
+
+| kind | still delivered up to |
+|---|---|
+| `reminder` | 2 days past `due_at` |
+| `survey` | 3 days past `due_at` |
+| `registration`, `deposit_confirmed`, `deposit_rejected` | 14 days past `due_at` |
+
+The ages are per kind because one cutoff cannot fit both clocks: a registration
+confirmation stays true until its event ends, which can be months out, while a
+survey is wrong days after its event ended. They live in
+`notifications::policy::max_age_secs` and are spliced into the SQL from there —
+the Rust tests and `worker/tests/notifications/test_outbox.py` both read them
+back out of that function, so there is no second copy to drift.
+
+- `off` — no age check; every due row is claimable. Escape hatch only.
+- `report` (**default**) — stale rows are withheld from the claim loop and
+  logged per kind with the oldest `due_at`, but not modified. Withholding
+  happens in `claim.sql`, so a stale row never spends one of the run's slots and
+  the backlog does not drain past the guard while it is being watched.
+- `cancel` — stale rows are retired with `status='cancelled'` and
+  `error_code='STALE'`. Deliberately not `NO_LONGER_ELIGIBLE`: the message was
+  eligible, the queue was simply too slow, and the two are worth telling apart.
+  Only `pending` and `failed` rows are touched; an `accepted`, `sending` or
+  `uncertain` row keeps its outcome.
+
+Unset or unrecognised parses as `report`, so a typo can neither disable the
+guard nor start deleting queued mail.
+
+**`NOTIFICATIONS_MAX_PER_RUN`** — how many messages one run sends. Default 25,
+the value the claim loop previously hardcoded; clamped to `1..=100`, with
+anything unparseable falling back to 25 rather than stopping the queue. The cron
+is daily, so this is also the daily ceiling — the backlog was never capable of
+going out "all at once". A run that spends its whole budget logs a warning,
+which is the only outward sign that the queue is behind.
+
+Before a first enable, run with `NOTIFICATIONS_STALENESS = "report"` and read
+the per-kind counts out of the logs. Move to `cancel` once those counts are what
+you expect.
+
 ## Organizer endpoints
 
 - `GET /api/events/{id}/notifications?before={cursor}` — newest 50 messages;

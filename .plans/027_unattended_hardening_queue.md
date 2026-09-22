@@ -14,10 +14,17 @@
 > **Bundle: 1,569,688 bytes gzip = 49.89 % of the 3 MiB free-plan ceiling**
 > (+12,501 bytes for everything tonight). Headroom ~1.5 MiB.
 >
-> **Next, in order:** **B** (notification staleness — still unstarted) then
-> **G** (slip QR, measure size on a branch first). **F production is
-> deliberately not done** — see §F.6 for why and exactly how to do it.
-> §9 lists what must not be started at all.
+> **Next, in order:** **G** (slip QR, measure size on a branch first) then
+> **H** (housekeeping). **F production is deliberately not done** — see §F.6 for
+> why and exactly how to do it. §9 lists what must not be started at all.
+>
+> **Update 2026-09-22, later session:** **B is built** (`.issues/128` §5), on
+> its own branch, with two deliberate deviations from the scope in §B — the age
+> cap is per kind rather than a flat 72 h, and there is no stop-the-world burst
+> gate. Both are explained in §B's STATUS block; both come down to the same
+> thing: the specified controls would have retired or blocked RTM#6's own 62
+> queued messages. Also on a branch, unmerged: the Wrangler 4.135.0 baseline
+> (`.issues/069`).
 Every item below is *ungated*: no owner decision, no external account, no
 irreversible action. Anything needing the owner stays in `.issues/129` §7 and is
 listed in §9 here as explicitly NOT to be started.
@@ -138,6 +145,38 @@ row is *also* cancelled, proving the comparison is live and not hardcoded.
 
 **Done when** enabling `NOTIFICATIONS_ENABLED` on staging with the real backlog
 shape sends **zero** historical mail, and the outbox shows 243 `cancelled/stale`.
+
+**STATUS 2026-09-22: BUILT, two deliberate deviations from the scope above.**
+Full write-up in `.issues/128` §5. `NOTIFICATIONS_STALENESS = off|report|cancel`
+(default `report`) + `NOTIFICATIONS_MAX_PER_RUN = 25`, in
+`notifications::policy` / `notifications::staleness` / `sql/claim.sql` /
+`sql/stale_report.sql` / `sql/stale_cancel.sql`, both envs in `wrangler.toml`,
+documented in `docs/notifications.md`. Verified by `cargo test` and by 36 tests
+in `worker/tests/notifications/test_outbox.py` against the real migrations and
+the real statements — both directions, plus `report` provably writing nothing
+and `cancel` retiring exactly the set `report` named.
+
+1. **The age cap is per kind, not a flat `NOTIFICATION_MAX_AGE_HOURS=72`.** A
+   flat 72 h would have retired RTM#6's own 24 registrations and 14 deposit
+   receipts (due 2026-09-16, six days old when this was written). No single
+   number works: a confirmation is true until its event ends, a survey is wrong
+   days after its event ended. 2 d reminder / 3 d survey / 14 d registration and
+   deposit receipts. Against the measured backlog: ~187 surveys retired, all 62
+   RTM#6 rows kept.
+2. **No stop-the-world burst gate.** `NOTIFICATION_BURST_LIMIT` as specified
+   ("over 25 in the first pass ⇒ send nothing, alert, require a manual raise")
+   would have tripped on RTM#6's legitimate 62 rows and stayed tripped. The
+   claim loop was already `0..25` against a **daily** cron, so the 243 could
+   never have gone out at once — 25/day for ten days was always the real shape.
+   That rate is now the named, tunable control, and `report` mode supplies the
+   "a human looks first" step the burst gate was reaching for.
+
+**Still not done (unchanged blockers, none of them code):** the sender domain is
+not onboarded, `NOTIFICATION_FROM` is empty, there is no `EMAIL` binding, and
+`dispatch` still has no caller. `NOTIFICATIONS_ENABLED` stays `0` in both
+environments — flipping it remains owner-gated (§9). The guard has never met the
+real 268-row backlog; doing so on staging in `report` mode is the next step and
+needs the staging deploy that is currently sequenced behind `.issues/069`.
 
 ---
 
