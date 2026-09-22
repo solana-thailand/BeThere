@@ -131,17 +131,33 @@ The layout degrades cleanly: `in_person_view.rs` guards the row with
 as an empty row with a dangling label. Email is masked in the render, which is
 worth noting as working correctly rather than assumed.
 
-**Not reproduced against production.** `wrangler d1 execute --remote` is
-returning the recurring **7403** ("account not authorized") again, so the
-"how many real attendees are affected" count could not be taken. The query to
-run when it clears — it reads no names, only a count:
+### 4.3 Production blast radius — measured 2026-09-23
 
-```bash
-npx wrangler d1 execute bethere-db --remote --json --command \
-  "SELECT COUNT(*) AS total,
-          SUM(CASE WHEN LOWER(name) LIKE '%vip%' THEN 1 ELSE 0 END) AS name_reads_as_vip
-     FROM attendees;"
-```
+`wrangler d1 execute --remote` is still returning the recurring **7403**, but
+`wrangler d1 export --remote` is **not** — so the count was taken from the
+pre-deploy backup instead, loaded into a local sqlite. No names printed:
+
+| | count |
+|---|---:|
+| production attendees | **516** |
+| whose **name** contains "vip" → wrongly badged VIP | **1** |
+| named literally "walk-in" | 0 |
+
+The one is in `solana-x-ai-builders-the-road-to-mainnet-5-bangkok-copy`
+(RTM#5). That is the person the owner reported.
+
+**Keep the three effects separate, because their sizes differ enormously:**
+
+| effect | affected |
+|---|---:|
+| a wrong **VIP badge** | **1 attendee** |
+| the **Ticket column showing the person's own name** instead of a tier | **all 516** |
+| the **Walk-in badge never firing** | every walk-in, always |
+
+So the reported symptom is rare while the underlying wrongness was total. A
+count of 1 is why this looked like a one-off curiosity rather than a broken
+field — and the rarity was luck: `contains("vip")` over 516 names happened to
+hit once.
 
 ## 5. What was fixed
 
@@ -367,5 +383,22 @@ the compiler, not by a live run. Also unverified: the production row count, as
 **หมายเหตุ:** ถึงจะแก้คอลัมน์แล้ว การเช็คด้วย `contains("vip")` ก็ยังอ่อนอยู่ดี —
 บัตรชื่อ "Non-VIP" ก็จะเข้าเงื่อนไข ควรเทียบแบบตรงตัวกับรายการประเภทบัตรของงาน
 
-**ยังตรวจไม่ได้:** นับจำนวนคนที่โดนจริงบน prod ไม่ได้ เพราะ `wrangler d1 --remote` ติด error
-**7403** อยู่ (คำสั่งที่ต้องรันไว้ในข้อ 4 แล้ว — นับอย่างเดียว ไม่ดึงชื่อใคร)
+**วัดผลกระทบจริงบน prod แล้ว (23 ก.ย.)** — `d1 execute --remote` ยังติด 7403 แต่ `d1 export --remote`
+ใช้ได้ เลยดึงไฟล์ backup มาเปิดใน sqlite แทน (ไม่ได้ดึงชื่อใครออกมา):
+
+| | จำนวน |
+|---|---:|
+| ผู้เข้าร่วมทั้งหมดบน prod | **516** |
+| ชื่อมีคำว่า "vip" → ขึ้นป้าย VIP ผิด | **1 คน** |
+
+คนนั้นอยู่ในงาน RTM#5 — **คือคนที่คุณเห็นนั่นเอง**
+
+**แต่ต้องแยก 3 อาการให้ออก ขนาดต่างกันมาก:**
+
+| อาการ | กระทบ |
+|---|---:|
+| ป้าย VIP ผิด | **1 คน** |
+| ช่อง Ticket แสดง**ชื่อคน**แทนประเภทบัตร | **ทั้ง 516 คน** |
+| ป้าย Walk-in ไม่เคยขึ้นเลย | walk-in ทุกคน ตลอดมา |
+
+อาการที่คุณเห็นเกิดยาก แต่ข้อมูลผิด**ทั้งหมด** — ที่เจอแค่คนเดียวคือ**โชคดี** ไม่ใช่เพราะระบบถูก
