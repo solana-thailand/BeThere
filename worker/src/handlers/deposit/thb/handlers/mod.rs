@@ -7,7 +7,6 @@ mod refund;
 mod slip_admin_upload;
 mod slip_fingerprint;
 mod slip_list;
-mod slip_qr;
 mod slip_upload;
 mod slip_verify;
 
