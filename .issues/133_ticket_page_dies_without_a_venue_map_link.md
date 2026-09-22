@@ -71,16 +71,21 @@ case that breaks is an organizer who leaves the field blank — and an
 **online-only event is exactly where nobody would ever set a venue map link**,
 so the audience most likely to hit this is the one least likely to be watched.
 
-## 5. Blast radius — NOT measured
+## 5. Blast radius — MEASURED 2026-09-22 (see §10)
 
-`npx wrangler d1 execute bethere-db --remote` fails from this machine with
-`code: 7403, "The given account is not valid or is not authorized to access
-this service"`, so the count of production events with an empty
-`location_map_url` is **unknown**. Do not assume it is zero.
+~~NOT measured.~~ The `7403` that blocked this cleared; the remote D1 answers
+again from this machine, and the failure was measured **against the deployed
+production worker**, not inferred from the table. Headline:
 
-The query to run once someone has authorised access:
+> **13 of the 14 production events that have attendees serve `null`.
+> 476 of 514 attendee tickets are dead today.** The one that works is
+> RTM#6 — the event being run this week.
+
+The original "run this query" plan is kept below because it is the wrong query,
+and knowing why is the point — see §10.2.
 
 ```sql
+-- NOT sufficient: the read path is KV-first, and this asks the table.
 SELECT COUNT(*) AS total,
        SUM(CASE WHEN location_map_url IS NULL OR location_map_url = '' THEN 1 ELSE 0 END) AS no_map
 FROM events;
@@ -254,3 +259,103 @@ guard sit **uncommitted in the working tree**:
 Nobody has claimed the commit. This is the live loose end on this issue — a
 verified fix for a page-killing bug, sitting unstaged, one `git checkout` away
 from being lost.
+
+## 10. Blast radius, measured against production — 2026-09-22
+
+Measured by session `event-checkin-aa`. Every number below is a response from
+`https://bethere.solana-thailand.workers.dev`, the live worker, not a local
+build and not a table read.
+
+### 10.1 The result
+
+One ticket per event, requested exactly the way the ticket page requests it:
+
+| | events | attendees |
+|---|---:|---:|
+| payload serves `null` → **page dies** | **13** | **476** |
+| payload serves a string → page renders | 1 | 38 |
+| not probed (event has 0 attendees) | 2 | 0 |
+| **total** | 16 | 514 |
+
+The single working event is `solana-x-ai-builders-the-road-to-mainnet-6-bangkok`
+— **RTM#6, the event being run on 2026-09-27**. It is the only production event
+whose `location_map_url` is set. Every past event's ticket — RTM#1 through #5,
+all seven *Latent Space* parts, *intro-to-vibing-on-solana*, *islanddao-v4-demo*
+— is dead for its attendees right now, and has been since `7e1d3c1` reached
+production (deployed 2026-09-19 16:47 UTC; latest prod version
+`f5b99ef0-2843-4352-8c8b-9800020f5c4a`).
+
+So §4's guess ("every event anyone has opened a ticket for presumably has a map
+link") is **backwards**. Exactly one event has one, and it is the one currently
+in use — which is precisely why the organiser has not seen this.
+
+**This also means RTM#6 works by accident.** Nothing in the product requires a
+map link. The next event created without one takes its whole attendee list with
+it.
+
+### 10.2 Two traps in measuring it — both hit here
+
+**Trap 1 — the D1 query in §5 gives the wrong answer.** It reports 15 of 16
+events with an empty `location_map_url`. The served payload disagrees, because
+the read path is KV-first ([[kv-masks-direct-d1-event-writes]]): the table is
+not what the worker answers from. The number happens to be close, but it is
+close by luck and was derived from the wrong source. **Ask the API.**
+
+**Trap 2 — probing without `event_id` reads as a clean bill of health.**
+
+```
+GET /api/public/ticket/{attendee_id}              → map url present, looks FINE
+GET /api/public/ticket/{attendee_id}?event_id={id} → null, page dies
+```
+
+`get_public_ticket` starts with `resolve_event(&state, query.event_id)`. With
+no `event_id` it resolves to the **active** event — RTM#6 — so every attendee
+of every dead event probes green, and the *attendee id in the URL is ignored*
+for the purpose of the event fields. A first pass over all 14 events returned
+the same RTM#6 map URL fourteen times, which is the tell: identical values
+across unrelated events mean the parameter is not reaching the query.
+
+That form is not hypothetical-only — it is what a person debugging by hand
+would type. Every real link the product hands out carries `event_id`
+(`register/my_registration.rs`, `notifications/content.rs`,
+`notifications/outbox.rs`, the claim, deposit, admin and feedback pages — all
+checked), so the dead path is the only one attendees ever travel.
+
+Same family as [[false-clean-probes-from-shell-aliases]]: the probe answered,
+answered consistently, and was measuring something else.
+
+### 10.3 Method, so it can be re-run
+
+```bash
+# 1. events + one attendee id each (ids, not slugs — they differ, e.g.
+#    slug solana-in-latent-space-part-2 has id solana-in-latent-space-part-1-copy)
+npx wrangler d1 execute bethere-db --remote --json --command \
+  "SELECT e.id AS event_id, e.slug, MIN(a.id) AS attendee_id, COUNT(a.id) AS attendees
+     FROM events e LEFT JOIN attendees a ON a.event_id = e.id GROUP BY e.id;"
+
+# 2. ask the live worker the way the page asks it
+curl -s "https://bethere.solana-thailand.workers.dev/api/public/ticket/$AID?event_id=$EID" \
+  | python3 -c "import json,sys; print(repr(json.load(sys.stdin)['data']['event_location_map_url']))"
+# null  → that event's tickets are dead
+# "..." → they render
+```
+
+The payload is wrapped: the field is under `data`, not at the top level. Reading
+the top level reports the key as absent, which is a third way to get a false
+pass.
+
+### 10.4 What this changes
+
+1. **This is a live production outage, not a latent defect.** 476 of 514
+   attendee tickets. Previously carried as "blast radius unmeasured".
+2. **The fix in §9 is still the right one** — nothing here changes the
+   mechanism, it only sizes it.
+3. **Shipping it is a production deploy**, and prod is deliberately
+   undeployed (`.plans/027` §F.6: two pending migrations, a preflight gate that
+   has never been satisfiable, five days before RTM#6). The fix cannot go out
+   on its own without either cherry-picking it onto what is deployed or
+   accepting the rest of the undeployed queue with it. **That is the owner's
+   call and is not taken here.**
+4. **RTM#6 itself is not at risk from this bug** — its map link is set. The
+   damage is to past attendees revisiting their tickets, which is also the
+   mildest possible version of 476 broken pages.
