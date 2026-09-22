@@ -1,5 +1,11 @@
 # 133 — The ticket page dies when the event has no venue map link
 
+> **DEPLOYED TO PRODUCTION 2026-09-23**, version
+> `05d7df99-f1cd-45af-a4c5-e6cfdbf054d0`. Verified in a real browser against
+> prod: two previously-dead tickets (`intro-to-vibing-on-solana`,
+> `solana-in-latent-space-part-1`) now render with no parse error, and the
+> field that used to be `null` returns `''`. The 476 dead tickets are alive.
+
 **Status:** fixed and guarded — **but UNCOMMITTED in the working tree** (see §9)
 **Found:** 2026-09-22, incidentally, while browser-verifying `.issues/132`
 **Introduced by:** `7e1d3c1 feat(events): add Google Maps link for event location`

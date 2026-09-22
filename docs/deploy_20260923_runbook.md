@@ -1,7 +1,25 @@
 # Production deploy runbook — 2026-09-23
 
-**Prepared for the owner to run. Nothing in it has been executed except the
-backup (step 0), which is done.**
+> ## ✅ EXECUTED 2026-09-23 by Claude, with the owner's explicit go-ahead
+>
+> | | |
+> |---|---|
+> | **new production version** | **`05d7df99-f1cd-45af-a4c5-e6cfdbf054d0`** |
+> | rollback target (previous) | `f5b99ef0-2843-4352-8c8b-9800020f5c4a` |
+> | migrations applied | 0046, 0047, 0049, 0050 — all ✅ |
+> | 0047 backfill on prod | cash 40 / credit 14 / comp 3 — **identical to the local rehearsal** |
+> | worker bundle | 1,573,991 gzip, 50.03 % of the ceiling |
+> | Content-Type | `/` → text/html, `.js` → text/javascript ✅ |
+> | **previously-dead tickets** | **render** (2 checked in a real browser, 0 parse errors) |
+> | RTM#6 ticket | renders: QR, venue + map link, name, deposit verified |
+>
+> Rollback, if ever needed:
+> `npx wrangler rollback f5b99ef0-2843-4352-8c8b-9800020f5c4a`
+>
+> **Step 8 was deliberately NOT run — see the hazard note there.**
+
+**Originally prepared for the owner to run; kept as the record of what was
+done and why.**
 
 This is not a general runbook — `docs/staging_deploy_runbook.md` is that. This
 one is for *this* deploy, with the exact commands, the exact expected output,
@@ -242,19 +260,47 @@ curl -sI https://bethere.solana-thailand.workers.dev/ | rg -i 'content-type'
 `curl` 200 have all passed on a visibly broken page in this repo before. Look
 at it.
 
-## Step 8 — backfill the ticket tiers (optional, per event)
+## Step 8 — backfill the ticket tiers — ⚠️ DO NOT RUN BEFORE READING THIS
 
 0050 adds the column; it does **not** fill it. The real tiers live in Google
-Sheets and no migration can read a spreadsheet. The sync is the backfill:
+Sheets and no migration can read a spreadsheet, so the sync is the only
+backfill:
 
 ```
 POST /api/events/{event_id}/sync
 ```
 
-Until you run it for an event, that event's rows read empty — which is exactly
-the behaviour without 0050, so **nothing regresses by waiting**. It calls the
-live Google Sheet, so which events to sync is your call. RTM#6 is the one that
-matters before Saturday.
+**NOT RUN on 2026-09-23, and this is a correction to an earlier draft of this
+runbook, which called it "optional" and safe.** It is neither.
+
+`sync_one_attendee` derives `deposit_status` from the **Google Sheet's** deposit
+columns (`derive_deposit_status`, `sync.rs:319`), and `upsert_attendee_full`
+writes it **unconditionally**: `deposit_status = excluded.deposit_status`
+(`management.rs:212`) — no `COALESCE`, unlike the columns around it.
+
+But **THB deposits are recorded in D1, not in the Sheet.** So the Sheet's
+deposit columns lag D1 by construction, and running this sync would overwrite
+real verified-deposit state with stale sheet-derived values — on an event with
+฿500 refund obligations attached to each row, four days before it happens.
+
+**The trade is bad:** the upside is a cosmetic VIP/Walk-in badge on the admin
+list; the downside is corrupting deposit state. Nothing regresses by waiting —
+an unsynced event reads an empty tier, which is exactly the behaviour before
+0050 existed.
+
+**When to do it:** after RTM#6, or before it only if you have first confirmed
+that the Sheet's deposit columns match D1 for that event. Check with:
+
+```bash
+npx wrangler d1 execute bethere-db --remote --json --command \
+  "SELECT deposit_status, COUNT(*) FROM attendees
+    WHERE event_id='<event>' GROUP BY deposit_status;"
+```
+
+…and compare against the sheet before syncing. A safer long-term fix is to make
+`deposit_status` a `COALESCE`-preserved column in `upsert_attendee_full` like
+its neighbours, so the sync can never demote a deposit. Filed as a follow-up in
+`.issues/136`.
 
 ---
 
@@ -327,5 +373,16 @@ matters before Saturday.
 6. **rollback ได้ด้วยคำสั่งเดียว** แต่ rollback แค่ตัว Worker ไม่ย้อน migration
    (ไม่เป็นไร เพราะ 0049/0050 แค่เพิ่มคอลัมน์ ของเก่าไม่สนใจมัน)
 
-**ขั้นที่ 8 (เลือกได้):** รัน sync เพื่อเติมประเภทบัตรจริง — **รอได้ ไม่มีอะไรแย่ลง**
-งานที่ควรทำก่อนวันเสาร์คือ RTM#6
+**⚠️ ขั้นที่ 8 — ผม *ไม่ได้* รัน และขอแก้ที่เคยเขียนไว้ว่า "ทำได้ปลอดภัย" — ไม่ปลอดภัย**
+
+คำสั่ง sync จะอ่าน**สถานะมัดจำจาก Google Sheet** แล้วเขียนทับลง D1 **แบบไม่มีเงื่อนไข**
+(`deposit_status = excluded.deposit_status` — ไม่มี COALESCE ต่างจากคอลัมน์ข้าง ๆ)
+
+**แต่มัดจำ THB ถูกบันทึกใน D1 ไม่ใช่ใน Sheet** → ข้อมูลใน Sheet เก่ากว่าเสมอ
+ถ้ารัน sync ตอนนี้ **สถานะ "จ่ายมัดจำแล้ว" ของจริงอาจถูกเขียนทับด้วยข้อมูลเก่า**
+บนงานที่มีภาระคืนเงิน ฿500 ต่อคน และเหลืออีก 4 วัน
+
+**ได้ไม่คุ้มเสีย** — ได้แค่ป้าย VIP บนหน้า admin แต่เสี่ยงข้อมูลเงิน
+**รอได้ ไม่มีอะไรแย่ลง** (ไม่ sync = ช่องบัตรว่าง ซึ่งเหมือนตอนก่อนมี 0050 อยู่แล้ว)
+
+**ควรทำหลังงาน RTM#6** หรือถ้าจะทำก่อน ต้องเช็คก่อนว่า Sheet กับ D1 ตรงกัน

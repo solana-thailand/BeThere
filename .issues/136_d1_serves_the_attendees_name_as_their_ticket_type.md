@@ -1,8 +1,11 @@
 # 136 — D1 serves an attendee's own name as their ticket type, so "Vipada" is a VIP
 
-**Status:** **fully fixed.** Cause found, reproduced, wrong information removed,
-and the real ticket tier restored via migration `0050` — built and verified
-end to end 2026-09-23. **Not deployed**; see §6.4.
+**Status:** **fully fixed and DEPLOYED 2026-09-23**, production version
+`05d7df99-f1cd-45af-a4c5-e6cfdbf054d0`. Migration 0050 applied to prod and the
+column read back. Verified live: RTM#6's ticket page previously showed
+`TICKET / ozone` — the holder's own name — and now correctly omits the row.
+**The tier backfill has NOT been run; see §6.6, which is a hazard, not a
+chore.**
 **Found:** 2026-09-23, from the owner's report that someone who registered came
 out with VIP status.
 **Severity:** medium-high. No data loss and nothing is destroyed, but it is
@@ -247,6 +250,29 @@ backfill inside the migration — but the decision to deploy at all is yours.
 
 **Running the sync per event** after deploying, to backfill. It reads the
 sheet, so it is an external call, and which events to sync is your call.
+
+### 6.6 ⚠️ The backfill is not safe to run yet — follow-up needed
+
+`POST /api/events/{id}/sync` is the only way to fill `ticket_name` for rows
+created before 0050. **It was deliberately not run**, and the reason is a
+defect in the sync, not caution about the sync:
+
+`sync_one_attendee` derives `deposit_status` from the **Google Sheet** columns
+(`derive_deposit_status`, `sync.rs:319`) and `upsert_attendee_full` writes it
+**unconditionally** — `deposit_status = excluded.deposit_status`
+(`management.rs:212`), with no `COALESCE`, unlike every sheet-sourced column
+beside it.
+
+But **THB deposits are recorded in D1, not in the Sheet.** The Sheet's deposit
+columns therefore lag D1 by construction, so a sync can silently demote a
+verified ฿500 deposit to whatever the spreadsheet last said. Nobody has hit
+this because nobody had a reason to sync a live event mid-cycle — restoring
+ticket tiers is the first such reason, which is how it surfaced.
+
+**Follow-up, not done here:** make `deposit_status` preserve-on-empty like its
+neighbours, or exclude it from the sync entirely, so the backfill becomes
+routine. Until then the tier column stays empty for pre-0050 rows, which is
+exactly the pre-0050 behaviour — nothing regresses by waiting.
 
 ### 6.5 Still worth deciding: `contains("vip")` is a weak test
 
