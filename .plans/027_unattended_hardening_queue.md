@@ -25,6 +25,18 @@
 > thing: the specified controls would have retired or blocked RTM#6's own 62
 > queued messages. Also on a branch, unmerged: the Wrangler 4.135.0 baseline
 > (`.issues/069`).
+>
+> **Update 2026-09-22, this session:** **B is merged into `develop`**
+> (`a8175cb`, `ad100e3`); `chore/wrangler-4.135` is still held back by design,
+> per `.issues/069` — ship the current payload on the toolchain it was tested
+> on, *then* move the toolchain.
+>
+> New, out of queue order and not from this plan: the **ticket-page
+> announcement** feature (`.issues/132`, migration **0049**). Built at the
+> owner's request, uncommitted at the time of writing. It adds a **second
+> pending migration** to the production deploy in §F.6 — 0048 is deferred by
+> design, 0049 must be applied.
+
 Every item below is *ungated*: no owner decision, no external account, no
 irreversible action. Anything needing the owner stays in `.issues/129` §7 and is
 listed in §9 here as explicitly NOT to be started.

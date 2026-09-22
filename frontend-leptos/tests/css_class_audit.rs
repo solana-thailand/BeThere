@@ -31,6 +31,25 @@
 //!   again the safe side — an unresolvable dynamic class is simply not checked,
 //!   rather than falsely reported as unstyled.
 //!
+//! ## Char literals desynchronise the scan
+//!
+//! `used_broad` walks the concatenated source character by character looking
+//! for a double-quote. It does not know what a char literal is, so a char
+//! literal holding a double-quote in any `.rs` file under `src/` opens a
+//! string the scanner never closes correctly, and every class literal in every
+//! file sorted after it stops counting as used. The same goes for an odd
+//! number of double-quotes inside a comment.
+//!
+//! The symptom is a `no_dead_css_classes` failure naming ~100 classes that are
+//! plainly still in the markup. The file that actually broke it is the one
+//! sorted *before* the first reported casualty, not any of the ones named.
+//!
+//! Found 2026-09-22 while adding `pages/ticket/announcement.rs`, whose
+//! trailing-punctuation set was a `&[char]`: it reported the whole of
+//! `community_links.rs` and the `pe-*` recap classes dead. Teaching the
+//! scanner about char literals is the real fix; until then, prefer a `&str`
+//! of punctuation over a `&[char]`.
+//!
 //! ## Extraction rules learned from real false positives
 //!
 //! - **Glued interpolation.** `format!("attendee-checkbox{}", ...)` yields the
