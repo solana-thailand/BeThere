@@ -309,6 +309,8 @@ mod tests {
             slug: "solana-bangkok-2025".into(),
             tagline: "The Road to Mainnet".into(),
             link: String::new(),
+            ticket_note_in_person: String::new(),
+            ticket_note_online: String::new(),
             status: EventStatus::Active,
             event_start_ms: 1_700_000_000_000, // 2023-11-14 22:13:20 UTC
             event_end_ms: 1_700_003_600_000,   // +1 hour

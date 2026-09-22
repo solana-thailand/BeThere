@@ -146,6 +146,12 @@ pub struct CreateEventRequest {
     /// Event visibility — public (shown on landing) or private (auth required).
     #[serde(default)]
     pub visibility: EventVisibility,
+    /// Ticket-page announcement for in-person attendees (migration 0049).
+    #[serde(default)]
+    pub ticket_note_in_person: String,
+    /// Ticket-page announcement for online attendees (migration 0049).
+    #[serde(default)]
+    pub ticket_note_online: String,
     /// Community/social links.
     #[serde(default)]
     pub community_links: Vec<CommunityLink>,
@@ -327,6 +333,14 @@ pub struct UpdateEventRequest {
     /// Whether developer profile fields are shown on the registration form.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dev_profile_enabled: Option<bool>,
+    /// Ticket-page announcement for in-person attendees. `None` leaves it
+    /// alone; `Some("")` clears it and hides the card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ticket_note_in_person: Option<String>,
+    /// Ticket-page announcement for online attendees. Same `None` vs
+    /// `Some("")` distinction as [`Self::ticket_note_in_person`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ticket_note_online: Option<String>,
     /// Community/social links. Replaces all existing links.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community_links: Option<Vec<CommunityLink>>,

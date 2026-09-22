@@ -217,6 +217,10 @@ pub async fn confirm_escrow_init_handler(
 
     if !already_persisted {
         let update_req = UpdateEventRequest {
+            // None = leave the ticket announcements exactly as they are; this
+            // path only moves escrow state.
+            ticket_note_in_person: None,
+            ticket_note_online: None,
             escrow_address: Some(escrow_address.clone()),
             on_chain_event_id: Some(on_chain_event_id),
             escrow_status: Some(EscrowStatus::Initialized),

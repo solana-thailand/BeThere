@@ -4,7 +4,7 @@ use worker::KvStore;
 
 use event_checkin_domain::models::event::{
     DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus, EventConfig,
-    UpdateEventRequest, normalize_map_url, normalize_sheet_name,
+    UpdateEventRequest, normalize_map_url, normalize_sheet_name, normalize_ticket_note,
 };
 
 use crate::event_store::read::get_event_index;
@@ -299,6 +299,15 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     }
     if let Some(ref links) = req.community_links {
         config.community_links = links.clone();
+    }
+    // Normalised, not just trimmed: bounds the size of the event JSON that KV
+    // serves on every ticket page load, and folds CRLF so a browser textarea
+    // does not add blank lines under `white-space: pre-wrap`.
+    if let Some(ref note) = req.ticket_note_in_person {
+        config.ticket_note_in_person = normalize_ticket_note(note)?;
+    }
+    if let Some(ref note) = req.ticket_note_online {
+        config.ticket_note_online = normalize_ticket_note(note)?;
     }
     if let Some(ref url) = req.calendar_subscribe_url {
         config.calendar_subscribe_url = url.clone();

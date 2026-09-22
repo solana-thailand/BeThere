@@ -61,6 +61,10 @@ pub async fn seed_from_config(
         slug: slugify(&defaults.name),
         tagline: defaults.tagline.clone(),
         link: defaults.link.clone(),
+        // The seeded default event has no announcements: the card only appears
+        // once an organizer writes one.
+        ticket_note_in_person: String::new(),
+        ticket_note_online: String::new(),
         status: EventStatus::Active,
         event_start_ms: defaults.start_ms,
         event_end_ms: defaults.end_ms,

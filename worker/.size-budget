@@ -27,5 +27,5 @@ WARN_PCT=70
 # Update it deliberately, in the same commit as the change that grew the
 # bundle, with `--update-baseline`. An unexplained baseline bump in a diff is
 # the thing this line exists to make visible.
-BASELINE_BYTES=1569688
+BASELINE_BYTES=1574121
 BASELINE_DATE=2026-09-22

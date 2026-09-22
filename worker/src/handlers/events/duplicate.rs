@@ -199,6 +199,13 @@ pub async fn duplicate_event(
         deposit_deadline_hours: source.deposit_deadline_hours,
         visibility: source.visibility.clone(),
         community_links: source.community_links.clone(),
+        // Carried forward like community_links and video_url above: a recurring
+        // series usually keeps the same venue, so travel and parking notes are
+        // written once. The per-event half (slide link, livestream time) is
+        // wrong on the copy until edited — same hazard video_url already has,
+        // and the duplicate always lands in draft for review.
+        ticket_note_in_person: source.ticket_note_in_person.clone(),
+        ticket_note_online: source.ticket_note_online.clone(),
         calendar_subscribe_url: source.calendar_subscribe_url.clone(),
     };
 

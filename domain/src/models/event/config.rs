@@ -273,6 +273,29 @@ pub struct EventConfig {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub calendar_subscribe_url: String,
 
+    // ── Ticket announcements ────────────────────────────────────────
+    /// Free-text announcement shown on the ticket page to **in-person**
+    /// attendees (migration 0049). Travel, parking, door procedure, the slide
+    /// deck, which group to join.
+    ///
+    /// Split from `ticket_note_online` because the two audiences need opposite
+    /// things on the day, and a page that shows both is a page neither reads.
+    /// Empty = no announcement card is rendered.
+    ///
+    /// Rendered as plain text with URLs auto-linked — never as HTML. The
+    /// organizer is trusted, the storage is not: this string survives a
+    /// spreadsheet import and a duplicate-event copy, and `inner_html` on any
+    /// of those paths is a stored-XSS hole for a field nobody would think to
+    /// audit again.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ticket_note_in_person: String,
+    /// Free-text announcement shown on the ticket page to **online**
+    /// attendees (migration 0049). Livestream timing, the watch link, badge.
+    ///
+    /// Same rendering contract as [`Self::ticket_note_in_person`].
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ticket_note_online: String,
+
     // ── Community links ─────────────────────────────────────────────
     /// Community/social links shown on ticket + public event pages.
     /// Organizer-configurable. Empty = no community section shown.
@@ -558,6 +581,8 @@ impl EventConfig {
             updated_at: String::new(),
             updated_by: String::new(),
             dev_profile_enabled: false,
+            ticket_note_in_person: String::new(),
+            ticket_note_online: String::new(),
             community_links: vec![],
             calendar_subscribe_url: String::new(),
         }
