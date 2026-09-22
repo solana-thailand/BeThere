@@ -167,7 +167,7 @@ npx wrangler d1 execute bethere-db --remote --json --command \
 
 ```bash
 cd ~/event-checkin
-bash frontend-leptos/build.sh          # MUST run before deploy.sh
+(cd frontend-leptos && bash build.sh)   # MUST run from INSIDE frontend-leptos
 cd worker
 bash deploy.sh --force --reason "ship .issues/133 — 476 of 514 prod tickets dead; plus .issues/136 ticket_name and the .plans/027 A–F queue"
 ```
