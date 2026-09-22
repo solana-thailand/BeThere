@@ -465,6 +465,20 @@ specific reasons to leave it for a waking human:
   something there. It is verified — but verified against a local fixture, not
   against production data.
 
+  **CLOSED 2026-09-23.** Prod was backed up and all four pending migrations
+  were applied to a copy of that backup — 57 real `thb_deposits` rows. 0047's
+  backfill was compared against `ThbDeposit::source()` row by row: **cash 40 /
+  credit 14 / comp 3 both before and after, 0 disagreements**, row counts
+  unchanged, `integrity_check` ok. It changes how the classification is stored,
+  not what it is.
+
+  **Also corrected the same day: production has FOUR migrations pending, not
+  two.** 0046 and 0047 were applied to *staging* only; prod never got them, and
+  this plan read as though it had. They cannot be skipped — `migrations apply`
+  has no subset option, and the Worker in this deploy queries `slip_blake3` and
+  writes `deposit_source`, so deploying the code without them breaks slip
+  upload. Full command-by-command runbook: `docs/deploy_20260923_runbook.md`.
+
 **When you do it:** back up first
 (`npx wrangler d1 export bethere-db --remote --output backups/pre-0046-$(date +%Y%m%d).sql`,
 keep it out of git — it holds PII), then `migrations list` → `CI=true …
