@@ -172,6 +172,16 @@ pub async fn upload_thb_slip_handler(
         _ => None,
     };
 
+    // SIZE/CPU PROBE (.issues/134) — decodes the slip's mini-QR and logs only
+    // whether one was found. Changes no behaviour and stores nothing. It is
+    // here rather than behind a flag because an uncalled function is
+    // dead-stripped, which would make the bundle measurement read falsely
+    // cheap. Remove it, or grow it into the feature, once .issues/134 decides.
+    tracing::info!(
+        qr_found = super::slip_qr::decode_slip_qr_from_url(&body.slip_url).is_some(),
+        "THB slip mini-QR probe"
+    );
+
     if let Some(other) = &duplicate_of {
         // The identity of the other attendee is deliberately kept out of the
         // response and reduced to a fingerprint in the log: "your slip matches
