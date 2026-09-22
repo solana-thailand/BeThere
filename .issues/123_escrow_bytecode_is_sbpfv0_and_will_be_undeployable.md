@@ -56,6 +56,18 @@ that false calm is the failure mode worth guarding. Both branches were run
 before committing: the real key prints "closed", a key that cannot exist prints
 the loud not-found and exits 1.
 
+### Gate watch log
+
+Each line is an actual run of the script, not a restatement of the one above it.
+
+| date | mainnet | devnet | testnet |
+|---|---|---|---|
+| 2026-09-19 | closed | closed | closed |
+| 2026-09-22 | closed | closed | closed |
+
+Until a row reads anything but "closed", the migration plan below stays parked
+and there is nothing to do.
+
 ## Why it matters
 
 [SIMD-0500](https://github.com/solana-foundation/solana-improvement-documents/blob/main/proposals/0500-disable-deployment-of-sbpf-v0-v1-v2.md)
