@@ -33,9 +33,25 @@
 >
 > New, out of queue order and not from this plan: the **ticket-page
 > announcement** feature (`.issues/132`, migration **0049**). Built at the
-> owner's request, uncommitted at the time of writing. It adds a **second
-> pending migration** to the production deploy in §F.6 — 0048 is deferred by
-> design, 0049 must be applied.
+> owner's request. **Now committed** — `ec59bf1`, `fbf73cb`, `96264d9`,
+> `77631ed`, unpushed. Every gate green: workspace + frontend clippy
+> `-D warnings` exit 0, 554 worker tests, 212 frontend tests, domain tests,
+> Python SQL suite 36/36, and **verified in a browser**, not just compiled.
+> It adds a **second pending migration** to the production deploy in §F.6 —
+> 0048 is deferred by design, 0049 must be applied.
+>
+> **Bundle: 1,574,121 bytes gzip = 50.03 %** of the 3 MiB ceiling, well under
+> the 70 % warn line. `worker/.size-budget` baseline moved to that figure, with
+> the composition written into the file. **This retires the separate "fix the
+> −33 staging offset" item** below: the new baseline is a direct measurement
+> and carries no offset.
+>
+> **New issue, unrelated to 0049 and not fixed here:** `.issues/133` — the
+> ticket page dies outright for any event with no venue map link
+> (`#[serde(default)]` does not cover an explicit `null`). Found only because
+> the announcement feature was opened in a browser. Blast radius unmeasured:
+> `wrangler d1 --remote` returns 7403 from this machine. The fix is owned by a
+> peer session.
 
 Every item below is *ungated*: no owner decision, no external account, no
 irreversible action. Anything needing the owner stays in `.issues/129` §7 and is
