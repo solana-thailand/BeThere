@@ -1,6 +1,7 @@
 pub mod config;
 pub mod models;
 pub mod pr_pack;
+pub mod slip_verify;
 
 #[cfg(feature = "qr")]
 pub mod qr;

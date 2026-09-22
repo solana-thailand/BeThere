@@ -183,6 +183,67 @@ stale (`ELSE 0`) and the suite would pass by accident.
 **Not verified:** nothing has been run against production or staging. The guard
 has never met the real 268-row backlog, which is the point of `report`.
 
+## 6. The plan gate, verified 2026-09-22
+
+Blocker 4 in §2 reads as a DNS-and-lead-time problem ("enable after onboarding a
+sender domain"). Onboarding is necessary but **not sufficient**: the feature is
+gated on billing as well, and that had never been checked against Cloudflare's
+docs — it was being carried between sessions as an assertion. Checked now:
+
+| fact | source |
+|---|---|
+| "Sending to arbitrary recipients requires the Workers Paid plan." | [pricing](https://developers.cloudflare.com/email-service/platform/pricing/) |
+| "3,000 included per month, then $0.35 per 1,000 emails" | [pricing](https://developers.cloudflare.com/email-service/platform/pricing/) |
+| "Sending to verified destination addresses in your account is free on all plans"; such sends "do not count toward the included quota" | [pricing](https://developers.cloudflare.com/email-service/platform/pricing/) |
+| Before a sending domain is onboarded you may send **only** to verified destination addresses; after onboarding, to any recipient immediately | [overview](https://developers.cloudflare.com/email-service/) |
+| 50 recipients per message, combined across to/cc/bcc | [limits](https://developers.cloudflare.com/email-service/platform/limits/) |
+| "New accounts start with a conservative daily quota and scale up over time based on your sending behavior, deliverability rates, and account standing." | [limits](https://developers.cloudflare.com/email-service/platform/limits/) |
+| Email Sending is in **beta** for outbound transactional email | [overview](https://developers.cloudflare.com/email-service/) |
+
+Worth stating plainly because it was nearly recorded the other way round: the
+`send_email` binding's API does *not* restrict recipients. The default binding
+sends to anyone, and the `allowed_sender_addresses` / restricted-binding feature
+constrains the **from** address, not the destination. The "verified destinations
+only" rule people remember belongs to Email **Routing**'s `message.forward()`,
+and to Email Sending only *before* a domain is onboarded. The gate here is the
+**plan**, not the API.
+
+### What this changes
+
+1. **The critical path is a billing decision, not DNS.** §2 put the long pole at
+   sender-domain onboarding. The real first question is whether this account goes
+   on Workers Paid at all — and that is the owner's, not something the worker can
+   shorten. Owner-gated; not decided here.
+2. **Volume is not the problem, and never was.** 268 pending rows and 62 for
+   RTM#6 sit far inside the 3,000/month allowance. At this scale the marginal
+   cost of the mail itself is **$0**; the cost is the plan.
+3. **The free tier cannot serve attendees.** "Free on all plans" is real but
+   useless here: every recipient would have to be added as a verified destination
+   address *and confirm it themselves*. Twenty-four attendees will not do that.
+   There is no free path to sending RTM#6's mail.
+4. **Paying today would still not make 2026-09-27 safe.** A freshly onboarded
+   domain has no sending reputation and starts on a deliberately conservative
+   daily quota that scales with observed behaviour. Five days does not warm a
+   domain. The 24 registration confirmations and 24 reminders would leave a cold
+   sender aimed mostly at Gmail inboxes — the failure mode is silent spam-foldering,
+   which is worse than not sending, because nobody learns the mail did not arrive.
+
+### Recommendation — owner's call, not taken here
+
+For **RTM#6 on 2026-09-27**: send by hand from the existing Gmail account. It is
+24 recipients and one event, and it clears the plan gate, the onboarding lead
+time and the cold-domain deliverability risk in a single step.
+
+Treat Email Sending as a **next-event** project rather than a this-week one: if
+email becomes a real product feature, onboarding plus Workers Paid is the path,
+started weeks ahead so the domain can warm. Note it is still in beta.
+
+`NOTIFICATIONS_ENABLED` stays `0` regardless until §3's backlog decision is made
+— that decision is independent of the plan question and still comes first.
+
+**Explicitly not decided here:** whether to put the account on Workers Paid, and
+whether to hand-send RTM#6's mail. Both are the owner's.
+
 ## Related
 
 - `.issues/080` — why post-event kinds survive the event ending.

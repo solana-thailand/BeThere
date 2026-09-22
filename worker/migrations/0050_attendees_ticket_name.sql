@@ -1,0 +1,48 @@
+-- 0050_attendees_ticket_name.sql — `.issues/136`
+--
+-- The `attendees` table has never had a `ticket_name` column. Every attendee
+-- read in the worker is D1-FIRST (`sheets::get_attendees_for_event` and
+-- `sheets::get_attendee_by_id` both try D1 and only fall through to Google
+-- Sheets on a miss), so the value shown on the admin list, the ticket page and
+-- the scanner has always been whatever `D1AttendeeRow::to_attendee` invented —
+-- and what it invented was a copy of the attendee's NAME.
+--
+-- The admin list decides who is a VIP with
+-- `ticket_name.to_lowercase().contains("vip")`, so every attendee whose name
+-- contained "vip" was rendered with a VIP badge. Vipada, Vipawee, Vipawadee
+-- and Vipa are ordinary Thai given names. The Google Sheet had the right value
+-- the whole time; nothing read it.
+--
+-- The read was fixed first, to `String::new()`, which removed the wrong
+-- information without restoring the right information. This column is what
+-- restores it.
+--
+-- NULLABLE with no default, deliberately. Three distinguishable states:
+--
+--   NULL          nobody has told us — a row written before this migration, or
+--                 by a writer that has no business inventing a ticket tier
+--                 (post-event leads).
+--   'Self-Registered' / 'Walk-in'
+--                 this system minted it. Named in
+--                 domain/src/models/attendee/ticket_name.rs so the Sheets
+--                 writer and the D1 writer can be asserted to agree.
+--   anything else the organizer's own ticket tier, from the sheet's
+--                 `ticket_name` column — 'VIP', 'Speaker', 'Sponsor'. This is
+--                 the case that actually matters and the one that was lost.
+--
+-- A NOT NULL DEFAULT '' would have collapsed "never set" into "set to nothing",
+-- and the backfill below could not then tell which rows it still had to visit.
+--
+-- NO BACKFILL HERE. The values live in Google Sheets, not in D1, so SQL cannot
+-- reach them. `POST /api/events/{id}/sync` → `sync_one_attendee` →
+-- `upsert_attendee_full` now carries `ticket_name` through from the sheet row,
+-- so running the existing sync for an event backfills that event. Until it is
+-- run, an old row reads NULL → empty, which is exactly the post-fix behaviour
+-- and strictly better than the name it used to show.
+--
+-- No table rebuild: SQLite ADD COLUMN is O(1) metadata and holds no lock worth
+-- worrying about, so this is safe to apply days before RTM #6 (2026-09-27).
+-- (The migration that DOES need a rebuild is `.issues/127`'s UNIQUE, which is
+-- why it sits in migrations-pending/0048 and not here.)
+
+ALTER TABLE attendees ADD COLUMN ticket_name TEXT;

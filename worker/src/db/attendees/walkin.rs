@@ -46,9 +46,9 @@ pub(crate) async fn try_insert_walkin(
 ) -> Result<bool, String> {
     let stmt = db.prepare(
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
-         contact_channel, contact_handle, checked_in_at, checked_in_by, claim_token, \
+         contact_channel, contact_handle, checked_in_at, checked_in_by, claim_token, ticket_name, \
          created_at, updated_at) \
-         SELECT ?1, ?2, ?3, ?4, 'approved', 'walkin', ?5, ?6, ?7, ?8, ?9, \
+         SELECT ?1, ?2, ?3, ?4, 'approved', 'walkin', ?5, ?6, ?7, ?8, ?9, ?12, \
          datetime('now'), datetime('now') \
          WHERE NOT EXISTS (\
          SELECT 1 FROM attendees \
@@ -68,6 +68,10 @@ pub(crate) async fn try_insert_walkin(
             D1Type::Text(claim_token),
             D1Type::Text(event_id),
             D1Type::Text(email),
+            // Bound from the domain constant so this and the Sheets append for
+            // the same flow cannot drift — the admin Walk-in badge compares
+            // against this exact string. See .issues/136.
+            D1Type::Text(event_checkin_domain::models::attendee::TICKET_NAME_WALK_IN),
         ])
         .map_err(|e| format!("D1 try_insert_walkin bind: {e:?}"))?
         .run()

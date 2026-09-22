@@ -8,7 +8,7 @@
 //! HTTP response. D1 is the source of truth; Sheets is a legacy mirror.
 
 use super::a1;
-use event_checkin_domain::models::attendee::ColumnMapping;
+use event_checkin_domain::models::attendee::{ColumnMapping, TICKET_NAME_SELF_REGISTERED};
 use worker::KvStore;
 
 use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
@@ -355,7 +355,11 @@ pub async fn append_attendee_row(
     set(&mut row, CK::FirstName, first_name);
     set(&mut row, CK::LastName, last_name);
     set(&mut row, CK::Email, email.clone());
-    set(&mut row, CK::TicketName, "Self-Registered".to_string());
+    set(
+        &mut row,
+        CK::TicketName,
+        TICKET_NAME_SELF_REGISTERED.to_string(),
+    );
     set(&mut row, CK::RegistrationDate, registration_date);
     set(&mut row, CK::ApprovalStatus, "Approved".to_string());
     set(&mut row, CK::ClaimToken, claim_token);

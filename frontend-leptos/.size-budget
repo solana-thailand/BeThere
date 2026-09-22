@@ -1,0 +1,66 @@
+# Frontend first-load size budget — BROTLI bytes.
+#
+# Read by scripts/verify/frontend_size_budget.sh. `KEY=value`, `#` comments.
+#
+# Why brotli and not gzip: Cloudflare serves these assets `content-encoding: br`
+# (checked against the deployed site on 2026-09-22), so brotli is what an
+# attendee actually waits for. worker/.size-budget is in gzip because
+# Cloudflare defines the *Worker size limit* on gzip — a different question
+# about a different artifact.
+#
+# Why this file exists at all: until 2026-09-22 the worker had a size gate
+# (.plans/027 item A) and the frontend had none, and the frontend is the
+# bigger of the two. The deployed wasm alone is ~1.68 MB brotli against a
+# ~1.57 MB whole-worker bundle, and every attendee downloads it on venue
+# mobile data before they can see their ticket.
+
+# ---------------------------------------------------------------------------
+# The product budget.
+#
+# Read this before changing it: unlike worker/.size-budget's 3 MiB, this is NOT
+# a platform limit. Cloudflare imposes nothing here. It is a number chosen to
+# stand for a real constraint, and it is honest about being chosen:
+#
+#   2 MiB brotli is roughly 5.6 seconds of download on a 3 Mbps connection —
+#   what a crowded venue actually gives you — before a single pixel renders.
+#   Past that the ticket page stops working at the door, which is the only
+#   moment it has to work.
+#
+# Raising it is allowed. Raising it quietly is the thing this file prevents.
+CEILING_BYTES=2097152
+
+# Fail AT the product budget, warn at 90%. Deliberately tighter than the
+# worker's 85/70: there is no emergency headroom to preserve here because
+# there is no hard wall to crash into — the cost of being over is a slower
+# page, paid by the attendee, continuously.
+FAIL_PCT=100
+WARN_PCT=90
+
+# ---------------------------------------------------------------------------
+# The growth allowance — this, not the ceiling, is the main mechanism.
+#
+# The failure this gate exists to catch is not "we hit a wall". It is "nobody
+# noticed the bundle grew", which is exactly how the frontend reached 1.7 MB
+# with no gate on it. So the primary check is the delta against the baseline
+# below, and crossing it is not a veto: it is a requirement to re-run with
+# --update-baseline and say in the commit what grew.
+#
+# 100 KiB is set where it is on purpose. The concrete decision in front of this
+# repo is .issues/134 option 2 — moving a QR + image decoder into the frontend,
+# measured at +257,210 bytes. That must trip this gate loudly rather than
+# landing as a 15% bundle increase nobody costed.
+MAX_GROWTH_BYTES=102400
+
+# 25 KiB: large enough that routine feature work does not cry wolf, small
+# enough that a new dependency is visible before it is normal.
+WARN_GROWTH_BYTES=25600
+
+# ---------------------------------------------------------------------------
+# Recorded baseline — first load (index.html plus every local asset it
+# references), brotli, measured on the date below from a clean `build.sh`.
+#
+# Update it deliberately, in the same commit as the change that grew the
+# bundle, with `--update-baseline`. An unexplained baseline bump in a diff is
+# the thing this line exists to make visible.
+BASELINE_BYTES=1765890
+BASELINE_DATE=2026-09-22

@@ -148,6 +148,15 @@ These are completed work from issues #039 / #041 / #046 / #053. Listed here so n
   - `POST /api/deposit/refund` (escrow refund)
 - **Risk**: 🟢 Zero (read-only observation)
 - **Decision rule**: if any path >7 ms CPU, flag for P1 optimization. If >10 ms, it's already failing in prod — needs immediate attention.
+- **First datum, 2026-09-22** (`.issues/134`): still nothing measured on a
+  *deployed* path — `wrangler tail` has never been run for this. What was
+  measured is a **proposed** one: decoding a slip's mini-QR (`image` + `rqrr`)
+  costs **33 ms release-native on an M5 Pro** for a 1080×1920 phone screenshot,
+  3.3× the cap, before wasm overhead and on faster silicon than the edge. That
+  is enough to reject the feature, and it is the first number anyone has
+  attached to this cap. It says nothing about the four hot paths above, which
+  remain the actual unknown — and the fact that a single image decode blows the
+  budget by 3× is a reason to raise their priority, not lower it.
 
 ---
 

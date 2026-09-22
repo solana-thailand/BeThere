@@ -20,6 +20,11 @@ pub(super) struct D1AttendeeRow {
     pub(super) event_id: Option<String>,
     email: Option<String>,
     name: Option<String>,
+    /// The event's ticket tier. Added by migration 0050 (`.issues/136`) — NULL
+    /// on any row written before it, and on any row whose event has not been
+    /// re-synced from its sheet since. NULL means "nobody told us", which is
+    /// why it maps to an empty string rather than to anything invented.
+    ticket_name: Option<String>,
     approval_status: Option<String>,
     participation_type: Option<String>,
     checked_in_at: Option<String>,
@@ -78,7 +83,16 @@ impl D1AttendeeRow {
             last_name: String::new(),
             name: self.name.clone().unwrap_or_default(),
             email: self.email.clone().unwrap_or_default(),
-            ticket_name: self.name.clone().unwrap_or_default(),
+            // Read from the column added by migration 0050, NOT from `name`.
+            // It used to be `self.name`, which turned every D1-served
+            // attendee's own name into their ticket type — and because the
+            // admin list decides VIP with
+            // `ticket_name.to_lowercase().contains("vip")`, ordinary Thai names
+            // (Vipada, Vipawee, Vipawadee) came back wearing a VIP badge
+            // (.issues/136). `unwrap_or_default` keeps NULL meaning "not known"
+            // rather than substituting some other field for it, which is the
+            // mistake that started all this.
+            ticket_name: self.ticket_name.clone().unwrap_or_default(),
             approval_status: approval,
             participation_type: self.participation_type.clone().unwrap_or_default(),
             registration_date: None,
@@ -115,7 +129,7 @@ pub(crate) async fn get_attendee_by_id(
     api_id: &str,
 ) -> Result<Option<Attendee>, String> {
     let stmt = db.prepare(
-        "SELECT id, event_id, email, name, approval_status, participation_type, \
+        "SELECT id, event_id, email, name, ticket_name, approval_status, participation_type, \
          checked_in_at, checked_in_by, claim_token, claimed_at, claim_asset_id, \
          claim_signature, qr_url, contact_channel, contact_handle, \
          deposit_status, deposit_amount_usdc, deposit_tx_hash, \
@@ -176,7 +190,7 @@ pub(crate) async fn get_attendee_by_claim_token(
     policy: crate::claim::ClaimTokenPolicy,
 ) -> Result<Option<Attendee>, String> {
     let stmt = db.prepare(
-        "SELECT id, event_id, email, name, approval_status, participation_type, \
+        "SELECT id, event_id, email, name, ticket_name, approval_status, participation_type, \
          checked_in_at, checked_in_by, claim_token, claimed_at, claim_asset_id, \
          claim_signature, qr_url, contact_channel, contact_handle, \
          deposit_status, deposit_amount_usdc, deposit_tx_hash, \
@@ -275,7 +289,7 @@ pub(crate) async fn get_attendees_by_event(
     event_id: &str,
 ) -> Result<Vec<Attendee>, String> {
     let stmt = db.prepare(
-        "SELECT id, event_id, email, name, approval_status, participation_type, \
+        "SELECT id, event_id, email, name, ticket_name, approval_status, participation_type, \
          checked_in_at, checked_in_by, claim_token, claimed_at, claim_asset_id, \
          claim_signature, qr_url, contact_channel, contact_handle, \
          deposit_status, deposit_amount_usdc, deposit_tx_hash, \
@@ -353,6 +367,11 @@ struct D1AttendeeWithCounts {
     event_id: Option<String>,
     email: Option<String>,
     name: Option<String>,
+    /// The event's ticket tier. Added by migration 0050 (`.issues/136`) — NULL
+    /// on any row written before it, and on any row whose event has not been
+    /// re-synced from its sheet since. NULL means "nobody told us", which is
+    /// why it maps to an empty string rather than to anything invented.
+    ticket_name: Option<String>,
     approval_status: Option<String>,
     participation_type: Option<String>,
     checked_in_at: Option<String>,
@@ -401,7 +420,16 @@ impl D1AttendeeWithCounts {
             last_name: String::new(),
             name: self.name.clone().unwrap_or_default(),
             email: self.email.clone().unwrap_or_default(),
-            ticket_name: self.name.clone().unwrap_or_default(),
+            // Read from the column added by migration 0050, NOT from `name`.
+            // It used to be `self.name`, which turned every D1-served
+            // attendee's own name into their ticket type — and because the
+            // admin list decides VIP with
+            // `ticket_name.to_lowercase().contains("vip")`, ordinary Thai names
+            // (Vipada, Vipawee, Vipawadee) came back wearing a VIP badge
+            // (.issues/136). `unwrap_or_default` keeps NULL meaning "not known"
+            // rather than substituting some other field for it, which is the
+            // mistake that started all this.
+            ticket_name: self.ticket_name.clone().unwrap_or_default(),
             approval_status: approval,
             participation_type: self.participation_type.clone().unwrap_or_default(),
             registration_date: None,
@@ -468,7 +496,7 @@ pub(crate) async fn get_attendee_with_claim_counts(
     // Targeted query: find attendee by claim_token + count aggregates in one D1 call.
     // Previous version fetched ALL attendees for the event (O(n) data transfer).
     let stmt = db.prepare(
-        "SELECT a.id, a.event_id, a.email, a.name, a.approval_status, a.participation_type, \
+        "SELECT a.id, a.event_id, a.email, a.name, a.ticket_name, a.approval_status, a.participation_type, \
                 a.checked_in_at, a.checked_in_by, a.claim_token, a.claimed_at, a.claim_asset_id, \
                 a.claim_signature, a.qr_url, a.contact_channel, a.contact_handle, \
                 a.deposit_status, a.deposit_amount_usdc, a.deposit_tx_hash, \
@@ -570,4 +598,84 @@ pub(crate) async fn count_in_person_attendees(
         .map_err(|e| format!("D1 count_in_person first: {e:?}"))?;
 
     Ok(cnt.map(|c| c as usize).unwrap_or(0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A D1 row for someone whose name happens to contain "vip".
+    ///
+    /// Not a contrived string: Vipada, Vipawee, Vipawadee and Vipa are ordinary
+    /// Thai given names (วิภาดา, วิภาวี, วิภาวดี, วิภา), and the admin list
+    /// decides who is a VIP with `ticket_name.to_lowercase().contains("vip")`.
+    fn row_named(name: &str) -> D1AttendeeRow {
+        serde_json::from_value(serde_json::json!({
+            "id": "019ec0aa-0000-7000-8000-000000000001",
+            "event_id": "rtm-6",
+            "email": "someone@example.com",
+            "name": name,
+            "approval_status": "Approved",
+            "participation_type": "in_person",
+        }))
+        .expect("row deserializes")
+    }
+
+    /// The `attendees` table has no `ticket_name` column at all — the struct's
+    /// own doc says such fields are "filled with defaults". Copying `name` into
+    /// it is not a default: it is different data wearing the field's name, and
+    /// every surface that reads `ticket_name` then reports the attendee's name
+    /// as their ticket type.
+    #[test]
+    fn a_d1_attendee_does_not_get_their_name_as_a_ticket_type() {
+        let attendee = row_named("Vipada Srisuk").to_attendee();
+        assert_eq!(attendee.name, "Vipada Srisuk", "the name still survives");
+        assert_ne!(
+            attendee.ticket_name, attendee.name,
+            "ticket_name must not be a copy of the attendee's name — D1 has no \
+             ticket_name column, so the honest value is empty"
+        );
+        assert!(
+            attendee.ticket_name.is_empty(),
+            "ticket_name should be empty for a D1-sourced attendee, matching \
+             first_name/last_name, which are the fields that got this right"
+        );
+    }
+
+    /// Migration 0050 gave the table a real `ticket_name`. When it is set, it
+    /// must be what comes back — otherwise the column exists, the sync fills
+    /// it, and the organizer still sees nothing.
+    #[test]
+    fn a_real_ticket_tier_survives_the_conversion() {
+        let mut row = row_named("Somchai P.");
+        row.ticket_name = Some("VIP".to_string());
+        let attendee = row.to_attendee();
+        assert_eq!(attendee.ticket_name, "VIP");
+        assert_eq!(attendee.name, "Somchai P.", "the name is left alone");
+    }
+
+    /// NULL is "nobody told us", and must not be filled in from somewhere else.
+    /// This is the distinction migration 0050 deliberately kept by making the
+    /// column nullable rather than `NOT NULL DEFAULT ''`.
+    #[test]
+    fn an_unset_tier_reads_as_empty_and_not_as_the_name() {
+        let attendee = row_named("Vipada Srisuk").to_attendee();
+        assert_eq!(attendee.ticket_name, "");
+    }
+
+    /// The specific consequence the organizer sees: the admin list flags a VIP
+    /// with `ticket_name.to_lowercase().contains("vip")`, so a name copied into
+    /// `ticket_name` turns Vipada into a VIP. The list is served D1-FIRST
+    /// (`get_attendees_inner`), so this is the normal path, not an outage path.
+    #[test]
+    fn an_ordinary_thai_name_does_not_become_a_vip_badge() {
+        for name in ["Vipada Srisuk", "Vipawee T.", "vipul m", "VIPAWADEE"] {
+            let ticket = row_named(name).to_attendee().ticket_name;
+            assert!(
+                !ticket.to_lowercase().contains("vip"),
+                "{name:?} must not read as a VIP ticket — that is the exact test \
+                 frontend-leptos/src/pages/admin.rs:is_vip_ticket applies"
+            );
+        }
+    }
 }

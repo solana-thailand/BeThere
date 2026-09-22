@@ -3,8 +3,9 @@
 Status: **fixed; offsets verified against the deployed program 2026-09-17.** All
 38 real devnet `AttendeeDeposit` accounts decode correctly, and 38/38 PDAs
 re-derive from the decoded fields (see below). The real-byte fixture tests pass
-(worker `wire::tests` 7/7, flow-harness 5/5, 2026-09-18). A full script run is still outstanding and is blocked
-on devnet USDC, as tracked in #084. Found while converting the `python3 -c` interpolation sites listed
+(worker `wire::tests` 7/7, flow-harness 5/5, 2026-09-18). A full script run is
+still outstanding — but **it is no longer blocked on devnet USDC**; see
+"Remaining" below. Found while converting the `python3 -c` interpolation sites listed
 as deferred work in [073](073_signing_keypair_in_process_argv.md).
 
 ## What happened
@@ -106,7 +107,24 @@ on one path while a twin keeps the bug is a recurring shape here.)
 match what the deployed program writes. That is now answered from real chain
 data (below) without needing a fresh deposit. A full end-to-end run of
 `e2e_devnet_test.sh` is still outstanding, but it is a script-level check, not
-an offset check, and it is blocked on devnet USDC with the #084 gate.
+an offset check.
+
+~~and it is blocked on devnet USDC with the #084 gate.~~ **That blocker is
+stale, corrected 2026-09-22.** Re-measured directly against devnet rather than
+re-read from the issue that asserted it:
+
+```
+$ solana balance 7ABX2ZyPogms6dvb3f8mTACy3SZUui25DhqYmSY9LSNC --url devnet
+4.99657124 SOL
+$ spl-token accounts --owner 7ABX2… --url devnet
+4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU   9.99998
+```
+
+The harness attendee wallet is funded in both SOL and devnet USDC
+(`4zMMC9sr…` is the devnet USDC-Dev mint), so nothing here waits on a faucet
+captcha. `.issues/084` carries the same correction for its own USDC blocker.
+What actually remains for a green run is the four contract drifts listed in
+`.issues/084`, not funding.
 
 ## Verification against real devnet accounts — 2026-09-17
 

@@ -233,6 +233,21 @@ jobs:
         working-directory: frontend-leptos
         run: trunk build
 
+      - name: Frontend first-load size budget
+        # The sibling of wasm-build's worker size gate. This is the only job
+        # that builds the SPA, so it is the only place the frontend can be
+        # measured — and until 2026-09-22 nothing measured it at all, while the
+        # worker had a gate. The frontend is the bigger of the two.
+        #
+        # `--dir` rather than `--build`: trunk has already produced the bundle
+        # above, and --dir also skips the staleness check, which is meaningless
+        # on a fresh checkout where every mtime is identical.
+        #
+        # Verified locally that a plain `trunk build` dist and a `build.sh` dist
+        # measure within 4 bytes of each other, so the baseline recorded from
+        # build.sh does not spuriously red this step.
+        run: bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
+
       - uses: pnpm/action-setup@v4
         with:
           version: 10

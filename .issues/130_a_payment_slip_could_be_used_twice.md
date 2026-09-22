@@ -117,9 +117,18 @@ tests cannot see that — it is a property of SQLite, not of the Rust.
 - [ ] `.issues/129` Gap 1 — the comp action, so a suspected slip has an outcome
       other than "admit and owe ฿500" or "refuse entry". **This issue is only
       half a fix without it.**
+- [ ] The mini-QR bank reference — the real fix named in §3. **Measured
+      2026-09-22 and it does not fit the current plan**: `.issues/134`. Bundle
+      size was fine (+257 KB gzip, 58 % of the ceiling); the free plan's 10 ms
+      CPU budget is not (33 ms for a phone screenshot, 89 % of it in QR grid
+      detection). The string parser shipped anyway as `domain::slip_verify`;
+      only the image decode is blocked, and it is now an owner decision about
+      which Cloudflare plan the worker runs on. **Until that is answered, this
+      issue's stopgap is the whole control.**
 
 ## Related
 
+- `.issues/134` — why the QR half is not in the worker.
 - `.issues/129` — the design this came out of; §7 holds the owner decisions.
 - `.issues/127` — the `UNIQUE (event_id, attendee_id)` that is still missing,
   deferred to after RTM #6. Different column, same lesson: a constraint in code

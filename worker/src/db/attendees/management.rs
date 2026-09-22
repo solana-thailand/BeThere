@@ -133,12 +133,22 @@ pub(crate) async fn clear_attendee_pii(db: &D1Database, attendee_id: &str) -> Re
 /// Empty optional strings bind as NULL so the `COALESCE(excluded.X, attendees.X)`
 /// branches preserve existing values instead of overwriting with ''.
 #[allow(clippy::too_many_arguments)]
+/// `ticket_name` is the event's own ticket tier, straight from the sheet's
+/// `ticket_name` column, and this is the backfill path for `.issues/136`: D1
+/// had no such column, so nothing ever read the tier the sheet had all along.
+/// Running this sync for an event is what restores 'VIP' / 'Speaker' / … on the
+/// admin list for rows that predate migration 0050. An empty value means the
+/// sheet said nothing and is preserved as "keep whatever D1 already had",
+/// matching the empty-string idiom used by every other sheet-sourced column
+/// here — so a sync of a sheet with no ticket column cannot blank a tier that
+/// was already recorded.
 pub(crate) async fn upsert_attendee_full(
     db: &D1Database,
     id: &str,
     event_id: &str,
     email: &str,
     name: &str,
+    ticket_name: &str,
     approval_status: &str,
     participation_type: &str,
     contact_channel: &str,
@@ -178,7 +188,7 @@ pub(crate) async fn upsert_attendee_full(
          deposit_status, deposit_tx_hash, \
          refund_tx_hash, refund_link, \
          bank_name, bank_account_number, bank_account_name, \
-         sheet_row_index, synced_at, created_at, updated_at \
+         sheet_row_index, ticket_name, synced_at, created_at, updated_at \
          ) VALUES ( \
          ?1, ?2, ?3, ?4, ?5, ?6, \
          ?7, ?8, \
@@ -186,7 +196,7 @@ pub(crate) async fn upsert_attendee_full(
          ?14, NULLIF(?15, ''), \
          NULLIF(?16, ''), NULLIF(?17, ''), \
          NULLIF(?18, ''), NULLIF(?19, ''), NULLIF(?20, ''), \
-         ?21, datetime('now'), datetime('now'), datetime('now') \
+         ?21, NULLIF(?22, ''), datetime('now'), datetime('now'), datetime('now') \
          ) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, \
@@ -207,6 +217,7 @@ pub(crate) async fn upsert_attendee_full(
          bank_account_number = COALESCE(excluded.bank_account_number, attendees.bank_account_number), \
          bank_account_name = COALESCE(excluded.bank_account_name, attendees.bank_account_name), \
          sheet_row_index = CASE WHEN excluded.sheet_row_index = 0 THEN attendees.sheet_row_index ELSE excluded.sheet_row_index END, \
+         ticket_name = COALESCE(excluded.ticket_name, attendees.ticket_name), \
          synced_at = datetime('now'), \
          updated_at = datetime('now')",
     );
@@ -238,6 +249,7 @@ pub(crate) async fn upsert_attendee_full(
         opt_text(bank_account_number),    // ?19
         opt_text(bank_account_name),      // ?20
         sheet_row_bind,                   // ?21
+        D1Type::Text(ticket_name),        // ?22
     ])
     .map_err(|e| format!("D1 upsert_attendee_full bind: {e:?}"))?
     .run()

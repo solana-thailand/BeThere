@@ -355,7 +355,13 @@ pub async fn get_public_ticket(
         "video_url": event.video_url,
         "event_link": event.link,
         "event_location": event.location,
-        "event_location_map_url": safe_map_url(&event.location_map_url),
+        // `safe_map_url` returns `Option`, but the ticket client declares this
+        // field as a plain `String` ("empty = no link"), and `#[serde(default)]`
+        // does not cover an explicit `null` — only an absent key. Emitting the
+        // bare `Option` made the whole ticket page fail to deserialize for any
+        // event without a venue map link. Flatten to "" to honour the declared
+        // contract. See `.issues/133`.
+        "event_location_map_url": safe_map_url(&event.location_map_url).unwrap_or_default(),
         "event_tagline": event.tagline,
         "nft_image_url": event.nft_image_url,
         "claimed": attendee.claimed_at.is_some(),
