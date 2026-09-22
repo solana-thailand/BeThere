@@ -136,8 +136,8 @@ Measured 2026-09-22, with the feature and the length cap in.
 | frontend `cargo test` | **212 passed, 0 failed** (incl. `css_class_audit` 5/5) |
 | Python SQL suite (applies all migrations, incl. 0049) | **36 passed** |
 | `upsert_event` SQL alignment | 61 columns = 61 placeholders; 40 binds = 40 `?` |
-| bundle re-measure | see §5 |
-| opened in a browser | see §5 |
+| worker bundle | **1,574,121 bytes gzip = 50.03%** of the 3 MiB ceiling, exit 0 |
+| opened in a browser | **verified, see §7** |
 
 The SQL alignment was checked by counting, not by eye. `upsert_event` builds
 its statement as a string, so the column list, the `VALUES` placeholders and
@@ -146,15 +146,14 @@ some other column and nothing fails loudly.
 
 ## 5. Remaining before this can ship
 
-1. worker `cargo test`
-2. `cargo clippy --all-targets -- -D warnings`, worker and frontend (frontend
-   is wasm32)
-3. `bash scripts/verify/worker_size_budget.sh` — not yet measured with the
-   feature in
-4. **Open it in a browser.** `cargo check`, clippy and HTTP 200 all pass on a
-   broken Leptos page; the rendered DOM is the only real check.
-5. Apply 0049 — local, then staging, then production. It is now an additional
-   pending migration on the production deploy described in `.plans/027` §F.6.
+Everything in §4 and §7 is done. What is left is deployment, which is
+owner-gated:
+
+1. Apply 0049 to staging, then production. It is now an **additional pending
+   migration** on the production deploy described in `.plans/027` §F.6 (0048 is
+   deferred by design; 0049 must be applied).
+2. Nothing else. The code is committed on `develop` (`ec59bf1`, `fbf73cb`,
+   `96264d9`) and unpushed.
 
 ## 6. A trap this work uncovered
 
@@ -170,3 +169,38 @@ of a `&[char]`, and the trap is now documented in that test's module comment.
 
 Worth knowing that the same defect will fire again on any char literal holding
 a quote anywhere under `src/`.
+
+## 7. Verified in a browser, not just compiled
+
+Per [[verify-frontend-by-opening-it]] — `cargo check`, `clippy -D warnings` and
+an HTTP 200 all pass on a Leptos page that renders nothing, so none of them
+count as verification here.
+
+Harness: `wrangler dev --local --port 8788 --persist-to /tmp/bethere-dev-state`,
+clean store, all migrations applied (**0049 applied cleanly for the first time
+anywhere**; 0048 correctly absent). Seeded event `probe-evt` with two
+attendees, `probe-inperson` and `probe-online`, straight into local D1 —
+`get_attendee_by_id` is D1-first, so the Sheets fallback never runs and this
+made **zero Google calls** despite `.dev.vars` holding live credentials.
+
+Read back from the rendered DOM:
+
+- `.ticket-announcement-card` present, title "From the organizer".
+- **The variant split works end to end.** The in-person attendee receives only
+  the in-person note; the online attendee receives only the online note, and
+  the in-person text appears nowhere in its DOM (checked explicitly).
+- **The XSS contract holds in a real browser.** The seeded
+  `<script>alert(1)</script>` came back as `innerHTML`
+  `&lt;script&gt;alert(1)&lt;/script&gt;`, with **0 `<script>` elements inside
+  the card** and no alert fired.
+- Thai text renders correctly, computed `white-space` is `pre-wrap` so the
+  organizer's line breaks survive, the URL is linkified with `target="_blank"
+  rel="noopener noreferrer"`, and the trailing sentence `.` is outside the
+  `href`.
+
+Screenshot taken and eyeballed: the card sits above the attendee details,
+sharing the Access & Logistics shell as intended.
+
+**This browser pass is also what found `.issues/133`** — the ticket page dies
+outright for any event with no venue map link. Unrelated to this feature, and
+it would have kept hiding behind a green build.

@@ -27,5 +27,12 @@ WARN_PCT=70
 # Update it deliberately, in the same commit as the change that grew the
 # bundle, with `--update-baseline`. An unexplained baseline bump in a diff is
 # the thing this line exists to make visible.
+# 2026-09-22: moved 1569688 -> 1574121. Composition, so nobody re-derives it:
+# +4332 is the ticket announcement feature (.issues/132); the remaining +101 is
+# growth from a8175cb that was never recorded. Note the OLD 1569688 figure
+# carried a known -33 byte staging offset, so deltas printed against it
+# overstated growth by 33 — real growth for a8175cb was +68, not +101. This new
+# baseline is a direct measurement and carries no offset, which retires the
+# separate "fix the -33" item in .plans/027.
 BASELINE_BYTES=1574121
 BASELINE_DATE=2026-09-22
