@@ -1,6 +1,6 @@
 # 133 — The ticket page dies when the event has no venue map link
 
-**Status:** open, reproduced locally, NOT fixed
+**Status:** fixed and guarded — **but UNCOMMITTED in the working tree** (see §9)
 **Found:** 2026-09-22, incidentally, while browser-verifying `.issues/132`
 **Introduced by:** `7e1d3c1 feat(events): add Google Maps link for event location`
 **Unrelated to 0049** — the announcement feature merely gave a reason to open a
@@ -160,3 +160,97 @@ sibling keeps the bug.
 (`frontend-leptos/src/api/types.rs`, possibly `worker/src/handlers/attendee/read.rs`,
 plus a test under `frontend-leptos/tests/`). This issue file and the repro stay
 with the session that found it.
+
+## 9. The fix, and the guard that would have caught it
+
+Written by session `event-checkin-ff`. Recorded here because this is the issue
+file; the claims below were **verified against the tree**, not transcribed.
+
+### The fix — server-side, deliberately
+
+`worker/src/handlers/attendee/read.rs:358`:
+
+```rust
+"event_location_map_url": safe_map_url(&event.location_map_url).unwrap_or_default(),
+```
+
+Server-side and not client-side on purpose: it repairs **every** client at
+once, including already-loaded tabs running a cached wasm bundle, which a
+client-side fix cannot do. It also puts the wire back in step with what the
+client already believed — `api/types.rs:388` documents "Empty = no link", and
+`frontend-leptos/src/pages/ticket/event_context.rs:66` re-runs `safe_map_url`
+on a plain `String` (verified). So `""` is the value the client was written
+for all along.
+
+### The guard — `frontend-leptos/tests/wire_nullability.rs`, 4 tests
+
+Derives every `pub fn … -> Option<…>` under `domain/src` from source, so a
+helper written tomorrow is covered the day it exists; brace-matches the `json!`
+blocks in `read.rs` and `public_event.rs`; asserts any entry calling such a
+helper is either flattened or `Option` client-side. Floors on both sides so it
+fails loudly rather than silently matching nothing.
+
+`event-checkin-ff` reports proving it fires by reverting `read.rs` to the
+broken version and watching the guard **fail against the real files** (exit
+101), then pass with the fix restored. I did not re-run that A/B myself — it
+would mean editing another session's in-flight file — so it is recorded here as
+their result, not mine.
+
+### Why `mirror_field_types.rs` did not catch this
+
+That test **already flags exactly this hazard** (domain `Option<T>` vs frontend
+`T`); its module docs say so. It missed this one for two independent reasons,
+both verified here:
+
+1. **`AttendeeData` is not in `MIRROR_STRUCT_PAIRS` at all.** There are 24
+   pairs — `PublicEventData`, `AttendeeListItem`, `AttendeeResponse`,
+   `StatsResponse`, `EventDetail`, `PrPack` and so on — and the ticket
+   payload's struct is not among them. Confirmed: `AttendeeData` appears zero
+   times in that file.
+2. **Even if it were, it could not see this.** `EventConfig.location_map_url`
+   is a plain `String`. The `null` is manufactured by a **handler expression**
+   in the `json!` block, and `mirror_field_types.rs` parses *struct
+   definitions*.
+
+Point 2 is the durable lesson, and it generalises well beyond this field:
+**struct-level mirror checks cannot see nullability created in the payload.**
+Any guard built by comparing type declarations has a blind spot exactly the
+shape of a `json!` macro.
+
+### Honest coverage — do not over-trust the new guard
+
+The guard covers **1 of the 9** top-level nullables in the ticket payload: the
+one that arrives via a domain helper. The other eight — `qr_image`,
+`deposit_info`, `claimed_asset_id`, `cluster`, `rollover_target_event`,
+`in_person_available`, `refund_link`, `deposit_deadline_hours` — reach `json!`
+as locals or struct fields and are checked by **nothing**.
+
+All eight are correctly `Option` client-side today (three independent passes
+agree, and `-78` extended it to 21 nullables across three nesting levels), but
+nothing keeps them that way.
+
+`event-checkin-ff` initially described those eight as "covered by
+`mirror_field_types.rs` instead"; `-78` caught that it was false, and the docs
+were corrected to say unchecked. Worth preserving as the reason this section
+exists: **a guard that overstates its coverage ends the search.** The comforting
+version of this note would have closed the issue with eight fields unguarded.
+
+### Verification recorded
+
+`worker cargo clippy --all-targets -D warnings` exit 0 · frontend `cargo fmt`
+clean · frontend suite **216 passed / 0 failed** including the 4 new tests —
+this last one I re-ran myself and confirm.
+
+### NOT COMMITTED
+
+`ff`'s instructions are to commit only when its user asks, so the fix and the
+guard sit **uncommitted in the working tree**:
+
+```
+ M worker/src/handlers/attendee/read.rs
+?? frontend-leptos/tests/wire_nullability.rs
+```
+
+Nobody has claimed the commit. This is the live loose end on this issue — a
+verified fix for a page-killing bug, sitting unstaged, one `git checkout` away
+from being lost.
