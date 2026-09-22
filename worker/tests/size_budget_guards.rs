@@ -148,3 +148,150 @@ fn the_gate_cannot_pass_on_an_empty_bundle() {
          dropping a map look like a size win"
     );
 }
+
+// ---------------------------------------------------------------------------
+// The frontend gate (added 2026-09-22, .issues/135)
+//
+// The worker had a size gate and the frontend had none — and the frontend is
+// the bigger of the two: 1.77 MB brotli of first load against a 1.57 MB
+// whole-worker bundle, downloaded by every attendee on venue mobile data
+// before they can see their ticket. Every invariant here fails silently in
+// exactly the way the worker ones do.
+// ---------------------------------------------------------------------------
+
+/// Read one `KEY=value` from `frontend-leptos/.size-budget`.
+fn frontend_budget(key: &str) -> u64 {
+    let file = repo_file("../frontend-leptos/.size-budget");
+    let prefix = format!("{key}=");
+    let raw = file
+        .lines()
+        .find_map(|l| l.trim().strip_prefix(&prefix).map(str::trim))
+        .unwrap_or_else(|| panic!("frontend-leptos/.size-budget is missing {key}"));
+    raw.parse()
+        .unwrap_or_else(|e| panic!("frontend .size-budget {key}={raw:?} is not a number: {e}"))
+}
+
+#[test]
+fn ci_runs_the_frontend_size_gate() {
+    let ci = repo_file("../.github/workflows/ci.yml");
+    assert!(
+        ci.contains("scripts/verify/frontend_size_budget.sh"),
+        "CI must run the frontend size gate. The e2e job is the only job that builds the \
+         SPA, so it is the only place the frontend can be measured at all — if the step \
+         is dropped, nothing measures the larger half of what users download"
+    );
+}
+
+#[test]
+fn the_frontend_gate_cannot_pass_on_a_half_built_bundle() {
+    let gate = strip_sh_comments(&repo_file("../scripts/verify/frontend_size_budget.sh"));
+    assert!(
+        gate.contains("pass vacuously"),
+        "the frontend gate must reject a dist that is empty or index.html-only. Without \
+         that check it reports a few KiB as comfortably under budget, which is the shape \
+         of a green gate that measures nothing (.issues/072)"
+    );
+    assert!(
+        gate.contains("references files that are not in"),
+        "an asset referenced by index.html but absent from dist must be an error, not a \
+         skip. A reference that silently measures as zero is how a gate stops seeing a \
+         whole asset while still reporting green"
+    );
+}
+
+/// The gate's whole claim is that it measures what an attendee waits for.
+/// Cloudflare serves these assets `br` at roughly quality 4 — measured against
+/// the deployed site — so judging gzip, or judging brotli at 11, would report
+/// a number nobody downloads. brotli-11 understates it by ~28%.
+#[test]
+fn the_frontend_gate_measures_what_cloudflare_actually_serves() {
+    let gate = strip_sh_comments(&repo_file("../scripts/verify/frontend_size_budget.sh"));
+    assert!(
+        gate.contains("brotliCompressSync"),
+        "the frontend gate must measure brotli — Cloudflare serves these assets with \
+         content-encoding: br, so a gzip number is not what any attendee waits for"
+    );
+    assert!(
+        gate.contains("BROTLI_PARAM_QUALITY"),
+        "the brotli quality must be set explicitly. The default is 11; Cloudflare \
+         compresses on the fly at roughly 4, and the gap between them is ~28% of the \
+         bundle — large enough that leaving it implicit is a measurement error, not a \
+         detail"
+    );
+}
+
+#[test]
+fn frontend_budget_thresholds_are_coherent() {
+    let ceiling = frontend_budget("CEILING_BYTES");
+    let warn_pct = frontend_budget("WARN_PCT");
+    let fail_pct = frontend_budget("FAIL_PCT");
+    let baseline = frontend_budget("BASELINE_BYTES");
+    let max_growth = frontend_budget("MAX_GROWTH_BYTES");
+    let warn_growth = frontend_budget("WARN_GROWTH_BYTES");
+
+    assert!(
+        warn_pct < fail_pct && fail_pct <= 100,
+        "warn ({warn_pct}%) must sit below fail ({fail_pct}%), and fail must not exceed \
+         the budget itself"
+    );
+    assert!(
+        warn_growth < max_growth,
+        "the growth warn line ({warn_growth}) must sit below the growth fail line \
+         ({max_growth})"
+    );
+    assert!(
+        baseline > 0,
+        "BASELINE_BYTES is 0 — the gate would report the entire bundle as growth and be \
+         red on a clean tree, which means it will be ignored"
+    );
+    assert!(
+        baseline <= ceiling * warn_pct / 100,
+        "BASELINE_BYTES ({baseline}) is already past the warn line — a gate that is amber \
+         on a clean tree is a gate nobody reads"
+    );
+    // The number this gate was built to make loud: .issues/134 option 2 moves a
+    // QR + image decoder into the frontend, measured at +257,210 bytes. If the
+    // growth allowance ever grows past it, that decision lands silently.
+    assert!(
+        max_growth < 257_210,
+        "MAX_GROWTH_BYTES ({max_growth}) must stay below the 257,210-byte frontend QR \
+         decoder in .issues/134 option 2 — that is the specific change this allowance \
+         exists to make visible, and an allowance wide enough to swallow it is not one"
+    );
+}
+
+/// Two gates measuring two bundles will drift; that is what sibling code does.
+/// These are the properties where drift would be silent AND harmful, so they
+/// are asserted on both scripts at once rather than left to whoever edits one.
+#[test]
+fn both_size_gates_keep_the_properties_that_make_them_trustworthy() {
+    let worker = strip_sh_comments(&repo_file("../scripts/verify/worker_size_budget.sh"));
+    let frontend = strip_sh_comments(&repo_file("../scripts/verify/frontend_size_budget.sh"));
+
+    for (name, gate) in [("worker", &worker), ("frontend", &frontend)] {
+        // The budget file is data. `source` would execute whatever a bad merge
+        // dropped into it, in a script that deploy.sh runs.
+        assert!(
+            gate.contains("awk -F= -v k="),
+            "the {name} gate must PARSE its budget file, not source it"
+        );
+        assert!(
+            !gate.contains("source \"$BUDGET_FILE\"") && !gate.contains(". \"$BUDGET_FILE\""),
+            "the {name} gate must never source its budget file"
+        );
+        // A missing key must stop the gate, not fall back to a default — a
+        // budget that silently defaults is a budget nobody is enforcing.
+        assert!(
+            gate.contains("is missing $key"),
+            "the {name} gate must refuse a budget file with a missing key rather than \
+             defaulting"
+        );
+        // Without this the only way to notice growth is to read the number,
+        // and nobody reads a number that is always green.
+        assert!(
+            gate.contains("--update-baseline"),
+            "the {name} gate must support --update-baseline, so an intentional bump is a \
+             visible line in the same commit as the change that caused it"
+        );
+    }
+}
