@@ -132,15 +132,111 @@ auto-discovers, so the new script was picked up without wiring);
 session cannot execute GitHub Actions. The 4-byte check above is the closest
 local proxy, and it is why the step uses `--dir` rather than `--build`.
 
-## 6. Remaining
+## 6. What the gate was then used to measure (2026-09-23)
 
-- [ ] **Precompress the assets at build time** — 380,390 bytes per first load,
-      21.5 %, no code change. Bigger than any feature on the queue. It touches
-      the deploy path, which has a production deploy pending (`.plans/027`
-      §F.6), so it wants a waking human rather than an unattended session.
-- [ ] **Split the 22 render-blocking stylesheets** so an attendee viewing a
-      ticket does not download the admin and dashboard sheets. Now measurable,
-      which is the prerequisite.
+With the gate in place, every plausible lever on the bundle was measured rather
+than argued about. **The headline is that three of the four are not worth
+taking, and one of them would have made things worse while looking like a
+430 KB win.**
+
+The wasm is **90.2 % code section, 8.6 % data** — no embedded blob to delete,
+and the `name` custom section is already stripped to 1,267 bytes. There is no
+accident here to find; it is genuinely that much compiled Leptos.
+
+### 6.1 `wasm-opt` — the repo's own dead script would have hurt
+
+`frontend-leptos/optimize-wasm.sh` exists, uses `-Oz`, and is **invoked from
+nowhere** — not `build.sh`, not `deploy.sh`, not CI. Measured on the shipped
+wasm:
+
+| | raw | **br4 (served)** | vs baseline |
+|---|---:|---:|---:|
+| trunk output | 5,478,875 | **1,646,742** | — |
+| `-Oz` (what the script uses) | 5,048,846 | 1,650,371 | **+3,629 worse** |
+| `-O2` | 5,334,606 | **1,637,846** | **−8,896 better** |
+| `-O3` | 5,262,260 | 1,643,638 | −3,104 |
+| `-Os` | 5,248,050 | 1,645,387 | −1,355 |
+| `-O4` | 5,266,407 | 1,653,103 | +6,361 worse |
+
+**`-Oz` shrinks the raw wasm by 430,029 bytes and makes the bytes an attendee
+downloads bigger.** Optimizing for size makes the code less compressible — the
+repeated patterns brotli feeds on are exactly what `-Oz` folds away. Anyone who
+wired that script up on the strength of the raw number would have shipped a
+regression and called it a 7.8 % win. Same lesson as §3.1, different tool:
+measure the number the user experiences.
+
+`-O2` is the only level that helps and it is worth **8.9 KB**, a third of the
+warn line. Not taken: it adds a build step and a binaryen dependency to the
+deploy path for 0.5 %.
+
+### 6.2 Stripping logging — 19 KB, and it costs debuggability
+
+`frontend-leptos/Cargo.toml` documents it: *"Disable in release builds to strip
+all log strings from WASM. Build release without logging: `trunk build
+--no-default-features`"*. Nothing passes that flag — `build.sh`, `deploy.sh`
+and CI all build with `console_log` on, confirmed in the live rustc invocation
+(`--cfg feature="console_log"`).
+
+Measured: `--no-default-features --features release_no_log` →
+**1,746,777 br4, −19,113 bytes.**
+
+**Not taken, and this is a judgement call rather than a measurement.** 19 KB is
+1.1 % of first load, and the price is every browser-console diagnostic at an
+event that is four days away. If the owner wants it after RTM#6 the number is
+here; doing it now trades a debugging tool for one percent.
+
+### 6.3 Precompression — the only real win, and it is blocked
+
+**380,390 bytes, 21.5 %.** Five times larger than everything else on this page
+combined. It is not a code change: it is the q4→q11 gap from §3.1.
+
+**Workers Static Assets has no first-class support for it.** There is no
+"upload a `.br` sibling" mechanism; the documented workaround is to serve
+pre-compressed bytes with an explicit `Content-Encoding: br` header. That is
+possible here — `frontend-leptos/_headers` is already used for cache control —
+but it means:
+
+- **No content negotiation.** `_headers` applies a header to a path
+  unconditionally, so a client that did not send `Accept-Encoding: br` gets
+  brotli bytes labelled brotli and fails. Every browser that can run wasm has
+  supported brotli since ~2017, so this is small — but it is not zero, and the
+  failure mode is a blank app, not a slow one.
+- **SRI still has to hold.** `index.html` carries
+  `integrity="sha384-…"` on the wasm preload and on all 22 stylesheets.
+  Per spec SRI hashes the *decoded* body, so it should survive — "should"
+  being the operative word.
+- **The edge behaviour cannot be verified locally.** Whether Cloudflare passes
+  our `Content-Encoding` through untouched, strips it, or re-compresses is the
+  actual risk, and `wrangler dev --local` cannot answer it. Only a staging
+  deploy can.
+
+**Not attempted.** Changing how the largest asset is served, without being able
+to verify the edge behaviour, four days before RTM#6, risks a blank app for
+every attendee to save 21 % of load time. That trade is not close. It is a good
+change for the week *after* the event, verified on staging first
+([[bethere-deploy-and-rollback]]).
+
+### 6.4 CSS — measured, and smaller than it looks
+
+All 22 stylesheets are render-blocking, which reads like an obvious win. It is
+not: the CSS is **~75 KB br4, about 4 %** of first load, and the page renders
+nothing until the 1.65 MB wasm has downloaded and booted — so unblocking CSS
+that arrives long before the wasm does not move first paint. Making the
+staff-only sheets (admin, scanner, quiz, dashboard, event-form) async would
+remove 7 render-blocking resources and **zero bytes**.
+
+Worth doing as hygiene, not as a performance fix, and not while the wasm
+dominates the critical path this completely.
+
+## 7. Remaining
+
+- [ ] **Precompression (§6.3)** — the 380 KB. Needs a staging deploy to verify
+      edge behaviour. The single highest-value frontend change available.
+- [ ] **Split the 22 render-blocking stylesheets** (§6.4) — hygiene, ~0 bytes
+      while the wasm dominates. Low priority, now that it is measured.
+- [ ] **Delete or fix `frontend-leptos/optimize-wasm.sh`** (§6.1). It is dead
+      code that, if ever wired up, makes the shipped bundle bigger. Leaving a
+      loaded footgun in the tree with an encouraging name is the risk.
 - [ ] De-duplicate the two gates. They share their parse-don't-source logic,
       their `--update-baseline` handling and their reporting, and two copies of
       anything drift (`[[duplicated-state-transition-paths]]`). Not done
@@ -157,7 +253,7 @@ local proxy, and it is why the step uses `--dir` rather than `--build`.
 - `.issues/134` — why this was needed now, and the +257,210 bytes it must catch.
 - `.issues/072` — a rule that can only ever pass is not a rule.
 
-## 7. สรุปภาษาไทย
+## 8. สรุปภาษาไทย
 
 **ปัญหา:** ฝั่ง worker มีตัววัดขนาด bundle ตั้งแต่ 22 ก.ย. แต่**ฝั่งหน้าเว็บไม่เคยมีใครวัดเลย** —
 ทั้งที่ฝั่งหน้าเว็บ**ใหญ่กว่า**: first load **1.77 MB** (br) เทียบกับ worker ทั้งตัว 1.57 MB
@@ -174,6 +270,26 @@ local proxy, and it is why the step uses `--dir` rather than `--build`.
 
 **สิ่งที่ทำแล้ว:** สร้าง gate + baseline + ต่อเข้า CI + เทสกันการเสื่อม 10 ตัว
 ทดสอบ**ทั้งทางผ่านและทางไม่ผ่าน** 7 เคส
+
+---
+
+**แล้ววัดทุกทางที่จะลดขนาดได้ (23 ก.ย.) — สรุปคือ 3 ใน 4 ทางไม่คุ้ม และ 1 ทางจะทำให้แย่ลง**
+
+- **`optimize-wasm.sh` ในโปรเจกต์นี้ (ใช้ `-Oz`) — ถ้าเอาไปใช้จริงจะแย่ลง**
+  มันลดขนาดไฟล์ดิบได้ 430 KB แต่**ขนาดที่ผู้ใช้โหลดจริงเพิ่มขึ้น 3,629 bytes**
+  เพราะ `-Oz` ตัดรูปแบบซ้ำ ๆ ที่ brotli ใช้บีบอัดออกไป
+  (สคริปต์นี้ไม่มีใครเรียกใช้เลย — ไม่อยู่ใน build.sh, deploy.sh หรือ CI)
+  ระดับเดียวที่ช่วยคือ `-O2` แต่ได้แค่ **8.9 KB** ไม่คุ้มกับการเพิ่มขั้นตอน build
+- **ปิด log ตอน release** (Cargo.toml เขียนไว้เองว่าควรทำ แต่ไม่มีใครใส่ flag) — ได้ **19 KB**
+  **ยังไม่ทำ**: แลกกับการเสีย console log ตอนดีบักหน้างาน ซึ่งเหลืออีก 4 วัน ไม่คุ้ม
+- **บีบอัดล่วงหน้า = 380 KB (21.5%) — ทางเดียวที่คุ้มจริง แต่ติดอยู่**
+  Workers Assets **ไม่รองรับโดยตรง** ต้องใช้วิธีอ้อมผ่าน `_headers`
+  ซึ่ง (ก) ไม่มีการเจรจา encoding — client ที่ไม่รับ brotli จะพัง (ข) ต้องพึ่ง SRI ทำงานถูก
+  (ค) **ตรวจสอบพฤติกรรมฝั่ง Cloudflare edge ในเครื่องไม่ได้ ต้อง deploy ขึ้น staging เท่านั้น**
+  **ยังไม่ทำ**: เสี่ยงหน้าเว็บขาวทั้งงาน เพื่อแลกกับโหลดเร็วขึ้น 21% — ไม่คุ้มตอนนี้
+  ควรทำ**หลัง**งาน RTM#6 และทดสอบบน staging ก่อน
+- **CSS 22 ไฟล์** — วัดแล้วเป็นแค่ **4%** ของทั้งหมด และหน้าเว็บก็ยังไม่แสดงอะไรอยู่ดี
+  จนกว่า wasm 1.65 MB จะโหลดเสร็จ → แก้แล้วได้ **0 bytes** เป็นแค่การจัดระเบียบ ไม่ใช่การเร่งความเร็ว
 
 **ตอนนี้:** 84.20% ของงบ เหลือที่ว่าง 331 KB — พอดีกับที่ `.issues/134` ทางเลือกที่ 2
 (+257 KB) จะ**ผ่านเพดานแต่ทะลุเส้นการเติบโต** = บังคับให้เป็นการตัดสินใจ ไม่ใช่การแอบโต

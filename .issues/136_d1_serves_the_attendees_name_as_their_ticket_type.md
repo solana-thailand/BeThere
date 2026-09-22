@@ -95,6 +95,41 @@ The second one asserts the *exact* predicate `admin.rs:is_vip_ticket` applies,
 over four real name shapes, so it fails for the reason the organizer would see
 rather than for an internal one.
 
+### 4.1 Runtime A/B against the running worker
+
+The unit tests prove the conversion. This proves the *symptom*, on the two
+endpoints the organizer actually reads, against a real `wrangler dev --local`
+worker with one seeded row (`name = 'Vipada Srisuk'`, no ticket type anywhere)
+— old build and fixed build, same request, same row:
+
+| | admin list `ticket_name` | `is_vip` | ticket page `ticket_name` |
+|---|---|---|---|
+| **before** | `'Vipada Srisuk'` | **true** | `'Vipada Srisuk'` |
+| **after** | `''` | false | `''` |
+
+Run both ways deliberately, not just the green one: a probe that has never been
+seen to fail is not evidence ([[fail-open-controls-need-format-ab]]). The "old"
+column is a real rebuild of the pre-fix code, not a recollection.
+
+### 4.2 The page was opened, not just curled
+
+This repo has a history of pages that pass `cargo check`, clippy and a
+`curl` 200 while rendering nothing ([[verify-frontend-by-opening-it]]), and
+this fix *removes* a field the ticket page renders — so it was rendered:
+
+```
+HTTP status      : 200
+rendered chars   : 364
+contains "VIP"   : false
+ticket-info-rows : ["NAME\nVipada Srisuk","EMAIL\nv***@example.com","TYPE\nin_person"]
+console errors   : only the Cloudflare RUM beacon failing CORS on localhost
+```
+
+The layout degrades cleanly: `in_person_view.rs` guards the row with
+`if !ticket_name.is_empty()`, so the "Ticket" row is **omitted**, not rendered
+as an empty row with a dangling label. Email is masked in the render, which is
+worth noting as working correctly rather than assumed.
+
 **Not reproduced against production.** `wrangler d1 execute --remote` is
 returning the recurring **7403** ("account not authorized") again, so the
 "how many real attendees are affected" count could not be taken. The query to
@@ -161,6 +196,8 @@ be an exact comparison against the event's ticket types, not a substring.
   places that build an `Attendee` without a sheet row
   (`register/tests.rs:127`, `escrow/status.rs:497`) already use
   `String::new()`, so the fix matches the convention rather than inventing one.
+- Runtime A/B on both affected endpoints, old build vs fixed build (§4.1), and
+  the ticket page rendered in a real browser (§4.2).
 
 ## Related
 
@@ -186,6 +223,16 @@ be an exact comparison against the event's ticket types, not a substring.
 
 **แก้แล้ว:** เปลี่ยนเป็นค่าว่าง ทั้ง 2 จุด (เป็นบั๊กเดียวกันที่ถูกก๊อปไว้ 2 ที่)
 พร้อมเทส 2 ตัวที่**ยืนยันว่าพังจริงก่อนแก้**
+
+**ทดสอบจริงกับ worker ที่รันอยู่** (seed คนชื่อ "Vipada Srisuk" เข้าไป 1 คน):
+
+| | หน้า admin `ticket_name` | ขึ้น VIP ไหม | หน้าตั๋ว |
+|---|---|---|---|
+| **ก่อนแก้** | `'Vipada Srisuk'` | **ขึ้น** | `'Vipada Srisuk'` |
+| **หลังแก้** | `''` | ไม่ขึ้น | `''` |
+
+และ**เปิดหน้าตั๋วในเบราว์เซอร์จริง**ด้วย — หน้าแสดงผลปกติ ไม่มีคำว่า VIP
+และแถว "Ticket" **หายไปทั้งแถว** (ไม่ได้เหลือแถวว่าง ๆ ค้างไว้)
 
 **แต่ยังไม่ได้ข้อมูลที่ถูกต้องกลับมา:** ตอนนี้ช่อง Ticket และป้าย VIP/Walk-in จะว่างเปล่า
 — ซึ่ง**ดีกว่าแสดงผิด** แต่คุณจะเสียตัวกรอง VIP ไป
