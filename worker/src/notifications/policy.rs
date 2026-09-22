@@ -74,7 +74,6 @@ pub(super) enum DeliveryWindow {
 }
 
 impl NotificationKind {
-    #[cfg(test)]
     pub(super) const ALL: [Self; 5] = [
         Self::Registration,
         Self::Reminder,
@@ -118,6 +117,42 @@ impl NotificationKind {
     /// Asking a no-show how the event went is worse than not asking.
     pub(super) fn requires_check_in(self) -> bool {
         matches!(self, Self::Survey)
+    }
+
+    /// How long past `due_at` a queued message is still worth delivering.
+    ///
+    /// Per kind rather than one cutoff because a flat one gets the queue
+    /// exactly backwards (`.issues/128`): the backlog that has to die is
+    /// months of surveys for finished events, and the rows sharing its age are
+    /// the registration confirmations and deposit receipts people are still
+    /// waiting on for an event that has not happened yet. Any single number
+    /// low enough to catch the first also drops the second.
+    pub(super) fn max_age_secs(self) -> i64 {
+        match self {
+            // Already bounded from both sides: `claim.sql` will not claim a
+            // reminder until the start is within 24 h and `reminder_timing`
+            // cancels it once the event has begun. The cap only has to survive
+            // a cron outage over the window itself.
+            Self::Reminder => 2 * 86_400,
+            // "How was it" stops being a question and becomes an apology. The
+            // answer also gets less useful to the organizer the further it is
+            // from the day being remembered. Measured from `due_at`, which for
+            // a survey is the moment the organizer opened post-event
+            // registration (trigger `notification_post_event_survey`) — not the
+            // event's end, so a form opened late still gets its three days.
+            Self::Survey => 3 * 86_400,
+            // Still literally true right up to the event — the event ending
+            // already cancels them (`cancel.sql`) — so this cap is a judgment
+            // call, not a correctness one: a confirmation that lands a
+            // fortnight after you signed up is no longer confirming anything,
+            // and a receipt for a payment made two weeks ago just announces
+            // that a system woke up. The cost is real and one-sided: someone
+            // who registers more than 14 days before an event that is still
+            // upcoming loses their confirmation. `report` is the default mode
+            // so that case is counted on a live queue before anything is
+            // cancelled.
+            Self::Registration | Self::DepositConfirmed | Self::DepositRejected => 14 * 86_400,
+        }
     }
 }
 
@@ -314,5 +349,283 @@ mod schedule_tests {
             reminder_timing(false, 86_401_000, 1000),
             ReminderTiming::Send
         );
+    }
+}
+
+/// What a dispatch run does with a message that has outlived
+/// `NotificationKind::max_age_secs` (`NOTIFICATIONS_STALENESS`).
+///
+/// Three modes rather than a boolean because the first run of this guard is
+/// against a queue that has never drained, and being wrong in either direction
+/// is expensive: `Off` works through the whole backlog at
+/// `NOTIFICATIONS_MAX_PER_RUN` a day, `Cancel` erases rows that cannot be
+/// recovered. `Report` sits between them — it withholds the stale rows from the
+/// claim loop and writes down what it would have cancelled, so the numbers can
+/// be read off a real run before anything is destroyed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum StalenessMode {
+    Off,
+    Report,
+    Cancel,
+}
+
+impl StalenessMode {
+    /// Parse `NOTIFICATIONS_STALENESS`.
+    ///
+    /// Unset or unrecognised is `Report`, for the same reason
+    /// `DuplicateMode::parse` does it: a typo in the variable name must not
+    /// silently disable a safety control, and must not silently start deleting
+    /// queued mail either. Mirrors `THB_SLIP_DUPLICATE_MODE` deliberately —
+    /// one convention for every operational dial in this Worker.
+    pub(super) fn parse(raw: Option<&str>) -> Self {
+        match raw.map(str::trim).unwrap_or("") {
+            "off" => Self::Off,
+            "cancel" => Self::Cancel,
+            _ => Self::Report,
+        }
+    }
+
+    /// The literal `claim.sql` compares `?1` against. Only `Off` is read in
+    /// SQL; `Report` and `Cancel` both withhold stale rows from the claim loop
+    /// and differ only in what the sweep afterwards does with them.
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Report => "report",
+            Self::Cancel => "cancel",
+        }
+    }
+}
+
+/// The token every staleness statement carries in place of the age table.
+pub(super) const MAX_AGE_TOKEN: &str = "{{max_age_secs}}";
+
+/// `CASE <column> WHEN 'registration' THEN 1209600 ... ELSE 0 END`, in seconds.
+///
+/// Emitted from `NotificationKind::ALL` rather than written out in the `.sql`
+/// files so `max_age_secs` stays the only place the numbers live; a kind added
+/// to the enum cannot be left out of the SQL the way `cancel.sql`'s hand-written
+/// kind list can (which is why that one needs a drift test and this does not).
+///
+/// `ELSE 0` covers a row whose `kind` this build cannot parse: it is stale the
+/// moment it falls due, which keeps it out of the claim loop that could only
+/// cancel it anyway. `column` is a caller-supplied SQL identifier, never input.
+pub(super) fn max_age_case_sql(column: &str) -> String {
+    let mut sql = format!("CASE {column}");
+    for kind in NotificationKind::ALL {
+        sql.push_str(&format!(
+            " WHEN '{}' THEN {}",
+            kind.as_str(),
+            kind.max_age_secs()
+        ));
+    }
+    sql.push_str(" ELSE 0 END");
+    sql
+}
+
+#[cfg(test)]
+mod staleness_tests {
+    use super::*;
+
+    /// The exact production backlog this guard was written for
+    /// (`.issues/128` §3, measured 2026-09-21). Ages are days behind `due_at`
+    /// on 2026-09-22; the two columns that matter are which rows survive.
+    #[test]
+    fn the_measured_backlog_splits_into_rtm6_and_the_dead_surveys() {
+        let day = 86_400;
+        let survives =
+            |kind: NotificationKind, age_days: i64| age_days * day <= kind.max_age_secs();
+
+        // RTM#6 is five days away and nobody has been told anything. Every one
+        // of these 62 rows has to go out.
+        // 6 days old on 2026-09-22, and still only 11 on the event day itself —
+        // the cap has to clear the whole remaining window, not just today.
+        for age_days in [6, 11] {
+            assert!(
+                survives(NotificationKind::Registration, age_days),
+                "24 registrations"
+            );
+            assert!(
+                survives(NotificationKind::DepositConfirmed, age_days),
+                "14 receipts"
+            );
+        }
+        // Due on the 26th, so never old at all — and claim.sql will not take it
+        // before then regardless.
+        assert!(survives(NotificationKind::Reminder, -4), "24 reminders");
+
+        // The ~187 surveys for events that ended weeks ago: all of them die.
+        for age_days in [8, 9, 30] {
+            assert!(
+                !survives(NotificationKind::Survey, age_days),
+                "a survey {age_days} days late is not a late survey"
+            );
+        }
+    }
+
+    /// A single flat cutoff is what this replaces, and no value of one can do
+    /// the job — not because of any particular day's numbers, but because the
+    /// two kinds decay against different clocks. A registration confirmation is
+    /// true until its event ends, which can be months out; a survey is wrong
+    /// days after its event ended. Age alone cannot tell them apart.
+    #[test]
+    fn no_flat_cutoff_can_separate_the_two_clocks() {
+        let day = 86_400;
+        // Someone registered for an event six weeks out and the queue never
+        // ran. The event has still not happened: the confirmation is not stale,
+        // it is merely late, and `cancel.sql` has not touched it.
+        let registration_age = 45;
+        // A survey for an event that ended four days ago. Nobody wants it.
+        let survey_age = 4;
+
+        for cutoff_days in 1..=90 {
+            let sends_the_registration = registration_age <= cutoff_days;
+            let withholds_the_survey = survey_age > cutoff_days;
+            assert!(
+                !(sends_the_registration && withholds_the_survey),
+                "a flat {cutoff_days}-day cutoff would have worked; this guard need not be per-kind"
+            );
+        }
+
+        // The per-kind table withholds the survey, as intended. It also drops
+        // the 45-day registration — the deliberate cost of capping pre-event
+        // kinds at a fortnight, and precisely the case `report` mode exists to
+        // surface on a real queue before `cancel` is ever switched on.
+        assert!(survey_age * day > NotificationKind::Survey.max_age_secs());
+        assert!(registration_age * day > NotificationKind::Registration.max_age_secs());
+    }
+
+    #[test]
+    fn every_kind_has_a_positive_finite_age_and_reminders_are_the_tightest() {
+        for kind in NotificationKind::ALL {
+            assert!(
+                kind.max_age_secs() > 0,
+                "{} would be stale on arrival",
+                kind.as_str()
+            );
+        }
+        let tightest = NotificationKind::ALL
+            .iter()
+            .map(|k| k.max_age_secs())
+            .min()
+            .expect("ALL is not empty");
+        assert_eq!(NotificationKind::Reminder.max_age_secs(), tightest);
+    }
+
+    #[test]
+    fn an_unrecognised_mode_neither_disables_the_guard_nor_deletes_mail() {
+        assert_eq!(StalenessMode::parse(None), StalenessMode::Report);
+        for raw in ["", "  ", "Off", "CANCEL", "repot", "1", "true"] {
+            assert_eq!(
+                StalenessMode::parse(Some(raw)),
+                StalenessMode::Report,
+                "{raw:?} must fall back to report"
+            );
+        }
+        assert_eq!(StalenessMode::parse(Some(" off ")), StalenessMode::Off);
+        assert_eq!(StalenessMode::parse(Some("cancel")), StalenessMode::Cancel);
+        // Only `off` is compared in SQL, but a drifting literal would silently
+        // leave the guard permanently on.
+        assert_eq!(StalenessMode::Off.as_str(), "off");
+    }
+
+    #[test]
+    fn the_age_table_names_every_kind_exactly_once() {
+        let sql = max_age_case_sql("n.kind");
+        assert!(sql.starts_with("CASE n.kind WHEN "));
+        assert!(sql.ends_with(" ELSE 0 END"));
+        for kind in NotificationKind::ALL {
+            let arm = format!(" WHEN '{}' THEN {} ", kind.as_str(), kind.max_age_secs());
+            assert_eq!(
+                sql.matches(arm.trim_end()).count(),
+                1,
+                "{} is missing from the emitted age table",
+                kind.as_str()
+            );
+        }
+    }
+
+    /// Every statement that has to agree on "stale" must carry the token, or it
+    /// would ship the literal `{{max_age_secs}}` to D1 and fail at runtime —
+    /// on the cron, where nobody is watching.
+    #[test]
+    fn every_staleness_statement_carries_the_token() {
+        for (name, sql) in [
+            ("claim.sql", include_str!("sql/claim.sql")),
+            ("stale_cancel.sql", include_str!("sql/stale_cancel.sql")),
+            ("stale_report.sql", include_str!("sql/stale_report.sql")),
+        ] {
+            assert_eq!(
+                sql.matches(MAX_AGE_TOKEN).count(),
+                1,
+                "{name} must splice the age table exactly once"
+            );
+        }
+    }
+}
+
+/// How many messages one dispatch run will take off the queue.
+///
+/// This used to be a bare `25` in the claim loop, which made it a real control
+/// nobody could see or tune: `.plans/027` B and `.issues/128` both describe the
+/// backlog as something that would go out "all at once", and it never could —
+/// the cron is daily, so the true worst case was always 25 a day. Naming the
+/// number puts the rate where it can be read, and lowering it is the lever for
+/// watching a first enable go out slowly.
+pub(super) const DEFAULT_MAX_PER_RUN: usize = 25;
+
+/// Upper bound on `NOTIFICATIONS_MAX_PER_RUN`.
+///
+/// A cap on the cap: a fat-fingered extra zero must not turn one cron into a
+/// mailing. Cloudflare's own daily send limit sits well above this, so the
+/// binding constraint here is deliberately ours and not the provider's.
+const MAX_PER_RUN_CEILING: usize = 100;
+
+/// Parse `NOTIFICATIONS_MAX_PER_RUN`, clamped to `1..=MAX_PER_RUN_CEILING`.
+///
+/// Unset, unparseable and out-of-range all resolve rather than fail: this
+/// number decides throughput, not correctness, and a dispatcher that refuses to
+/// run because of a typo in a rate limit is worse than one that runs at 25.
+/// Zero clamps up to one — pausing the queue is `NOTIFICATIONS_ENABLED`'s job,
+/// and a silently zeroed rate is indistinguishable from a broken cron.
+pub(super) fn max_per_run(raw: Option<&str>) -> usize {
+    raw.map(str::trim)
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_MAX_PER_RUN)
+        .clamp(1, MAX_PER_RUN_CEILING)
+}
+
+#[cfg(test)]
+mod rate_tests {
+    use super::*;
+
+    #[test]
+    fn an_unusable_value_falls_back_rather_than_stopping_the_queue() {
+        for raw in [
+            None,
+            Some(""),
+            Some("  "),
+            Some("twenty"),
+            Some("-5"),
+            Some("2.5"),
+        ] {
+            assert_eq!(max_per_run(raw), DEFAULT_MAX_PER_RUN, "{raw:?}");
+        }
+        assert_eq!(max_per_run(Some(" 40 ")), 40);
+    }
+
+    #[test]
+    fn the_rate_can_be_lowered_to_one_but_never_to_zero_or_to_a_mailing() {
+        assert_eq!(max_per_run(Some("0")), 1);
+        assert_eq!(max_per_run(Some("1")), 1);
+        assert_eq!(max_per_run(Some("100")), MAX_PER_RUN_CEILING);
+        assert_eq!(max_per_run(Some("100000")), MAX_PER_RUN_CEILING);
+    }
+
+    /// The default has to stay what the hardcoded loop bound was, or upgrading
+    /// to this version would silently change production's send rate.
+    #[test]
+    fn the_default_is_the_rate_the_loop_always_had() {
+        assert_eq!(DEFAULT_MAX_PER_RUN, 25);
     }
 }

@@ -2,6 +2,7 @@
 Run: python3 -m unittest discover -s worker/tests/notifications -v
 """
 from pathlib import Path
+import re
 import sqlite3
 import tempfile
 import threading
@@ -12,11 +13,62 @@ WORKER = Path(__file__).resolve().parents[2]
 SQL = WORKER / 'src/notifications/sql'
 HANDLER_SQL = WORKER / 'src/handlers/sql'
 DB_SQL = WORKER / 'src/db/sql'
+POLICY = WORKER / 'src/notifications/policy.rs'
+MAX_AGE_TOKEN = '{{max_age_secs}}'
+# The mode these tests claim under. `report` rather than `off` on purpose: it
+# runs every existing case through the staleness predicate, so a guard that
+# accidentally withheld live mail would fail the whole suite rather than one
+# new test (`.issues/128`).
+MODE = 'report'
+
+
+def _match_body(marker):
+    """The body of a `match self` block in policy.rs, by its fn signature."""
+    source = POLICY.read_text()
+    start = source.index(marker)
+    return source[start:source.index('\n    }', start)]
+
+
+def max_age_secs():
+    """`NotificationKind` -> seconds, read out of `policy::max_age_secs`.
+
+    Parsed rather than restated so the ages have exactly one home. A Python
+    copy of the table would be a second source of truth that drifts silently,
+    and the whole point of this suite is to run the SQL the worker runs.
+    """
+    body = _match_body('pub(super) fn max_age_secs(self)')
+    ages = {}
+    for variants, left, right in re.findall(
+        r'^\s*((?:Self::\w+\s*\|?\s*)+)=>\s*([\d_]+)\s*\*\s*([\d_]+),', body, re.M
+    ):
+        seconds = int(left.replace('_', '')) * int(right.replace('_', ''))
+        for variant in re.findall(r'Self::(\w+)', variants):
+            ages[variant] = seconds
+    return ages
+
+
+def kind_names():
+    """`NotificationKind` -> the string stored in `notification_outbox.kind`."""
+    body = _match_body('pub(super) fn as_str(self)')
+    return dict(re.findall(r'Self::(\w+) => "([a-z_]+)"', body))
+
+
+def max_age_case(column):
+    """The same CASE expression `policy::max_age_case_sql` emits."""
+    ages, names = max_age_secs(), kind_names()
+    assert set(ages) == set(names), f'policy.rs kinds disagree: {ages} vs {names}'
+    arms = ' '.join(f"WHEN '{names[v]}' THEN {ages[v]}" for v in sorted(ages))
+    return f'CASE {column} {arms} ELSE 0 END'
+
 
 def query(name):
-    return (SQL / (name + '.sql')).read_text()
+    sql = (SQL / (name + '.sql')).read_text()
+    column = 'n.kind' if name == 'claim' else 'kind'
+    return sql.replace(MAX_AGE_TOKEN, max_age_case(column))
 
-class OutboxTests(unittest.TestCase):
+class Harness(unittest.TestCase):
+    """Schema, fixtures and the dispatcher SQL, shared by every suite below."""
+
     def setUp(self):
         self.db = sqlite3.connect(':memory:')
         self.db.row_factory = sqlite3.Row
@@ -46,6 +98,8 @@ class OutboxTests(unittest.TestCase):
     def deposit(self, verified=0, rejected=0, version='upload-1'):
         self.db.execute("INSERT INTO deposit_statuses(attendee_id,event_id,method,amount,currency,verified,rejected,deposited_at) VALUES ('a','event-a','thb',100,'THB',?,?,?) ON CONFLICT(event_id,attendee_id) DO UPDATE SET verified=excluded.verified,rejected=excluded.rejected,deposited_at=excluded.deposited_at", (verified,rejected,version))
 
+
+class OutboxTests(Harness):
     def test_registration_is_atomic_and_duplicate_enrollment_is_noop(self):
         self.register()
         self.db.execute("INSERT OR IGNORE INTO notification_enrollments VALUES ('a','event-a',unixepoch())")
@@ -79,21 +133,21 @@ class OutboxTests(unittest.TestCase):
 
     def test_only_one_claim_and_no_resend_of_accepted(self):
         self.register()
-        first=self.db.execute(query('claim')).fetchall()
+        first=self.db.execute(query('claim'), (MODE,)).fetchall()
         self.assertEqual(len(first),1)
-        self.assertEqual(self.db.execute(query('claim')).fetchall(),[])
+        self.assertEqual(self.db.execute(query('claim'), (MODE,)).fetchall(),[])
         self.db.execute(query('settle'),('accepted','provider-id','',0,first[0]['id'])).fetchall()
-        self.assertEqual(self.db.execute(query('claim')).fetchall(),[])
+        self.assertEqual(self.db.execute(query('claim'), (MODE,)).fetchall(),[])
         self.assertEqual(self.db.execute(query('retry'),('event-a',first[0]['id'])).fetchall(),[])
 
     def test_interrupted_send_is_uncertain_and_cannot_retry(self):
         self.register()
-        job=self.db.execute(query('claim')).fetchone()
+        job=self.db.execute(query('claim'), (MODE,)).fetchone()
         self.db.execute("UPDATE notification_outbox SET attempted_at=unixepoch()-1000 WHERE id=?",(job['id'],))
         self.db.execute(query('recover'))
         self.assertEqual(self.jobs()[0]['status'],'uncertain')
         self.assertEqual(self.db.execute(query('retry'),('event-a',job['id'])).fetchall(),[])
-        self.assertEqual(self.db.execute(query('claim')).fetchall(),[])
+        self.assertEqual(self.db.execute(query('claim'), (MODE,)).fetchall(),[])
 
     def test_retry_is_event_scoped_and_only_once(self):
         self.register()
@@ -108,17 +162,17 @@ class OutboxTests(unittest.TestCase):
         self.db.execute("UPDATE events SET status='cancelled' WHERE id='event-a'")
         self.db.execute(query('cancel'))
         self.assertTrue(all(j['status']=='cancelled' for j in self.jobs()))
-        self.assertEqual(self.db.execute(query('claim')).fetchall(),[])
+        self.assertEqual(self.db.execute(query('claim'), (MODE,)).fetchall(),[])
 
     def test_reschedule_and_tba(self):
         self.register()
         self.db.execute("UPDATE events SET event_start_ms=? WHERE id='event-a'",((self.now+172800)*1000,))
         self.assertEqual(self.jobs()[1]['due_at'],self.now+86400)
         self.db.execute("UPDATE events SET time_tba=1,event_start_ms=? WHERE id='event-a'",((self.now+3600)*1000,))
-        self.db.execute(query('claim')).fetchall() # registration
-        self.assertEqual(self.db.execute(query('claim')).fetchall(),[])
+        self.db.execute(query('claim'), (MODE,)).fetchall() # registration
+        self.assertEqual(self.db.execute(query('claim'), (MODE,)).fetchall(),[])
         self.db.execute("UPDATE events SET time_tba=0 WHERE id='event-a'")
-        self.assertEqual(self.db.execute(query('claim')).fetchone()['kind'],'reminder')
+        self.assertEqual(self.db.execute(query('claim'), (MODE,)).fetchone()['kind'],'reminder')
 
     def test_tba_registration_later_gets_reminder(self):
         self.db.execute("UPDATE events SET time_tba=1 WHERE id='event-a'")
@@ -152,7 +206,7 @@ class OutboxTests(unittest.TestCase):
         self.register()
         self.db.execute("UPDATE notification_outbox SET status='accepted' WHERE kind='registration'")
         self.db.execute("UPDATE events SET event_start_ms=? WHERE id='event-a'", ((self.now+3600)*1000,))
-        job = self.db.execute(query('claim')).fetchone()
+        job = self.db.execute(query('claim'), (MODE,)).fetchone()
         self.assertEqual(job['attempts'], 1)
         self.db.execute("UPDATE events SET event_start_ms=? WHERE id='event-a'", ((self.now+172800)*1000,))
         self.db.execute(query('defer'), (self.now+86400, job['id']))
@@ -160,11 +214,11 @@ class OutboxTests(unittest.TestCase):
         self.assertEqual(reminder['status'], 'pending')
         self.assertEqual(reminder['attempts'], 0)
         self.assertIsNone(reminder['attempted_at'])
-        self.assertEqual(self.db.execute(query('claim')).fetchall(), [])
+        self.assertEqual(self.db.execute(query('claim'), (MODE,)).fetchall(), [])
 
     def test_late_completion_cannot_overwrite_uncertain_result(self):
         self.register()
-        job = self.db.execute(query('claim')).fetchone()
+        job = self.db.execute(query('claim'), (MODE,)).fetchone()
         self.db.execute("UPDATE notification_outbox SET status='uncertain' WHERE id=?", (job['id'],))
         self.assertEqual(self.db.execute(query('settle'), ('accepted','provider-id','',0,job['id'])).fetchall(), [])
         self.assertEqual(self.jobs()[0]['status'], 'uncertain')
@@ -416,7 +470,7 @@ class OutboxTests(unittest.TestCase):
         self.assertEqual(states['registration'], 'cancelled')
         self.assertEqual(states['reminder'], 'cancelled')
         self.assertEqual(states['survey'], 'pending')
-        self.assertEqual(self.db.execute(query('claim')).fetchone()['kind'], 'survey')
+        self.assertEqual(self.db.execute(query('claim'), (MODE,)).fetchone()['kind'], 'survey')
 
     def test_cancel_retires_a_survey_once_its_event_is_no_longer_addressable(self):
         self.register()
@@ -477,7 +531,7 @@ class OutboxTests(unittest.TestCase):
                     conn=sqlite3.connect(filename,timeout=10)
                     barrier.wait()
                     with conn:
-                        results.extend(conn.execute(query('claim')).fetchall())
+                        results.extend(conn.execute(query('claim'), (MODE,)).fetchall())
                     conn.close()
                 except Exception as error:
                     errors.append(error)
@@ -486,5 +540,121 @@ class OutboxTests(unittest.TestCase):
             for thread in threads:thread.join()
             self.assertEqual(errors,[])
             self.assertEqual(len(results),1)
+
+class StalenessTests(Harness):
+    """The age guard (`.issues/128`), against the statements the worker runs.
+
+    Production's outbox has never drained: 268 pending rows on 2026-09-21, of
+    which `cancel.sql` retires 25 and the rest would go out, ~187 of them
+    surveys for events that finished weeks earlier.
+    """
+
+    def enqueue(self, kind, age_days, attendee='z', event='event-b', status='pending'):
+        self.db.execute(
+            'INSERT INTO notification_outbox(dedup_key,event_id,attendee_id,kind,version,status,due_at)'
+            ' VALUES (?,?,?,?,?,?,unixepoch()-?)',
+            (f'{event}:{attendee}:{kind}:{age_days}:{status}', event, attendee, kind,
+             'v1', status, int(age_days * 86400)))
+        return self.db.execute('SELECT last_insert_rowid() AS id').fetchone()['id']
+
+    def claim_all(self, mode=MODE):
+        claimed = []
+        while True:
+            row = self.db.execute(query('claim'), (mode,)).fetchone()
+            if row is None:
+                return claimed
+            claimed.append(row['kind'])
+
+    def states(self):
+        return {j['id']: (j['status'], j['error_code']) for j in self.jobs()}
+
+    def test_kinds_of_the_same_age_are_judged_against_their_own_clocks(self):
+        """Eight days late: the confirmation is still wanted, the survey is not.
+
+        This is the whole reason the cap is per kind. A flat cutoff sees one
+        number for both rows and has to be wrong about one of them.
+        """
+        self.register('z', event='event-b', enroll=False)
+        for kind in ('registration', 'survey'):
+            self.enqueue(kind, age_days=8)
+        self.assertEqual(self.claim_all(), ['registration'])
+
+    def test_off_mode_still_takes_the_row_the_guard_withholds(self):
+        """Proves the comparison is live and reads the mode, rather than the
+        stale row being unclaimable for some unrelated reason."""
+        self.register('z', event='event-b', enroll=False)
+        self.enqueue('survey', age_days=8)
+        self.assertEqual(self.claim_all('report'), [])
+        self.assertEqual(self.claim_all('cancel'), [])
+        self.assertEqual(self.claim_all('off'), ['survey'])
+
+    def test_a_survey_inside_its_window_is_untouched(self):
+        """The other direction: a genuinely delayed send still goes out. A guard
+        that withheld everything would pass every test above."""
+        self.register('z', event='event-b', enroll=False)
+        self.enqueue('survey', age_days=2)
+        self.assertEqual(self.db.execute(query('stale_report')).fetchall(), [])
+        self.assertEqual(self.claim_all(), ['survey'])
+
+    def test_report_names_what_cancel_would_retire_and_changes_nothing(self):
+        self.register('z', event='event-b', enroll=False)
+        self.enqueue('survey', age_days=9)
+        self.enqueue('registration', age_days=20)
+        self.enqueue('reminder', age_days=1)      # inside its 2-day cap
+        # `claim.sql` only takes a reminder once the start is within 24 h.
+        self.db.execute("UPDATE events SET event_start_ms=(unixepoch()+3600)*1000 WHERE id='event-b'")
+        before = self.states()
+
+        reported = [(r['kind'], r['due_at'])
+                    for r in self.db.execute(query('stale_report')).fetchall()]
+        self.assertEqual(self.states(), before, 'report mode wrote to the outbox')
+
+        retired = [(r['kind'], r['due_at'])
+                   for r in self.db.execute(query('stale_cancel')).fetchall()]
+        self.assertEqual(sorted(reported), sorted(retired))
+        self.assertEqual(sorted(k for k, _ in reported), ['registration', 'survey'])
+
+        after = self.states()
+        changed = [i for i in after if after[i] != before[i]]
+        self.assertEqual(len(changed), 2)
+        self.assertTrue(all(after[i] == ('cancelled', 'STALE') for i in changed))
+        # Nothing left to find, and the fresh reminder is still claimable.
+        self.assertEqual(self.db.execute(query('stale_report')).fetchall(), [])
+        self.assertEqual(self.claim_all(), ['reminder'])
+
+    def test_cancel_does_not_touch_a_row_that_has_already_been_sent(self):
+        """`STALE` is for mail that was never attempted. Rewriting an `accepted`
+        row would lose the provider outcome, and `uncertain` must never be
+        reclassified — that is the one state this pipeline refuses to guess at.
+        """
+        self.register('z', event='event-b', enroll=False)
+        untouchable = {status: self.enqueue('survey', age_days=30, status=status)
+                       for status in ('accepted', 'sending', 'uncertain', 'cancelled')}
+        stale = self.enqueue('survey', age_days=30, status='pending')
+        also_stale = self.enqueue('survey', age_days=30, status='failed')
+
+        retired = self.db.execute(query('stale_cancel')).fetchall()
+        self.assertEqual(len(retired), 2)
+        after = self.states()
+        for status, row_id in untouchable.items():
+            self.assertEqual(after[row_id][0], status)
+        self.assertEqual(after[stale], ('cancelled', 'STALE'))
+        self.assertEqual(after[also_stale], ('cancelled', 'STALE'))
+
+    def test_the_ages_the_sql_runs_are_the_ages_policy_declares(self):
+        """The CASE arms are generated from `policy.rs` on both sides. If that
+        parse ever silently produced an empty table, every test above would pass
+        by accident — `ELSE 0` makes everything stale, which no assertion here
+        distinguishes from a correctly tight cap."""
+        ages = max_age_secs()
+        self.assertEqual(len(ages), 5, ages)
+        names = kind_names()
+        by_kind = {names[v]: secs for v, secs in ages.items()}
+        self.assertEqual(by_kind['survey'], 3 * 86400)
+        self.assertEqual(by_kind['reminder'], 2 * 86400)
+        self.assertEqual(by_kind['registration'], 14 * 86400)
+        for kind, secs in by_kind.items():
+            self.assertIn(f"WHEN '{kind}' THEN {secs}", max_age_case('kind'))
+
 
 if __name__=='__main__':unittest.main()
