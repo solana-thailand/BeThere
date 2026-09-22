@@ -49,9 +49,34 @@
 > **New issue, unrelated to 0049 and not fixed here:** `.issues/133` — the
 > ticket page dies outright for any event with no venue map link
 > (`#[serde(default)]` does not cover an explicit `null`). Found only because
-> the announcement feature was opened in a browser. Blast radius unmeasured:
-> `wrangler d1 --remote` returns 7403 from this machine. The fix is owned by a
-> peer session.
+> the announcement feature was opened in a browser. The fix is owned by a
+> peer session and is written, guarded and green — but **uncommitted**.
+>
+> **Update 2026-09-22, later still: item G is measured and its server-side
+> half is rejected** (`.issues/134`, branch `feature/134-slip-qr-bank-reference`,
+> three commits, unpushed). Size passed with room — **+257,210 bytes gzip,
+> 58.21 %**, well under the 70 % warn line — so the stopping condition this
+> plan wrote down never fired. **CPU is what fails**: 33.14 ms release-native
+> for a 1080×1920 phone screenshot against a **10 ms** free-plan budget, 89 %
+> of it in QR grid detection, which does not shrink with the image. Shipping it
+> would be error 1102 on slip upload. Kept: `domain::slip_verify`, the
+> CRC-verified string parser, which both sides need regardless. **G is now
+> owner-gated** on a plan/paid-tier question — see §G's STATUS block.
+>
+> **With that, every item A–H is either done or owner-gated. The queue is
+> empty of ungated engineering work.**
+>
+> **Blast radius now measured against the live worker (`.issues/133` §10):
+> 13 of the 14 production events with attendees serve `null` — 476 of 514
+> attendee tickets are dead today.** The only event that renders is RTM#6,
+> because it is the only one with a map link set; that is why nobody saw it,
+> and it means RTM#6 works by accident. The `7403` that blocked this cleared.
+> The D1 query first proposed for it is the wrong instrument (KV-first read
+> path) and a probe without `?event_id=` reads falsely green — both written up
+> in §10.2. **This makes the production deploy in §F.6 a live-outage decision
+> rather than a queue-flush**, and it is still the owner's call: the fix cannot
+> ship without either a cherry-pick onto the deployed tree or accepting the
+> rest of the undeployed queue with it.
 
 Every item below is *ungated*: no owner decision, no external account, no
 irreversible action. Anything needing the owner stays in `.issues/129` §7 and is
@@ -443,6 +468,48 @@ plan that could plausibly move the 1.48 MiB number. Therefore:
 - The bank-resolution half stays owner-gated (vendor account, PII) — decoding
   and the UNIQUE reference do not.
 
+**STATUS 2026-09-22: MEASURED, AND THE SERVER-SIDE HALF IS REJECTED.**
+Written up in full in `.issues/134`; branch `feature/134-slip-qr-bank-reference`
+(unpushed), three commits.
+
+The stopping condition above was the wrong one. **Size passed**: `image`
+(jpeg+png+**webp** — the upload path accepts webp, so a jpeg+png-only decoder
+would have been inert on real traffic) plus `rqrr` costs **+257,210 bytes
+gzip**, taking the bundle to 1,831,331 = **58.21 %**, which is 370,678 bytes
+*below* the 70 % warn line.
+
+**What fails is CPU, which this item never thought to budget.** Release-profile
+native on an M5 Pro — a lower bound, since wasm is slower and the edge is
+slower than this laptop — a 1080×1920 phone screenshot costs **33.14 ms**
+against the free plan's **10 ms per request** (`.plans/010` §P0.2). 3.3× over.
+**89 % of that is `rqrr`'s grid detection, not the image decode**, so shrinking
+the image first does not buy it back: shrink past the QR's module size and
+there is no QR left to find. Shipped, it is Cloudflare error 1102 on
+`POST /api/deposit/thb/upload` — an attendee who cannot submit a slip at all,
+which is strictly worse than no check.
+
+Kept and shipped: **`domain::slip_verify`** — payload → CRC-verified bank
+reference, no image dependency, no measurable size, both published wire formats
+(bank and TrueMoney) covered by vectors with real CRCs. It belongs in `domain`
+rather than in either side because wherever the decoder ends up, **the server
+must re-parse what it is handed**; a client-supplied reference is a claim.
+
+Reverted from the worker but kept reproducible: probe `36b8c02`, revert
+`65e68f9`. Re-run with `git checkout 36b8c02` then
+`cargo test --release -p event-checkin-worker --lib slip_qr -- --nocapture`
+(`--release` matters; the debug profile exaggerates it 7×).
+
+The three ways it comes back are in `.issues/134` §6 and **none of them are
+engineering decisions** — Workers Paid ($5/mo, which dissolves both limits and
+is the cheapest fix on the page), frontend decode (needs a frontend size budget
+first, and yields an attacker-controlled reference), or a second Worker (worst
+of the three). Recommended: frontend decode, but only after the owner rules on
+the paid plan, because if that moves the server-side decode is both simpler and
+trustworthy and the frontend work is wasted.
+
+**So item G is now owner-gated too**, on a question this plan assumed away.
+`.issues/130` stays where it was: re-used images are caught, forgeries are not.
+
 ---
 
 ## H. Housekeeping (whenever the queue stalls)
@@ -452,8 +519,10 @@ plan that could plausibly move the 1.48 MiB number. Therefore:
   no other doc still repeats the stale "blocked on devnet USDC" claim.
 - Confirm `.gitignore` still covers `worker/scripts/.preflight-bypass.log`
   (public repo, owner's call — never un-ignore).
-- Re-run `scripts/verify/check_sbpf_v3_gate.sh` and record the date; the v3
-  deployment gate has been closed on all three clusters.
+- Re-run `scripts/check_sbpf_v3_gate.sh` (it is in `scripts/`, **not**
+  `scripts/verify/`) and record the date; the v3 deployment gate has been closed
+  on all three clusters. **Run 2026-09-22: still closed on all three**, logged in
+  `.issues/123` "Gate watch log".
 
 ---
 
@@ -462,6 +531,13 @@ plan that could plausibly move the 1.48 MiB number. Therefore:
 Do not start these even if the queue empties. They need a decision or an
 account in the owner's name, and guessing wrong costs money or sends mail.
 
+- **Which plan the worker runs on** (`.issues/134` §6, added 2026-09-22 after
+  measuring item G). Workers Paid is $5/mo and raises CPU from **10 ms to 30 s**
+  and the bundle ceiling from 3 MiB to 10 MiB. It is the cheapest fix for item G
+  by a wide margin, and `.plans/010` records a standing commitment to the free
+  tier through Demo Day — so it is a decision, not an oversight, and it is not
+  ours to reverse. Everything downstream of it (frontend QR decode, a frontend
+  size budget) waits on the answer, because the work is wasted if the plan moves.
 - **`.issues/129` §7 all four**: what "refund at check-in" must mean;
   credit-by-default at check-in; slip-verify vendor (RDCW vs EasySlip — the
   vendor sees slip PII); whether a juristic entity exists to hold a payout
