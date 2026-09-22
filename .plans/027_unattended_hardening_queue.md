@@ -84,6 +84,30 @@
 > change.** That last one is larger than anything left in this queue and it
 > touches the deploy path, so it waits for a waking human.
 >
+> **Update 2026-09-23, owner awake.** Owner ruled: **no Workers Paid**, so
+> `.issues/134`'s server-side decode stays rejected and its option 2 (frontend
+> decode) is the only live path — now costable against the new frontend gate,
+> where its +257 KB would clear the ceiling but blow the growth allowance by
+> design. Owner also green-lit frontend work, so **every remaining lever was
+> measured** (`.issues/135` §6): three of four are not worth taking and one —
+> `frontend-leptos/optimize-wasm.sh`, dead in the tree, using `-Oz` — **would
+> have made the shipped bundle bigger while looking like a 430 KB win**. Its
+> flags are now `-O2` with the measurement in the header. The only real win,
+> precompression, is blocked on edge behaviour that `wrangler dev --local`
+> cannot verify; it wants staging, after RTM#6.
+>
+> **New, owner-reported, now fixed: `.issues/136`.** Anyone whose *name*
+> contained "vip" — Vipada, Vipawee, Vipawadee, all ordinary Thai names — wore
+> a VIP badge, because D1 has no `ticket_name` column and the read path
+> substituted the attendee's name. **Not an outage path**: `list.rs` claimed
+> D1 was the Sheets fallback and it is the other way round, so this was on
+> every organizer screen every day. Fixed in two steps — the wrong information
+> removed, then migration **0050** plus named constants for the two ticket
+> names this system mints (previously bare literals in four files, which is why
+> the Sheet and D1 were free to disagree). Verified with a runtime A/B and in a
+> browser. **This is a third pending migration on the §F.6 deploy** — the
+> cheapest of the three, but still the owner's call.
+>
 > **Blast radius now measured against the live worker (`.issues/133` §10):
 > 13 of the 14 production events with attendees serve `null` — 476 of 514
 > attendee tickets are dead today.** The only event that renders is RTM#6,

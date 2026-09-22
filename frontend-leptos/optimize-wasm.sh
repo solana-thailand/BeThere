@@ -1,7 +1,28 @@
 #!/usr/bin/env bash
 # WASM post-build optimization script
-# Runs wasm-opt (-Oz) and wasm-strip on the dist WASM file
+# Runs wasm-opt and wasm-strip on the dist WASM file
 # Requires: binaryen (wasm-opt), wabt (wasm-strip)
+#
+# NOT WIRED INTO ANYTHING. Neither build.sh, deploy.sh nor CI calls this. Before
+# you wire it up, read the next paragraph — it used to make things worse.
+#
+# IT USED -Oz, AND -Oz IS A REGRESSION HERE. Measured 2026-09-23 on the shipped
+# wasm (.issues/135 §6.1), against what Cloudflare actually serves — brotli at
+# roughly quality 4, not the library default of 11:
+#
+#     level   raw bytes              br4 bytes (what a user downloads)
+#     none    5,478,875              1,646,742
+#     -Oz     5,048,846  (-430,029)  1,650,371  (+3,629  WORSE)
+#     -O2     5,334,606  (-144,269)  1,637,846  (-8,896  better)
+#     -O3     5,262,260              1,643,638  (-3,104)
+#     -O4     5,266,407              1,653,103  (+6,361  WORSE)
+#
+# -Oz shrinks the raw file by 7.8% and grows the transfer, because optimizing
+# for size folds away exactly the repetition brotli feeds on. Judging a wasm
+# change by `ls -l` is how that looks like a win. The flags below are now -O2,
+# the only level that helped, and it is worth 8.9 KB — about a third of the
+# frontend size gate's warn line, which is why nobody has bothered wiring this
+# up. Re-measure with scripts/verify/frontend_size_budget.sh, not with ls.
 
 set -euo pipefail
 
@@ -9,7 +30,7 @@ set -euo pipefail
 DIST_DIR="$(cd "$(dirname "$0")" && pwd)/dist"
 # An array, not a string: these are separate argv words for wasm-opt, and an
 # unquoted string expansion to achieve that is a word-splitting trap (SC2086).
-WASM_OPT_FLAGS=(-Oz --enable-bulk-memory-opt --enable-nontrapping-float-to-int)
+WASM_OPT_FLAGS=(-O2 --enable-bulk-memory-opt --enable-nontrapping-float-to-int)
 
 # Colors
 RED='\033[0;31m'
