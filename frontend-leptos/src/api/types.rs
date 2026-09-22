@@ -389,6 +389,14 @@ pub struct AttendeeData {
     /// Event tagline / subtitle.
     #[serde(default)]
     pub event_tagline: String,
+    /// Organizer's announcement for this attendee's ticket page (migration
+    /// 0049). The Worker already picked the in-person or online variant to
+    /// match `is_in_person`, so there is only ever one here. Empty = no card.
+    ///
+    /// Plain text. Rendered with line breaks preserved and bare URLs turned
+    /// into links — never through `inner_html`.
+    #[serde(default)]
+    pub ticket_note: String,
     /// NFT badge image URL.
     #[serde(default)]
     pub nft_image_url: String,

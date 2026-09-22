@@ -4,7 +4,8 @@
 //! that renders the full form UI with validation, save, and escrow init logic.
 
 use event_checkin_domain::models::event::{
-    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, normalize_sheet_name,
+    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, MAX_TICKET_NOTE_CHARS,
+    normalize_sheet_name,
 };
 use leptos::prelude::*;
 use std::sync::Arc;
@@ -73,6 +74,10 @@ pub struct EventForm {
     pub updated_at: String,
     pub community_links: Vec<crate::api::CommunityLink>,
     pub calendar_subscribe_url: String,
+    /// Ticket-page announcement shown to in-person attendees (migration 0049).
+    pub ticket_note_in_person: String,
+    /// Ticket-page announcement shown to online attendees (migration 0049).
+    pub ticket_note_online: String,
 }
 
 // ===== Helpers =====
@@ -214,6 +219,8 @@ pub fn default_form() -> EventForm {
         updated_at: String::new(),
         community_links: vec![],
         calendar_subscribe_url: String::new(),
+        ticket_note_in_person: String::new(),
+        ticket_note_online: String::new(),
     }
 }
 
@@ -316,6 +323,8 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         visibility: detail.visibility.clone(),
         updated_at: detail.updated_at.clone(),
         community_links: detail.community_links.clone(),
+        ticket_note_in_person: detail.ticket_note_in_person.clone(),
+        ticket_note_online: detail.ticket_note_online.clone(),
         calendar_subscribe_url: detail.calendar_subscribe_url.clone(),
     }
 }
@@ -377,6 +386,7 @@ pub fn EventFormComponent(
     let (sec_capacity_open, set_sec_capacity_open) = signal(true);
     let (sec_people_open, set_sec_people_open) = signal(true);
     let (sec_community_open, set_sec_community_open) = signal(false);
+    let (sec_announce_open, set_sec_announce_open) = signal(false);
     let (sec_poster_open, set_sec_poster_open) = signal(true);
 
     // Community links — managed as a separate signal for easier row-level editing
@@ -714,6 +724,8 @@ pub fn EventFormComponent(
                     .ok(),
                 visibility: current_form.visibility.clone(),
                 community_links: cl_links.get(),
+                ticket_note_in_person: current_form.ticket_note_in_person.clone(),
+                ticket_note_online: current_form.ticket_note_online.clone(),
                 calendar_subscribe_url: current_form.calendar_subscribe_url.trim().to_string(),
             };
 
@@ -970,6 +982,8 @@ pub fn EventFormComponent(
                 ),
                 visibility: Some(current_form.visibility.clone()),
                 community_links: Some(cl_links.get()),
+                ticket_note_in_person: Some(current_form.ticket_note_in_person.clone()),
+                ticket_note_online: Some(current_form.ticket_note_online.clone()),
                 calendar_subscribe_url: Some(
                     current_form.calendar_subscribe_url.trim().to_string(),
                 ),
@@ -2355,6 +2369,44 @@ pub fn EventFormComponent(
                             <span class="quiz-setting-hint">"Comma-separated"</span>
                         </div>
                     </div>
+                    </div>
+                </div>
+
+                // ── Ticket announcements ──
+                // Two boxes rather than one: the two audiences need opposite
+                // things on the day, and each attendee is shown only the one
+                // that matches how they are taking part.
+                <div class="form-section">
+                    <div class="form-section-header" on:click=move |_| set_sec_announce_open.update(|v| *v = !*v)>
+                        <span class="form-section-icon form-section-icon-community"></span>
+                        <span class="form-section-title">"Ticket Announcements"</span>
+                        <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                        <span class="form-section-toggle" class:form-section-toggle-open=move || sec_announce_open.get()>"▼"</span>
+                    </div>
+                    <div class="form-section-body" class:form-section-body-hidden=move || !sec_announce_open.get()>
+                        <p class="quiz-setting-hint">
+                            "Shown on each attendee's ticket page. Everyone sees only the box that matches how they are attending. Leave one empty to hide it for that audience. Links starting with http:// or https:// become clickable; line breaks are kept."
+                        </p>
+                        <div class="quiz-setting-item">
+                            <label class="quiz-field-label">"In-person attendees"</label>
+                            <textarea
+                                class="quiz-textarea"
+                                maxlength=MAX_TICKET_NOTE_CHARS
+                                placeholder="Doors open 12:30 at Building B. Free parking in the basement — tell the guard you are here for the meetup.\n\nSlides: https://example.com/deck\nJoin the group: https://example.com/invite"
+                                prop:value=move || form.get().ticket_note_in_person
+                                on:input=move |ev| set_form.update(|f| f.ticket_note_in_person = event_target_value(&ev))
+                            ></textarea>
+                        </div>
+                        <div class="quiz-setting-item">
+                            <label class="quiz-field-label">"Online attendees"</label>
+                            <textarea
+                                class="quiz-textarea"
+                                maxlength=MAX_TICKET_NOTE_CHARS
+                                placeholder="The YouTube live link goes up about 30 minutes before we start.\n\nWatch: https://example.com/live\nClaim your badge from this page once the session begins."
+                                prop:value=move || form.get().ticket_note_online
+                                on:input=move |ev| set_form.update(|f| f.ticket_note_online = event_target_value(&ev))
+                            ></textarea>
+                        </div>
                     </div>
                 </div>
 

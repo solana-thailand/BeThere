@@ -49,6 +49,9 @@ pub struct TicketViewData {
 
     // Event
     pub is_online: bool,
+    /// Organizer announcement for this attendee, already matched to
+    /// `is_online` by the Worker. Empty = no announcement card.
+    pub ticket_note: String,
     pub event_start_ms: i64,
     pub event_end_ms: i64,
     pub event_name: String,
@@ -165,6 +168,7 @@ impl TicketViewData {
             escrow_status,
             escrow_closed,
             is_online,
+            ticket_note: data.ticket_note.clone(),
             event_start_ms: data.event_start_ms,
             event_end_ms: data.event_end_ms,
             event_name: data.event_name.clone(),

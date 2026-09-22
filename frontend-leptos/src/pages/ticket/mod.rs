@@ -1,5 +1,6 @@
 pub mod access_logistics;
 pub mod action_cards;
+pub mod announcement;
 pub mod calendar_links;
 pub mod community_links;
 pub mod credit_chip;
