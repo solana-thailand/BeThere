@@ -131,6 +131,23 @@ owner decision.
   explicitly (the katgpt wasm32 trap), plus a weekly `RUSTUP_TOOLCHAIN=stable`
   rot lane. **After RTM#6**, because it can change builds.
 
+  **Version check, 2026-09-24.**
+  - Latest stable is 1.98.1 (`rustup check`). CI's `toolchain: stable` resolves to it.
+  - Agent shells here export `RUSTUP_TOOLCHAIN=1.97.1-aarch64-apple-darwin`, and the source is not found in the zsh rc files, Claude settings or launchctl. So local `deploy.sh` builds ship on 1.97.1, a toolchain CI no longer tests.
+  - 1.98.1 fixes a rustc vtable miscompile. Pin `channel = "1.98.1"`, not 1.97.1.
+  - Local `clippy -D warnings` on 1.98.1 is clean for the workspace (`--all-targets`), the frontend (wasm32) and the worker (wasm32). No new-lint drift is waiting in CI.
+
+  **Worth adopting once the pin lands.** Each needs MSRV 1.98, so none lands before the pin.
+  - `u64::format_into` + `core::fmt::NumBuffer` (1.98): alloc-free integer formatting. No hot-path hand-rolled formatter exists today, so this is for new zero-alloc code only.
+  - `assert_matches!` (1.96): replaces `assert!(matches!(..))`, which appears 19× in `domain`/`worker`, and prints the value on failure.
+  - `str::strip_circumfix` (1.98).
+  - Cargo `build.warnings = "deny"` (1.97): can replace the workflow-level `RUSTFLAGS: -D warnings`, which also changes the build hash, so every flag flip is a full rebuild.
+  - The `cargo -m` shorthand (1.97). Skip it in scripts; the long flag stays readable.
+
+  **Compat notes to re-check on the bump:**
+  - 1.97 switched to v0 symbol mangling by default. Re-measure `worker_size_budget.sh` and `frontend_size_budget.sh`.
+  - 1.96 stopped passing `--allow-undefined` on wasm. The local wasm32 clippy builds on 1.98.1 pass; a full `worker-build` on 1.98.1 has not been run.
+
 ## 4. Owner decisions (product)
 
 - [ ] **Verifiable lucky draw**, from `katgpt-device-verify` fair_roll: commit,
