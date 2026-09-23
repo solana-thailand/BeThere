@@ -18,7 +18,7 @@
 #   - solana CLI 3.x+ (configured for devnet)
 #   - curl, jq, python3
 #   - pip3 install solders
-#   - Staging deployment live at WORKER_URL
+#   - Staging deployment live at WORKER_URL (default: staging; prod refused)
 #   - DEV_MODE=1 deployed on worker
 #
 # Usage:
@@ -32,7 +32,14 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-WORKER_URL="${WORKER_URL:-https://bethere.solana-thailand.workers.dev}"
+# Defaults to STAGING, like flow-harness/src/context.rs. Step 2 writes an event
+# into the target's KV, so production needs an explicit E2E_ALLOW_PROD=1.
+WORKER_URL="${WORKER_URL:-https://bethere-staging.solana-thailand.workers.dev}"
+PROD_URL="https://bethere.solana-thailand.workers.dev"
+if [ "${WORKER_URL%/}" = "$PROD_URL" ] && [ "${E2E_ALLOW_PROD:-0}" != "1" ]; then
+  echo "Refusing to run against production ($PROD_URL); set E2E_ALLOW_PROD=1 to override." >&2
+  exit 2
+fi
 PUBLIC_RPC="https://api.devnet.solana.com"
 ESCROW_PROGRAM="C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T"
 USDC_MINT="4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
