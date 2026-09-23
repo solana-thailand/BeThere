@@ -35,15 +35,15 @@ pub struct LiveDashboardQuery {
 
 /// Lightweight event metadata embedded in the dashboard response.
 ///
-/// Trimmed from the full `D1EventRow` to the fields the UI actually renders,
+/// Trimmed from the event's `EventConfig` to the fields the UI actually renders,
 /// keeping the 2.5s-poll payload small.
 #[derive(Debug, Clone, Serialize)]
 pub struct EventDashboardMeta {
     pub id: String,
     pub name: String,
     pub slug: String,
-    /// In-person capacity. `None` or negative = unlimited (matches D1's -1
-    /// sentinel convention used by `D1EventRow.in_person_capacity`). The
+    /// In-person capacity. `None` = unlimited (`EventConfig` already maps D1's
+    /// -1 sentinel to `None`; the frontend also treats negatives as unlimited). The
     /// legacy `capacity` column is ignored — it's a deprecated field that
     /// drifts to 0 for events using the newer per-format capacity model.
     pub in_person_capacity: Option<i64>,
@@ -108,31 +108,32 @@ pub async fn live_dashboard(
         .as_ref()
         .ok_or_else(|| AppError::NotFound("D1 database not available".to_string()))?;
 
-    // Resolve the target event: explicit id first, else active event fallback.
-    let event = match query.event_id.as_deref() {
-        Some(eid) if !eid.is_empty() => crate::db::events::get_event(d1, eid)
-            .await
-            .map_err(|e| AppError::Internal(format!("failed to load event: {e}")))?
-            .ok_or_else(|| AppError::NotFound(format!("event '{eid}' not found")))?,
-        _ => crate::db::events::get_active_event(d1)
+    // Resolve the target id: explicit first, else the newest active event.
+    // Only the id comes from D1 here; the event's fields come from the
+    // KV-first `EventConfig` that the access check loads anyway, so a poll no
+    // longer reads the whole `events` row (plan 028 W10).
+    let event_id = match query.event_id.as_deref() {
+        Some(eid) if !eid.is_empty() => eid.to_string(),
+        _ => dashboard::active_event_id(d1)
             .await
             .map_err(|e| AppError::Internal(format!("failed to load active event: {e}")))?
             .ok_or_else(|| AppError::NotFound("no active event found".to_string()))?,
     };
 
-    let event_id = event.id.clone().unwrap_or_default();
-    if event_id.is_empty() {
-        return Err(AppError::Internal("event row missing id".to_string()).into());
-    }
-
     // Authorize the caller for THIS event (S5: was ungated — any staff could poll
     // another organizer's live check-in stats). resolve_event_with_access layers
     // super-admin → per-event organizer/staff and 403s otherwise.
-    crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&event_id)).await?;
+    let event =
+        crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&event_id)).await?;
+    // Without an events KV binding the resolver returns the global defaults
+    // whatever id was asked for. That is not this event.
+    if event.id != event_id {
+        return Err(AppError::NotFound(format!("event '{event_id}' not found")).into());
+    }
 
     tracing::info!(
         event_id = %event_id,
-        event_name = ?event.name,
+        event_name = %event.name,
         "live dashboard snapshot requested",
     );
 
@@ -159,11 +160,11 @@ pub async fn live_dashboard(
 
     let event_meta = EventDashboardMeta {
         id: event_id.clone(),
-        name: event.name.clone().unwrap_or_default(),
-        slug: event.slug.clone().unwrap_or_default(),
-        in_person_capacity: event.in_person_capacity,
-        deposit_amount_usdc: event.deposit_amount_usdc.unwrap_or(0),
-        event_start_ms: event.event_start_ms.unwrap_or(0),
+        name: event.name,
+        slug: event.slug,
+        in_person_capacity: event.in_person_capacity.map(i64::from),
+        deposit_amount_usdc: i64::try_from(event.deposit_amount_usdc).unwrap_or(i64::MAX),
+        event_start_ms: event.event_start_ms,
     };
 
     let totals = DashboardTotals {

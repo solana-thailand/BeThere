@@ -58,6 +58,21 @@ pub struct ActivityEntry {
 // Aggregate queries
 // ---------------------------------------------------------------------------
 
+/// Id of the newest active event — the same row `db::events::get_active_event`
+/// picks, without its `SELECT *` (plan 028 W10). The dashboard needs only the
+/// id; the event's fields come from the KV-first `EventConfig`.
+pub async fn active_event_id(db: &D1Database) -> Result<Option<String>, String> {
+    let stmt = db
+        .prepare("SELECT id FROM events WHERE status = 'active' ORDER BY created_at DESC LIMIT 1");
+    let rows = d1_safe::safe_all_rows(&stmt).await?;
+    Ok(rows
+        .first()
+        .and_then(|row| row.get("id"))
+        .and_then(|id| id.as_str())
+        .filter(|id| !id.is_empty())
+        .map(str::to_string))
+}
+
 /// Fetch all frequently-polled headline metrics in one D1 round trip.
 pub async fn live_metrics(db: &D1Database, event_id: &str) -> Result<DashboardMetrics, String> {
     let stmt = db
