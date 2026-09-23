@@ -4,7 +4,8 @@
 >
 > | | |
 > |---|---|
-> | **production version (hotfix)** | **`11335a18-da72-4550-915d-1645dab060f6`** |
+> | **production version (current)** | **`70989bdb-3250-487d-840d-d163996f289c`** |
+> | previous | `67a16a73` ("No slip yet"), `11335a18` (slip hotfix) |
 > | superseded — broke slip upload, see `.issues/138` | `05d7df99-f1cd-45af-a4c5-e6cfdbf054d0` |
 > | rollback target (previous) | `f5b99ef0-2843-4352-8c8b-9800020f5c4a` |
 > | migrations applied | 0046, 0047, 0049, 0050 — all ✅ |
@@ -260,6 +261,24 @@ curl -sI https://bethere.solana-thailand.workers.dev/ | rg -i 'content-type'
 **4. Open a real ticket page in a browser.** `cargo check`, clippy and a
 `curl` 200 have all passed on a visibly broken page in this repo before. Look
 at it.
+
+## Step 7.4 — run the write smoke test (staging first, then here)
+
+**This is now the gate.** `scripts/verify/post_deploy_smoke.sh` creates a
+disposable event, seeds an attendee, **uploads a slip**, reads the roster back
+and deletes the fixture. Every step is an INSERT or UPDATE.
+
+```bash
+# staging, BEFORE promoting to production:
+bash scripts/verify/post_deploy_smoke.sh
+```
+
+It fails closed on a non-staging URL, because it writes real rows. It is proven
+in both directions: against a build with `.issues/138` reintroduced it reports
+`slip upload → 500` and exits 1; against a good build it is green and cleans up
+after itself.
+
+**Deploy order is therefore: staging → migrations → smoke → production.**
 
 ## Step 7.5 — check that WRITES still work, not just reads ⚠️
 
