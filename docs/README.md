@@ -36,6 +36,7 @@
 | Document | Description |
 |---|---|
 | [ISO 27001 Gap Assessment](iso27001_gap_assessment.md) | 2026-09-23 self-assessment against Annex A (2022): what exists, ranked gaps, and the auth/SRI fixes made during it. Not a certification. Remediation lives in `.plans/029` |
+| [katgpt-rs study](katgpt_rs_study.md) | 2026-09-23 read of the owner's katgpt-rs fork: which process, CI, perf/security practices and blake3 helpers transfer (and which do not). Adoption queue in `.plans/030` |
 | [Deposit Commitment Model](deposit-commitment-model.md) | **Canonical** deposit/refund/credit rules per rail, real show-up data, open decisions, off-chain vs on-chain comparison — **read this first** for anything deposit-related or pitch-facing |
 | [Handover 2026-08-15 — Credit + Security](HANDOVER-2026-08-15-credit-and-security.md) | Rolling-credit ledger rebuild + all admin IDOR/PII fixes. Its "Model B" no-show forfeiture is superseded (#118) |
 | [Security Findings 2026-08-13](SECURITY-FINDINGS-2026-08-13.md) | This cycle's branch-review findings (IDOR, credit double-spend, wallet binding) + fixes |
