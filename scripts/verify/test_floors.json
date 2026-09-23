@@ -27,6 +27,7 @@
     "capacity_count_single_home tests/capacity_count_single_home.rs": 3,
     "claim_lock_cleanup_guard tests/claim_lock_cleanup_guard.rs": 3,
     "claim_locks_backfill_migration tests/claim_locks_backfill_migration.rs": 2,
+    "claim_single_token_read tests/claim_single_token_read.rs": 3,
     "claim_token_log_guard tests/claim_token_log_guard.rs": 1,
     "claim_token_window_guard tests/claim_token_window_guard.rs": 2,
     "cleanup_guards tests/cleanup_guards.rs": 7,

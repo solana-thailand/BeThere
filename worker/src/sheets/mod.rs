@@ -668,6 +668,18 @@ pub async fn get_attendee_by_claim_token(
         }
     }
 
+    get_attendee_by_claim_token_from_sheets(claim_token, state, sheet_id, sheet_name, kv).await
+}
+
+/// The Sheets half of [`get_attendee_by_claim_token`], for callers that have
+/// already read D1 by claim token (plan 028 W6).
+pub(crate) async fn get_attendee_by_claim_token_from_sheets(
+    claim_token: &str,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<Option<Attendee>, String> {
     // Sheets fallback (no KV cache — Phase 2d). The replay window applies here
     // too: D1 is primary, but a D1 outage must not quietly restore an unbounded
     // token lifetime (Issue 071).

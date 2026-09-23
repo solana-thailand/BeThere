@@ -16,7 +16,6 @@ use worker::d1::D1Type;
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct D1AttendeeRow {
     id: Option<String>,
-    #[allow(dead_code)]
     pub(super) event_id: Option<String>,
     email: Option<String>,
     name: Option<String>,
@@ -189,6 +188,42 @@ pub(crate) async fn get_attendee_by_claim_token(
     claim_token: &str,
     policy: crate::claim::ClaimTokenPolicy,
 ) -> Result<Option<Attendee>, String> {
+    Ok(fetch_row_by_claim_token(db, claim_token)
+        .await?
+        .and_then(|row| within_replay_window(claim_token, row.to_attendee(), policy)))
+}
+
+/// One attendee row fetched by claim token: the row's `event_id` (read before
+/// the replay window, like [`get_attendee_event_id_by_claim_token`]) and the
+/// attendee itself, `None` when the token is outside its window.
+pub(crate) struct ClaimTokenRow {
+    pub(crate) event_id: Option<String>,
+    pub(crate) attendee: Option<Attendee>,
+}
+
+/// Fetch the event id and the attendee for a claim token in one D1 read.
+///
+/// The public claim flows need both: the event id picks the event context and
+/// the attendee answers the walk-in check and the D1 fallback. Reading them
+/// separately cost the same indexed row two to three times per request
+/// (plan 028 W6). `Ok(None)` means no row has this token.
+pub(crate) async fn get_claim_token_row(
+    db: &D1Database,
+    claim_token: &str,
+    policy: crate::claim::ClaimTokenPolicy,
+) -> Result<Option<ClaimTokenRow>, String> {
+    Ok(fetch_row_by_claim_token(db, claim_token)
+        .await?
+        .map(|row| ClaimTokenRow {
+            event_id: row.event_id.clone().filter(|s| !s.is_empty()),
+            attendee: within_replay_window(claim_token, row.to_attendee(), policy),
+        }))
+}
+
+async fn fetch_row_by_claim_token(
+    db: &D1Database,
+    claim_token: &str,
+) -> Result<Option<D1AttendeeRow>, String> {
     let stmt = db.prepare(
         "SELECT id, event_id, email, name, ticket_name, approval_status, participation_type, \
          checked_in_at, checked_in_by, claim_token, claimed_at, claim_asset_id, \
@@ -235,7 +270,14 @@ pub(crate) async fn get_attendee_by_claim_token(
         format!("D1 get_attendee_by_claim_token deserialize: {e}")
     })?;
 
-    let attendee = row.to_attendee();
+    Ok(Some(row))
+}
+
+fn within_replay_window(
+    claim_token: &str,
+    attendee: Attendee,
+    policy: crate::claim::ClaimTokenPolicy,
+) -> Option<Attendee> {
     match policy.is_expired(attendee.checked_in_at.as_deref()) {
         // Outside the replay window: behave exactly as an unknown token, so a
         // replayed URL from the platform request log is indistinguishable from
@@ -245,9 +287,9 @@ pub(crate) async fn get_attendee_by_claim_token(
                 claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(claim_token),
                 "claim token outside its replay window — treating as not found"
             );
-            Ok(None)
+            None
         }
-        false => Ok(Some(attendee)),
+        false => Some(attendee),
     }
 }
 

@@ -1,13 +1,13 @@
 //! Lookup logic (GET /api/claim/{token}).
 
 use event_checkin_domain::models::api::{EventConfig as ApiEventConfig, QuizStatus};
-use event_checkin_domain::models::attendee::WalkinAttendee;
 use event_checkin_domain::models::error::AppError;
+use event_checkin_domain::models::event::EventConfig;
 
 use crate::handlers::ext::{resolve_event, resolve_kv};
 use crate::state::AppState;
 
-use super::helpers::coalesce_event_id;
+use super::helpers::{d1_claim_fallback, resolve_claim_context};
 use super::types::ClaimLookup;
 use crate::claim::lock::{claim_lock_key, mask_wallet};
 
@@ -22,34 +22,14 @@ pub async fn lookup_claim(
     // Resolve the correct event BEFORE any other logic. The public claim URL
     // `/claim/{token}` carries no event_id; without this coalesce, the fallback
     // picks the "first active event", which may be a different event than the
-    // one this attendee registered for.
-    let resolved_event_id = coalesce_event_id(state, token, event_id).await;
-    let event = resolve_event(state, resolved_event_id.as_deref()).await?;
+    // one this attendee registered for. The same D1 read also answers the
+    // walk-in check and the D1 fallback below (plan 028 W6).
+    let ctx = resolve_claim_context(state, token, event_id).await;
+    let event = resolve_event(state, ctx.event_id.as_deref()).await?;
     let kv = resolve_kv(state);
 
     // ── Walk-in path: D1-only (walk-ins are stored in D1 as primary) ──
-    let mut walkin: Option<WalkinAttendee> = None;
-
-    if let Some(ref d1) = state.d1
-        && let Ok(Some(a)) =
-            crate::db::attendees::get_attendee_by_claim_token(d1, token, state.claim_token_policy())
-                .await
-        && a.participation_type == "walkin"
-    {
-        walkin = Some(WalkinAttendee {
-            event_id: event.id.clone(),
-            email: a.email.clone(),
-            name: a.name.clone(),
-            phone: None,
-            claim_token: a.claim_token.clone().unwrap_or_default(),
-            checked_in_at: a.checked_in_at.clone().unwrap_or_default(),
-            checked_in_by: a.checked_in_by.clone().unwrap_or_default(),
-            wallet_address: None,
-            claimed_at: a.claimed_at.clone(),
-        });
-    }
-
-    if let Some(walkin) = walkin {
+    if let Some(walkin) = ctx.walkin(&event.id) {
         tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: found walk-in attendee");
 
         // Match the actual mint executor. Helius is used for reads, while NFT
@@ -107,37 +87,18 @@ pub async fn lookup_claim(
         {
             Ok((Some(a), checked_in, claimed)) => (a, checked_in, claimed),
             Ok((None, _, _)) => {
-                // Sheets returned nothing — try D1 fallback (online attendees may
+                // Sheets returned nothing — use the D1 row (online attendees may
                 // have claim_token in D1 but not yet synced to Sheets). The
-                // event is already correctly resolved above via coalesce_event_id,
-                // so this fallback uses the attendee's real event.
+                // event is already correctly resolved above, so this fallback
+                // uses the attendee's real event. Counts are unavailable
+                // without the event's rows; the claim page shows them as
+                // informational only.
                 tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: Sheets miss, trying D1 fallback");
-                if let Some(ref d1) = state.d1 {
-                    match crate::db::attendees::get_attendee_by_claim_token(
-                        d1,
-                        token,
-                        state.claim_token_policy(),
-                    )
-                    .await
-                    {
-                        Ok(Some(a)) => {
-                            tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: found in D1 fallback");
-                            // Counts unavailable without event_id; claim page shows them as informational only
-                            (a, 0, 0)
-                        }
-                        Ok(None) => {
-                            tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: not found in Sheets or D1");
-                            return Err(AppError::NotFound("claim token not found".into()));
-                        }
-                        Err(e) => {
-                            tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "claim lookup D1 fallback failed");
-                            return Err(AppError::NotFound("claim token not found".into()));
-                        }
-                    }
-                } else {
-                    tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim lookup: no attendee found (no D1)");
-                    return Err(AppError::NotFound("claim token not found".into()));
-                }
+                (
+                    d1_claim_fallback(state, token, ctx.d1, "lookup").await?,
+                    0,
+                    0,
+                )
             }
             Err(ref e) => {
                 tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "claim lookup failed");
@@ -169,87 +130,17 @@ pub async fn lookup_claim(
         .map(|w| w.trim().to_string())
         .filter(|w| !w.is_empty());
 
-    // Determine quiz status (Issue 002 — activity-gated claim)
-    // If the event does NOT have quiz enabled, skip quiz unconditionally.
-    let quiz_status = if !event.quiz_enabled {
-        QuizStatus::NotRequired
-    } else {
-        let qs = crate::quiz::get_quiz_status(
-            state.d1.as_deref(),
-            state.events_kv.as_ref().or(state.quiz_kv.as_ref()),
-            &event.id,
-            token,
-            event.quiz_enabled,
-        )
-        .await
-        .unwrap_or(QuizStatus::NotRequired);
-
-        // If quiz_enabled is true but no quiz config exists yet, treat as NotStarted
-        // so the frontend shows the correct gate instead of letting the user claim.
-        // The organizer must configure quiz questions before attendees can claim.
-        if qs == QuizStatus::NotRequired {
-            QuizStatus::NotStarted
-        } else {
-            qs
-        }
-    };
-
-    // Read finalized claim lock KV for already-claimed attendees
-    // to retrieve signature, asset_id, wallet for explorer links
-    let (claimed_signature, claimed_asset_id, claimed_wallet, cluster) = if claimed {
-        let lock_key = claim_lock_key(&event.id, token);
-        let lock_data: Option<String> = if let Some(kv_ref) = kv {
-            kv_ref.get(&lock_key).text().await.ok().flatten()
-        } else {
-            None
-        };
-        if let Some(json_str) = lock_data {
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
-                let cluster_val = if state.config.solana.rpc_url.contains("mainnet") {
-                    "mainnet-beta".to_string()
-                } else {
-                    "devnet".to_string()
-                };
-                (
-                    val.get("signature")
-                        .and_then(|v| v.as_str())
-                        .map(String::from),
-                    val.get("asset_id")
-                        .and_then(|v| v.as_str())
-                        .map(String::from),
-                    val.get("wallet").and_then(|v| v.as_str()).map(String::from),
-                    Some(cluster_val),
-                )
-            } else {
-                (None, None, None, None)
-            }
-        } else {
-            (None, None, None, None)
-        }
-    } else {
-        (None, None, None, None)
-    };
-
-    // When there's no per-event lock, signal that the attendee has a verified
-    // profile-bound wallet (via the SIWS bind flow) so the claim page can offer a
-    // one-tap "mint to my linked wallet" path. We expose ONLY a masked display —
-    // the full address stays server-side and the mint resolves it by email, so a
-    // leaked claim link can neither read the wallet nor redirect the badge.
-    let linked_wallet_display = if locked_wallet.is_none() {
-        match state.d1.as_deref() {
-            Some(db) => crate::db::developers::get_developer_profile(db, &attendee.email)
-                .await
-                .ok()
-                .flatten()
-                .and_then(|p| p.wallet_address)
-                .map(|w| w.trim().to_string())
-                .filter(|w| !w.is_empty())
-                .map(|w| mask_wallet(&w)),
-            None => None,
-        }
-    } else {
-        None
-    };
+    // Quiz status, the finalized claim lock and the linked profile wallet are
+    // independent reads, so they run concurrently (plan 028 W6).
+    let (
+        quiz_status,
+        (claimed_signature, claimed_asset_id, claimed_wallet, cluster),
+        linked_wallet_display,
+    ) = futures_util::join!(
+        quiz_status_for(state, &event, token),
+        claimed_explorer_fields(state, kv, &event.id, token, claimed),
+        linked_wallet_display_for(state, &attendee.email, locked_wallet.is_none()),
+    );
 
     Ok(ClaimLookup {
         name: display_name,
@@ -275,4 +166,90 @@ pub async fn lookup_claim(
         claimed_wallet,
         cluster,
     })
+}
+
+/// Quiz status (Issue 002 — activity-gated claim). If the event does NOT have
+/// quiz enabled, skip quiz unconditionally.
+async fn quiz_status_for(state: &AppState, event: &EventConfig, token: &str) -> QuizStatus {
+    if !event.quiz_enabled {
+        return QuizStatus::NotRequired;
+    }
+    let qs = crate::quiz::get_quiz_status(
+        state.d1.as_deref(),
+        state.events_kv.as_ref().or(state.quiz_kv.as_ref()),
+        &event.id,
+        token,
+        event.quiz_enabled,
+    )
+    .await
+    .unwrap_or(QuizStatus::NotRequired);
+
+    // If quiz_enabled is true but no quiz config exists yet, treat as NotStarted
+    // so the frontend shows the correct gate instead of letting the user claim.
+    // The organizer must configure quiz questions before attendees can claim.
+    match qs {
+        QuizStatus::NotRequired => QuizStatus::NotStarted,
+        other => other,
+    }
+}
+
+type ExplorerFields = (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+);
+
+/// Read the finalized claim lock KV for already-claimed attendees to retrieve
+/// signature, asset_id, wallet and cluster for explorer links.
+async fn claimed_explorer_fields(
+    state: &AppState,
+    kv: Option<&worker::KvStore>,
+    event_id: &str,
+    token: &str,
+    claimed: bool,
+) -> ExplorerFields {
+    let none = (None, None, None, None);
+    let Some(kv_ref) = kv.filter(|_| claimed) else {
+        return none;
+    };
+    let lock_key = claim_lock_key(event_id, token);
+    let Some(json_str) = kv_ref.get(&lock_key).text().await.ok().flatten() else {
+        return none;
+    };
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) else {
+        return none;
+    };
+    let cluster = match state.config.solana.rpc_url.contains("mainnet") {
+        true => "mainnet-beta",
+        false => "devnet",
+    };
+    let field = |name: &str| val.get(name).and_then(|v| v.as_str()).map(String::from);
+    (
+        field("signature"),
+        field("asset_id"),
+        field("wallet"),
+        Some(cluster.to_string()),
+    )
+}
+
+/// When there's no per-event lock, signal that the attendee has a verified
+/// profile-bound wallet (via the SIWS bind flow) so the claim page can offer a
+/// one-tap "mint to my linked wallet" path. We expose ONLY a masked display —
+/// the full address stays server-side and the mint resolves it by email, so a
+/// leaked claim link can neither read the wallet nor redirect the badge.
+async fn linked_wallet_display_for(
+    state: &AppState,
+    email: &str,
+    unlocked: bool,
+) -> Option<String> {
+    let db = state.d1.as_deref().filter(|_| unlocked)?;
+    crate::db::developers::get_developer_profile(db, email)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|p| p.wallet_address)
+        .map(|w| w.trim().to_string())
+        .filter(|w| !w.is_empty())
+        .map(|w| mask_wallet(&w))
 }
