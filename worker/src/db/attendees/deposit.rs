@@ -4,6 +4,8 @@ use serde::Deserialize;
 use worker::D1Database;
 use worker::d1::D1Type;
 
+use crate::db::d1_int::int_bind;
+
 /// Get deposit status from D1 by attendee ID.
 /// Returns the raw deposit columns if a row is found.
 ///
@@ -93,7 +95,7 @@ pub(crate) async fn save_deposit_status_to_d1(
     stmt.bind_refs(&[
         D1Type::Text(deposit_status),
         D1Type::Text(tx_hash),
-        D1Type::Integer(deposit_amount_usdc as i32),
+        int_bind("attendees.deposit_amount_usdc", deposit_amount_usdc)?,
         D1Type::Text(attendee_id),
     ])
     .map_err(|e| format!("D1 save_deposit_status bind: {e:?}"))?

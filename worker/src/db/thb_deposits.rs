@@ -5,6 +5,8 @@
 use worker::D1Database;
 use worker::d1::D1Type;
 
+use super::d1_int::uint_bind;
+
 use event_checkin_domain::models::deposit::{DepositSource, ThbDeposit};
 
 // ---------------------------------------------------------------------------
@@ -255,7 +257,7 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
     stmt.bind_refs(&[
         D1Type::Text(&deposit.attendee_id),
         D1Type::Text(&deposit.event_id),
-        D1Type::Integer(deposit.amount_thb as i32),
+        uint_bind("thb_deposits.amount_thb", deposit.amount_thb)?,
         D1Type::Text(deposit.slip_url.as_deref().unwrap_or("")),
         D1Type::Integer(deposit.verified as i32),
         D1Type::Text(deposit.verified_by.as_deref().unwrap_or("")),
@@ -304,7 +306,7 @@ pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
          WHERE event_id = ?12 AND attendee_id = ?13",
     );
     stmt.bind_refs(&[
-        D1Type::Integer(deposit.amount_thb as i32),
+        uint_bind("thb_deposits.amount_thb", deposit.amount_thb)?,
         D1Type::Text(deposit.slip_url.as_deref().unwrap_or("")),
         D1Type::Integer(deposit.verified as i32),
         D1Type::Text(deposit.verified_by.as_deref().unwrap_or("")),

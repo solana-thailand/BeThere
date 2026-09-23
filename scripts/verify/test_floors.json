@@ -30,6 +30,7 @@
     "comp_emails_guards tests/comp_emails_guards.rs": 5,
     "credit_ledger_guards tests/credit_ledger_guards.rs": 16,
     "credit_release_and_staff_comp tests/credit_release_and_staff_comp.rs": 6,
+    "d1_int_bind_exactness tests/d1_int_bind_exactness.rs": 4,
     "deposit_source_bind_guards tests/deposit_source_bind_guards.rs": 4,
     "deposit_source_guards tests/deposit_source_guards.rs": 8,
     "deposit_verify_guard tests/deposit_verify_guard.rs": 7,

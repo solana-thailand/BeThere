@@ -3,6 +3,8 @@
 use worker::D1Database;
 use worker::d1::D1Type;
 
+use crate::db::d1_int::int_bind;
+
 /// `consent_marketing` as a bind value: `NULL` when the submission did not ask.
 ///
 /// The column has three meaningful states and `Option<bool>` carries all
@@ -287,7 +289,7 @@ pub(crate) async fn verify_deposit(
     stmt.bind_refs(&[
         D1Type::Text(deposit_status),
         D1Type::Text(deposit_tx_hash),
-        D1Type::Integer(deposit_amount_usdc as i32),
+        int_bind("attendees.deposit_amount_usdc", deposit_amount_usdc)?,
         D1Type::Text(verified_at),
         D1Type::Text(verified_by),
         D1Type::Text(id),
