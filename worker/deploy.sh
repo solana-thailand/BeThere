@@ -252,6 +252,31 @@ verify_content_types() {
   return 0
 }
 
+# Until 2026-09-23 no deploy recorded which commit it shipped: `wrangler
+# deployments list` showed version ids with no message, so "is fix X live?" was
+# answered from hand-written issue prose that went stale on the next deploy.
+# Provenance is now recorded both ways: the Worker Version message carries the
+# commit (prod → git), and a local tag marks the commit (git → prod). A dirty
+# tree is recorded as such rather than refused — the tag is evidence, not a gate.
+deploy_provenance() {
+  local sha dirty=""
+  sha=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+  [ -n "$(git status --porcelain 2>/dev/null)" ] && dirty="+dirty"
+  printf 'git:%s%s' "$sha" "$dirty"
+}
+
+# Tag HEAD as deploy/<env>/<UTC timestamp>. Local only — pushing tags to the
+# public remote is the owner's call. Never fails the deploy.
+record_deploy_tag() {
+  local tag
+  tag="deploy/${DEPLOY_ENV}/$(date -u +%Y%m%dT%H%M%SZ)"
+  if git tag -a "$tag" -m "$(deploy_provenance) via $1" HEAD 2>/dev/null; then
+    echo "🏷️  Recorded ${tag} → $(deploy_provenance)"
+  else
+    echo "⚠️  Could not record deploy tag ${tag} (deploy itself succeeded)." >&2
+  fi
+}
+
 # ── §3.5 Preflight gate (opt-in, production-only) ────────────────────────────
 # Production deploys require a green flow-harness run within the last hour
 # (PREFLIGHT_MAX_AGE_SECONDS). --force --reason bypasses the gate and appends a
@@ -360,8 +385,9 @@ else
   fi
 
   # ── Step 1: Try standard wrangler deploy ──
-  if CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" 2>&1; then
+  if CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" --message "$(deploy_provenance)" 2>&1; then
     echo "✅ Deployed via wrangler"
+    record_deploy_tag wrangler
     if verify_content_types; then
       restore_pnp
       exit 0
@@ -504,6 +530,7 @@ else
   if [ "$HTTP_CODE" = "200" ]; then
     STARTUP_MS=$(echo "$BODY" | "$PYTHON_BIN" -c "import json,sys; r=json.load(sys.stdin); print(r.get('result',{}).get('startup_time_ms','?'))" 2>/dev/null || echo "?")
     echo "✅ Deployed successfully! (startup: ${STARTUP_MS}ms)"
+    record_deploy_tag put-api
     echo "   https://${WORKER_NAME}.solana-thailand.workers.dev"
 
     # Verify assets are served

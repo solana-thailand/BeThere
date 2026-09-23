@@ -213,6 +213,10 @@ working as designed.
 npx wrangler deployments list | tail -20
 ```
 
+Since `.issues/140`, the new version's message should read `git:<sha>` and
+`git tag -l 'deploy/production/*'` should show a new tag. Check both. This is
+the first deploy to use them, so an empty message means provenance didn't work.
+
 **Write the new version id down.** Rollback is one command and needs it:
 
 ```bash
