@@ -66,12 +66,26 @@ reflex-site has no license, so its code is a pattern only.
   - **Proof:** `--self-test` passes 11/11. A/B on real `cargo tree` output: a
     planted `web-sys` gave exit 1, and a removed `js-sys` gave exit 1 as a
     stale pin.
-- [ ] **Bench-record rules** for `.plans/028` M1:
-  - a numbered file per rung;
-  - a correctness gate that is green before a number is quoted;
-  - one session, interleaved;
-  - retractions recorded in place;
-  - published numbers generated, with a check.
+- [x] **Bench-record rules** for `.plans/028` M1 (2026-09-24):
+  - **Rules:** `.benchmarks/README.md`. One numbered file per rung, allocated
+    by `numbering_gate.py --next .benchmarks` (the directory is now in its
+    `DIRS`). A green correctness gate comes before any number. Lanes are
+    measured in one session, interleaved. The load is written down.
+    Retractions are recorded in place. Numbers are quoted by citation. When
+    n < 100, report the tail support instead of "p99".
+  - **Check:** `scripts/verify/bench_records.py` (CI `build-test`). It checks
+    each record's header (Status vocabulary, Gate with a command and
+    `exit 0`, `vs … interleaved` lanes, sha, session), and that every
+    `.benchmarks/NNN` citation in plans, issues, docs, README and CLAUDE.md
+    resolves and does not quote a retracted record as live. `--self-test`
+    passes 16/16.
+  - **First run:** the check flagged 5 unprefixed citations of *other*
+    repos' `.benchmarks/` in `docs/gist_rs_study.md` and
+    `docs/katgpt_rs_study.md`. Those now carry the repo prefix
+    (`riir-reflex/`, `katgpt-rs/`), which the citation pattern skips.
+  - **Not automated:** "published numbers generated". Nothing here publishes
+    numbers yet. The citation check is the enforceable part until something
+    does.
 
 ## 3. After RTM#6
 

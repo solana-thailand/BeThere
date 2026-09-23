@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when two `.issues` / `.plans` / `.handovers` files share a number.
+"""Fail when two `.issues` / `.plans` / `.handovers` / `.benchmarks` files share a number.
 
 Plan 030 (adapted from katgpt-rs `scripts/numbering_gate.py`). Sessions pick the
 next number by eye ("ls, take the last one, add one"), so two sessions working in
@@ -40,7 +40,7 @@ from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DIRS = (".issues", ".plans", ".handovers")
+DIRS = (".issues", ".plans", ".handovers", ".benchmarks")
 HIGHWATER = ".highwater"
 NUMBERED_RE = re.compile(r"^(\d{3})_.+\.md$")
 

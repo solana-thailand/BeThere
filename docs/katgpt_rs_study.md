@@ -37,7 +37,7 @@ Nothing we would want is published: `katgpt-device-verify`, `-proof-cert` and
 | **BOUNDARY.md:** Owns / Does not own / May depend on / drift ledger. File the issue before the fix; the drift row is removed in the commit that closes it. | `BOUNDARY.md`; `AGENTS.md:9-18` | **Lite version.** One page covering what worker, frontend, escrow and D1 each own. |
 | **A green result is not a whole-repo claim.** A gate that skipped an axis prints PARTIAL, never PASSED. "0 tests ran" counts as a failure. An EXIT trap can launder a `set -e` abort into exit 0. | `AGENTS.md:61-120, 1148, 1747` | **Yes.** Audit `scripts/verify/*.sh` for all three. |
 | **A gate's failure path must be tested** (a negative test proves it can fail). | `AGENTS.md:2319`; `lean_proofs.yml:118` | **Adopted 2026-09-23.** See §6. |
-| **Promotion review before turning something on by default:** G1 correctness, G2 perf (`--release`), G3 no regression, G4 alloc-free, in a numbered write-up. | `AGENTS.md:3143-3160`; `.benchmarks/675_*` | **Lite version**, for production toggles only, not every function. |
+| **Promotion review before turning something on by default:** G1 correctness, G2 perf (`--release`), G3 no regression, G4 alloc-free, in a numbered write-up. | `AGENTS.md:3143-3160`; `katgpt-rs/.benchmarks/675_*` | **Lite version**, for production toggles only, not every function. |
 | **Peer-session hygiene:** stage named files only; add a `Session: <name>, <epoch>` commit trailer; `git fetch` and cross-run the peer's fixtures before recording a negative result. | `AGENTS.md:2920-3018, 3243-3262` | **Yes.** It matches our `[[check-for-peer-sessions-in-same-tree]]` memory. |
 | **Mandatory "Honest caveats" section** in proposals; a second model reviews in AGREE/REVISE rounds (at most 3). | `.agents/skills/proposal/SKILL.md:289`; research skill §5 | **Yes, for risky plans** (escrow, merge strategy, money paths). |
 | **Three-way retirement:** pending / kept for A/B / dead-and-exiled, with evidence links. | `.docs/10_audits/loser_sweep_audit.md:17-28` | Maybe, for stale experiment branches. |
@@ -171,7 +171,7 @@ Other findings:
   run automatically nowhere, and the scheduled CI has been suspended since
   2026-09-09.
 - "GOAT-proved" is not uniform. `swir_switch_thinking` is default-on with
-  **G1 accuracy 0%** on Gemma 2 2B ✔ `.benchmarks/275`, which breaks the repo's
+  **G1 accuracy 0%** on Gemma 2 2B ✔ `katgpt-rs/.benchmarks/275`, which breaks the repo's
   own promotion rule.
 - The latest `main` push is red on Full gate, required-features and Docs ✔
   (`gh run list`, 2026-09-23 14:41).

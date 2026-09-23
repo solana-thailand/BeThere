@@ -14,7 +14,7 @@ reasoning lives. If a rule needs a story, put the story in `.issues/` or
 | `bethere-escrow/` | On-chain escrow program (Quasar) | no |
 | `flow-harness/` | Business-flow harness | no |
 | `scripts/verify/` | Gates and probes run by CI and by hand | — |
-| `.issues/` `.plans/` `.handovers/` | Numbered working docs | — |
+| `.issues/` `.plans/` `.handovers/` `.benchmarks/` | Numbered working docs | — |
 
 Architecture: `docs/architecture.md`. Security posture: `SECURITY.md`,
 `docs/iso27001_gap_assessment.md`.
@@ -117,6 +117,7 @@ that cannot fail is not a gate.
 | `wasm_leak_scan.sh` | build-host paths (report-only) and secrets in shipped wasm/js |
 | `domain_import_fence.py` | `domain`'s wasm32 graph reaching app/platform crates; JS bridge pinned both ways |
 | `third_party_licenses.sh` | `THIRD_PARTY_LICENSES.md` drift vs. the lockfiles (licence gate itself: `cargo deny check licenses`) |
+| `bench_records.py` | `.benchmarks/` record headers (green gate, interleaved lanes, retractions) and citations that resolve |
 
 ## Deploy (owner-gated)
 

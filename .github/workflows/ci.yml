@@ -477,6 +477,14 @@ jobs:
           python3 scripts/verify/numbering_gate.py --self-test
           python3 scripts/verify/numbering_gate.py
 
+      - name: Benchmark records and citations
+        # Plan 031 §2. Rules in .benchmarks/README.md: a green correctness gate
+        # before a number, interleaved lanes, retractions in place, and every
+        # .benchmarks/NNN citation resolving to a record that is not retracted.
+        run: |
+          python3 scripts/verify/bench_records.py --self-test
+          python3 scripts/verify/bench_records.py
+
       - name: Issue Status verdict vocabulary
         # Plan 030. Issues above 144 must open Status with a fixed verdict word
         # so stale prose is machine-checkable (.issues/140). --vocab needs no git

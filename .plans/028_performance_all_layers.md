@@ -54,7 +54,7 @@ Two audit recommendations were **rejected after measurement** — see §4.
 - [ ] F9 CSS: 22 unminified render-blocking sheets + 5 Inter weights. ~0 effect on first paint while the wasm dominates ([[measure-at-the-compression-served]]); hygiene.
 
 ### Measurement
-- [ ] **M1 `.plans/010` P0.2 — CPU per hot path** (check-in, claim, deposit confirm, refund). Now possible unattended on staging: seed via `/escrow/init` + `confirm-init` ([[devnet-e2e-run-recipe]]) and read `cpuTime` from `wrangler tail --env staging`. Needed before W3/W4 claim any CPU number.
+- [ ] **M1 `.plans/010` P0.2 — CPU per hot path** (check-in, claim, deposit confirm, refund). Now possible unattended on staging: seed via `/escrow/init` + `confirm-init` ([[devnet-e2e-run-recipe]]) and read `cpuTime` from `wrangler tail --env staging`. Needed before W3/W4 claim any CPU number. Record each rung under `.benchmarks/` (rules: `.benchmarks/README.md`, checked by `scripts/verify/bench_records.py`).
 
 ## 3. Verification log
 
