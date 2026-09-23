@@ -251,7 +251,7 @@ backfill inside the migration — but the decision to deploy at all is yours.
 **Running the sync per event** after deploying, to backfill. It reads the
 sheet, so it is an external call, and which events to sync is your call.
 
-### 6.6 ⚠️ The backfill is not safe to run yet — follow-up needed
+### 6.6 ⚠️ The backfill was not safe to run — fixed, awaiting deploy
 
 `POST /api/events/{id}/sync` is the only way to fill `ticket_name` for rows
 created before 0050. **It was deliberately not run**, and the reason is a
@@ -273,6 +273,19 @@ ticket tiers is the first such reason, which is how it surfaced.
 neighbours, or exclude it from the sync entirely, so the backfill becomes
 routine. Until then the tier column stays empty for pre-0050 rows, which is
 exactly the pre-0050 behaviour — nothing regresses by waiting.
+
+**Fixed 2026-09-23 (`develop`, not deployed).** `upsert_attendee_full` now
+ranks `none < agreed < pending < verified` and only takes the sheet's value
+when it ranks higher; any D1 value off that ladder (`refunded`,
+`manual_refund`, …) outranks everything and is kept. Verified by running the
+statement text itself (extracted from the source) against the migrated local
+D1 schema in SQLite — 9/9 cases — and the same probe on the `HEAD` statement
+reproduced the defect: `verified` + sheet `none` → **`none`**, and `refunded`
++ sheet `verified` → **`verified`** (a refunded deposit re-marked as held).
+Guarded by `worker/tests/sync_deposit_status_guard.rs`, which fails on the
+pre-fix source. **The backfill itself is still owner-gated (§6.4)**: it is a
+production write against every attendee row of the event, and it needs this
+fix deployed first.
 
 ### 6.5 Still worth deciding: `contains("vip")` is a weak test
 
@@ -428,3 +441,8 @@ the compiler, not by a live run. Also unverified: the production row count, as
 | ป้าย Walk-in ไม่เคยขึ้นเลย | walk-in ทุกคน ตลอดมา |
 
 อาการที่คุณเห็นเกิดยาก แต่ข้อมูลผิด**ทั้งหมด** — ที่เจอแค่คนเดียวคือ**โชคดี** ไม่ใช่เพราะระบบถูก
+
+**อัปเดต §6.6:** แก้แล้วบน develop (ยังไม่ deploy) — sync เลื่อนสถานะมัดจำได้แค่ขึ้น
+(`none < agreed < pending < verified`) ห้ามลด และค่าอื่นใน D1 เช่น `refunded` จะไม่ถูกเขียนทับ ·
+โค้ดเก่าทำให้ `verified` กลายเป็น `none` และ `refunded` กลายเป็น `verified` (ยืนยันด้วย SQLite จริง) ·
+**การรัน backfill ยังต้องรอเจ้าของสั่ง** และต้อง deploy ตัวแก้นี้ก่อน

@@ -142,6 +142,14 @@ pub(crate) async fn clear_attendee_pii(db: &D1Database, attendee_id: &str) -> Re
 /// matching the empty-string idiom used by every other sheet-sourced column
 /// here — so a sync of a sheet with no ticket column cannot blank a tier that
 /// was already recorded.
+///
+/// `deposit_status` only ever moves **up** the ladder
+/// `none < agreed < pending < verified` on conflict. The sheet's deposit
+/// columns lag D1 by construction (deposits are recorded in D1 first), so
+/// taking the sheet's value unconditionally let a sync demote a verified
+/// deposit to whatever the spreadsheet last said. Any D1 value off the ladder
+/// (`refunded`, `manual_refund`, …) is a later lifecycle state the sheet cannot
+/// derive, and is never overwritten. `.issues/136` §6.6.
 pub(crate) async fn upsert_attendee_full(
     db: &D1Database,
     id: &str,
@@ -209,7 +217,12 @@ pub(crate) async fn upsert_attendee_full(
          claim_token = COALESCE(excluded.claim_token, attendees.claim_token), \
          claimed_at = COALESCE(excluded.claimed_at, attendees.claimed_at), \
          qr_url = COALESCE(excluded.qr_url, attendees.qr_url), \
-         deposit_status = excluded.deposit_status, \
+         deposit_status = CASE WHEN \
+           (CASE excluded.deposit_status WHEN 'none' THEN 0 WHEN 'agreed' THEN 1 \
+             WHEN 'pending' THEN 2 WHEN 'verified' THEN 3 ELSE -1 END) > \
+           (CASE attendees.deposit_status WHEN '' THEN 0 WHEN 'none' THEN 0 WHEN 'agreed' THEN 1 \
+             WHEN 'pending' THEN 2 WHEN 'verified' THEN 3 ELSE 99 END) \
+           THEN excluded.deposit_status ELSE attendees.deposit_status END, \
          deposit_tx_hash = COALESCE(excluded.deposit_tx_hash, attendees.deposit_tx_hash), \
          refund_tx_hash = COALESCE(excluded.refund_tx_hash, attendees.refund_tx_hash), \
          refund_link = COALESCE(excluded.refund_link, attendees.refund_link), \
