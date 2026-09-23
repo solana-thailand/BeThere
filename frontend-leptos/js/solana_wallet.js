@@ -568,6 +568,24 @@ export async function getConnectedPublicKey(walletName) {
  */
 var web3Promise = null;
 
+// Pinned and integrity-checked: this bundle builds the transactions the wallet
+// signs, so a CDN serving different bytes must fail closed, not run. 1.95.3
+// predates the compromised 1.95.6/1.95.7 releases (Dec 2024). The hash matches
+// the npm tarball and both CDNs serve identical bytes. Recompute on any bump:
+//   curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
+var WEB3_PATH = "@solana/web3.js@1.95.3/lib/index.iife.min.js";
+var WEB3_INTEGRITY =
+  "sha384-xo1g+ODR6i1cxIVZeALc/apXFHeaJHO1j1whMO3dhtdBChWeaihnDs7UnXs9ch78";
+
+/** A <script> for the pinned web3.js bundle on one CDN, integrity-checked. */
+function web3Script(cdnBase) {
+  var script = document.createElement("script");
+  script.integrity = WEB3_INTEGRITY;
+  script.crossOrigin = "anonymous";
+  script.src = cdnBase + WEB3_PATH;
+  return script;
+}
+
 function loadWeb3() {
   if (!web3Promise) {
     web3Promise = new Promise(function (resolve, reject) {
@@ -575,8 +593,7 @@ function loadWeb3() {
         resolve(window.solanaWeb3);
         return;
       }
-      var script = document.createElement("script");
-      script.src = "https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js";
+      var script = web3Script("https://unpkg.com/");
       script.onload = function () {
         if (window.solanaWeb3) {
           console.log("[solana_wallet] Loaded @solana/web3.js from unpkg");
@@ -592,8 +609,7 @@ function loadWeb3() {
 
       function tryFallback() {
         console.log("[solana_wallet] unpkg failed, trying jsdelivr fallback...");
-        var fallbackScript = document.createElement("script");
-        fallbackScript.src = "https://cdn.jsdelivr.net/npm/@solana/web3.js@1.95.3/lib/index.iife.min.js";
+        var fallbackScript = web3Script("https://cdn.jsdelivr.net/npm/");
         fallbackScript.onload = function () {
           if (window.solanaWeb3) {
             console.log("[solana_wallet] Loaded @solana/web3.js from jsdelivr");
