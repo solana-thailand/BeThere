@@ -62,21 +62,25 @@ pub(crate) async fn get_campaign_for_event(
 /// are listed: `get_public_event` hides private (401/403) and draft/archived
 /// (404) events, so the series must not name them either (.issues/149). The
 /// `INNER JOIN` also drops dangling `campaign_events` rows, which have no
-/// visibility to check. Pure so the predicate is pinned by a native test.
-pub fn series_summaries_sql() -> String {
-    let public = EventVisibility::Public.as_str();
-    let active = EventStatus::Active.as_str();
-    let completed = EventStatus::Completed.as_str();
-    format!(
-        "SELECT ce.event_id AS event_id, e.name AS name, e.slug AS slug, \
-                COALESCE(e.event_start_ms, 0) AS event_start_ms, ce.sequence_order AS sequence_order \
-         FROM campaign_events ce \
-         INNER JOIN events e ON e.id = ce.event_id \
-         WHERE ce.campaign_id = ? \
-           AND e.visibility = '{public}' \
-           AND e.status IN ('{active}', '{completed}') \
-         ORDER BY ce.sequence_order ASC, e.event_start_ms ASC"
-    )
+/// visibility to check. The filter values are bound, in the order
+/// [`series_live_filter`] returns them, after `campaign_id`.
+pub const SERIES_SUMMARIES_SQL: &str = "SELECT ce.event_id AS event_id, e.name AS name, e.slug AS slug, \
+            COALESCE(e.event_start_ms, 0) AS event_start_ms, ce.sequence_order AS sequence_order \
+     FROM campaign_events ce \
+     INNER JOIN events e ON e.id = ce.event_id \
+     WHERE ce.campaign_id = ? \
+       AND e.visibility = ? \
+       AND e.status IN (?, ?) \
+     ORDER BY ce.sequence_order ASC, e.event_start_ms ASC";
+
+/// The `(visibility, status, status)` values bound into
+/// [`SERIES_SUMMARIES_SQL`]. Pure so the filter is pinned by a native test.
+pub fn series_live_filter() -> [&'static str; 3] {
+    [
+        EventVisibility::Public.as_str(),
+        EventStatus::Active.as_str(),
+        EventStatus::Completed.as_str(),
+    ]
 }
 
 /// List a campaign's publicly visible events in `sequence_order`, joined to
@@ -86,10 +90,15 @@ pub(crate) async fn list_campaign_event_summaries(
     db: &D1Database,
     campaign_id: &str,
 ) -> Result<Vec<EventSeriesEntry>, String> {
-    let sql = series_summaries_sql();
+    let [visibility, active, completed] = series_live_filter();
     let stmt = db
-        .prepare(&sql)
-        .bind_refs(&[D1Type::Text(campaign_id)])
+        .prepare(SERIES_SUMMARIES_SQL)
+        .bind_refs(&[
+            D1Type::Text(campaign_id),
+            D1Type::Text(visibility),
+            D1Type::Text(active),
+            D1Type::Text(completed),
+        ])
         .map_err(|e| format!("D1 list_campaign_event_summaries bind: {e:?}"))?;
     let raw_result = JsFuture::from(
         stmt.inner()

@@ -29,4 +29,6 @@ pub(crate) use progress::{
 pub(crate) use series::{get_campaign_for_event, list_campaign_event_summaries};
 pub(crate) use stats::campaign_completion_stats;
 
-pub use series::{EventSeriesEntry, compute_series_neighbors, series_summaries_sql};
+pub use series::{
+    EventSeriesEntry, SERIES_SUMMARIES_SQL, compute_series_neighbors, series_live_filter,
+};
