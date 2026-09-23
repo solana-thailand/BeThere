@@ -28,9 +28,16 @@ owner decision.
     `.sql` backfill companion.
   - Runs in CI (`ci.yml`, after its `--self-test`, 10/10). A planted
     `.issues/144_probe_collision.md` turned the live run red.
-- [ ] **Verdict vocabulary.** Extend `scripts/verify/issue_ledger.py` so
-  `Status:` must start with one of: OPEN, FIXED-ON-DEVELOP, DEPLOYED, CLOSED,
-  CLOSED NEGATIVE, PARKED (reopen trigger: …), DECLINED.
+- [x] **Verdict vocabulary** (2026-09-23). `issue_ledger.py` checks that
+  `Status:` opens with one of: open, in progress, fixed on develop, deployed,
+  closed, closed negative, parked (a reopen trigger must be named), declined.
+  Markup is ignored, so ``fixed on `develop` `` counts.
+  - Issues above `LEGACY_MAX = 144` are enforced. The 141 older issues use
+    about 30 free-form phrasings (27 already conform); they are reported, not
+    failed, and not rewritten.
+  - `--vocab` (git-free) and `--self-test` (9/9) run in CI. A planted
+    `145_probe.md` turned `--vocab` red. Until issue 145 exists, a clean run
+    prints "vacuous", not ✅.
 - [ ] **Green-zero guard.** In CI, assert a minimum passed-test count for the
   worker, domain and frontend suites. The count may only move down with a
   commit that says why. A module split that drops a whole test file would then

@@ -14,6 +14,12 @@ What it can check mechanically:
     writes one per deploy since 2026-09-23 — before that, deploy state is
     UNKNOWN, not "not deployed")
 
+It also enforces a fixed verdict vocabulary (plan 030, from katgpt-rs HISTORY.md).
+The Status of every issue numbered above LEGACY_MAX must open with one of VERDICTS,
+e.g. `**Status:** fixed on develop 2026-09-24 ...`; `parked` must name its reopen
+trigger. Older issues predate the rule and use ~30 free-form phrasings; they are
+reported, not failed. `--vocab` runs only this check (no git), which is what CI runs.
+
 What it cannot: whether the behaviour is still fixed. That needs the issue's own
 reproduction. This script only narrows what to re-verify first.
 
@@ -22,6 +28,8 @@ Usage:
     python3 scripts/verify/issue_ledger.py --all      # every issue
     python3 scripts/verify/issue_ledger.py --strict   # exit 1 on any flag
     python3 scripts/verify/issue_ledger.py --prod-ref <commit>   # what-if
+    python3 scripts/verify/issue_ledger.py --vocab    # verdict vocabulary only
+    python3 scripts/verify/issue_ledger.py --self-test   # prove the vocab check fails
 
 Read-only.
 """
@@ -46,6 +54,21 @@ BRANCH_RE = re.compile(r"`((?:feature|hotfix|release|fix)/[\w./-]+)`")
 LINK_RE = re.compile(r"(?:\.issues/|#|\(|\b[Ii]ssue )(\d{3})\b")
 # Doc-only commits land after the deploy they describe; they are not the fix.
 CODE_PATHS = (".", ":!.issues", ":!.plans", ":!.handovers", ":!docs", ":!*.md")
+# The terminal and in-flight states an issue may declare. Longest first, so
+# "closed negative" wins over "closed".
+VERDICTS = (
+    "closed negative",
+    "fixed on develop",
+    "in progress",
+    "deployed",
+    "declined",
+    "closed",
+    "parked",
+    "open",
+)
+VERDICT_RE = re.compile(r"^(" + "|".join(VERDICTS) + r")\b")
+# Issues up to this number were written before the vocabulary existed.
+LEGACY_MAX = 144
 
 
 class Claim(Enum):
@@ -63,6 +86,8 @@ class Flag(Enum):
     NOT_ON_HEAD = "a cited fix commit is not on HEAD"
     BRANCH_GONE = "a cited branch no longer exists"
     UNVERIFIABLE = "claims a fix, but no commit is cited in Status or names the issue"
+    OFF_VOCAB = f"Status does not open with a verdict word ({', '.join(VERDICTS)})"
+    PARKED_NO_TRIGGER = "parked, but no reopen trigger is named"
 
 
 @dataclass
@@ -117,6 +142,27 @@ def status_block(text: str) -> str:
     return ""
 
 
+def verdict_word(block: str) -> str | None:
+    """The verdict the Status block opens with, ignoring markup; None if off-vocabulary."""
+    head = STATUS_RE.sub("", block, count=1)
+    plain = re.sub(r"[*`_]", "", " ".join(head.split())).lower().lstrip(" :—-")
+    match = VERDICT_RE.match(plain)
+    return match.group(1) if match else None
+
+
+def vocab_flags(path: Path, block: str) -> list[Flag]:
+    if int(path.name[:3]) <= LEGACY_MAX:
+        return []
+    word = verdict_word(block)
+    match word:
+        case None:
+            return [Flag.OFF_VOCAB]
+        case "parked" if "reopen" not in block.lower():
+            return [Flag.PARKED_NO_TRIGGER]
+        case _:
+            return []
+
+
 def classify(block: str) -> Claim:
     low = block.lower()
     match low:
@@ -137,6 +183,7 @@ def classify(block: str) -> Claim:
 def judge(path: Path, prod: str | None, links: dict[str, list[str]]) -> Verdict:
     block = status_block(path.read_text(encoding="utf-8"))
     verdict = Verdict(path, classify(block))
+    verdict.flags.extend(vocab_flags(path, block))
     # 8-hex ids are also Cloudflare version ids; only what git resolves counts.
     verdict.commits = [c for c in (resolve_commit(s) for s in SHA_RE.findall(block)) if c]
     verdict.linked = [c for c in links.get(path.name[:3], []) if c not in verdict.commits]
@@ -163,12 +210,63 @@ def judge(path: Path, prod: str | None, links: dict[str, list[str]]) -> Verdict:
     return verdict
 
 
+def vocab_only() -> int:
+    paths = sorted(ISSUES.glob("[0-9][0-9][0-9]_*.md"))
+    words = {p: verdict_word(status_block(p.read_text(encoding="utf-8"))) for p in paths}
+    failures = [(p, f) for p in paths for f in vocab_flags(p, status_block(p.read_text(encoding="utf-8")))]
+    legacy = [p for p in paths if int(p.name[:3]) <= LEGACY_MAX]
+    conforming = sum(1 for p in legacy if words[p])
+    print(f"legacy issues (<= {LEGACY_MAX:03d}) already on the vocabulary: {conforming}/{len(legacy)} (reported, not failed)")
+    for p, f in failures:
+        print(f"❌ {p.name}: {f.value}")
+    checked = len(paths) - len(legacy)
+    match (checked, failures):
+        case (0, _):
+            # Not a pass: nothing was in scope. The --self-test is what proves the rule.
+            print(f"⚪ vacuous: no issue above {LEGACY_MAX:03d} exists yet, 0 checked")
+        case (_, []):
+            print(f"✅ {checked} issue(s) above {LEGACY_MAX:03d} checked, 0 violations")
+        case _:
+            print(f"❌ {checked} issue(s) above {LEGACY_MAX:03d} checked, {len(failures)} violation(s)")
+    return 1 if failures else 0
+
+
+def self_test() -> int:
+    new = Path("145_fixture.md")
+    cases: list[tuple[str, Path, str, list[Flag]]] = [
+        ("plain verdict", new, "**Status:** open (2026-09-24).", []),
+        ("markup around the verdict", new, "**Status:** fixed on `develop` 2026-09-24, not deployed.", []),
+        ("longest verdict wins", new, "Status: CLOSED NEGATIVE — the claim did not hold.", []),
+        ("parked with trigger", new, "**Status:** parked. Reopen trigger: RTM#7 ticket volume.", []),
+        ("parked without trigger", new, "**Status:** parked until later.", [Flag.PARKED_NO_TRIGGER]),
+        ("free-form phrasing", new, "**Status:** mechanism built 2026-09-24.", [Flag.OFF_VOCAB]),
+        ("verdict word inside another word", new, "**Status:** opened a PR.", [Flag.OFF_VOCAB]),
+        ("empty status", new, "", [Flag.OFF_VOCAB]),
+        ("legacy issue is grandfathered", Path(f"{LEGACY_MAX:03d}_fixture.md"), "**Status:** whatever", []),
+    ]
+    failures = 0
+    for label, path, block, want in cases:
+        got = vocab_flags(path, block)
+        ok = got == want
+        failures += not ok
+        print(f"{'✅' if ok else '❌'} {label}: {[f.name for f in got]}")
+    print(f"\n{'❌' if failures else '✅'} {len(cases) - failures}/{len(cases)} vocabulary cases behaved as expected.")
+    return 1 if failures else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--all", action="store_true", help="print every issue, not only flagged ones")
     parser.add_argument("--strict", action="store_true", help="exit 1 if any issue is flagged")
     parser.add_argument("--prod-ref", help="treat this commit as prod (what-if; overrides the newest deploy tag)")
+    parser.add_argument("--vocab", action="store_true", help="check only the verdict vocabulary (no git)")
+    parser.add_argument("--self-test", action="store_true", help="prove the vocabulary check can fail")
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
+    if args.vocab:
+        return vocab_only()
 
     prod = args.prod_ref or newest_prod_tag()
     links = commits_by_issue()
