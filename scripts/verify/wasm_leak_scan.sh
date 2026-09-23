@@ -14,7 +14,10 @@
 #            publish the builder's username and toolchain. The fix is
 #            --remap-path-prefix (after RTM#6, .plans/031 §3).
 #   secrets  ghp_ / github_pat_ / AKIA / sk- / xox?- / Slack webhook / PEM
-#            private key. Always fatal, even with --report-only.
+#            private key. Always fatal, even with --report-only. The PEM arm
+#            needs 32+ base64 chars after the header (raw or JSON-escaped
+#            newline): a parser's bare "-----BEGIN PRIVATE KEY-----" label
+#            constant (worker/src/crypto.rs) is not a key.
 # Not checked: repo-relative panic paths (module names only).
 #
 # Exit: 0 clean (or paths only, with --report-only) · 1 leak · 2 usage error,
@@ -22,7 +25,7 @@
 set -euo pipefail
 
 path_re='/(Users|home)/[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+|[A-Z]:[\\/][A-Za-z0-9_. -]+[\\/][A-Za-z0-9_. -]+'
-secret_re='ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|hooks\.slack\.com/services/T[A-Za-z0-9/]+|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+secret_re='ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|hooks\.slack\.com/services/T[A-Za-z0-9/]+|-----BEGIN [A-Z ]*PRIVATE KEY-----(\\n|[[:space:]])*[A-Za-z0-9+/]{32,}'
 
 scan() {
   local report_only="$1"
@@ -38,7 +41,8 @@ scan() {
       printf '%s\n' "$hits" | sed -n '1,5p' | sed 's/^/     /'
       path_hits=$((path_hits + count))
     fi
-    hits="$(LC_ALL=C grep -a -o -E "$secret_re" "$file" | sort -u || true)"
+    # CR/LF flattened so a PEM header and its body on the next line still match.
+    hits="$(LC_ALL=C tr '\r\n' '  ' < "$file" | LC_ALL=C grep -a -o -E "$secret_re" | sort -u || true)"
     if [[ -n "$hits" ]]; then
       count="$(printf '%s\n' "$hits" | wc -l | tr -d ' ')"
       # Print only a prefix: the scan must not re-leak what it found.
@@ -69,6 +73,14 @@ self_test() {
   printf 'plain bytes\0src/lib.rs\0' > "$dir/clean.wasm"
   printf 'x\0/Users/alice/.cargo/registry/src/foo.rs\0' > "$dir/path.wasm"
   printf 'x\0AKIA%s\0' "ABCDEFGHIJKLMNOP" > "$dir/secret.wasm"
+  # Assembled at runtime so this script never holds a PEM-shaped literal.
+  local pem_head="-----BEGIN PRIVATE""-----" pem_tail="-----END PRIVATE""-----" body
+  pem_head="${pem_head/PRIVATE/PRIVATE KEY}"
+  pem_tail="${pem_tail/PRIVATE/PRIVATE KEY}"
+  body="$(printf 'A%.0s' {1..40})"
+  printf 'x\0%s%s\0' "$pem_head" "$pem_tail" > "$dir/pem_label.wasm"
+  printf 'x\0%s\n%s\n%s\0' "$pem_head" "$body" "$pem_tail" > "$dir/pem_raw.wasm"
+  printf 'x\0%s\\n%s\\n%s\0' "$pem_head" "$body" "$pem_tail" > "$dir/pem_json.wasm"
   expect() {
     local want="$1" label="$2"
     shift 2
@@ -87,10 +99,13 @@ self_test() {
   expect 1 "secret, strict" false "$dir/secret.wasm"
   expect 1 "secret, report-only" true "$dir/secret.wasm"
   expect 1 "one leak among clean files" false "$dir/clean.wasm" "$dir/path.wasm"
+  expect 0 "PEM label constant only" false "$dir/pem_label.wasm"
+  expect 1 "PEM key, raw newline" true "$dir/pem_raw.wasm"
+  expect 1 "PEM key, JSON-escaped newline" true "$dir/pem_json.wasm"
   expect 2 "missing file" false "$dir/nope.wasm"
   expect 2 "zero files" false
   [[ "$failed" -eq 0 ]] || { echo "❌ self-test failed"; return 1; }
-  echo "✅ self-test: 8/8"
+  echo "✅ self-test: 11/11"
 }
 
 case "${1:-}" in

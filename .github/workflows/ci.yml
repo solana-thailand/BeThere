@@ -176,7 +176,17 @@ jobs:
         # worker/.size-budget.
         env:
           WRANGLER_SEND_METRICS: "false"
-        run: bash scripts/verify/worker_size_budget.sh
+        run: bash scripts/verify/worker_size_budget.sh --keep "$RUNNER_TEMP/worker-bundle"
+
+      - name: Worker wasm leak scan (report-only)
+        # Same scan as the frontend step, on the bundle the budget step kept
+        # (.plans/031 §2). Paths are reported until --remap-path-prefix lands;
+        # secret-shaped strings fail. The PEM arm needs key material after the
+        # header, because worker/src/crypto.rs ships the bare marker constant.
+        run: |
+          set -euo pipefail
+          bash scripts/verify/wasm_leak_scan.sh --self-test
+          bash scripts/verify/wasm_leak_scan.sh --report-only "$RUNNER_TEMP"/worker-bundle/*.wasm "$RUNNER_TEMP"/worker-bundle/*.js
 
   frontend-clippy:
     name: frontend wasm32 clippy + native tests

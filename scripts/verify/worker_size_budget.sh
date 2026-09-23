@@ -19,6 +19,7 @@
 # Usage:
 #   bash scripts/verify/worker_size_budget.sh                  # build + measure
 #   bash scripts/verify/worker_size_budget.sh --dir <outdir>   # measure an existing bundle
+#   bash scripts/verify/worker_size_budget.sh --keep <outdir>  # build into <outdir>, measure, keep it
 #   bash scripts/verify/worker_size_budget.sh --update-baseline
 #
 # Exit: 0 green (or warn), 1 over the fail line or broken invocation.
@@ -28,11 +29,12 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 
 BUDGET_FILE="worker/.size-budget"
 BUNDLE_DIR=""
+KEEP_DIR=""
 UPDATE_BASELINE=false
 TMP_DIR=""
 
 usage() {
-  sed -n '3,22p' "${BASH_SOURCE[0]}" >&2
+  sed -n '3,25p' "${BASH_SOURCE[0]}" >&2
   exit 1
 }
 
@@ -43,6 +45,11 @@ while [ $# -gt 0 ]; do
       BUNDLE_DIR="$2"
       shift 2
       ;;
+    --keep)
+      [ $# -ge 2 ] || { echo "❌ --keep needs a path" >&2; usage; }
+      KEEP_DIR="$2"
+      shift 2
+      ;;
     --update-baseline)
       UPDATE_BASELINE=true
       shift
@@ -51,6 +58,8 @@ while [ $# -gt 0 ]; do
     *) echo "❌ Unknown argument: $1" >&2; usage ;;
   esac
 done
+
+[ -z "$BUNDLE_DIR" ] || [ -z "$KEEP_DIR" ] || { echo "❌ --dir and --keep are exclusive" >&2; usage; }
 
 cleanup() {
   [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
@@ -86,8 +95,15 @@ if [ -z "$BUNDLE_DIR" ]; then
     echo "   --dir pointing at an already-built bundle." >&2
     exit 1
   }
-  TMP_DIR=$(mktemp -d)
-  BUNDLE_DIR="$TMP_DIR"
+  # --keep hands the bundle to a later step (the worker leak scan in CI);
+  # otherwise it is a temp dir removed on exit.
+  if [ -n "$KEEP_DIR" ]; then
+    mkdir -p "$KEEP_DIR"
+    BUNDLE_DIR="$KEEP_DIR"
+  else
+    TMP_DIR=$(mktemp -d)
+    BUNDLE_DIR="$TMP_DIR"
+  fi
   echo "📦 Bundling worker (wrangler deploy --dry-run) ..."
   if ! (cd worker && CI=true npx wrangler deploy --env="" --dry-run --outdir "$BUNDLE_DIR" >/dev/null 2>&1); then
     echo "❌ Dry-run bundling failed — cannot measure. Re-run the command by hand" >&2

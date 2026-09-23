@@ -18,8 +18,15 @@ reflex-site has no license, so its code is a pattern only.
   Prod wasm: 116 paths; local dist: 112; no secrets. CI runs it report-only
   after the frontend size budget (actionlint clean; the first real run comes
   with the owner's push). Paths are reported and exit 0; secrets always exit 1.
-  **Left:** scan the worker bundle too. The dry-run bundle lives in a temp dir
-  inside `worker_size_budget.sh`, so it needs a `--keep` or a hook there.
+  **Worker bundle** (2026-09-24): `worker_size_budget.sh --keep <dir>` keeps
+  the dry-run bundle, and CI scans it report-only right after the budget
+  step. The first local run found a false secret: `worker/src/crypto.rs:89`
+  ships the bare `-----BEGIN PRIVATE KEY-----` label (the PKCS#8 parser), with
+  `-----END…` right after it and no key body. The PEM arm now needs 32+ base64
+  chars after the header (raw newline or JSON `\n`); CR/LF are flattened for
+  the secret pass so a multi-line PEM still matches. `--self-test` 11/11
+  (label-only → 0, raw and JSON-escaped keys → 1). Local worker bundle: 201
+  paths, no secrets. Frontend dist: 112 paths, no secrets.
   Original item: a port of
   `riir-reflex/scripts/binary_leak_scan.sh` (MIT). It checks absolute
   build-host paths and secret shapes in `frontend-leptos/dist/*.wasm` and the
