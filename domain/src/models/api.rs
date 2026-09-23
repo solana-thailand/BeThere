@@ -180,6 +180,26 @@ pub struct AttendeeListItem {
     /// the "Credit ✓" badge distinguishing credit-covered from cash registrations.
     #[serde(default)]
     pub used_credit: bool,
+    /// How this attendee's THB deposit for THIS event was settled — `"cash"`,
+    /// `"credit"` or `"comp"` — annotated by the list handler from
+    /// `thb_deposits`. `None` when they have no THB deposit row at all.
+    ///
+    /// The roster badge used to read `deposit_status` and the USDC amount, and
+    /// **nothing in the THB flow writes either** (`.issues/137`). A staff comp
+    /// and a credit-covered registration were therefore indistinguishable from
+    /// an unpaid attendee, and the door screen said "Deposit pending" for
+    /// people who owed nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thb_source: Option<String>,
+    /// Whether that THB deposit has been accepted — by an organizer for cash,
+    /// or by the system for a comp or an applied credit.
+    #[serde(default)]
+    pub thb_verified: bool,
+    /// Whether that THB deposit has been refunded. Separate from
+    /// `refund_status`, which is derived from `deposit_status` and is therefore
+    /// also never set on the THB path.
+    #[serde(default)]
+    pub thb_refunded: bool,
 }
 
 impl AttendeeListItem {
@@ -210,6 +230,13 @@ impl AttendeeListItem {
             // Defaults; the list handler annotates these post-build from the ledger.
             credit_thb: 0,
             used_credit: false,
+            // All three are annotated by the list handler from `thb_deposits`,
+            // which `from_attendee` has no access to. Absent means "no THB
+            // deposit row", which is the honest default: the alternative —
+            // inventing a state here — is the mistake `.issues/136` was.
+            thb_source: None,
+            thb_verified: false,
+            thb_refunded: false,
         }
     }
 }

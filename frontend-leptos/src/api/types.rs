@@ -267,6 +267,14 @@ pub struct AttendeeListItem {
     /// Drives the "Credit ✓" badge (distinct from cash "Deposit ✓").
     #[serde(default)]
     pub used_credit: bool,
+    /// `"cash"` | `"credit"` | `"comp"` — how the THB deposit was settled.
+    /// `None` when there is no THB deposit row. See `.issues/137`.
+    #[serde(default)]
+    pub thb_source: Option<String>,
+    #[serde(default)]
+    pub thb_verified: bool,
+    #[serde(default)]
+    pub thb_refunded: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

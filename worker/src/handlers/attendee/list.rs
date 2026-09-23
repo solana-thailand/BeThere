@@ -170,6 +170,29 @@ pub async fn list_attendees(
                 }
             }
         }
+
+        //  - thb_source / thb_verified / thb_refunded: how the THB deposit was
+        //    settled. Without this the roster is blind to the entire THB flow —
+        //    it reads `attendees.deposit_status` and the USDC amount columns,
+        //    and nothing writes either (`save_deposit_status_to_d1` is dead
+        //    code). A staff comp and a credit-covered registration both looked
+        //    like an unpaid attendee and the door screen said "Deposit
+        //    pending". See `.issues/137`.
+        //
+        //    Best-effort like the two above: a failure here must degrade the
+        //    badge, never the roster. An organizer at the door needs the list of
+        //    names far more than they need the badge on it.
+        if let Ok(settlements) =
+            crate::db::thb_deposits::settlement_by_attendee(db, &event.id).await
+        {
+            for item in attendee_responses.iter_mut() {
+                if let Some(s) = settlements.get(&item.api_id) {
+                    item.thb_source = Some(s.source.as_str().to_string());
+                    item.thb_verified = s.verified;
+                    item.thb_refunded = s.refunded;
+                }
+            }
+        }
     }
 
     let data = json!({

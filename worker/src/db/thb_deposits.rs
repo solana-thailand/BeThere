@@ -128,6 +128,115 @@ pub async fn list_thb_deposits(db: &D1Database, event_id: &str) -> Result<Vec<Th
         .collect::<Result<Vec<_>, _>>()
 }
 
+/// How one attendee's THB deposit for an event was settled.
+///
+/// Deliberately narrow. The admin roster needs three facts to draw a badge and
+/// nothing else, and `thb_deposits.slip_url` can hold a multi-megabyte base64
+/// data URL — pulling whole rows for a 500-person roster to read three booleans
+/// is the kind of thing that only shows up as a slow page at the door.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThbSettlement {
+    /// An organizer (or the system, for a comp) has accepted this deposit.
+    pub verified: bool,
+    /// The money has gone back.
+    pub refunded: bool,
+    /// Cash, rolling credit, or a comp. Reads the `deposit_source` column added
+    /// by migration 0047, falling back to the legacy sentinels for rows written
+    /// before it — the same order `ThbDeposit::source()` uses.
+    pub source: DepositSource,
+}
+
+/// Settlement state for every attendee with a THB deposit at one event.
+///
+/// **Why this exists.** The admin roster's deposit badge used to read
+/// `attendees.deposit_status` and the USDC amount columns — and nothing in the
+/// THB flow writes either. `save_deposit_status_to_d1` is dead code
+/// (`#[allow(dead_code)]`, zero callers), so a staff comp and a
+/// credit-covered registration both looked identical to an unpaid attendee:
+/// the roster said **"Deposit pending"** for people who owed nothing
+/// (`.issues/137`). This is the missing read.
+///
+/// One query per roster page, batched like the credit-ledger annotations
+/// beside it. Attendees with no THB deposit are simply absent from the map.
+pub async fn settlement_by_attendee(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<std::collections::HashMap<String, ThbSettlement>, String> {
+    // Named columns, not `SELECT *`: see the doc comment on ThbSettlement.
+    let stmt = db
+        .prepare(
+            "SELECT attendee_id, verified, refunded, amount_thb, slip_url, verified_by,              deposit_source              FROM thb_deposits WHERE event_id = ?1",
+        )
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 settlement_by_attendee bind: {e:?}"))?;
+
+    let rows = super::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| format!("D1 settlement_by_attendee: {e}"))?;
+
+    let truthy = |v: Option<&serde_json::Value>| match v {
+        Some(serde_json::Value::Bool(b)) => *b,
+        Some(serde_json::Value::Number(n)) => n.as_i64().unwrap_or(0) != 0,
+        Some(serde_json::Value::String(s)) => {
+            s == "1" || s.eq_ignore_ascii_case("true") || s.eq_ignore_ascii_case("yes")
+        }
+        _ => false,
+    };
+
+    let mut map = std::collections::HashMap::new();
+    for row in rows {
+        let Some(attendee_id) = row.get("attendee_id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let source = classify_source(
+            row.get("deposit_source").and_then(|v| v.as_str()),
+            row.get("verified_by").and_then(|v| v.as_str()),
+            row.get("slip_url").and_then(|v| v.as_str()),
+            row.get("amount_thb").and_then(serde_json::Value::as_i64),
+        );
+        map.insert(
+            attendee_id.to_string(),
+            ThbSettlement {
+                verified: truthy(row.get("verified")),
+                refunded: truthy(row.get("refunded")),
+                source,
+            },
+        );
+    }
+    Ok(map)
+}
+
+/// Classify a deposit's source from the stored column, falling back to the
+/// legacy sentinels.
+///
+/// The arm ORDER is load-bearing and is a transcription of
+/// `ThbDeposit::source()` in `domain/src/models/deposit.rs`: a row that is both
+/// credit-applied AND ฿0 is Credit, not Comp. Migration 0047's backfill is a
+/// transcription of the same function in the same order, which is why the
+/// backfill and this agree on every production row.
+fn classify_source(
+    stored: Option<&str>,
+    verified_by: Option<&str>,
+    slip_url: Option<&str>,
+    amount_thb: Option<i64>,
+) -> DepositSource {
+    match stored {
+        Some("credit") => return DepositSource::Credit,
+        Some("comp") => return DepositSource::Comp,
+        Some("cash") => return DepositSource::Cash,
+        _ => {}
+    }
+    let vb = verified_by.unwrap_or("");
+    let slip = slip_url.unwrap_or("");
+    if vb == "SYSTEM_ROLLING_CREDIT" || slip == "ROLLING_CREDIT_AUTO_APPLIED" {
+        DepositSource::Credit
+    } else if vb == "SYSTEM_STAFF_WAIVE" || slip == "STAFF_COMP_WAIVED" || amount_thb == Some(0) {
+        DepositSource::Comp
+    } else {
+        DepositSource::Cash
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Write
 // ---------------------------------------------------------------------------

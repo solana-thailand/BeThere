@@ -204,6 +204,23 @@ pub enum DepositSource {
     Comp,
 }
 
+impl DepositSource {
+    /// The stored/wire spelling — the same string the `deposit_source` column
+    /// holds, the same string `#[serde(rename_all = "snake_case")]` produces,
+    /// and the same string migration 0047's `CHECK` constraint allows.
+    ///
+    /// Three places already agreed on these spellings by coincidence; this makes
+    /// it one place. `as_str_matches_the_serde_representation` below is what
+    /// stops them drifting apart again.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cash => "cash",
+            Self::Credit => "credit",
+            Self::Comp => "comp",
+        }
+    }
+}
+
 impl ThbDeposit {
     /// Classify this deposit's economic source — the one place the
     /// credit/comp/cash decision is made.
@@ -564,6 +581,26 @@ mod tests {
         assert_eq!(err, "unknown DepositMethod: ''");
         let err = "Usdc".parse::<DepositMethod>().unwrap_err();
         assert_eq!(err, "unknown DepositMethod: 'Usdc'");
+    }
+
+    /// `as_str` is used for the D1 `deposit_source` column, the admin roster's
+    /// wire field and migration 0047's CHECK. If it ever disagreed with the
+    /// serde representation, a deposit would round-trip through JSON as one
+    /// source and through SQL as another.
+    #[test]
+    fn as_str_matches_the_serde_representation() {
+        for source in [
+            DepositSource::Cash,
+            DepositSource::Credit,
+            DepositSource::Comp,
+        ] {
+            let json = serde_json::to_string(&source).expect("serializes");
+            assert_eq!(
+                json.trim_matches('"'),
+                source.as_str(),
+                "as_str and serde disagree for {source:?}"
+            );
+        }
     }
 
     // ── DepositSource: the recorded column vs the legacy sentinels ──────────
