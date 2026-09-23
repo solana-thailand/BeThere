@@ -233,9 +233,10 @@ pub async fn get_staff_role(email: &str, state: &AppState) -> Option<String> {
 /// Check if a user is assigned as organizer or staff in **any** event config.
 ///
 /// This is the fallback path in `is_staff()` for users not in global sources.
-/// Two-pass check:
+/// Three-pass check:
 /// 1. Fast path: `EventMeta.organizer_emails` (no extra KV read)
-/// 2. Slow path: load full `EventConfig` to check `staff_emails`
+/// 2. D1 candidates for `staff_emails`, each confirmed against its KV config
+/// 3. Slow path: load every full `EventConfig` to check `staff_emails`
 ///
 /// Returns `true` if the email appears in any event's organizer or staff list.
 pub async fn is_event_assigned(email: &str, state: &AppState) -> bool {
@@ -263,7 +264,28 @@ pub async fn is_event_assigned(email: &str, state: &AppState) -> bool {
         }
     }
 
-    // Slow path: load full configs to check staff_emails
+    // D1 path (plan 028 W2): one query names the candidate events, and each is
+    // confirmed against its KV config, so D1 never grants on its own.
+    if let Some(db) = state.d1.as_deref() {
+        match crate::db::event_staff::event_ids_for_staff(db, email).await {
+            Ok(candidates) => {
+                for id in candidates
+                    .iter()
+                    .filter(|id| all_events.iter().any(|meta| &meta.id == *id))
+                {
+                    if let Ok(Some(config)) = crate::event_store::get_event_config(kv, id).await
+                        && crate::event_store::is_event_staff(&config, email)
+                    {
+                        return true;
+                    }
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "D1 staff lookup failed, scanning KV"),
+        }
+    }
+
+    // Slow path: load full configs to check staff_emails. Still reached on a
+    // D1 miss, because a failed D1 sync must not lock out a KV-listed volunteer.
     for meta in &all_events {
         if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await
             && crate::event_store::is_event_staff(&config, email)
