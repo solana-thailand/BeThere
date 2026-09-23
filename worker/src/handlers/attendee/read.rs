@@ -404,14 +404,27 @@ fn mask_email(email: &str) -> String {
     format!("{first}***@{domain}")
 }
 
-/// QR image cache TTL in seconds (1 hour).
-const QR_IMAGE_CACHE_TTL_SECS: u64 = 3600;
+/// QR image cache TTL: 7 days.
+///
+/// The image is a pure function of the URL, and the cached value carries the
+/// URL it was rendered from, so a long TTL can never serve a stale code. The
+/// old 1-hour TTL made every polling attendee cost one KV write per hour
+/// (free plan: 1,000/day); regenerating instead is ~0.5 ms native, 1-2 ms in
+/// wasm, which spends the scarcer budget (10 ms CPU/request).
+const QR_IMAGE_CACHE_TTL_SECS: u64 = 7 * 24 * 3600;
+
+/// Split a cached `"{url}\n{image}"` value; `None` for legacy image-only
+/// values, which are then regenerated and overwritten.
+fn cached_qr_for_url<'a>(cached: &'a str, qr_code_url: &str) -> Option<&'a str> {
+    let (url, image) = cached.split_once('\n')?;
+    (url == qr_code_url).then_some(image)
+}
 
 /// Generate a QR base64 image, cached in KV.
 ///
-/// Key: `qr:{api_id}`, TTL: 1 hour.
-/// Falls back to uncached generation if KV is unavailable.
-#[allow(clippy::collapsible_if)]
+/// Key: `qr:{api_id}` (the delete/privacy paths purge it by that name), value
+/// `"{url}\n{image}"`. The URL check is what makes the lazy `qr_url` backfill
+/// above take effect immediately instead of after the TTL.
 async fn get_cached_qr_image(
     kv: Option<&KvStore>,
     api_id: &str,
@@ -419,19 +432,18 @@ async fn get_cached_qr_image(
 ) -> Option<String> {
     let cache_key = format!("qr:{api_id}");
 
-    // Try KV cache first
     if let Some(kv) = kv
         && let Ok(Some(cached)) = kv.get(&cache_key).text().await
+        && let Some(image) = cached_qr_for_url(&cached, qr_code_url)
     {
-        return Some(cached);
+        return Some(image.to_string());
     }
 
-    // Generate fresh
     let image = event_checkin_domain::qr::generate_qr_base64(qr_code_url).ok()?;
 
-    // Store in KV (best-effort, don't block on failure)
+    // Best-effort: a failed write only means the next poll regenerates.
     if let Some(kv) = kv
-        && let Ok(builder) = kv.put(&cache_key, image.clone())
+        && let Ok(builder) = kv.put(&cache_key, format!("{qr_code_url}\n{image}"))
         && let Err(e) = builder
             .expiration_ttl(QR_IMAGE_CACHE_TTL_SECS)
             .execute()

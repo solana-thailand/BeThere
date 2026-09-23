@@ -129,17 +129,6 @@ pub async fn check_in(
         _ => Uuid::now_v7().to_string(),
     };
 
-    // Resolve column mapping for this event's sheet
-    let mapping = match sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
-        .await
-    {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to get column mapping, using hardcoded fallback");
-            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
-        }
-    };
-
     // Generate timestamp locally — response returns immediately, Sheets write is detached
     let timestamp = chrono::Utc::now().to_rfc3339();
 
@@ -182,21 +171,37 @@ pub async fn check_in(
         }
     }
 
-    // Detach Google Sheets write — response returns immediately (Phase 2c)
+    // Detach Google Sheets write — response returns immediately (Phase 2c).
+    // The column mapping is resolved inside the detached task: only the Sheets
+    // mirror needs it, and awaiting it here cost every door scan a KV read (a
+    // Sheets header fetch on a cache miss) before the response.
     if let Some(ctx) = &state.worker_ctx {
-        ctx.wait_until(crate::sheets::bg_sync::mark_checked_in(
+        let (state, sheet_id, sheet_name, kv) = (
             state.clone(),
-            attendee.row_index,
-            claims.email.clone(),
-            claim_token.clone(),
-            mapping,
             event.sheet_id.clone(),
             event.sheet_name.clone(),
             kv.cloned(),
+        );
+        let (row_index, staff, token, ts) = (
+            attendee.row_index,
+            claims.email.clone(),
+            claim_token.clone(),
             timestamp.clone(),
-        ));
+        );
+        ctx.wait_until(async move {
+            let mapping =
+                sheets::column_mapping_or_hardcoded(&state, &sheet_id, &sheet_name, kv.as_ref())
+                    .await;
+            crate::sheets::bg_sync::mark_checked_in(
+                state, row_index, staff, token, mapping, sheet_id, sheet_name, kv, ts,
+            )
+            .await;
+        });
     } else {
         // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
+        let mapping =
+            sheets::column_mapping_or_hardcoded(&state, &event.sheet_id, &event.sheet_name, kv)
+                .await;
         if let Err(e) = sheets::write::mark_checked_in(
             attendee.row_index,
             &claims.email,
@@ -354,17 +359,6 @@ pub async fn undo_check_in(
         return Err(AppError::Validation("attendee is not checked in".to_string()).into());
     }
 
-    // Resolve column mapping for this event's sheet
-    let mapping = match sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
-        .await
-    {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to get column mapping, using hardcoded fallback");
-            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
-        }
-    };
-
     // Clear check-in columns in D1 first (source of truth)
     if let Some(ref d1) = state.d1
         && let Err(e) = crate::db::attendees::undo_check_in(d1, &attendee.api_id).await
@@ -376,19 +370,30 @@ pub async fn undo_check_in(
         );
     }
 
-    // Detach Google Sheets write — response returns immediately (Phase 2c)
+    // Detach Google Sheets write — response returns immediately (Phase 2c).
+    // Mapping resolved in the detached task, as in `check_in`.
     if let Some(ctx) = &state.worker_ctx {
-        ctx.wait_until(crate::sheets::bg_sync::clear_checked_in(
+        let (state, sheet_id, sheet_name, kv) = (
             state.clone(),
-            attendee.row_index,
-            claims.email.clone(),
-            mapping,
             event.sheet_id.clone(),
             event.sheet_name.clone(),
             kv.cloned(),
-        ));
+        );
+        let (row_index, staff) = (attendee.row_index, claims.email.clone());
+        ctx.wait_until(async move {
+            let mapping =
+                sheets::column_mapping_or_hardcoded(&state, &sheet_id, &sheet_name, kv.as_ref())
+                    .await;
+            crate::sheets::bg_sync::clear_checked_in(
+                state, row_index, staff, mapping, sheet_id, sheet_name, kv,
+            )
+            .await;
+        });
     } else {
         // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
+        let mapping =
+            sheets::column_mapping_or_hardcoded(&state, &event.sheet_id, &event.sheet_name, kv)
+                .await;
         if let Err(e) = sheets::clear_checked_in(
             attendee.row_index,
             &claims.email,

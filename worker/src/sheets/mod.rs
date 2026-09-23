@@ -304,6 +304,23 @@ struct SheetProperties {
 // Column mapping
 // ---------------------------------------------------------------------------
 
+/// [`get_column_mapping`], falling back to the hardcoded layout (logged) when
+/// it cannot be resolved. For Sheets-mirror writes, where a wrong-but-standard
+/// layout beats not writing at all.
+pub async fn column_mapping_or_hardcoded(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> ColumnMapping {
+    get_column_mapping(state, sheet_id, sheet_name, kv)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(error = %e, "failed to get column mapping, using hardcoded fallback");
+            ColumnMapping::hardcoded()
+        })
+}
+
 /// Get the column mapping for a sheet.
 ///
 /// Resolution order:
