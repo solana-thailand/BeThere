@@ -1,0 +1,50 @@
+# Plan 031: Adopt what transfers from gist-rs (riir-reflex, riir-infer, reflex-site)
+
+**Created:** 2026-09-24 · **Study:** `docs/gist_rs_study.md`
+**Rule:** as in `.plans/030`, nothing here changes shipped bytes or runtime
+behaviour before RTM#6 (2026-09-27). Nothing is taken as a dependency.
+reflex-site has no license, so its code is a pattern only.
+
+## 1. Done 2026-09-24
+
+- [x] Study written (`docs/gist_rs_study.md`), including an audit of 8
+  headline claims.
+- [x] `.issues/147`: public `/api/health` returned D1 row counts. Fixed on
+  develop. This came from a side finding of the study.
+
+## 2. Ungated (S)
+
+- [ ] **`scripts/verify/wasm_leak_scan.sh`**, a port of
+  `riir-reflex/scripts/binary_leak_scan.sh` (MIT). It checks absolute
+  build-host paths and secret shapes in `frontend-leptos/dist/*.wasm` and the
+  worker bundle, and has a `--self-test`. It starts report-only, because
+  today's build has 116 paths.
+- [ ] **License hygiene:** `cargo about` → `THIRD_PARTY_LICENSES.md` for the
+  served wasm, plus `[licenses]` in `deny.toml`. The root `LICENSE` for this
+  public repo is the owner's decision (already on the owner list).
+- [ ] **`domain` import fence:** `cargo tree -p event-checkin-domain --target
+  wasm32-unknown-unknown -e normal` must not reach `worker`/`frontend-leptos`.
+  Pins fail in both directions, and a blindness floor exits 2. First check
+  whether chrono's `wasmbind` already pulls in `js-sys`.
+- [ ] **Bench-record rules** for `.plans/028` M1:
+  - a numbered file per rung;
+  - a correctness gate that is green before a number is quoted;
+  - one session, interleaved;
+  - retractions recorded in place;
+  - published numbers generated, with a check.
+
+## 3. After RTM#6
+
+- [ ] `--remap-path-prefix` for `$HOME` and the rustup/cargo roots in both wasm
+  builds, then make the leak scan blocking. Measure the brotli delta and open
+  the staging page.
+- [ ] Toolchain pin (`.plans/030` §3): declare `components` and `targets`.
+- [ ] Build stamp on `/api/health`: git sha, `BUILD_TAG`, and "stale" when
+  built outside `deploy.sh`.
+
+## 4. Owner decisions
+
+- [ ] Parity-before-use in the lucky-draw spec (`.plans/030` §4): the browser
+  replays pinned server outputs bit-exactly before showing its own re-run.
+- [ ] Whether to keep `dev_mode` and the Solana readiness block public on
+  `/api/health` (`.issues/147`, "Not in scope").
