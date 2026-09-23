@@ -271,7 +271,7 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         D1Type::Integer(deposit.held_as_credit as i32),
         D1Type::Text(deposit.held_as_credit_at.as_deref().unwrap_or("")),
         D1Type::Text(deposit.slip_blake3.as_deref().unwrap_or("")),
-        D1Type::Text(deposit_source_str(deposit.deposit_source)),
+        deposit_source_bind(deposit.deposit_source),
     ])
     .map_err(|e| format!("D1 insert_thb_deposit bind: {e:?}"))?
     .run()
@@ -321,7 +321,7 @@ pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         // the admin comp action through the same read-modify-write every other
         // non-settlement column uses. The five settlement columns stay out of
         // this SET list for the reason documented above.
-        D1Type::Text(deposit_source_str(deposit.deposit_source)),
+        deposit_source_bind(deposit.deposit_source),
         D1Type::Text(&deposit.event_id),
         D1Type::Text(&deposit.attendee_id),
     ])
@@ -628,11 +628,27 @@ fn row_to_thb_deposit(row: serde_json::Value) -> Result<ThbDeposit, String> {
 
 /// The wire/DB spelling of a [`DepositSource`] — the same three strings the
 /// `deposit_source` CHECK constraint allows.
-fn deposit_source_str(source: Option<DepositSource>) -> &'static str {
+/// Bind `deposit_source` for D1.
+///
+/// **Returns `D1Type::Null` for `None`, NOT an empty string**, and that is the
+/// whole point of this function existing (`.issues/138`).
+///
+/// Every other optional column in this module binds `""` for absent, because
+/// they are plain `TEXT` with no constraint. `deposit_source` is different:
+/// migration 0047 gave it
+/// `CHECK (deposit_source IS NULL OR deposit_source IN ('cash','credit','comp'))`,
+/// and `''` is neither NULL nor a member of that list. Binding the module's
+/// usual empty string therefore **fails the CHECK and aborts the whole
+/// statement** — which is exactly what happened in production on 2026-09-23:
+/// every attendee slip upload sets `deposit_source: None`
+/// (`slip_upload.rs`), so every upload returned
+/// `500 internal error` from the moment 0047 was applied.
+///
+/// `D1Type::Null` binds correctly on worker 0.8.1 — `db/audit.rs`,
+/// `db/credit_ledger.rs` and `db/attendees/writes.rs` all rely on it.
+fn deposit_source_bind(source: Option<DepositSource>) -> D1Type<'static> {
     match source {
-        Some(DepositSource::Cash) => "cash",
-        Some(DepositSource::Credit) => "credit",
-        Some(DepositSource::Comp) => "comp",
-        None => "",
+        Some(s) => D1Type::Text(s.as_str()),
+        None => D1Type::Null,
     }
 }
