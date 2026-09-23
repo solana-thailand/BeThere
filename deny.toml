@@ -4,9 +4,10 @@
 # lives under target/), so CI scans its Cargo.lock with `cargo audit`, feeding
 # it the RUSTSEC ids below — this file stays the single ignore list. Local: `cargo deny --manifest-path <m> --config deny.toml check advisories`.
 #
-# Licenses are not checked yet: the repo has no LICENSE and no `license =`
-# fields, so every first-party crate reads "unlicensed". Picking a license is
-# an owner call (.plans/029 §4).
+# Licenses: third-party crates must carry one of the permissive licenses in
+# [licenses].allow. First-party crates are `publish = false` and skipped via
+# [licenses.private]; the repo's own LICENSE is an owner call (.plans/029 §4).
+# Local: `cargo deny --manifest-path <m> --config deny.toml check licenses`.
 
 [advisories]
 version = 2
@@ -28,3 +29,26 @@ ignore = [
   # graph does not reach rand 0.7 in the escrow build).
   { id = "RUSTSEC-2026-0097", reason = "rand 0.7.3: unsound only with a custom logger calling rand::rng(); Solana toolchain transitive" },
 ]
+
+[licenses]
+version = 2
+# Permissive only. An OR expression passes when any branch is allowed, so
+# "MIT OR LGPL-2.1-or-later" passes on MIT. A copyleft-only crate fails.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.9
+# One file serves two graphs (workspace, frontend-leptos); an allowance used
+# by only one of them is not stale.
+unused-allowed-license = "allow"
+
+[licenses.private]
+ignore = true

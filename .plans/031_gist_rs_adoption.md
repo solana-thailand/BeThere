@@ -25,9 +25,25 @@ reflex-site has no license, so its code is a pattern only.
   build-host paths and secret shapes in `frontend-leptos/dist/*.wasm` and the
   worker bundle, and has a `--self-test`. It starts report-only, because
   today's build has 116 paths.
-- [ ] **License hygiene:** `cargo about` → `THIRD_PARTY_LICENSES.md` for the
-  served wasm, plus `[licenses]` in `deny.toml`. The root `LICENSE` for this
-  public repo is the owner's decision (already on the owner list).
+- [x] **License hygiene** (2026-09-24):
+  - **Gate:** `[licenses]` in `deny.toml` allows only permissive licences
+    (MIT, Apache-2.0 ± LLVM-exception, BSD-2/3, BSL-1.0, CC0-1.0,
+    Unicode-3.0, Zlib). First-party crates are now `publish = false` and are
+    skipped by `[licenses.private]`. CI runs `check licenses` as its own step
+    in the `advisories` matrix (workspace + frontend-leptos).
+  - **A/B:** dropping `Zlib` gave 5 errors on the frontend graph; removing
+    `publish = false` from `domain` gave `event-checkin-domain is
+    unlicensed`. Both restored → `licenses ok` on both graphs.
+  - **Notices:** `scripts/verify/third_party_licenses.sh` renders
+    `THIRD_PARTY_LICENSES.md` with cargo-about 0.9.2 (`about.toml`,
+    `scripts/licenses/about.hbs`), wasm32 only, no build/dev deps, offline.
+    Two sections: worker bundle (126 crate-licence entries) and frontend dist (187).
+    `--check` fails on drift; `--self-test` 4/4; two runs are byte-identical.
+    CI job `third-party-notices` runs both.
+  - **Left:** the notices are in the repo, not served. Shipping them in
+    `dist/` (and the Content-Type Cloudflare gives `.md`) is a follow-up.
+    `bethere-escrow` is not covered: its graph needs `quasar build`. The root
+    `LICENSE` stays the owner's decision.
 - [x] **`domain` import fence** (2026-09-24):
   `scripts/verify/domain_import_fence.py`, run in CI `build-test`.
   - **What it checks:** `domain`'s wasm32 normal graph (31 crates, all

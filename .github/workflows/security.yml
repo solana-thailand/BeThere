@@ -73,6 +73,12 @@ jobs:
       - name: cargo deny check advisories
         run: cargo deny --manifest-path ${{ matrix.manifest }} --config deny.toml check advisories
 
+      # Separate step so a licence failure still reports when advisories fail
+      # (.plans/031 §2). The job keeps its name; required checks key on it.
+      - name: cargo deny check licenses
+        if: success() || failure()
+        run: cargo deny --manifest-path ${{ matrix.manifest }} --config deny.toml check licenses
+
   advisories-escrow:
     # bethere-escrow's graph cannot resolve without `quasar build` (a dev-dep
     # lives under its target/), so scan the lockfile directly. The ignore ids
@@ -98,3 +104,30 @@ jobs:
             < <(grep -oE 'RUSTSEC-[0-9]+-[0-9]+' deny.toml)
           [ "${#args[@]}" -gt 0 ] || { echo "no ignore ids parsed from deny.toml"; exit 1; }
           cargo audit --file bethere-escrow/Cargo.lock --deny warnings "${args[@]}"
+
+  third-party-notices:
+    # THIRD_PARTY_LICENSES.md must match the lockfiles (.plans/031 §2). A dep
+    # bump without a regenerated file fails here; the licence *gate* is the
+    # `cargo deny check licenses` step above.
+    name: third-party notices current
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Install cargo-about
+        uses: taiki-e/install-action@7623a79cdfecb99d681017af368ca353d9f49bb5 # v2.87.19
+        with:
+          tool: cargo-about@0.9.2
+
+      - name: Fetch both graphs
+        run: |
+          cargo fetch --locked --manifest-path Cargo.toml
+          cargo fetch --locked --manifest-path frontend-leptos/Cargo.toml
+
+      - name: Self-test and check
+        run: |
+          scripts/verify/third_party_licenses.sh --self-test
+          scripts/verify/third_party_licenses.sh --check

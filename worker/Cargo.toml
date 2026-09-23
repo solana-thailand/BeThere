@@ -2,6 +2,7 @@
 name = "event-checkin-worker"
 version = "0.1.0"
 edition = "2024"
+publish = false
 description = "Cloudflare Worker for event-checkin with Axum-on-Workers"
 
 [dependencies]

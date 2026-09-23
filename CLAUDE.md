@@ -116,6 +116,7 @@ that cannot fail is not a gate.
 | `golden_vectors_check.sh` | escrow PDA/ATA fixture vs. the Solana CLI |
 | `wasm_leak_scan.sh` | build-host paths (report-only) and secrets in shipped wasm/js |
 | `domain_import_fence.py` | `domain`'s wasm32 graph reaching app/platform crates; JS bridge pinned both ways |
+| `third_party_licenses.sh` | `THIRD_PARTY_LICENSES.md` drift vs. the lockfiles (licence gate itself: `cargo deny check licenses`) |
 
 ## Deploy (owner-gated)
 
