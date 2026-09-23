@@ -62,7 +62,32 @@ jobs:
         run: cargo clippy --workspace --locked --all-targets -- -D warnings
 
       - name: cargo test (workspace)
-        run: cargo test --workspace --locked
+        # Output is saved for the floor gate below. pipefail is explicit because
+        # a bare `run:` is `bash -e`, so a failing `cargo test | tee` would exit 0.
+        run: |
+          set -o pipefail
+          cargo test --workspace --locked 2>&1 | tee "$RUNNER_TEMP/test-workspace.log"
+
+      - name: cargo test (domain zero-alloc audit, wire + alloc_count)
+        # domain/tests/alloc_count.rs is `#![cfg(feature = "alloc_count")]`, so
+        # the workspace run above compiles it to 0 tests. Until 2026-09-23 no CI
+        # step enabled the feature and the audit never ran. One thread: the
+        # allocation counter is process-global.
+        run: |
+          set -o pipefail
+          cargo test -p event-checkin-domain --locked --features wire,alloc_count \
+            --test alloc_count -- --test-threads=1 2>&1 | tee "$RUNNER_TEMP/test-alloc-count.log"
+
+      - name: Test-count floors (workspace)
+        # Plan 030 green-zero guard. `test result: ok. 0 passed` exits 0, so a
+        # test file that stops running (a dropped `mod`, a feature never
+        # enabled) reads as green. Each binary must pass at least its count in
+        # scripts/verify/test_floors.json; lowering one takes --allow-decrease
+        # in a commit that says why.
+        run: |
+          python3 scripts/verify/test_count_floor.py --self-test
+          python3 scripts/verify/test_count_floor.py --suite workspace "$RUNNER_TEMP/test-workspace.log"
+          python3 scripts/verify/test_count_floor.py --suite domain-alloc-count "$RUNNER_TEMP/test-alloc-count.log"
 
       - name: Security and notification SQL behavior
         env:
@@ -197,7 +222,13 @@ jobs:
       - name: cargo test (frontend, host target)
         # Host target on purpose: these are plain #[test] cases, and the wasm32
         # target has no test runner on the runner box.
-        run: cargo test --locked
+        run: |
+          set -o pipefail
+          cargo test --locked 2>&1 | tee "$RUNNER_TEMP/test-frontend.log"
+
+      - name: Test-count floors (frontend)
+        # Plan 030 green-zero guard; see the workspace step in build-test.
+        run: python3 ../scripts/verify/test_count_floor.py --suite frontend "$RUNNER_TEMP/test-frontend.log"
 
   e2e:
     name: playwright e2e (SPA served by the worker)

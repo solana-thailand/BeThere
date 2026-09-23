@@ -38,10 +38,23 @@ owner decision.
   - `--vocab` (git-free) and `--self-test` (9/9) run in CI. A planted
     `145_probe.md` turned `--vocab` red. Until issue 145 exists, a clean run
     prints "vacuous", not ✅.
-- [ ] **Green-zero guard.** In CI, assert a minimum passed-test count for the
-  worker, domain and frontend suites. The count may only move down with a
-  commit that says why. A module split that drops a whole test file would then
-  turn CI red instead of reading "ok".
+- [x] **Green-zero guard** (2026-09-23). `scripts/verify/test_count_floor.py`
+  parses the saved `cargo test` log and checks every test binary against
+  `scripts/verify/test_floors.json`: workspace 55 binaries / 830 tests,
+  frontend 12 / 229, domain alloc-count 1 / 10.
+  - Fails on: a binary below its floor (including 0), a binary missing from the
+    log, any FAILED result, a non-zero `filtered out`, a log with no results.
+    A new binary is reported, not failed.
+  - `--update` only raises floors; lowering one needs `--allow-decrease`, so
+    the shrinking commit has to be deliberate.
+  - `--self-test` 13/13 runs in CI first. Doctored real logs (domain lib
+    157 → 0; frontend `serde_contract` removed) both went red.
+  - **Found on the way:** `domain/tests/alloc_count.rs` is
+    `#![cfg(feature = "alloc_count")]` and no CI step enabled the feature, so
+    the zero-alloc audit compiled on every run and executed 0 of its 10 tests.
+    It now has its own `build-test` step (10/10 locally).
+  - The test steps now `tee` with an explicit `set -o pipefail`: a bare
+    `run:` is `bash -e`, which would let a failing `cargo test | tee` exit 0.
 - [x] **Audit `scripts/verify/*.sh`** (2026-09-23) for katgpt's three gate lies:
   - PASS on a partial run;
   - exit 0 on zero checks;
@@ -93,7 +106,8 @@ owner decision.
 
   Feeds `.plans/028`. Native wall time is only a proxy for Workers CPU.
 - [ ] **Counting-allocator test** for the check-in hot path (feature-gated,
-  proves it is installed). Treat the counts as relative: dlmalloc on wasm
+  proves it is installed). The wire-decode audit (`domain/tests/alloc_count.rs`)
+  already exists and now runs in CI; the check-in path itself is still uncovered. Treat the counts as relative: dlmalloc on wasm
   differs from native.
 - [ ] **`.claude/skills/deploy-guard/SKILL.md`**:
   - D1 backup → size budgets → `issue_ledger.py --strict` → `deploy.sh` →
