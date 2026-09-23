@@ -113,6 +113,8 @@ that cannot fail is not a gate.
 | `event_invariants_audit.py` | contradictory D1 columns (`--db` for real data) |
 | `pii_log_probe.sh` | PII in logs: leak → 1, missing log → 2 |
 | `post_deploy_smoke.sh` | status **and** Content-Type after a deploy |
+| `golden_vectors_check.sh` | escrow PDA/ATA fixture vs. the Solana CLI |
+| `wasm_leak_scan.sh` | build-host paths (report-only) and secrets in shipped wasm/js |
 
 ## Deploy (owner-gated)
 

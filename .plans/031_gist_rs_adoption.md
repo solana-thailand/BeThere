@@ -14,7 +14,13 @@ reflex-site has no license, so its code is a pattern only.
 
 ## 2. Ungated (S)
 
-- [ ] **`scripts/verify/wasm_leak_scan.sh`**, a port of
+- [x] **`scripts/verify/wasm_leak_scan.sh`** (2026-09-24). `--self-test` 8/8.
+  Prod wasm: 116 paths; local dist: 112; no secrets. CI runs it report-only
+  after the frontend size budget (actionlint clean; the first real run comes
+  with the owner's push). Paths are reported and exit 0; secrets always exit 1.
+  **Left:** scan the worker bundle too. The dry-run bundle lives in a temp dir
+  inside `worker_size_budget.sh`, so it needs a `--keep` or a hook there.
+  Original item: a port of
   `riir-reflex/scripts/binary_leak_scan.sh` (MIT). It checks absolute
   build-host paths and secret shapes in `frontend-leptos/dist/*.wasm` and the
   worker bundle, and has a `--self-test`. It starts report-only, because

@@ -290,6 +290,16 @@ jobs:
         # build.sh does not spuriously red this step.
         run: bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
 
+      - name: Frontend wasm leak scan (report-only)
+        # .plans/031: build-host paths (/home/runner/... here, /Users/... on a
+        # laptop build) are reported, not failed, until --remap-path-prefix
+        # lands after RTM#6. Secret-shaped strings fail the step even now.
+        # The self-test runs first so a scan that cannot fail is caught.
+        run: |
+          set -euo pipefail
+          bash scripts/verify/wasm_leak_scan.sh --self-test
+          bash scripts/verify/wasm_leak_scan.sh --report-only frontend-leptos/dist/*.wasm frontend-leptos/dist/*.js
+
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10
