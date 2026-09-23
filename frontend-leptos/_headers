@@ -59,3 +59,7 @@
 
 /style-*.css
   Cache-Control: public, max-age=31536000, immutable
+
+# Vendored libraries carry their version in the filename (vendor/jsqr-1.4.0.js).
+/jsqr-*.js
+  Cache-Control: public, max-age=31536000, immutable

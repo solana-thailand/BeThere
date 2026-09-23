@@ -67,8 +67,9 @@ export function startCamera() {
       // Fetch the decoder IN PARALLEL with the camera prompt. It used to be
       // awaited first, so the camera waited on a CDN round trip, and a slow or
       // blocked jsdelivr on venue Wi-Fi failed the whole scanner — even on
-      // browsers with a native BarcodeDetector that never use jsQR. A failed
-      // load is only fatal below, on the one branch that needs jsQR.
+      // browsers with a native BarcodeDetector that never use jsQR. jsQR is
+      // now same-origin (lazy_assets.js), but a failed load is still only
+      // fatal below, on the one branch that needs jsQR.
       var decoderReady = _loadQrLibraries().catch(function (e) {
         console.warn("[scanner] jsQR fallback failed to load:", e);
       });

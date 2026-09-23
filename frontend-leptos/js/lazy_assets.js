@@ -10,12 +10,16 @@
  * Promise.
  */
 
-// `dist/jsQR.js`, not `jsQR.min.js`: the npm package ships no .min file, and
-// jsdelivr minifies that path on the fly (unpkg 404s it), so its bytes are not
-// a stable Subresource Integrity target. The hash matches the npm tarball.
-// Bumping the version means recomputing it:
-//   curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
-var JSQR_URL = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js";
+// Self-hosted: `vendor/jsqr-1.4.0.js` is `dist/jsQR.js` from the npm tarball,
+// byte for byte, copied into dist/ by index.html's copy-file. It used to come
+// from the jsdelivr CDN, which put a third-party round trip (and a CDN that
+// venue Wi-Fi sometimes blocks) on every iOS scan, since iOS Safari has no
+// BarcodeDetector. Same origin, so it is also cached by the service worker.
+// The integrity pin is unchanged and worker/tests/vendored_jsqr_integrity.rs
+// checks it against the vendored bytes. Bumping the version means replacing
+// the file, renaming it (it is cached immutable) and recomputing:
+//   openssl dgst -sha384 -binary vendor/jsqr-<v>.js | openssl base64 -A
+var JSQR_URL = "/jsqr-1.4.0.js";
 var JSQR_INTEGRITY =
   "sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx";
 

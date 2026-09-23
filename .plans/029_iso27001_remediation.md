@@ -74,8 +74,22 @@
       Slack channel; after deploy, hit a staging endpoint with a bad bearer
       token 20× within a minute.
 - [x] Swap the real email in `worker/scripts/seed_dev.sh` for `example.test` (8.33).
-- [ ] Self-host jsQR: same-origin, precompressed, and no CDN on venue Wi-Fi.
-      This would let the CSP drop `cdn.jsdelivr.net`.
+- [x] Self-host jsQR (2026-09-24). `frontend-leptos/vendor/jsqr-1.4.0.js` is
+      the npm tarball's `dist/jsQR.js` byte for byte: the tarball shasum
+      matched the registry, and the file matches the existing SRI pin. It is
+      shipped by `copy-file` together with its Apache-2.0 LICENSE, cached
+      immutable, and is outside the first load (budget delta unchanged).
+      `worker/tests/vendored_jsqr_integrity.rs` checks the bytes against the
+      pin. Headless Chrome A/B on the built dist: the right pin loads (`jsQR`
+      is a function) and a wrong pin is blocked.
+      - Not precompressed: that needs a `run_worker_first` entry, which is the
+        trap in `.issues/144`. Cloudflare's on-the-fly brotli is enough for a
+        lazy iOS-only file.
+      - **The CSP keeps `cdn.jsdelivr.net`.** The plan assumed jsQR was its
+        only user, but `js/solana_wallet.js` falls back to jsdelivr when
+        `@solana/web3.js` fails from unpkg. Dropping it means self-hosting
+        web3.js or dropping that fallback. `unpkg.com` stays allowed either
+        way, so removing jsdelivr alone buys little. Left as is, with this note.
 
 ## 3. After RTM#6
 
