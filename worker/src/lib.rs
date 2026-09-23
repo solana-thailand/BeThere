@@ -39,6 +39,8 @@ mod virtual_checkin;
 
 // Export DO class for workers-rs macro registration
 pub use durable_objects::EventDurableObject;
+// Mirrored into `frontend-leptos/_headers`; `tests/security_headers_parity.rs`.
+pub use middleware::headers::SECURITY_HEADERS;
 
 use std::sync::OnceLock;
 
