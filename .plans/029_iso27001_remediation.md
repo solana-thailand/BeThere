@@ -53,7 +53,15 @@
 - [x] Update the secrets list in the `worker/wrangler.toml` comments (**done**, re-derived from `get_secret` calls). It
       had missed `WEBHOOK_SECRET`, `CROSSMINT_API_KEY`, `GITHUB_CLIENT_*`,
       `TELEGRAM_BOT_TOKEN` and `SLACK_WEBHOOK_URL`.
-- [ ] Magic-byte validation on slip uploads (8.7).
+- [x] Magic-byte validation on slip uploads (8.7), 2026-09-23.
+      `domain::image_kind::ImageKind::sniff` recognises JPEG, PNG and WebP.
+      `storage::sniff_base64_image` decodes only the first 16 base64 chars.
+      `validate_slip_url`, shared by the attendee and admin endpoints, now
+      rejects a data URL whose bytes are not one of those three, whatever its
+      label says. The R2 key extension, and so the served Content-Type, now
+      follows the bytes instead of the label. Tests: `domain/tests/image_kind.rs`
+      (5) and `worker/tests/slip_magic_bytes.rs` (6). Found on the way: the
+      refund-proof URL has no validation at all (`.issues/145`).
 - [ ] Alert on 401 and 429 spikes through the existing Slack alert (8.16).
 - [x] Swap the real email in `worker/scripts/seed_dev.sh` for `example.test` (8.33).
 - [ ] Self-host jsQR: same-origin, precompressed, and no CDN on venue Wi-Fi.

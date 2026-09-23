@@ -1,5 +1,6 @@
 use axum::{Extension, Json, extract::State};
 use chrono::Utc;
+use event_checkin_domain::image_kind::ImageKind;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::deposit::{DepositMethod, DepositStatus, ThbDeposit};
 use event_checkin_domain::models::error::AppError;
@@ -16,6 +17,7 @@ use crate::state::AppState;
 ///
 /// Ensures:
 /// - Data URLs have an allowed MIME type (image/jpeg, image/png, image/webp)
+/// - Data URLs actually contain a JPEG, PNG or WebP (magic bytes, not the label)
 /// - Data URLs are within size limits (decoded ≤ 5MB, encoded ≤ 7MB)
 /// - SVG is rejected (XSS risk)
 /// - External URLs use HTTPS
@@ -27,7 +29,7 @@ pub(crate) fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
     if let Some(rest) = slip_url.strip_prefix("data:") {
         // Data URL — validate MIME type and size
         // Format: data:<mediatype>;base64,<data>
-        let (header, _data) = rest
+        let (header, data) = rest
             .split_once(',')
             .ok_or_else(|| AppError::Validation("invalid data URL format".to_string()))?;
 
@@ -42,11 +44,19 @@ pub(crate) fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
         let mime = header.split(';').next().unwrap_or("").trim();
 
         // Whitelist safe image types — reject SVG (XSS risk)
-        let allowed_mimes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
-        if !allowed_mimes.contains(&mime) {
+        if ImageKind::from_mime(mime).is_none() {
             return Err(AppError::Validation(format!(
                 "unsupported image type '{mime}' — allowed: JPEG, PNG, WebP"
             )));
+        }
+
+        // The label is the client's claim; the leading bytes are the file.
+        // A JPEG labelled PNG is still an accepted image and is stored by its
+        // real type (`maybe_upload_to_r2`), so only non-images are rejected.
+        if crate::storage::sniff_base64_image(data).is_none() {
+            return Err(AppError::Validation(
+                "the uploaded file is not a JPEG, PNG or WebP image".to_string(),
+            ));
         }
 
         // Check total data URL size (encoded)

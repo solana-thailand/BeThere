@@ -192,13 +192,13 @@ pub(super) async fn maybe_upload_to_r2(
         }
     };
 
-    // Determine extension from MIME type
-    let mime = header.split(';').next().unwrap_or("image/jpeg");
-    let ext = match mime {
-        "image/png" => "png",
-        "image/webp" => "webp",
-        _ => "jpg",
-    };
+    // Store by what the bytes are, falling back to the label for legacy rows
+    // written before magic-byte validation. The R2 key's extension decides the
+    // Content-Type the object is later served with.
+    use event_checkin_domain::image_kind::ImageKind;
+    let label = header.split(';').next().unwrap_or("image/jpeg");
+    let kind = ImageKind::sniff(&bytes).or_else(|| ImageKind::from_mime(label));
+    let (mime, ext) = kind.map_or((label, "jpg"), |k| (k.mime(), k.extension()));
 
     // Upload to R2
     let key = format!("{prefix}{event_id}/{attendee_id}.{ext}");

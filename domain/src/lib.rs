@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod config;
+pub mod image_kind;
 pub mod models;
 pub mod pr_pack;
 pub mod slip_verify;
