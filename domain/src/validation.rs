@@ -47,3 +47,26 @@ pub fn safe_redirect_path(raw: &str) -> Option<&str> {
         _ => None,
     }
 }
+
+/// A stored link to an uploaded document (refund receipt, slip) that is safe to
+/// render as an `href`, or `None`.
+///
+/// Staff paste these as free text and attendees click them on the ticket page.
+/// The CSP allows inline script, so a `javascript:` link would run in this
+/// origin (`.issues/145`).
+///
+/// Accepted: `https://<host>…`, and same-origin R2 serving paths
+/// (`/api/storage/…`) that `maybe_upload_to_r2` writes. Rejected: every other
+/// scheme (`javascript:`, `data:`, `http:`), protocol-relative `//host`, and any
+/// whitespace or control character (browsers strip tab and newline, which can
+/// turn a harmless-looking value into a different URL).
+pub fn safe_document_link(raw: &str) -> Option<&str> {
+    if raw.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return None;
+    }
+    match raw.strip_prefix("https://") {
+        Some(rest) if !rest.is_empty() && !rest.starts_with('/') => Some(raw),
+        Some(_) => None,
+        None => safe_redirect_path(raw).filter(|path| path.starts_with("/api/storage/")),
+    }
+}

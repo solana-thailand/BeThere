@@ -151,7 +151,10 @@ pub fn RefundCard(
     #[prop(into)]
     refund_proof_url: String,
 ) -> impl IntoView {
-    let url = refund_proof_url.clone();
+    // Staff-typed and clicked by the attendee: render only a safe link (.issues/145).
+    let url = event_checkin_domain::validation::safe_document_link(&refund_proof_url)
+        .unwrap_or_default()
+        .to_string();
     view! {
         <div class="ticket-action-card ticket-action-card--refund">
             <div class="ticket-action-icon">

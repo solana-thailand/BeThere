@@ -1003,7 +1003,12 @@ pub fn AdminDeposits(
                             let display_bank_account = item.bank_account.clone();
                             let display_bank_name = item.bank_name.clone();
                             let display_account_name = item.account_name.clone();
-                            let refund_proof_url = item.refund_proof_url.clone();
+                            // Rows stored before .issues/145 may hold any scheme.
+                            let refund_proof_url = item
+                                .refund_proof_url
+                                .as_deref()
+                                .and_then(event_checkin_domain::validation::safe_document_link)
+                                .map(str::to_string);
                             let has_refund_proof = refund_proof_url.is_some();
 
                             (amount, verified_by, refunded_at, display_name, slip_url, has_slip_url, has_bank_info, display_bank_account, display_bank_name, display_account_name, refund_proof_url, has_refund_proof)

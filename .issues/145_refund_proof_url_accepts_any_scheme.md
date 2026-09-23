@@ -1,6 +1,7 @@
 # 145: Refund-proof URL accepts any scheme and is rendered as an attendee link
 
-**Status:** open. Found 2026-09-23 while adding magic-byte checks to slip uploads (`.plans/029` §2); not fixed.
+**Status:** fixed on develop 2026-09-24 (server + frontend). Not deployed. The staging browser repro and the
+prod row count (§Fix 3) have not been run; the prod read was refused in the agent session, so the owner runs it.
 **Found by:** session `event-checkin-df`, reading every writer that shares `maybe_upload_to_r2`.
 **Severity:** medium-low. Planting a link needs a staff account, but it then runs
 script in an attendee's session on click.
@@ -45,3 +46,23 @@ is the check.
 As staff, mark a verified THB deposit refunded with proof
 `javascript:alert(document.domain)`. Then open that attendee's ticket page and
 click "View Refund Receipt". Expected after the fix: a 400 at step one.
+
+## Fix applied (2026-09-24)
+
+- `domain::validation::safe_document_link` is one predicate for both sides. It
+  accepts `https://<host>…` and same-origin `/api/storage/…` paths, and rejects
+  every other scheme, `//host`, backslashes, whitespace and control characters.
+  Tests: `domain/tests/safe_document_link.rs`.
+- `mark_refund_handler` checks a `data:` proof like a slip (MIME + magic bytes)
+  and requires `safe_document_link` for everything else. Both checks run before
+  `maybe_upload_to_r2`. The batch path reuses the stored value and the manual
+  path writes `refund_link` only to the Sheet (not rendered), so neither takes
+  new input.
+- `RefundCard` (ticket page) and the admin refunded list render the link only
+  when `safe_document_link` accepts it. Existing rows with any other value show
+  no link. `http://` proofs, if prod has any, stop being clickable, which is
+  intended.
+- `worker/tests/refund_proof_link_guard.rs` pins that the checks exist and run
+  before the store.
+- Staging has 1 `thb_deposits` row and 0 refund proofs (read 2026-09-24), so
+  there is nothing to compare there.
