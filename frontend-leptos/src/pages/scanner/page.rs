@@ -118,8 +118,11 @@ pub fn Scanner() -> impl IntoView {
                 loop {
                     gloo_timers::future::TimeoutFuture::new(300).await;
 
-                    // Stop polling when superseded by a new round
-                    if scan_round.get() != round {
+                    // Stop polling when superseded by a new round — or when
+                    // the page unmounted: `.get()` on a disposed signal
+                    // panics (a wasm trap under panic=abort), and this loop
+                    // outlives the component on a client-side navigation.
+                    if scan_round.try_get() != Some(round) {
                         break;
                     }
 
@@ -306,11 +309,15 @@ pub fn Scanner() -> impl IntoView {
             leptos::task::spawn_local(async move {
                 loop {
                     gloo_timers::future::TimeoutFuture::new(1000).await;
-                    // Stop if we're no longer in Success (e.g. user clicked Scan Next)
-                    if !matches!(state_check.get(), CheckInState::Success(_)) {
+                    // Stop if we're no longer in Success (e.g. user clicked
+                    // Scan Next) or the page unmounted (disposed → None;
+                    // `.get()` would panic there).
+                    if !matches!(state_check.try_get(), Some(CheckInState::Success(_))) {
                         break;
                     }
-                    let remaining = secs_reader.get();
+                    let Some(remaining) = secs_reader.try_get() else {
+                        break;
+                    };
                     if remaining == 0 {
                         set_exp.set(true);
                         break;

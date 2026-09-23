@@ -179,6 +179,16 @@ pub fn Ticket() -> impl IntoView {
         });
     });
 
+    // The tier as a Memo, so the polling effect below re-runs only when the
+    // tier CHANGES. It used to read `state` directly, and every poll sets
+    // `state` — so each poll tore down and restarted both timers, the tier-1
+    // 5-minute cap restarted with them and never fired, and a page waiting on
+    // a deposit polled every 10 s for as long as it stayed open.
+    let current_tier = Memo::new(move |_| match &*state.read() {
+        TicketState::Found(data) => polling_tier(data),
+        _ => None,
+    });
+
     // Two-tier auto-refresh polling:
     //   Tier 1 (AwaitingDeposit): 10s interval, 5-min cap → then manual refresh
     //   Tier 2 (AwaitingCheckIn): 30s interval, no cap → polls until check-in
@@ -189,13 +199,7 @@ pub fn Ticket() -> impl IntoView {
             return;
         }
 
-        // Determine current tier from latest state
-        let current_tier = match &state.get() {
-            TicketState::Found(data) => polling_tier(data),
-            _ => None,
-        };
-
-        let tier = match current_tier {
+        let tier = match current_tier.get() {
             Some(t) => t,
             None => {
                 // State resolved (e.g. checked in) — stop polling
@@ -231,6 +235,14 @@ pub fn Ticket() -> impl IntoView {
             let attendee_id = attendee_id.clone();
             let event_id = event_id.clone();
             Closure::<dyn Fn()>::new(move || {
+                // A backgrounded tab (phone in a pocket at the venue) skips
+                // the tick; the next visible tick catches up.
+                let hidden = web_sys::window()
+                    .and_then(|w| w.document())
+                    .is_some_and(|d| d.hidden());
+                if hidden {
+                    return;
+                }
                 let aid = attendee_id.clone();
                 let eid = event_id.clone();
                 cache_invalidate(&cache_key);
@@ -238,25 +250,25 @@ pub fn Ticket() -> impl IntoView {
                 leptos::task::spawn_local(async move {
                     match api::get_public_ticket(&aid, eid.as_deref()).await {
                         Ok(data) => {
-                            let new_tier = polling_tier(&data);
-                            set_state.set(TicketState::Found(Box::new(data)));
-                            match new_tier {
-                                None => {
-                                    log::info!("[ticket] polling stopped — state resolved");
-                                    set_polling_active.set(false);
-                                }
-                                Some(PollingTier::AwaitingCheckIn)
-                                    if tier == PollingTier::AwaitingDeposit =>
-                                {
-                                    // Tier upgrade: Tier 1 → Tier 2
-                                    // Restart the effect to pick up new interval
-                                    log::info!(
-                                        "[ticket] deposit verified — switching to check-in polling"
-                                    );
-                                    set_polling_active.set(false);
-                                    set_polling_active.set(true);
-                                }
-                                _ => {} // same tier, keep polling
+                            // A tier change (1 → 2, or resolved → None) reaches
+                            // the effect through `current_tier`, which restarts
+                            // or stops the timers; nothing to do here.
+                            //
+                            // Skip identical payloads: `set` always notifies,
+                            // and the view below rebuilds the whole ticket on
+                            // every notification — re-decoding the QR image and
+                            // re-fetching child data (event series) each poll.
+                            let unchanged = state
+                                .try_with_untracked(|s| match s {
+                                    TicketState::Found(old) => {
+                                        serde_json::to_string(old.as_ref()).ok()
+                                            == serde_json::to_string(&data).ok()
+                                    }
+                                    _ => false,
+                                })
+                                .unwrap_or(true);
+                            if !unchanged {
+                                set_state.set(TicketState::Found(Box::new(data)));
                             }
                         }
                         Err(e) => {
