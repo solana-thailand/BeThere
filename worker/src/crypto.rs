@@ -372,9 +372,30 @@ mod fingerprint_tests {
     }
 }
 
+/// Distinct HMAC secrets in use: the JWT secret plus the social-link keys.
+const HMAC_KEY_CACHE_CAP: usize = 4;
+
+thread_local! {
+    /// Imported HMAC `CryptoKey`s for this isolate (plan 028 W12), keyed by a
+    /// SHA-256 of the raw secret so the cache holds no second copy of it.
+    static HMAC_KEYS: std::cell::RefCell<crate::isolate_cache::BoundedCache<[u8; 32], JsValue>> =
+        const { std::cell::RefCell::new(crate::isolate_cache::BoundedCache::new(HMAC_KEY_CACHE_CAP)) };
+}
+
+/// Import `key_bytes` once per isolate; every JWT sign/verify reuses the key.
+async fn cached_hmac_key(key_bytes: &[u8]) -> Result<JsValue, String> {
+    let id: [u8; 32] = Sha256::digest(key_bytes).into();
+    if let Some(key) = HMAC_KEYS.with_borrow(|keys| keys.get(&id)) {
+        return Ok(key);
+    }
+    let key = import_hmac_key(key_bytes).await?;
+    HMAC_KEYS.with_borrow_mut(|keys| keys.insert(id, key.clone()));
+    Ok(key)
+}
+
 /// Compute HMAC-SHA256 of the given data using the provided key.
 pub(crate) async fn hmac_sha256(key_bytes: &[u8], data: &[u8]) -> Result<Vec<u8>, String> {
-    let key = import_hmac_key(key_bytes).await?;
+    let key = cached_hmac_key(key_bytes).await?;
 
     let data_arr = Uint8Array::new_with_length(data.len() as u32);
     data_arr.copy_from(data);

@@ -39,7 +39,7 @@ Two audit recommendations were **rejected after measurement** — see §4.
 - [ ] W9 Admin roster: 3 independent awaits → `join!`; `recent_check_ins` unbounded.
 - [ ] W10 Dashboard (2.5 s poll) resolves the event twice, D1 `SELECT *` incl. `form_config`.
 - [ ] W11 `resolve_event_by_slug` parses the whole KV index per request.
-- [ ] W12 HMAC `importKey` per request → cache the key.
+- [x] W12 HMAC `importKey` per request → cache the key. **Done (2026-09-24):** `crypto::cached_hmac_key` keeps imported `CryptoKey`s in a per-isolate `thread_local` `isolate_cache::BoundedCache` (cap 4, oldest evicted). Entries are keyed by SHA-256 of the secret, so the cache holds no second copy of it. This covers every `hmac_sha256` caller: JWT sign/verify on each authed request, plus the social-link signing. `worker/tests/isolate_cache.rs` has 4 tests. **Local `wrangler dev` probe** (temporary logs, since removed): 5 `/api/auth/me` calls → 1 import, 4 cache hits; a token signed with the wrong secret still gets 401 on a cache hit. No CPU number is claimed, because M1 is still open.
 
 ### Frontend
 - [x] **F1 Service worker asset cache never prunes** — **closed negative (2026-09-24).** The premise is false: `build.sh::bump_sw_version` sets `CACHE_VERSION` to a hash of `index.html` on every build (prod and staging both serve a hashed version), and `activate` deletes every cache not named for it, so a deploy's first activation purges the previous build. The real gap was that the purge rested on an unchecked `sed` (exit 0 on no match); `bump_sw_version` now fails the build if the bump didn't land (mutant `var`→`let` → exit 1).

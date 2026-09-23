@@ -52,6 +52,7 @@
     "golden_vectors tests/golden_vectors.rs": 9,
     "golden_vectors_escrow tests/golden_vectors_escrow.rs": 2,
     "image_kind tests/image_kind.rs": 5,
+    "isolate_cache tests/isolate_cache.rs": 4,
     "linked_email_guards tests/linked_email_guards.rs": 2,
     "log_pii_guard tests/log_pii_guard.rs": 8,
     "map_url tests/map_url.rs": 4,

@@ -23,6 +23,7 @@ mod escrow_indexer;
 pub mod event_store;
 mod handlers;
 mod http;
+pub mod isolate_cache;
 mod middleware;
 pub mod notifications;
 mod org_store;
