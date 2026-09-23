@@ -409,6 +409,14 @@ jobs:
         # it calls.
         run: bash scripts/verify/e2e_lib_smoke.sh
 
+      - name: Issue / plan / handover numbering gate
+        # Plan 030. Concurrent sessions numbered files by eye and collided
+        # (plan 014, handovers 001/124/126 are pinned legacy cases). The
+        # self-test runs first so a gate that can no longer fail goes red too.
+        run: |
+          python3 scripts/verify/numbering_gate.py --self-test
+          python3 scripts/verify/numbering_gate.py
+
       - name: Install blake3 (wrangler-compatible asset hashing)
         run: python3 -m pip install --quiet blake3
 

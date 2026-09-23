@@ -17,12 +17,17 @@ owner decision.
 
 ## 2. Ungated, small (S) — process and tests
 
-- [ ] **Numbering gate.**
-  - Add `.issues/.highwater`, `.plans/.highwater` and `.handovers/.highwater`.
-  - Add `scripts/verify/numbering_gate.py`. It fails on a new duplicate prefix
-    and pins the existing ones by membership, each with a reason: issues
-    091/095/097, plan 014, handovers 001/124/126.
-  - Run it from `issue_ledger.py` or in CI.
+- [x] **Numbering gate** (2026-09-23).
+  - `.issues/.highwater` (144), `.plans/.highwater` (030) and
+    `.handovers/.highwater` (137). Allocate with
+    `python3 scripts/verify/numbering_gate.py --next .issues` (flock-safe).
+  - `scripts/verify/numbering_gate.py` fails on a new duplicate `.md` prefix, a
+    pinned group gaining or losing a file, a stale pin, or a highwater below
+    the disk. Pinned: plan 014 (9 sibling docs), handovers 001/124/126.
+    Issues 091/095/097 were never collisions; each is an `.md` plus its
+    `.sql` backfill companion.
+  - Runs in CI (`ci.yml`, after its `--self-test`, 10/10). A planted
+    `.issues/144_probe_collision.md` turned the live run red.
 - [ ] **Verdict vocabulary.** Extend `scripts/verify/issue_ledger.py` so
   `Status:` must start with one of: OPEN, FIXED-ON-DEVELOP, DEPLOYED, CLOSED,
   CLOSED NEGATIVE, PARKED (reopen trigger: …), DECLINED.
