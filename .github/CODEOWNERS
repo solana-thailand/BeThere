@@ -1,0 +1,25 @@
+# Review routing for security-sensitive paths (.plans/029 §2, ISO 27001 A.8.4/A.8.32).
+# Only enforced once branch protection on `main`/`develop` turns on
+# "Require review from Code Owners" — a repository setting, owner's call.
+# Later rules win, so the catch-all comes first.
+
+*                                   @ozoneRatchapon
+
+# CI, supply chain and secret scanning
+/.github/                           @ozoneRatchapon
+/deny.toml                          @ozoneRatchapon
+/.gitleaks.toml                     @ozoneRatchapon
+/.gitleaksignore                    @ozoneRatchapon
+
+# Deploy path and runtime config
+/worker/deploy.sh                   @ozoneRatchapon
+/worker/wrangler.toml               @ozoneRatchapon
+/worker/migrations/                 @ozoneRatchapon
+/frontend-leptos/_headers           @ozoneRatchapon
+
+# Auth, crypto, money
+/worker/src/crypto.rs               @ozoneRatchapon
+/worker/src/middleware/             @ozoneRatchapon
+/worker/src/handlers/auth.rs        @ozoneRatchapon
+/worker/src/handlers/deposit/       @ozoneRatchapon
+/bethere-escrow/                    @ozoneRatchapon

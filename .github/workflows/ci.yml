@@ -5,6 +5,13 @@ on:
     branches: [develop, main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
@@ -16,15 +23,16 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
         with:
+          toolchain: stable
           components: clippy, rustfmt
 
       - name: Cache cargo registry + target
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Stub frontend dist for worker include_str!
         # `worker/src/lib.rs` does `include_str!("../../frontend-leptos/dist/index.html")`
@@ -69,15 +77,16 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable, wasm32 target)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
         with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry + target
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Stub frontend dist for worker include_str!
         # Same reason as build-test: worker/src/lib.rs include_str!s the SPA shell
@@ -94,11 +103,11 @@ jobs:
         # `deploy.sh` and fail mid-build. --locked mirrors the deploy toolchain.
         run: cargo build -p event-checkin-worker --target wasm32-unknown-unknown --locked --release
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
@@ -115,7 +124,7 @@ jobs:
       - name: Install wasm-bindgen CLI
         # Pinned to the crate version; wasm-bindgen's CLI and crate halves must
         # match exactly or the bindgen step fails with a schema error.
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@7623a79cdfecb99d681017af368ca353d9f49bb5 # v2.87.19
         with:
           tool: wasm-bindgen-cli@0.2.118
 
@@ -154,16 +163,17 @@ jobs:
       run:
         working-directory: frontend-leptos
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable, wasm32 target)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
         with:
+          toolchain: stable
           components: clippy, rustfmt
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry + target
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: frontend-leptos
 
@@ -206,15 +216,16 @@ jobs:
     # D1/KV/R2 in-process, and `.dev.vars` is absent. Verified locally that the run
     # makes zero `sheets::` calls — nothing in this job can reach a live Google Sheet.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable, wasm32 target)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
         with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry + target
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: |
             .
@@ -224,7 +235,7 @@ jobs:
         # trunk builds the Leptos SPA; wasm-bindgen is invoked directly by the
         # worker's [build] command in wrangler.toml and must be on PATH at the
         # exact crate version (a mismatch fails the bindgen step, not the build).
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@7623a79cdfecb99d681017af368ca353d9f49bb5 # v2.87.19
         with:
           tool: trunk@0.21.7,wasm-bindgen-cli@0.2.118
 
@@ -248,11 +259,11 @@ jobs:
         # build.sh does not spuriously red this step.
         run: bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
@@ -291,7 +302,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report
           path: worker/playwright-report/
@@ -322,10 +333,12 @@ jobs:
       run:
         working-directory: bethere-escrow
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
+        with:
+          toolchain: stable
       # No rust-cache here: the dev-dep `bethere-escrow-client` is a path dep under
       # target/ generated by `quasar build`, so `cargo metadata` fails until the build
       # runs — rust-cache would error and cache nothing.
@@ -362,7 +375,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: ShellCheck every tracked shell script
         # `worker/deploy.sh` used to embed Python inside double-quoted
@@ -384,7 +397,7 @@ jobs:
           bash scripts/verify/shellcheck_gate.sh
 
       - name: Setup Python (3.11+ for tomllib)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
 
