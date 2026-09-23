@@ -2,6 +2,7 @@
 
 mod columns;
 mod core;
+mod recent;
 mod row;
 mod status;
 mod ticket_name;
@@ -12,6 +13,7 @@ mod tests;
 
 pub use columns::{ColumnKey, ColumnMapping};
 pub use core::{Attendee, CheckInError};
+pub use recent::{RECENT_CHECK_INS_PER_TYPE, recent_check_ins};
 pub use row::AttendeeRow;
 pub use status::{CheckInStatus, ParticipationType};
 pub use ticket_name::{

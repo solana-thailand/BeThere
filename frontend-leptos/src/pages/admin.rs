@@ -12,6 +12,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use event_checkin_domain::models::attendee::RECENT_CHECK_INS_PER_TYPE;
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
@@ -2343,7 +2344,7 @@ fn render_recent_check_ins(
                             .unwrap_or_default();
                         tab.matches(&p_type)
                     })
-                    .take(10)
+                    .take(RECENT_CHECK_INS_PER_TYPE)
                     .collect()
             };
 

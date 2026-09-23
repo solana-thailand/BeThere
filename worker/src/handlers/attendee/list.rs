@@ -7,7 +7,8 @@ use axum::{
 use serde_json::json;
 
 use crate::error::ApiOk;
-use event_checkin_domain::models::api::{AttendeeListItem, RecentCheckIn, StatsResponse};
+use event_checkin_domain::models::api::{AttendeeListItem, StatsResponse};
+use event_checkin_domain::models::attendee::{RECENT_CHECK_INS_PER_TYPE, recent_check_ins};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
@@ -99,18 +100,10 @@ pub async fn list_attendees(
         0.0
     };
 
-    let recent_check_ins: Vec<RecentCheckIn> = attendees
-        .iter()
-        .filter(|a| a.is_checked_in())
-        .filter_map(|a| {
-            a.checked_in_at.as_ref().map(|ts| RecentCheckIn {
-                api_id: a.api_id.clone(),
-                name: a.display_name().to_string(),
-                checked_in_at: ts.clone(),
-                checked_in_by: a.checked_in_by.clone(),
-            })
-        })
-        .collect();
+    // Bounded per participation type: the dashboard only shows the newest
+    // few per tab, and this list used to carry every check-in on every poll
+    // (plan 028 W9).
+    let recent_check_ins = recent_check_ins(&attendees, RECENT_CHECK_INS_PER_TYPE);
 
     let stats = StatsResponse {
         total_approved,
@@ -149,42 +142,46 @@ pub async fn list_attendees(
         .map(|a| AttendeeListItem::from_attendee(a))
         .collect();
 
-    // Annotate each row from the credit ledger (two batch queries, best-effort):
+    // Annotate each row from three independent batch queries, run
+    // concurrently (plan 028 W9). All three are best-effort: a failure
+    // degrades a badge, never the roster. An organizer at the door needs the
+    // list of names far more than the badges on it.
     //  - credit_thb: remaining rolling credit (powers the Apply-Credit action + badge)
     //  - used_credit: whether the attendee got in by spending credit AT this event
     //    (powers the "Credit ✓" badge / who-used-credit view)
+    //  - thb_source / thb_verified / thb_refunded: how the THB deposit was
+    //    settled. Without this the roster is blind to the entire THB flow —
+    //    it reads `attendees.deposit_status` and the USDC amount columns,
+    //    and nothing writes either (`save_deposit_status_to_d1` is dead
+    //    code). A staff comp and a credit-covered registration both looked
+    //    like an unpaid attendee and the door screen said "Deposit
+    //    pending". See `.issues/137`.
+    //
+    // Running them together is safe: `thb_balances_by_email` first writes
+    // `return` rows for ended events, and neither sibling reads those rows
+    // (`emails_applied_credit` reads `apply` rows, `settlement_by_attendee`
+    // reads `thb_deposits`).
     if let Some(db) = state.d1.as_deref() {
-        if let Ok(balances) =
-            crate::db::credit_ledger::thb_balances_by_email(db, &event.organization_id).await
-        {
+        let (balances, applied, settlements) = futures_util::join!(
+            crate::db::credit_ledger::thb_balances_by_email(db, &event.organization_id),
+            crate::db::credit_ledger::emails_applied_credit(db, &event.id),
+            crate::db::thb_deposits::settlement_by_attendee(db, &event.id),
+        );
+        if let Ok(balances) = balances {
             for item in attendee_responses.iter_mut() {
                 if let Some(&bal) = balances.get(&item.email.to_lowercase()) {
                     item.credit_thb = bal.max(0);
                 }
             }
         }
-        if let Ok(applied) = crate::db::credit_ledger::emails_applied_credit(db, &event.id).await {
+        if let Ok(applied) = applied {
             for item in attendee_responses.iter_mut() {
                 if applied.contains(&item.email.to_lowercase()) {
                     item.used_credit = true;
                 }
             }
         }
-
-        //  - thb_source / thb_verified / thb_refunded: how the THB deposit was
-        //    settled. Without this the roster is blind to the entire THB flow —
-        //    it reads `attendees.deposit_status` and the USDC amount columns,
-        //    and nothing writes either (`save_deposit_status_to_d1` is dead
-        //    code). A staff comp and a credit-covered registration both looked
-        //    like an unpaid attendee and the door screen said "Deposit
-        //    pending". See `.issues/137`.
-        //
-        //    Best-effort like the two above: a failure here must degrade the
-        //    badge, never the roster. An organizer at the door needs the list of
-        //    names far more than they need the badge on it.
-        if let Ok(settlements) =
-            crate::db::thb_deposits::settlement_by_attendee(db, &event.id).await
-        {
+        if let Ok(settlements) = settlements {
             for item in attendee_responses.iter_mut() {
                 if let Some(s) = settlements.get(&item.api_id) {
                     item.thb_source = Some(s.source.as_str().to_string());
