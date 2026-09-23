@@ -50,7 +50,27 @@ impl EventIx {
             Self::CloseDeposit => 7,
         }
     }
+
+    /// Inverse of [`Self::discriminator`]; `None` for 0, 8 and anything the
+    /// program does not declare.
+    pub const fn from_discriminator(disc: u8) -> Option<Self> {
+        match disc {
+            1 => Some(Self::Deposit),
+            2 => Some(Self::MarkCheckedIn),
+            3 => Some(Self::Refund),
+            4 => Some(Self::ClaimForfeited),
+            5 => Some(Self::CloseEvent),
+            6 => Some(Self::DeactivateEvent),
+            7 => Some(Self::CloseDeposit),
+            _ => None,
+        }
+    }
 }
+
+/// `create_event`'s discriminator.
+pub const CREATE_EVENT_DISCRIMINATOR: u8 = 0;
+/// `rollover_deposit`'s discriminator.
+pub const ROLLOVER_DEPOSIT_DISCRIMINATOR: u8 = 8;
 
 /// Instruction data for one bethere-escrow instruction: a one-byte
 /// discriminator, then each argument little-endian in declaration order.
@@ -76,9 +96,9 @@ pub enum EscrowIxData {
 impl EscrowIxData {
     pub const fn discriminator(&self) -> u8 {
         match self {
-            Self::CreateEvent { .. } => 0,
+            Self::CreateEvent { .. } => CREATE_EVENT_DISCRIMINATOR,
             Self::EventScoped { ix, .. } => ix.discriminator(),
-            Self::RolloverDeposit { .. } => 8,
+            Self::RolloverDeposit { .. } => ROLLOVER_DEPOSIT_DISCRIMINATOR,
         }
     }
 

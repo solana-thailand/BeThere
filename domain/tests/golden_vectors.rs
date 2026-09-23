@@ -197,3 +197,16 @@ fn escrow_ix_data_covers_every_instruction() {
         );
     }
 }
+
+/// `EventIx::from_discriminator` inverts `discriminator` on 1–7 and rejects
+/// every other byte, so decoders built on it agree with the encoder.
+#[test]
+fn event_ix_discriminator_round_trips() {
+    for disc in 0u8..=u8::MAX {
+        let decoded = EventIx::from_discriminator(disc);
+        match disc {
+            1..=7 => assert_eq!(decoded.map(EventIx::discriminator), Some(disc)),
+            _ => assert_eq!(decoded, None, "discriminator {disc}"),
+        }
+    }
+}
