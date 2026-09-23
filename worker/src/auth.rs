@@ -743,6 +743,7 @@ mod tests {
             claim_rate_limiter: None,
             deposit_rate_limiter: None,
             webhook_rate_limiter: None,
+            sheets_fallback_rate_limiter: None,
             webhook_secret: String::new(),
             thb_slip_duplicate_mode: String::new(),
             worker_ctx: None,

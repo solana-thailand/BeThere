@@ -47,7 +47,7 @@
     "escrow_ix_program_sync tests/escrow_ix_program_sync.rs": 3,
     "escrow_transition_contract tests/escrow_transition_contract.rs": 14,
     "event_checkin_domain src/lib.rs": 157,
-    "event_checkin_worker src/lib.rs": 324,
+    "event_checkin_worker src/lib.rs": 327,
     "event_enum_column_fallbacks tests/event_enum_column_fallbacks.rs": 13,
     "golden_vectors tests/golden_vectors.rs": 9,
     "golden_vectors_escrow tests/golden_vectors_escrow.rs": 2,

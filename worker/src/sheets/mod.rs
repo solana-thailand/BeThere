@@ -595,23 +595,42 @@ pub async fn get_attendee_by_id(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
-    // D1-first: try by primary key
-    if let Some(ref d1) = state.d1 {
-        match crate::db::attendees::get_attendee_by_id(d1, api_id).await {
-            Ok(Some(attendee)) => {
-                tracing::debug!(attendee_id = %api_id, "D1 hit: attendee by id");
-                return Ok(Some(attendee));
-            }
-            Ok(None) => {
-                tracing::debug!(attendee_id = %api_id, "D1 miss: attendee by id, falling back to Sheets");
-            }
-            Err(e) => {
-                tracing::warn!(attendee_id = %api_id, error = %e, "D1 error: attendee by id, falling back to Sheets");
-            }
+    if let Some(attendee) = get_attendee_by_id_from_d1(api_id, state).await {
+        return Ok(Some(attendee));
+    }
+    get_attendee_by_id_from_sheets(api_id, state, sheet_id, sheet_name, kv).await
+}
+
+/// The D1 half of [`get_attendee_by_id`]: `None` on a miss, a D1 error or no
+/// D1 binding. Public callers use the halves separately so they can gate the
+/// Sheets read (plan 028 W7).
+pub async fn get_attendee_by_id_from_d1(api_id: &str, state: &AppState) -> Option<Attendee> {
+    let d1 = state.d1.as_ref()?;
+    match crate::db::attendees::get_attendee_by_id(d1, api_id).await {
+        Ok(Some(attendee)) => {
+            tracing::debug!(attendee_id = %api_id, "D1 hit: attendee by id");
+            Some(attendee)
+        }
+        Ok(None) => {
+            tracing::debug!(attendee_id = %api_id, "D1 miss: attendee by id, falling back to Sheets");
+            None
+        }
+        Err(e) => {
+            tracing::warn!(attendee_id = %api_id, error = %e, "D1 error: attendee by id, falling back to Sheets");
+            None
         }
     }
+}
 
-    // Sheets fallback
+/// The Sheets half of [`get_attendee_by_id`]: reads the whole sheet, so every
+/// call costs a Google API request.
+pub async fn get_attendee_by_id_from_sheets(
+    api_id: &str,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<Option<Attendee>, String> {
     let map = get_attendees_map(state, sheet_id, sheet_name, kv).await?;
     Ok(map.get(api_id).cloned())
 }

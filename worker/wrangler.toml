@@ -251,6 +251,16 @@ namespace_id = "63204"
 limit = 120
 period = 60
 
+# Public lookups that miss D1 and would read the whole Google Sheet (plan 028
+# W7). Charged per miss, not per request. Keep in sync with
+# RATE_LIMIT_SHEETS_FALLBACK in worker/src/middleware/rate_limit.rs.
+[[ratelimits]]
+name = "SHEETS_FALLBACK_RATE_LIMITER"
+namespace_id = "63205"
+[ratelimits.simple]
+limit = 10
+period = 60
+
 # Phase 4: Quiz KV namespace — REMOVED (Option C).
 # Quiz data is now D1-only. QUIZ KV binding removed from wrangler.toml.
 # If needed for rollback, restore:
@@ -419,6 +429,13 @@ name = "WEBHOOK_RATE_LIMITER"
 namespace_id = "63304"
 [env.staging.ratelimits.simple]
 limit = 120
+period = 60
+
+[[env.staging.ratelimits]]
+name = "SHEETS_FALLBACK_RATE_LIMITER"
+namespace_id = "63305"
+[env.staging.ratelimits.simple]
+limit = 10
 period = 60
 
 # NOTE: DO bindings (EVENT_DO) remain commented out for staging too — the PUT API

@@ -4,6 +4,7 @@
 use axum::{
     Extension,
     extract::{Path, Query, State},
+    http::HeaderMap,
 };
 use serde_json::json;
 
@@ -111,21 +112,34 @@ pub async fn get_public_ticket(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Query(query): Query<EventIdQuery>,
+    headers: HeaderMap,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(attendee_id = %id, "public ticket requested");
 
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
     let kv = resolve_kv(&state);
-    let attendee = match sheets::get_attendee_by_id(
-        &id,
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        kv,
-    )
-    .await
-    {
+    // A D1 miss would read the whole Google Sheet for an unauthenticated
+    // caller. Rate-limit only that path (plan 028 W7): rows added straight to
+    // the Sheet stay reachable, and D1 hits never spend the budget.
+    let lookup = match sheets::get_attendee_by_id_from_d1(&id, &state).await {
+        Some(a) => Ok(Some(a)),
+        None if !crate::middleware::rate_limit::allow_sheets_fallback(&state, &headers).await => {
+            tracing::warn!(attendee_id = %id, "public ticket: Sheets fallback rate-limited");
+            return Err(AppError::RateLimited("too many unknown ticket lookups".into()).into());
+        }
+        None => {
+            sheets::get_attendee_by_id_from_sheets(
+                &id,
+                &state,
+                &event.sheet_id,
+                &event.sheet_name,
+                kv,
+            )
+            .await
+        }
+    };
+    let attendee = match lookup {
         Ok(Some(a)) => a,
         Ok(None) => {
             return Err(AppError::NotFound(format!("attendee with id '{id}' not found")).into());

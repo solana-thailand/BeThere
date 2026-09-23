@@ -29,6 +29,7 @@ struct CachedBindings {
     claim_rate_limiter: Option<Arc<RateLimiter>>,
     deposit_rate_limiter: Option<Arc<RateLimiter>>,
     webhook_rate_limiter: Option<Arc<RateLimiter>>,
+    sheets_fallback_rate_limiter: Option<Arc<RateLimiter>>,
 }
 
 static CACHED_BINDINGS: OnceLock<CachedBindings> = OnceLock::new();
@@ -97,6 +98,7 @@ pub struct AppState {
     pub claim_rate_limiter: Option<Arc<RateLimiter>>,
     pub deposit_rate_limiter: Option<Arc<RateLimiter>>,
     pub webhook_rate_limiter: Option<Arc<RateLimiter>>,
+    pub sheets_fallback_rate_limiter: Option<Arc<RateLimiter>>,
 }
 
 impl AppState {
@@ -374,6 +376,10 @@ impl AppState {
                         .rate_limiter("WEBHOOK_RATE_LIMITER")
                         .ok()
                         .map(Arc::new),
+                    sheets_fallback_rate_limiter: env
+                        .rate_limiter("SHEETS_FALLBACK_RATE_LIMITER")
+                        .ok()
+                        .map(Arc::new),
                 };
                 let _ = CACHED_BINDINGS.set(b);
                 CACHED_BINDINGS.get().unwrap()
@@ -390,6 +396,7 @@ impl AppState {
         let claim_rate_limiter = bindings.claim_rate_limiter.clone();
         let deposit_rate_limiter = bindings.deposit_rate_limiter.clone();
         let webhook_rate_limiter = bindings.webhook_rate_limiter.clone();
+        let sheets_fallback_rate_limiter = bindings.sheets_fallback_rate_limiter.clone();
 
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
         if webhook_secret.is_empty() {
@@ -421,6 +428,7 @@ impl AppState {
             claim_rate_limiter,
             deposit_rate_limiter,
             webhook_rate_limiter,
+            sheets_fallback_rate_limiter,
             webhook_secret,
             // Unset is not an error: `DuplicateMode::parse` maps anything
             // unrecognised to Report, which records the collision without
