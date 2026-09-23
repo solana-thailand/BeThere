@@ -10,7 +10,10 @@
 > Source: https://developers.cloudflare.com/email-service/platform/pricing/
 
 
-Status: free in-app implementation complete locally; migration and app not deployed.
+Status: free in-app inbox **deployed** (checked 2026-09-24). Prod D1 reports
+no pending migrations, so `0030` is applied. Prod answers `/api/my-notifications`
+with a JSON 401 and a made-up sibling route with a 404. Email sending stays off,
+as the budget note above requires.
 
 ## Scope and decisions
 
@@ -66,6 +69,10 @@ rows owned by that email. No provider, sender domain, or notification cron is ne
 - [x] Attendee list/read/read-all APIs are identity-scoped and use existing D1 intent.
 - [x] Free in-app UI needs no provider call or recurring dispatch cron.
 - [ ] Native email binding integration, only if a no-cost sender domain/provider is later approved.
+  **Blocked on owner budget approval:** no free sender has been approved.
+  Cloudflare Email Sending to arbitrary recipients needs Workers Paid, which the
+  $0 budget (2026-09-09) rules out. Unblock by approving a provider with a hard
+  free-tier cap and no automatic paid overage; no code starts before that.
 
 ## Activation gates
 

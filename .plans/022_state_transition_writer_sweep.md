@@ -686,4 +686,10 @@ deliverable, not the list.
 - [x] The capacity gates swept — the walk-in half of the in-person tally no
       longer degrades to zero on a D1 error, and both gates share one
       fail-closed count (§9).
-- [ ] Nothing here is deployed; this branch is unpushed.
+- [x] Pushed and deployed (checked 2026-09-24). Every fix commit here (latest
+      `1dc43bc`, `65add65`) is on `origin/main` (`3d30f5e`) and is an ancestor of
+      `25d13ed`, which adds `/api/auth/email-link`. Prod version `70989bdb`
+      (2026-09-23) answers that route with a JSON 401 while a made-up sibling
+      route gets a 404, so the deployed build includes this plan's fixes. The
+      exact deployed commit can't be read yet, because health has no build stamp
+      (queued after RTM#6 in `.plans/031` §3).
