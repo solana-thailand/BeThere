@@ -304,6 +304,7 @@ mod tests {
     /// Minimal valid EventConfig for tests — only the fields `generate` reads.
     fn sample_event() -> EventConfig {
         EventConfig {
+            comp_emails: Vec::new(),
             id: "evt-1".into(),
             name: "Solana Bangkok 2025".into(),
             slug: "solana-bangkok-2025".into(),

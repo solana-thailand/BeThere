@@ -188,6 +188,12 @@ pub async fn duplicate_event(
         description: source.description.clone(),
         location: source.location.clone(),
         location_map_url: source.location_map_url.clone(),
+        // NOTE: `comp_emails` is deliberately absent. `CreateEventRequest` has
+        // no such field, so a duplicate starts with nobody waived — which is
+        // the behaviour we want. A waived-email list is a decision about who
+        // does not pay for ONE occasion; carrying it forward would silently
+        // waive last event's guests at the next one, a money decision nobody
+        // made. The organizer re-enters it if it still applies.
         video_url: source.video_url.clone(),
         event_format: source.event_format.clone(),
         require_contact_info: source.require_contact_info,

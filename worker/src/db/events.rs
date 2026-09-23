@@ -253,6 +253,9 @@ impl D1EventRow {
             .collect();
 
         EventConfig {
+            // D1 does not carry the waived-email list; KV is its home. An empty
+            // vec here means "unknown from this source", never "nobody is waived".
+            comp_emails: Vec::new(),
             id: self.id.clone().unwrap_or_default(),
             name: self.name.clone().unwrap_or_default(),
             slug: self.slug.clone().unwrap_or_default(),

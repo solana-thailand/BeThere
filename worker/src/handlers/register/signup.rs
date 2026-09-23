@@ -187,7 +187,15 @@ pub async fn register_attendee(
         || state
             .config
             .super_admin_emails
-            .contains(&email.to_lowercase());
+            .contains(&email.to_lowercase())
+        // Guests the organizer decided do not pay — speakers, sponsors, VIPs
+        // (`EventConfig::comp_emails`). Same comp path as staff, but grants no
+        // privileges: this list is read here and nowhere else, whereas
+        // `is_staff` gates the entire admin router.
+        //
+        // The list is stored already lowercased and trimmed by `apply_update`,
+        // so this is a plain membership test.
+        || config.comp_emails.contains(&email.to_lowercase());
 
     // 3e. Validate deposit agreement if deposit is enabled — skip for Online
     // attendees and for waived staff/organizers.

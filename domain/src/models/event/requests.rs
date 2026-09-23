@@ -180,6 +180,10 @@ pub struct DuplicateEventRequest {
 /// All fields are optional; only provided fields are updated.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UpdateEventRequest {
+    /// Replace the deposit-waived email list. `None` leaves it untouched;
+    /// `Some(vec![])` clears it. See `EventConfig::comp_emails`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub comp_emails: Option<Vec<String>>,
     /// New display name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,

@@ -155,6 +155,7 @@ pub async fn create_event(
         description: req.description.trim().to_string(),
         location: req.location.trim().to_string(),
         location_map_url,
+        comp_emails: Vec::new(),
         video_url: req.video_url.trim().to_string(),
         event_format: req.event_format.clone(),
         require_contact_info: req.require_contact_info,

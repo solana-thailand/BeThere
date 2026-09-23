@@ -264,6 +264,20 @@ pub struct EventConfig {
     /// Map link for the venue (e.g. a Google Maps share URL). Empty = no link.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub location_map_url: String,
+    /// Emails that are admitted to this event **without paying a deposit**.
+    ///
+    /// Guests the organizer has decided do not pay — speakers, sponsors, VIPs.
+    /// An email here takes the same path staff already take
+    /// (`register::signup::record_staff_comp`): a ฿0 comp is written, the
+    /// ticket QR is issued, and no refund is ever owed. It grants **no
+    /// privileges** — unlike putting someone on the staff list, which gates the
+    /// entire admin router (`auth.rs`).
+    ///
+    /// Empty is the default and means nobody is waived, so an event that never
+    /// sets this behaves exactly as before. Compared case-insensitively, like
+    /// every other email match in this system.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub comp_emails: Vec<String>,
     /// YouTube/live stream/recording URL for the event.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub video_url: String,
@@ -567,6 +581,7 @@ impl EventConfig {
             description: String::new(),
             location: String::new(),
             location_map_url: String::new(),
+            comp_emails: Vec::new(),
             video_url: String::new(),
             event_format: EventFormat::InPerson,
             require_contact_info: true,

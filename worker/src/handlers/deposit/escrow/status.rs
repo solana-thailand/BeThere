@@ -217,6 +217,9 @@ pub async fn confirm_escrow_init_handler(
 
     if !already_persisted {
         let update_req = UpdateEventRequest {
+            // None = leave the waived-email list alone; this path only moves
+            // escrow state.
+            comp_emails: None,
             // None = leave the ticket announcements exactly as they are; this
             // path only moves escrow state.
             ticket_note_in_person: None,

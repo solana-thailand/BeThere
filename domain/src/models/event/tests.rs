@@ -2,6 +2,7 @@ use super::*;
 
 fn make_event() -> EventConfig {
     EventConfig {
+        comp_emails: Vec::new(),
         id: "test-event".to_string(),
         name: "Test Event".to_string(),
         slug: "test-event".to_string(),
