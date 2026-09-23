@@ -25,3 +25,25 @@ pub fn is_plausible_email(email: &str) -> bool {
     };
     !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }
+
+/// `raw` if it is a same-origin path that is safe to redirect to, else `None`.
+///
+/// Every post-login redirect target (the OAuth `state` the worker redirects to
+/// and the login page's `?next=`) is attacker-controllable: anyone can craft a
+/// real Google sign-in link or a `/login?next=` link. Accepting it verbatim made
+/// both an open redirect to any site, and on the frontend `location.href =
+/// "javascript:…"` would run script in this origin.
+///
+/// Accepted: a path starting with a single `/` (`/e/rtm-6`, `/ticket/x?y=1`).
+/// Rejected: absolute URLs and other schemes (`https:`, `javascript:`),
+/// protocol-relative `//host`, any backslash (browsers read `/\host` as
+/// `//host`), and control characters (header injection, and browsers strip tab
+/// and newline, so `/\t/host` becomes `//host`).
+pub fn safe_redirect_path(raw: &str) -> Option<&str> {
+    let bytes = raw.as_bytes();
+    match bytes {
+        [b'/', b'/' | b'\\', ..] => None,
+        [b'/', ..] if !raw.contains('\\') && !raw.chars().any(char::is_control) => Some(raw),
+        _ => None,
+    }
+}

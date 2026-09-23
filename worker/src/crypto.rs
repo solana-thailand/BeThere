@@ -30,6 +30,26 @@ fn get_subtle_crypto() -> Result<Object, String> {
         .ok_or_else(|| "crypto.subtle is not an object".to_string())
 }
 
+/// `bytes` bytes from the runtime CSPRNG (`crypto.getRandomValues`), hex-encoded.
+///
+/// For anything an attacker must not predict (challenge nonces). Not a UUIDv7:
+/// its timestamp and in-millisecond counter are guessable, leaving only part
+/// of it random.
+pub fn random_hex(bytes: usize) -> Result<String, String> {
+    let global = js_sys::global();
+    let crypto_val = Reflect::get(&global, &JsValue::from_str("crypto"))
+        .map_err(|e| format!("failed to get global crypto: {e:?}"))?;
+    let get_random_values = Reflect::get(&crypto_val, &JsValue::from_str("getRandomValues"))
+        .map_err(|e| format!("failed to get crypto.getRandomValues: {e:?}"))?;
+    let view = Uint8Array::new_with_length(bytes as u32);
+    js_sys::Function::from(get_random_values)
+        .call1(&crypto_val, &view)
+        .map_err(|e| format!("crypto.getRandomValues failed: {e:?}"))?;
+    let mut buf = vec![0u8; bytes];
+    view.copy_to(&mut buf);
+    Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
+}
+
 /// Convert a JS Uint8Array or ArrayBuffer into a Rust Vec<u8>.
 fn js_buffer_to_vec(val: &JsValue) -> Result<Vec<u8>, String> {
     if val.is_instance_of::<ArrayBuffer>() {
@@ -445,6 +465,16 @@ async fn sign_session_claims(claims: &Claims, secret: &str) -> Result<String, St
     Ok(format!("{sign_input}.{sig_b64}"))
 }
 
+/// Compare two secrets without an early exit on the first differing byte, so
+/// the time taken does not reveal how much of a guess was right. A length
+/// mismatch returns at once; lengths of these secrets are not secret.
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
+}
+
 /// Verify and decode a JWT session token, returning the claims.
 ///
 /// This replaces `jsonwebtoken::decode` from the Axum build.
@@ -464,16 +494,7 @@ pub async fn verify_jwt(token: &str, secret: &str) -> Result<Claims, String> {
     let expected_sig = hmac_sha256(secret.as_bytes(), sign_input.as_bytes()).await?;
     let actual_sig = base64_url_decode(parts[2])?;
 
-    // Constant-time comparison of signature bytes
-    if expected_sig.len() != actual_sig.len() {
-        return Err("JWT signature verification failed".to_string());
-    }
-
-    let mut diff = 0u8;
-    for (a, b) in expected_sig.iter().zip(actual_sig.iter()) {
-        diff |= a ^ b;
-    }
-    if diff != 0 {
+    if !constant_time_eq(&expected_sig, &actual_sig) {
         return Err("JWT signature verification failed".to_string());
     }
 

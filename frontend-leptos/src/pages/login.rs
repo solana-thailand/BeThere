@@ -32,9 +32,17 @@ pub fn Login() -> impl IntoView {
     let (loading, set_loading) = signal(false);
     let (error_msg, set_error_msg) = signal(None::<String>);
 
-    // Read the `next` query param
+    // Read the `next` query param. Only a same-origin path survives: all three
+    // sinks below (wallet hard-navigate, already-signed-in redirect, Google
+    // OAuth `state`) would otherwise follow `/login?next=https://…` off-site, and
+    // `location.href = "javascript:…"` would run script in this origin.
     let query = use_query_map();
-    let next_param = query.get().get("next").map(|s| s.to_string());
+    let next_param = query
+        .get()
+        .get("next")
+        .and_then(|s| event_checkin_domain::validation::safe_redirect_path(&s).map(str::to_string));
+    // `StoredValue` keeps `handle_login` `Copy`: the view re-runs its closure.
+    let login_next = StoredValue::new(next_param.clone());
 
     // `/feedback` needs a Google-verified email; a wallet session gets a 403
     // from the survey endpoint. Used to bias this page's copy (`.issues/106`).
@@ -118,7 +126,7 @@ pub fn Login() -> impl IntoView {
         set_loading.set(true);
         set_error_msg.set(None);
 
-        let redirect = query.get().get("next").map(|s| s.to_string());
+        let redirect = login_next.get_value();
         leptos::task::spawn_local(async move {
             match api::get_auth_url(redirect.as_deref()).await {
                 Ok(data) => {
