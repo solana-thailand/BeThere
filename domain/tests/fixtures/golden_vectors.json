@@ -1,0 +1,77 @@
+{
+  "_about": "Pinned input -> expected output vectors (.plans/030 section 3). Change a value only with a commit that says why: a changed PDA or on-chain id orphans live escrow accounts. PDA/ATA values were derived independently with `solana find-program-derived-address` (solana-cli 3.1.10); re-check with scripts/verify/golden_vectors_check.sh. u64 values exceed 2^53, so read this file with serde_json or Python, not jq.",
+  "usdc_parse": [
+    { "input": "2.01", "atomic": 2010000 },
+    { "input": "2.03", "atomic": 2030000 },
+    { "input": "4.02", "atomic": 4020000 },
+    { "input": "0.000249", "atomic": 249 },
+    { "input": "2.009999", "atomic": 2009999 },
+    { "input": "0.29", "atomic": 290000 },
+    { "input": "10", "atomic": 10000000 },
+    { "input": "10.", "atomic": 10000000 },
+    { "input": ".5", "atomic": 500000 },
+    { "input": " 1.5 ", "atomic": 1500000 },
+    { "input": "0.000001", "atomic": 1 },
+    { "input": "1000", "atomic": 1000000000 },
+    { "input": "0", "atomic": 0 },
+    { "input": "18446744073709.551615", "atomic": 18446744073709551615 },
+    { "input": "18446744073709.551616", "atomic": null },
+    { "input": "", "atomic": null },
+    { "input": ".", "atomic": null },
+    { "input": "1.0000001", "atomic": null },
+    { "input": "-1", "atomic": null },
+    { "input": "+1", "atomic": null },
+    { "input": "1e3", "atomic": null },
+    { "input": "1,5", "atomic": null },
+    { "input": "1.2.3", "atomic": null },
+    { "input": "abc", "atomic": null }
+  ],
+  "usdc_ui": [
+    { "ui": 2.01, "atomic": 2010000 },
+    { "ui": 2.03, "atomic": 2030000 },
+    { "ui": 4.1, "atomic": 4100000 },
+    { "ui": 0.000249, "atomic": 249 },
+    { "ui": 0.000251, "atomic": 251 },
+    { "ui": 2.009999, "atomic": 2009999 },
+    { "ui": 1000.0, "atomic": 1000000000 },
+    { "ui": 0.0, "atomic": 0 },
+    { "ui": -0.5, "atomic": null }
+  ],
+  "on_chain_event_id": [
+    { "event_id": "islanddao-v4-demo", "id": 15159210065911598203 },
+    { "event_id": "flow-test-event", "id": 5055890856068877793 },
+    { "event_id": "", "id": 14695981039346656037 }
+  ],
+  "escrow_pda": {
+    "program_id": "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T",
+    "usdc_mint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+    "organizer": "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b",
+    "attendee": "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b",
+    "cases": [
+      {
+        "event_id": 1,
+        "escrow": "3CzSgvftMgjQE1Du9uyamJe6xVCMmu1tvEhHc172Z4JD",
+        "escrow_bump": 255,
+        "deposit": "EwGrFaXTJdY8cv3T4d93shtASJZdp1t34Y7rGtbf5Fhi",
+        "deposit_bump": 252,
+        "vault": "DXiJimCs3Rzv1i3W93oeRSoxcT8Coeo2YqA7iUaQKndQ"
+      },
+      {
+        "event_id": 15159210065911598203,
+        "escrow": "77auoC9XY8NCBGdqkgyB5QGZGqtqRCqozgH92hVCk26L",
+        "escrow_bump": 254,
+        "deposit": "EgV8p5tCSwjXnY9JR8WJpwxWDU4dnbfxZuJ5ob7YZee6",
+        "deposit_bump": 254,
+        "vault": "2sm3vw34g4smPR1M323waZij5ZitCjUcZmr5wBhbk1Yx"
+      },
+      {
+        "event_id": 5055890856068877793,
+        "escrow": "4jtgLbA9kVegEwAT26bE3J88orKZScXvtYViStf24jug",
+        "escrow_bump": 254,
+        "deposit": "uiqWM3z5j996coq3s7xiYuZ1GBKf5pP8pRhgxeQP2Zb",
+        "deposit_bump": 255,
+        "vault": "JDgK9ugykMdtZkXSxWPcTVnxZWAJU6YEA463cPN8dYhE"
+      }
+    ]
+  }
+}

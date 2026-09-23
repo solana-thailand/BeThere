@@ -94,7 +94,17 @@ owner decision.
     deletes the issue file.
   - Needs an owner OK before purging the existing closed files, since it
     changes where the team looks for history.
-- [ ] **Pinned golden vectors.** One `domain` fixture of
+- [~] **Pinned golden vectors.** Part done 2026-09-24:
+  `domain/tests/fixtures/golden_vectors.json` pins USDC string/float → atomic
+  (issue 146), the on-chain event id (now `domain::onchain`) and escrow /
+  deposit PDAs + vault ATAs for three event ids (two need bump 254). The PDA
+  values come from `solana find-program-derived-address`, not our code;
+  `scripts/verify/golden_vectors_check.sh` re-derives them (`--self-test`).
+  Asserted by `domain/tests/golden_vectors.rs` and
+  `worker/tests/golden_vectors_escrow.rs` (a planted wrong address went red).
+  **Left:** instruction-data encoding (the builders compose bytes inline;
+  needs pure encoders first), JWT, and the escrow-crate / flow-harness
+  consumers. Original scope: one `domain` fixture of
   (input → expected bytes) for:
   - escrow PDA derivation and instruction-data encoding;
   - JWT signing;

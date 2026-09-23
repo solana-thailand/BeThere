@@ -7,6 +7,7 @@ use event_checkin_domain::models::event::{
     DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, MAX_TICKET_NOTE_CHARS,
     normalize_sheet_name,
 };
+use event_checkin_domain::money::parse_usdc_atomic;
 use leptos::prelude::*;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
@@ -576,14 +577,22 @@ pub fn EventFormComponent(
 
         // Validate deposit fields when deposit is enabled
         if current_form.deposit_enabled {
-            let usdc_val = current_form
-                .deposit_amount_usdc
-                .parse::<f64>()
-                .unwrap_or(0.0);
+            let usdc_text = current_form.deposit_amount_usdc.trim();
+            let Some(usdc_atomic) = (match usdc_text {
+                "" => Some(0),
+                text => parse_usdc_atomic(text),
+            }) else {
+                components::show_toast(
+                    &set_toast,
+                    "USDC amount must be a plain number with at most 6 decimals",
+                    components::ToastType::Error,
+                );
+                return;
+            };
             let thb_val = current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0);
 
             // At least one deposit amount must be set
-            if usdc_val == 0.0 && thb_val == 0 {
+            if usdc_atomic == 0 && thb_val == 0 {
                 components::show_toast(
                     &set_toast,
                     "At least one deposit amount (USDC or THB) is required when deposit is enabled",
@@ -593,7 +602,7 @@ pub fn EventFormComponent(
             }
 
             // USDC minimum precision (6 decimals → 0.01 smallest meaningful)
-            if usdc_val > 0.0 && usdc_val < 0.01 {
+            if usdc_atomic > 0 && usdc_atomic < 10_000 {
                 components::show_toast(
                     &set_toast,
                     "Minimum deposit is 0.01 USDC",
@@ -603,7 +612,7 @@ pub fn EventFormComponent(
             }
 
             // USDC max cap (SEC-003: backend enforces $1,000 = 1,000,000,000 lamports)
-            if usdc_val > 1000.0 {
+            if usdc_atomic > 1_000_000_000 {
                 components::show_toast(
                     &set_toast,
                     "Maximum deposit is 1,000 USDC",
@@ -623,7 +632,7 @@ pub fn EventFormComponent(
             }
 
             // In Create mode with USDC deposit > 0, wallet connection is required
-            if is_create && usdc_val > 0.0 && create_wallet_pk.get().is_empty() {
+            if is_create && usdc_atomic > 0 && create_wallet_pk.get().is_empty() {
                 components::show_toast(
                     &set_toast,
                     "Connect your Solana wallet to create event with USDC deposit escrow",
@@ -635,7 +644,7 @@ pub fn EventFormComponent(
             // Escrow init requires USDC amount — check early when wallet is connected
             let do_escrow_init =
                 !create_wallet_pk.get().is_empty() && !create_wallet_name.get().is_empty();
-            if do_escrow_init && usdc_val == 0.0 {
+            if do_escrow_init && usdc_atomic == 0 {
                 components::show_toast(
                     &set_toast,
                     "USDC deposit amount is required to initialize on-chain escrow",
@@ -685,11 +694,8 @@ pub fn EventFormComponent(
                 organizer_emails: parse_emails(&current_form.organizer_emails),
                 staff_emails: parse_emails(&current_form.staff_emails),
                 deposit_enabled: current_form.deposit_enabled,
-                deposit_amount_usdc: (current_form
-                    .deposit_amount_usdc
-                    .parse::<f64>()
-                    .unwrap_or(0.0)
-                    * 1_000_000.0) as u64,
+                deposit_amount_usdc: parse_usdc_atomic(&current_form.deposit_amount_usdc)
+                    .unwrap_or(0),
                 deposit_amount_thb: current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),
                 promptpay_id: current_form.promptpay_id.trim().to_string(),
                 escrow_address: current_form.escrow_address.trim().to_string(),
@@ -932,11 +938,7 @@ pub fn EventFormComponent(
                 staff_emails: Some(parse_emails(&current_form.staff_emails)),
                 deposit_enabled: Some(current_form.deposit_enabled),
                 deposit_amount_usdc: Some(
-                    (current_form
-                        .deposit_amount_usdc
-                        .parse::<f64>()
-                        .unwrap_or(0.0)
-                        * 1_000_000.0) as u64,
+                    parse_usdc_atomic(&current_form.deposit_amount_usdc).unwrap_or(0),
                 ),
                 deposit_amount_thb: Some(
                     current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),

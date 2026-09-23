@@ -32,7 +32,8 @@ mod quiz;
 
 mod sheets;
 mod solana;
-mod solana_escrow;
+// Public so `worker/tests/golden_vectors_escrow.rs` can pin PDA derivation.
+pub mod solana_escrow;
 // Public so `worker/tests/security_spike_alert.rs` can drive the detector.
 pub mod spike;
 mod state;

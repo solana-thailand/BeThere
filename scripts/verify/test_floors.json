@@ -44,6 +44,8 @@
     "event_checkin_domain src/lib.rs": 157,
     "event_checkin_worker src/lib.rs": 321,
     "event_enum_column_fallbacks tests/event_enum_column_fallbacks.rs": 13,
+    "golden_vectors tests/golden_vectors.rs": 6,
+    "golden_vectors_escrow tests/golden_vectors_escrow.rs": 2,
     "image_kind tests/image_kind.rs": 5,
     "linked_email_guards tests/linked_email_guards.rs": 2,
     "log_pii_guard tests/log_pii_guard.rs": 8,
