@@ -4,7 +4,8 @@
 >
 > | | |
 > |---|---|
-> | **new production version** | **`05d7df99-f1cd-45af-a4c5-e6cfdbf054d0`** |
+> | **production version (hotfix)** | **`11335a18-da72-4550-915d-1645dab060f6`** |
+> | superseded — broke slip upload, see `.issues/138` | `05d7df99-f1cd-45af-a4c5-e6cfdbf054d0` |
 > | rollback target (previous) | `f5b99ef0-2843-4352-8c8b-9800020f5c4a` |
 > | migrations applied | 0046, 0047, 0049, 0050 — all ✅ |
 > | 0047 backfill on prod | cash 40 / credit 14 / comp 3 — **identical to the local rehearsal** |
@@ -259,6 +260,29 @@ curl -sI https://bethere.solana-thailand.workers.dev/ | rg -i 'content-type'
 **4. Open a real ticket page in a browser.** `cargo check`, clippy and a
 `curl` 200 have all passed on a visibly broken page in this repo before. Look
 at it.
+
+## Step 7.5 — check that WRITES still work, not just reads ⚠️
+
+**Added after `.issues/138`.** Everything above this line verifies *reads*.
+The 2026-09-23 deploy passed every one of them while **every slip upload in
+production was returning 500** — a CHECK constraint added by one of its own
+migrations rejected what the application writes. Reads cannot see that.
+
+```bash
+# Write volume over the last few days. A zero on deploy day against a
+# non-zero baseline is an outage, and it shows up in one command.
+npx wrangler d1 execute bethere-db --remote --json --command \
+  "SELECT substr(uploaded_at,1,10) AS day, COUNT(*) AS n FROM thb_deposits
+    WHERE uploaded_at >= date('now','-5 days') GROUP BY day ORDER BY day;"
+```
+
+Run it **a few hours after** the deploy, when people have had time to act. On
+2026-09-23 it read `20th: 4 · 21st: 3 · 22nd: 3 · 23rd: 0` — the outage, plain
+in the data.
+
+Better still, and not yet built: an authenticated write against **staging**
+after every deploy. Staging's `thb_deposits` is empty, which is precisely why
+its rehearsal could not catch this.
 
 ## Step 8 — backfill the ticket tiers — ⚠️ DO NOT RUN BEFORE READING THIS
 

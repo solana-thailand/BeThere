@@ -1,7 +1,8 @@
 # 138 — Every slip upload 500s: an empty string where the CHECK wants NULL
 
-**Status:** cause proven, fixed, guarded — 2026-09-23. **A regression I
-introduced the same morning.**
+**Status:** cause proven, fixed, guarded, and **DEPLOYED 2026-09-23**,
+production version `11335a18-da72-4550-915d-1645dab060f6`. **A regression I
+introduced the same morning** in `05d7df99`.
 **Found:** 2026-09-23, owner reported an attendee who transferred money that
 morning could not upload their slip: `Failed to upload slip: API error (500):
 internal error`.
@@ -138,6 +139,22 @@ the reasoning.
 Gates: `clippy --workspace --all-targets -D warnings` exit 0 · 49 workspace
 test binaries, 0 failures.
 
+## 4.5 The outage window, measured
+
+Slips successfully recorded per day, from production:
+
+| day | slips landed |
+|---|---:|
+| 2026-09-20 | 4 |
+| 2026-09-21 | 3 |
+| 2026-09-22 | 3 |
+| **2026-09-23 (today)** | **0** |
+
+Migration 0047 was applied at ~01:00 on the 23rd. Against a baseline of 3–4 a
+day, **zero** landed in the ~10 hours after. That is the outage, visible in the
+data without needing a single log line — and it is the check that should have
+been run before declaring the morning deploy a success.
+
 ## 5. Impact on real attendees
 
 Anyone who tried to upload a slip between the deploy (~01:00) and this fix got
@@ -160,6 +177,14 @@ nothing behind. Worth a message to the RTM#6 list after deploying.
 - **A smoke test that actually writes.** The deploy runbook verifies reads
   (health, a ticket payload, Content-Type). Nothing in it writes. A single
   authenticated write against staging would have caught this in seconds.
+- **A post-deploy sanity query on write volume.** `SELECT day, COUNT(*)` over
+  the last few days of `thb_deposits` takes one command and would have shown
+  "0 today, 3–4 every other day" within minutes of the morning deploy. Added to
+  the runbook.
+- **The fix itself is NOT verified against production.** Confirming it needs a
+  real slip upload, which creates a real ฿500 refund obligation against a real
+  attendee — not something to manufacture for a test. The confirmation is the
+  blocked attendee retrying. The same write-volume query above will show it.
 
 ## Related
 
