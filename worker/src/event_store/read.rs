@@ -209,6 +209,7 @@ pub async fn resolve_event_or_fallback(
                             .await
                             .map_err(ResolveError::Backend);
                         if let Some(config) = d1_result? {
+                            let config = with_kv_only_fields(Some(kv), config).await;
                             tracing::info!(
                                 event_id = %config.id,
                                 slug = %config.slug,
@@ -282,6 +283,33 @@ async fn resolve_event_from_d1(
     }
 }
 
+/// Restore the fields D1 cannot represent onto an event resolved from D1.
+///
+/// `comp_emails` (the deposit-waiver list) lives only in the KV config, so
+/// `D1EventRow::to_event_config` returns it empty. A D1 resolve is not proof
+/// the KV config is absent: the KV *index* is what missed, and `update_event`
+/// writes the config by id whether or not the index has an entry. Reading it
+/// by id recovers the list; without this every listed guest was charged
+/// (`.issues/139`).
+///
+/// Only the D1 fallback pays for the extra KV read. A read failure keeps the
+/// empty list — the pre-fix behaviour — and is logged, not raised: failing
+/// registration because the waiver list is unreadable would turn away the
+/// paying attendees too.
+async fn with_kv_only_fields(kv: Option<&KvStore>, mut config: EventConfig) -> EventConfig {
+    let Some(kv) = kv else {
+        return config;
+    };
+    match get_event_config(kv, &config.id).await {
+        Ok(Some(kv_config)) => config.comp_emails = kv_config.comp_emails,
+        Ok(None) => {}
+        Err(e) => {
+            tracing::warn!(event_id = %config.id, error = %e, "D1-resolved event: KV-only fields unreadable, comp_emails left empty");
+        }
+    }
+    config
+}
+
 // ---------------------------------------------------------------------------
 // Slug-based resolution (KV → D1 fallback)
 // ---------------------------------------------------------------------------
@@ -317,7 +345,7 @@ pub async fn resolve_event_by_slug(
             .map_err(ResolveError::Backend)?
     {
         tracing::info!(%slug, event_id = %row.id.clone().unwrap_or_default(), "resolved event by slug from D1");
-        return Ok(row.to_event_config());
+        return Ok(with_kv_only_fields(events_kv, row.to_event_config()).await);
     }
 
     Err(ResolveError::NotFound(format!("event '{slug}' not found")))

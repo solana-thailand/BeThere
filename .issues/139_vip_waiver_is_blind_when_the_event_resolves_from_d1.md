@@ -1,6 +1,6 @@
 # 139 — The VIP waiver is blind when the event resolves from D1
 
-**Status:** known limitation, documented, **not fixed**. The feature itself is
+**Status:** **fixed on `develop`, not deployed** (§6). The feature itself is
 verified working (§2). Filed 2026-09-23 while verifying `f041baf`.
 **Severity:** low today, but it fails in the expensive direction — a guest the
 organizer promised would not pay is asked for ฿500.
@@ -72,6 +72,40 @@ this week.
 - `.issues/136` — the same read-path-invents-a-value shape, in `ticket_name`.
 - `.issues/138` — the same verify-the-write-path lesson.
 
+## 6. Fix (2026-09-23, same day) — no migration
+
+§3 assumed the fix needed a column. It does not. The KV **index** is what
+misses; the KV **config** is written by id on every admin save
+(`handlers/events/update.rs` and `event_store::write::update_event` both call
+`save_event_config` unconditionally, but only *update* an index entry that
+already exists). So an event that is missing from the index but was ever
+saved from the admin form still has its `comp_emails` in KV at `event:{id}`.
+
+`event_store::read::with_kv_only_fields` reads that key after a D1 resolve and
+copies `comp_emails` across. It runs in the D1 branch of both
+`resolve_event_by_slug` (registration) and `resolve_event_or_fallback`. The KV
+path pays nothing; the D1 fallback pays one KV read. A read failure keeps the
+old behaviour (empty, logged) rather than failing registration for everyone.
+
+**Verified A/B on a local worker** (`wrangler dev --local`, fresh state): event
+in D1 only, list saved through `PUT /api/events/vip139` (this writes the KV
+config and, correctly, no index entry), then `POST /api/public/register` as the
+listed email:
+
+| build | log | listed VIP's next step |
+|---|---|---|
+| pre-fix | `resolved event by slug from D1` | **`/deposit/…`** (charged) |
+| fix | `resolved event by slug from D1` | **`/ticket/…`**, ฿0 `comp` row |
+| fix, unlisted email | same | `/deposit/…` |
+
+Same state, same email; only the code differed. Wrangler's custom build
+recompiles on start, so the pre-fix run had the change stashed for the whole
+server lifetime, not just the `cargo build`.
+
+**Still not covered:** an event with no KV config at all. That event has never
+been saved from the admin form with KV bound, so no list exists anywhere; the
+empty list is then the truth, not a substitution.
+
 ## 5. สรุปภาษาไทย
 
 **ช่องโหว่:** รายชื่อ VIP เก็บอยู่ใน **KV** · ตอนลงทะเบียน ระบบหาข้อมูลงานจาก KV ก่อน
@@ -97,3 +131,8 @@ this week.
 
 **ควรทำหลังงาน:** เพิ่มคอลัมน์ หรือให้ทาง D1 ปฏิเสธที่จะตอบเรื่องการยกเว้นมัดจำไปเลย
 แทนที่จะคืนลิสต์ว่าง (อย่างหลังเล็กกว่าและซื่อตรงกว่า เพราะ D1 ไม่รู้จริง ๆ)
+
+**อัปเดต (แก้แล้ว ไม่ต้องใช้ migration):** ที่ miss คือ *index* ใน KV ไม่ใช่ตัว config —
+หน้าแอดมินเขียน config ลง KV ตาม id ทุกครั้งที่บันทึก · ตอนนี้ถ้า resolve จาก D1
+ระบบจะอ่าน `event:{id}` จาก KV มาเติม `comp_emails` · ทดสอบ A/B แล้ว: โค้ดเก่า VIP ไปหน้ามัดจำ,
+โค้ดใหม่ไปหน้าตั๋ว (฿0 comp) · **อยู่บน develop ยังไม่ deploy**

@@ -255,6 +255,8 @@ impl D1EventRow {
         EventConfig {
             // D1 does not carry the waived-email list; KV is its home. An empty
             // vec here means "unknown from this source", never "nobody is waived".
+            // The event resolvers restore it from KV by id
+            // (`event_store::read::with_kv_only_fields`, `.issues/139`).
             comp_emails: Vec::new(),
             id: self.id.clone().unwrap_or_default(),
             name: self.name.clone().unwrap_or_default(),
