@@ -42,10 +42,24 @@ owner decision.
   worker, domain and frontend suites. The count may only move down with a
   commit that says why. A module split that drops a whole test file would then
   turn CI red instead of reading "ok".
-- [ ] **Audit `scripts/verify/*.sh`** for katgpt's three gate lies:
+- [x] **Audit `scripts/verify/*.sh`** (2026-09-23) for katgpt's three gate lies:
   - PASS on a partial run;
   - exit 0 on zero checks;
   - an EXIT trap laundering a `set -e` abort (macOS bash 3.2).
+
+  Findings, all reproduced on `/bin/bash` 3.2.57:
+  - **EXIT traps: clean.** None of the 5 handlers calls `exit`; an abort
+    still exits 1 and `exit 3` still exits 3.
+  - **Signal resume: fixed.** In `claim_token_window_staging.sh`,
+    `trap restore EXIT INT TERM` ran the handler on Ctrl-C/TERM and then
+    *resumed*, so the remaining checks ran against the restored row and could
+    end in exit 0. INT/TERM now `exit 130`/`143`, and restore still runs once.
+  - **False-clean probe: fixed.** `pii_log_probe.sh --grep` exited 0 even
+    with leaks, and a missing log fell through `|| echo "(none)"` as clean.
+    Now: leak → 1, missing or empty log → 2, clean → 0 (tested all four).
+  - **Zero-check exits: none found.** `post_deploy_smoke.sh` and the claim
+    window script are linear and exit early on missing fixtures; the size
+    budgets exit 0 only on a measured result.
 - [ ] **Commit hygiene** in a repo `CLAUDE.md`, about 150 lines, index-style;
   its narratives go to HISTORY:
   - stage named files only;
