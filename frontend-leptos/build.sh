@@ -64,6 +64,12 @@ bump_sw_version() {
     ver="$(shasum -a 256 dist/index.html | cut -c1-16)"
     sed -i.bak -E "s/var CACHE_VERSION = \"[^\"]*\";/var CACHE_VERSION = \"bethere-${ver}\";/" dist/sw.js
     rm -f dist/sw.js.bak
+    # sed exits 0 on no match. A missed bump means activate never purges the
+    # previous build's caches (plan 028 F1), so fail the build instead.
+    if ! grep -q "var CACHE_VERSION = \"bethere-${ver}\";" dist/sw.js; then
+        echo "❌ SW cache version bump did not apply — check the CACHE_VERSION line in sw.js" >&2
+        exit 1
+    fi
     echo "🔁 SW cache version → bethere-${ver} (auto-invalidates stale caches on deploy)"
 }
 

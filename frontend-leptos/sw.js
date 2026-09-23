@@ -111,10 +111,12 @@ self.addEventListener("fetch", function (event) {
   }
 
   // /snippets/* — JS snippets (e.g. solana_wallet.js) can have content changes
-  // across builds without changing pathname. Always fetch fresh from network
-  // to avoid SRI sha384 integrity mismatch errors.
+  // across builds without changing pathname. Always revalidate with the edge
+  // to avoid SRI sha384 integrity mismatch errors. `no-cache` (not `no-store`)
+  // still asks the server every time but lets it answer 304 from the ETag
+  // instead of resending the body (plan 028 F2).
   if (url.pathname.startsWith("/snippets/")) {
-    event.respondWith(networkFirst(req));
+    event.respondWith(networkFirst(req, "no-cache"));
     return;
   }
 
@@ -136,7 +138,7 @@ self.addEventListener("fetch", function (event) {
   // cached). Network-first guarantees the latest index.html; falls back to
   // cache (or the generic SPA shell) when offline.
   if (req.mode === "navigate" || req.destination === "document") {
-    event.respondWith(networkFirst(req));
+    event.respondWith(networkFirst(req, "no-store"));
     return;
   }
 
@@ -157,15 +159,17 @@ function networkOnly(req) {
   return fetch(req, { cache: "no-store" });
 }
 
-function networkFirst(req) {
-  // `cache: "no-store"` bypasses the browser HTTP cache entirely, forcing a
-  // fresh round-trip to the edge for navigations and API calls. The edge
+// `cacheMode` is the fetch() HTTP-cache mode. Navigations pass "no-store":
+// it bypasses the browser HTTP cache entirely, forcing a fresh round-trip to
+// the edge. Snippets pass "no-cache": same freshness, but a 304 on a match.
+function networkFirst(req, cacheMode) {
+  // For navigations, "no-store" bypasses the browser HTTP cache. The edge
   // serves index.html with `Cache-Control: no-store` (see _headers), so this
   // guarantees the SW always sees the current index.html — never a stale one
   // whose hashed <script> references have been purged by the latest deploy
   // (the blank-page-after-deploy bug).
   var isNav = req.mode === "navigate" || req.destination === "document";
-  return fetch(req, { cache: "no-store" })
+  return fetch(req, { cache: cacheMode })
     .then(function (res) {
       // Only cache successful responses. A 3xx/4xx/5xx must NOT shadow the
       // network — otherwise a transient error response gets cached and served

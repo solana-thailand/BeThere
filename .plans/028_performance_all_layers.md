@@ -42,8 +42,8 @@ Two audit recommendations were **rejected after measurement** — see §4.
 - [ ] W12 HMAC `importKey` per request → cache the key.
 
 ### Frontend
-- [ ] **F1 Service worker asset cache never prunes** (`sw.js:128`): +5.4 MB decoded wasm per deploy until iOS evicts the origin. Prune same-prefix entries on put.
-- [ ] **F2 Snippets fetched `no-store` every visit** (`sw.js:168`): `no-cache` gives 304s without losing freshness.
+- [x] **F1 Service worker asset cache never prunes** — **closed negative (2026-09-24).** The premise is false: `build.sh::bump_sw_version` sets `CACHE_VERSION` to a hash of `index.html` on every build (prod and staging both serve a hashed version), and `activate` deletes every cache not named for it, so a deploy's first activation purges the previous build. The real gap was that the purge rested on an unchecked `sed` (exit 0 on no match); `bump_sw_version` now fails the build if the bump didn't land (mutant `var`→`let` → exit 1).
+- [x] **F2 Snippets fetched `no-store` every visit** — done (2026-09-24): `networkFirst(req, cacheMode)`; snippets pass `no-cache`, navigations keep `no-store`. Headless Chrome A/B over 3 loads: old SW 33× 200, new SW 11× 200 then 22× 304; app boots, 0 SRI errors. Staging edge sends an ETag and answers `If-None-Match` with 304.
 - [ ] F3 Scan-to-result latency: two stacked 300 ms polls (JS detect + Rust poll). Callback instead of polling: −150–400 ms per scan.
 - [ ] F4 Scanner mount fetches `/api/events/{id}` twice and pages through every event.
 - [ ] F5 Public event countdown interval never cleared (`on_cleanup` after `.await` has no owner).
