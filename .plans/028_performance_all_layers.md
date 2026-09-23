@@ -23,6 +23,7 @@ Two audit recommendations were **rejected after measurement** — see §4.
 | D7 | door CPU (iOS) | jsQR loop: canvas resized only on size change, `willReadFrequently`, `inversionAttempts: "dontInvert"` (both QR generators draw dark-on-light) | removes per-frame canvas realloc + GPU readback + the second inverted decode pass |
 | D9 | door latency | check-in/undo: the Sheets column mapping is resolved inside the `wait_until` task, not before the response (`sheets::column_mapping_or_hardcoded`) | −1 KV read (a Sheets header fetch on a miss) on every scan's critical path |
 | D10 | attendee phones | ticket poll skips `set_state` when the payload is byte-identical | staging: the child `event-series` fetch went from once per poll to once per page |
+| D11 | security trade-off | jsQR now loaded as `dist/jsQR.js` with SRI, not the on-the-fly `jsQR.min.js` (`.plans/029`) | **+11 KB brotli** (42.0 → 53.3 KB), paid only without `BarcodeDetector` (iOS) and loaded in parallel with the camera prompt. F10 removes it |
 | D8 | stability | `try_get()` in the scanner poll + undo loops; adventure timer cleared on unmount and reads via `try_with` | `.get()` on a disposed signal panics → wasm trap under `panic = "abort"` after client-side navigation |
 
 ## 2. Queued — ranked by (impact × frequency) / risk
@@ -49,6 +50,7 @@ Two audit recommendations were **rejected after measurement** — see §4.
 - [ ] F6 Admin roster rebuilds every row per keystroke/checkbox; no debounce.
 - [ ] F7 Adventure grid re-created per move; ~20 `GameState` clones.
 - [ ] F8 Leaked global keydown listeners (`admin.rs:563`, `events_page.rs:78`); `SessionTimer` loops stack.
+- [ ] F10 Self-host jsQR (same origin, precompressed like the wasm): wins back D11's 11 KB, removes the venue-Wi-Fi CDN dependency, and lets the CSP drop `cdn.jsdelivr.net`.
 - [ ] F9 CSS: 22 unminified render-blocking sheets + 5 Inter weights. ~0 effect on first paint while the wasm dominates ([[measure-at-the-compression-served]]); hygiene.
 
 ### Measurement
