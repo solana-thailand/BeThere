@@ -12,7 +12,7 @@
 #   ./validate_d1.sh --clean      # Remove seeded test data
 #
 # This script validates:
-#   1. D1 health endpoint connectivity + row counts
+#   1. D1 health endpoint connectivity; row counts via read-only wrangler
 #   2. D1-first read path (claim token lookup)
 #   3. D1 dual-write on registration (needs manual registration)
 
@@ -33,6 +33,13 @@ pass() { echo -e "${GREEN}✓${NC} $1"; }
 fail() { echo -e "${RED}✗${NC} $1"; }
 info() { echo -e "${YELLOW}ℹ${NC} $1"; }
 
+# Row count via a read-only remote query. /api/health no longer returns counts
+# (issue 147). Prints 0 when the query fails.
+d1_count() {
+    npx wrangler d1 execute "$D1_DB" --remote --json --command \
+        "SELECT COUNT(*) AS n FROM $1" 2>/dev/null | jq -rs '[.[] | arrays | .[0].results[0].n][0] // 0'
+}
+
 # ─── 1. Health Check ────────────────────────────────────────────
 echo ""
 echo "=== D1 E2E Validation ==="
@@ -42,9 +49,9 @@ info "Checking health endpoint..."
 HEALTH=$(curl -s "${BASE_URL}/api/health")
 STATUS=$(echo "$HEALTH" | jq -r '.status // empty')
 D1_CONNECTED=$(echo "$HEALTH" | jq -r '.d1.connected // false')
-ATTENDEES=$(echo "$HEALTH" | jq -r '.d1.counts.attendees // 0')
-EVENTS=$(echo "$HEALTH" | jq -r '.d1.counts.events // 0')
-CONTACTS=$(echo "$HEALTH" | jq -r '.d1.counts.contacts // 0')
+ATTENDEES=$(d1_count attendees)
+EVENTS=$(d1_count events)
+CONTACTS=$(d1_count contacts)
 
 if [ "$STATUS" = "ok" ]; then
     pass "Health endpoint: status=$STATUS"
@@ -89,9 +96,8 @@ if [ "${1:-}" = "--seed" ]; then
     # Verify seed
     echo ""
     info "Verifying seeded data..."
-    HEALTH2=$(curl -s "${BASE_URL}/api/health")
-    ATT2=$(echo "$HEALTH2" | jq -r '.d1.counts.attendees // 0')
-    EVT2=$(echo "$HEALTH2" | jq -r '.d1.counts.events // 0')
+    ATT2=$(d1_count attendees)
+    EVT2=$(d1_count events)
     if [ "$ATT2" -gt "$ATTENDEES" ] && [ "$EVT2" -gt "$EVENTS" ]; then
         pass "D1 counts incremented: attendees=$ATT2, events=$EVT2"
     else
@@ -149,10 +155,9 @@ done
 
 # ─── Summary ────────────────────────────────────────────────────
 # Refresh counts after any seeding
-FINAL_HEALTH=$(curl -s "${BASE_URL}/api/health")
-FINAL_ATT=$(echo "$FINAL_HEALTH" | jq -r '.d1.counts.attendees // 0')
-FINAL_EVT=$(echo "$FINAL_HEALTH" | jq -r '.d1.counts.events // 0')
-FINAL_CON=$(echo "$FINAL_HEALTH" | jq -r '.d1.counts.contacts // 0')
+FINAL_ATT=$(d1_count attendees)
+FINAL_EVT=$(d1_count events)
+FINAL_CON=$(d1_count contacts)
 
 echo ""
 echo "=== Validation Summary ==="

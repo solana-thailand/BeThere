@@ -57,6 +57,7 @@
     "onchain_event_id_exactness tests/onchain_event_id_exactness.rs": 6,
     "pod tests/pod.rs": 9,
     "precompressed_asset tests/precompressed_asset.rs": 2,
+    "public_health_no_counts tests/public_health_no_counts.rs": 2,
     "quiz_readiness_guard tests/quiz_readiness_guard.rs": 2,
     "r2_cache_policy tests/r2_cache_policy.rs": 4,
     "refund_proof_link_guard tests/refund_proof_link_guard.rs": 2,
