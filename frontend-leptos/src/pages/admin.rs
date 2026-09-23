@@ -111,6 +111,7 @@ fn is_vip_ticket(ticket_name: &str) -> bool {
 fn deposit_badge_for(
     a: &AttendeeListItem,
     is_in_person: bool,
+    deposit_required: bool,
 ) -> Option<(&'static str, &'static str)> {
     if !is_in_person {
         return None; // online attendees don't deposit
@@ -140,9 +141,24 @@ fn deposit_badge_for(
         _ if a.thb_verified || is_deposit_verified => {
             Some(("badge badge-success", "Deposit \u{2713}"))
         }
-        // A slip is in but unverified, or a USDC deposit is pending. The only
-        // state genuinely waiting on the organizer.
+        // A slip IS in, but nobody has checked it. Waiting on the ORGANIZER.
         _ if thb.is_some() || has_deposit => Some(("badge badge-warning", "Deposit pending")),
+        // Nothing submitted at all, on an event that requires a deposit.
+        // Waiting on the ATTENDEE — a different action, so a different badge.
+        //
+        // This state had no badge of its own until 2026-09-23. It was covered
+        // by accident: `deposit_amount` is `Some("0")` for most rows, so the
+        // old `is_some()` check painted everyone "Deposit pending" — wrong for
+        // comps and credit users, but right often enough that the organizer
+        // relied on it to see who still owed money. Fixing that
+        // (`.issues/137`) removed the accident and the signal with it, which
+        // the owner noticed immediately.
+        //
+        // "No slip yet" rather than "Not paid": the system knows a slip is
+        // absent, not that the money is. `.issues/138` is exactly that case —
+        // people HAD transferred and could not upload, and a roster calling
+        // them unpaid would have been both wrong and accusatory.
+        _ if deposit_required => Some(("badge badge-danger", "No slip yet")),
         _ => None,
     }
 }
@@ -1643,7 +1659,11 @@ pub fn Admin() -> impl IntoView {
                                     // "Deposit pending" forever. The `thb_*`
                                     // fields are the roster's first look at
                                     // `thb_deposits`.
-                                    let deposit_badge = deposit_badge_for(attendee, is_attendee_in_person);
+                                    let deposit_badge = deposit_badge_for(
+                                        attendee,
+                                        is_attendee_in_person,
+                                        current_deposit_enabled.get(),
+                                    );
 
                                     // For online: show claim status when no deposit flow
                                     let claim_badge = if !is_attendee_in_person && has_nft {
@@ -2406,8 +2426,9 @@ mod deposit_badge_tests {
         }
     }
 
+    /// Deposit-enabled event, the normal case for an in-person roster.
     fn label(a: &AttendeeListItem) -> Option<&'static str> {
-        deposit_badge_for(a, true).map(|(_, text)| text)
+        deposit_badge_for(a, true, true).map(|(_, text)| text)
     }
 
     /// The reported bug: a staff comp carries `deposit_amount_usdc = 0` — a
@@ -2470,18 +2491,49 @@ mod deposit_badge_tests {
         }
     }
 
-    /// Nobody has deposited anything: no badge at all, not a pending one.
+    /// Nobody has submitted anything, on an event that requires a deposit:
+    /// this is the person the organizer still has to chase, and it must be
+    /// visible. Losing it was the regression the owner reported the same day
+    /// `.issues/137` shipped.
     #[test]
-    fn an_attendee_with_no_deposit_gets_no_badge() {
-        assert_eq!(label(&row()), None);
-        // A zero USDC amount is still no deposit.
+    fn an_attendee_who_has_submitted_nothing_is_flagged() {
+        assert_eq!(label(&row()), Some("No slip yet"));
+        // A zero USDC amount is not a deposit — same state.
         let mut a = row();
         a.deposit_amount = Some("0".into());
-        assert_eq!(label(&a), None);
+        assert_eq!(label(&a), Some("No slip yet"));
         // ...and an empty string must not parse into something truthy.
         let mut b = row();
         b.deposit_amount = Some("".into());
-        assert_eq!(label(&b), None);
+        assert_eq!(label(&b), Some("No slip yet"));
+    }
+
+    /// The two "needs action" states are NOT the same and must not share a
+    /// badge: one waits on the organizer to verify, the other waits on the
+    /// attendee to send anything at all.
+    #[test]
+    fn nothing_submitted_reads_differently_from_an_unchecked_slip() {
+        let nothing = label(&row());
+        let mut submitted = row();
+        submitted.thb_source = Some("cash".into());
+        submitted.thb_verified = false;
+        assert_eq!(nothing, Some("No slip yet"));
+        assert_eq!(label(&submitted), Some("Deposit pending"));
+        assert_ne!(nothing, label(&submitted));
+    }
+
+    /// An event with no deposit at all must not accuse anyone of owing one.
+    #[test]
+    fn an_event_without_deposits_flags_nobody() {
+        assert_eq!(deposit_badge_for(&row(), true, false), None);
+        // ...but a deposit that somehow exists is still reported.
+        let mut a = row();
+        a.thb_source = Some("cash".into());
+        a.thb_verified = true;
+        assert_eq!(
+            deposit_badge_for(&a, true, false).map(|(_, t)| t),
+            Some("Deposit \u{2713}")
+        );
     }
 
     /// A real USDC deposit still reads pending — the escrow path is unchanged
@@ -2501,6 +2553,6 @@ mod deposit_badge_tests {
         let mut a = row();
         a.thb_source = Some("cash".into());
         a.deposit_amount = Some("500".into());
-        assert_eq!(deposit_badge_for(&a, false), None);
+        assert_eq!(deposit_badge_for(&a, false, true), None);
     }
 }

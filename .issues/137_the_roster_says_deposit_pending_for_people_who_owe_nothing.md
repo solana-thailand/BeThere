@@ -141,6 +141,47 @@ Staff Person     -> ["In-Person","Pending","Comp ✓","staff@ex.com"]
 binaries, 0 failures · frontend `fmt --check`, wasm32 `clippy -D warnings`,
 host tests all green · shellcheck clean.
 
+## 4.5 Follow-up the same day: the signal I removed
+
+Shipping §3 removed a badge the owner was relying on, and they spotted it
+within hours: **an attendee who has submitted nothing showed no badge at all.**
+
+That state was previously covered *by accident*. `deposit_amount` is
+`Some("0")` for nearly every row, so the old `is_some()` check painted
+everyone "Deposit pending" — wrong for comps and credit users, but right often
+enough that it doubled as "who still owes money". Removing the false positive
+removed the accident, and the true signal with it.
+
+The gap was real: **there was never a badge for "in-person, deposit required,
+nothing submitted"** — which is the single most actionable row on the screen.
+
+Added: **`No slip yet`** (`badge-danger`), gated on the event's
+`deposit_enabled` so an event without deposits accuses nobody.
+
+**Why that wording.** Not "Not paid" or "Unpaid": the system knows a *slip* is
+absent, not that the *money* is. `.issues/138` is exactly that case — people
+had transferred and could not upload, and a roster calling them unpaid would
+have been both wrong and accusatory on the same day.
+
+The two action-needed states are now distinct, because the actions differ:
+
+| badge | who is it waiting on |
+|---|---|
+| `Deposit pending` | **the organizer** — a slip is in, nobody has checked it |
+| `No slip yet` | **the attendee** — nothing has been submitted |
+
+Rendered, all four states on one roster:
+
+```
+Paid Person     -> Deposit ✓
+Slip Sent       -> Deposit pending
+Staff Person    -> Comp ✓
+Unpaid Person   -> No slip yet
+```
+
+Tests grew from 8 to 10, including one asserting the two action states never
+collapse into the same label.
+
 ## 5. What this does NOT fix
 
 - **`save_deposit_status_to_d1` is still dead**, and `attendees.deposit_status`
@@ -201,6 +242,26 @@ hazard in `.issues/136` §6.6. Filed as a follow-up, not built here.
 
 **ทดสอบแล้ว 3 ชั้น:** เทส 8 ตัว (**รันกับโค้ดเก่าแล้วพัง 6 ตัว** = เทสจับบั๊กได้จริง) · ยิง API จริง 5 สถานะถูกหมด · **เปิดหน้า admin ในเบราว์เซอร์จริง** เห็นป้ายถูกต้องครบ
 
-**ยังไม่ deploy** — เป็นการแก้โค้ดล้วน **ไม่มี migration** และปลอดภัยไม่ว่าจะ deploy ฝั่งไหนก่อน
+**ตามมาอีกเรื่องในวันเดียวกัน:** หลัง deploy เจ้าของสังเกตว่า **คนที่ยังไม่ส่งสลิปเลย ไม่มีป้ายขึ้นเลย**
+
+เดิมสถานะนี้ถูกครอบด้วย**ความบังเอิญ** — เพราะ `deposit_amount` เป็น `Some("0")` เกือบทุกแถว
+ทุกคนเลยขึ้น "Deposit pending" หมด ผิดสำหรับ staff/credit แต่**บังเอิญถูกพอที่จะใช้ดูว่าใครยังไม่จ่าย**
+พอแก้ของผิดออก ของที่บังเอิญถูกก็หายไปด้วย
+
+**ความจริงคือไม่เคยมีป้ายสำหรับ "ต้องมัดจำ แต่ยังไม่ส่งอะไรมาเลย"** ซึ่งเป็นแถวที่สำคัญที่สุดบนหน้าจอ
+
+**เพิ่มป้าย `No slip yet`** (สีแดง) และผูกกับ `deposit_enabled` ของงาน — งานที่ไม่เก็บมัดจำจะไม่ขึ้นป้ายนี้กับใคร
+
+**ทำไมใช้คำนี้** ไม่ใช้ "ยังไม่จ่าย" เพราะ**ระบบรู้แค่ว่าไม่มีสลิป ไม่ได้รู้ว่าไม่มีเงิน**
+— `.issues/138` คือกรณีนั้นเป๊ะ ๆ คนโอนเงินมาแล้วแต่อัปโหลดไม่ได้ ถ้าขึ้นว่า "ยังไม่จ่าย" จะทั้งผิดและกล่าวหาเขา
+
+**ตอนนี้แยกชัด 2 สถานะที่ต้องลงมือต่างกัน:**
+
+| ป้าย | รอใคร |
+|---|---|
+| `Deposit pending` | **รอคุณตรวจ** — สลิปเข้ามาแล้ว ยังไม่มีใครดู |
+| `No slip yet` | **รอผู้เข้าร่วม** — ยังไม่ส่งอะไรมาเลย |
+
+ทดสอบในเบราว์เซอร์จริง เห็นครบ 4 สถานะแยกกันชัดเจน · เทสเพิ่มจาก 8 เป็น 10 ตัว
 
 **⚠️ เรื่อง VIP ยังแก้ไม่ได้ด้วยอันนี้** — ยังไม่มีวิธี "ยกเว้นล่วงหน้า" ให้ใคร ต้องรอให้ข้อมูลประเภทบัตรเข้าระบบก่อน ซึ่งติดปัญหา sync อยู่ (`.issues/136` §6.6)
