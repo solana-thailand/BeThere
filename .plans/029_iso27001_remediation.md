@@ -19,24 +19,43 @@
       (`paste`, `proc-macro-error2`, both pulled in by leptos), nothing
       that ships in the wasm as runtime code.
 - [x] Public ticket page no longer bounces signed-out attendees to /login (`.issues/142`)
+- [x] Staging deploy + verification of all of the above (`deploy/staging/20260923T160500Z`).
+      Served wasm/JS are byte-identical to `dist/`; two SIWS nonces in the same
+      second differ (128-bit hex); all three CDN URLs still hash to their SRI values.
+- [x] Asset-first pages had no CSP/HSTS/XFO on `develop` (`.issues/144`, from
+      `7ed1c07`'s `run_worker_first` array). Mirrored `SECURITY_HEADERS` into
+      `_headers /*` with a parity test; verified on staging.
 
 ## 2. Ungated, small (S)
 
-- [ ] CI: add a dependency advisory gate. `cargo-deny` (advisories + licenses),
+- [x] CI: add a dependency advisory gate. **Done:** `.github/workflows/security.yml`
+      (push, PR, weekly cron) runs `cargo deny … check advisories` on the root and
+      frontend lockfiles and `cargo audit` on the escrow lockfile (its graph needs
+      `quasar build`), both fed from one ignore list in `deny.toml` (6 ids, each
+      with a reason; `rand 0.7` RUSTSEC-2026-0097 is cargo-audit-only). Licenses
+      are not gated: no LICENSE exists (owner call, §4).
+      Original scope: `cargo-deny` (advisories + licenses),
       or the OSV querybatch script used for the 2026-09-23 scan, run on
       `Cargo.lock`, `frontend-leptos/Cargo.lock` and
       `bethere-escrow/Cargo.lock`. Ignore list: the escrow's
       Solana-toolchain transitive notices (`bincode`, `derivative`,
       `libsecp256k1`, `rand 0.7`, `paste`), which move only with the SBPF
       toolchain decision (`[[sbpf-v3-gate-still-closed]]`).
-- [ ] CI: gitleaks secret scan. Pin third-party actions to commit SHAs.
-- [ ] `.github/CODEOWNERS`; `SECURITY.md` names a real contact.
-- [ ] Update the secrets list in the `worker/wrangler.toml` comments. It
-      misses `WEBHOOK_SECRET`, `CROSSMINT_API_KEY`, `GITHUB_CLIENT_*`,
+- [x] CI: gitleaks secret scan. Pin third-party actions to commit SHAs. **Done:**
+      pinned gitleaks 8.30.1 binary (sha256-checked; the action needs an org
+      license) scans all history; 73 historical hits triaged as placeholders/test
+      fixtures (`.gitleaks.toml` regexes + 8 fingerprints in `.gitleaksignore`).
+      Every `uses:` is SHA-pinned with a version comment; `dtolnay/rust-toolchain`
+      now passes `toolchain: stable` explicitly (a SHA pin loses the branch-name
+      default). All workflows got `permissions: contents: read` + `concurrency`.
+- [~] `.github/CODEOWNERS` **done** (needs "Require review from Code Owners" in
+      branch protection — owner); `SECURITY.md` names a real contact (owner, §4).
+- [x] Update the secrets list in the `worker/wrangler.toml` comments (**done**, re-derived from `get_secret` calls). It
+      had missed `WEBHOOK_SECRET`, `CROSSMINT_API_KEY`, `GITHUB_CLIENT_*`,
       `TELEGRAM_BOT_TOKEN` and `SLACK_WEBHOOK_URL`.
 - [ ] Magic-byte validation on slip uploads (8.7).
 - [ ] Alert on 401 and 429 spikes through the existing Slack alert (8.16).
-- [ ] Swap the real email in `worker/scripts/seed_dev.sh` for `example.test` (8.33).
+- [x] Swap the real email in `worker/scripts/seed_dev.sh` for `example.test` (8.33).
 - [ ] Self-host jsQR: same-origin, precompressed, and no CDN on venue Wi-Fi.
       This would let the CSP drop `cdn.jsdelivr.net`.
 

@@ -192,7 +192,15 @@ EVENT_END_MS = "1777183200000"
 # - GOOGLE_SERVICE_ACCOUNT_TOKEN_URI
 # - GOOGLE_SHEET_ID
 # - STAFF_EMAILS
+# - SUPER_ADMIN_EMAILS          (secret or [vars])
+# - WEBHOOK_SECRET              (bearer for the deposit/escrow webhooks; compared in constant time)
+# - GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URI  (social linking)
+# - TELEGRAM_BOT_TOKEN          (TELEGRAM_BOT_USERNAME may be a secret or a var)
+# - CROSSMINT_API_KEY           (cNFT minting; CROSSMINT_HOST / _COLLECTION_ID may be vars)
+# - SLACK_WEBHOOK_URL           (ops alerts)
 # - PLATFORM_SHEET_ID (env var, not secret — set in [vars])
+# Source of truth: every get_secret(..)/env.secret(..) call in src/ — re-derive
+# with `rg -o 'get_secret[a-z_]*\([^"]*"[A-Z_0-9]+"' src` when this list is edited.
 
 # Phase 2 secrets (Solana / Helius NFT minting):
 # - HELIUS_RPC_URL          (optional — defaults to https://devnet.helius-rpc.com)
