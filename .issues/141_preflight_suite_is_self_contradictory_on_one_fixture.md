@@ -60,6 +60,14 @@ This needs:
 - per-flow attendee config (`FLOW_HARNESS_NOSHOW_ATTENDEE_ID` / wallet);
 - a seed mode that writes two attendees.
 
+Seeding does not need a person. On 2026-09-23 `scripts/e2e_devnet_test.sh` ran
+green end to end on staging with no browser step. It initialized its own escrow
+through `POST /api/escrow/init` → organizer-keypair signature →
+`POST /api/escrow/confirm-init`, and deposited, checked in and refunded through
+the same API ([074](074_attendee_deposit_decode_offsets_stale.md) "Full run").
+The "initialize from Manage Events" step in `flow-harness/README.md` is how it
+is done today, not a requirement. Both phases can seed their own fixtures that way.
+
 Whether a prod deploy should wait an hour for Phase B is an owner call. The
 alternative is to gate on Phase A only and run Phase B nightly.
 

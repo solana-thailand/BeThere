@@ -1,11 +1,11 @@
 # 074 — The devnet e2e decodes `AttendeeDeposit` at pre-`version` offsets, so step 9 verifies nothing
 
-Status: **fixed; offsets verified against the deployed program 2026-09-17.** All
-38 real devnet `AttendeeDeposit` accounts decode correctly, and 38/38 PDAs
-re-derive from the decoded fields (see below). The real-byte fixture tests pass
-(worker `wire::tests` 7/7, flow-harness 5/5, 2026-09-18). A full script run is
-still outstanding — but **it is no longer blocked on devnet USDC**; see
-"Remaining" below. Found while converting the `python3 -c` interpolation sites listed
+Status: **closed 2026-09-23 — full script run green against staging.** The
+offsets were verified against the deployed program on 2026-09-17 (38/38 real
+devnet `AttendeeDeposit` accounts decode and re-derive; see below). The full
+`e2e_devnet_test.sh` run that stayed outstanding is now done, after the script
+was repaired for four contract drifts it had accumulated (see "Full run —
+2026-09-23"). Found while converting the `python3 -c` interpolation sites listed
 as deferred work in [073](073_signing_keypair_in_process_argv.md).
 
 ## What happened
@@ -103,6 +103,9 @@ on one path while a twin keeps the bug is a recurring shape here.)
 
 ## Remaining
 
+**Nothing — the full run is done; see "Full run — 2026-09-23" below.** The
+history is kept as it was written.
+
 ~~A real devnet run.~~ The open question was whether the corrected offsets
 match what the deployed program writes. That is now answered from real chain
 data (below) without needing a fresh deposit. A full end-to-end run of
@@ -125,6 +128,65 @@ The harness attendee wallet is funded in both SOL and devnet USDC
 captcha. `.issues/084` carries the same correction for its own USDC blocker.
 What actually remains for a green run is the four contract drifts listed in
 `.issues/084`, not funding.
+
+## Full run — 2026-09-23
+
+`PATH=<venv with solders>:$PATH ./scripts/e2e_devnet_test.sh --skip-setup --non-interactive`
+against `bethere-staging` (DEV_MODE on), organizer = default CLI wallet
+`9Bz7p4RW…`, attendee = the funded harness wallet `7ABX2ZyP…`. **Exit 0, ALL
+PASSED**, event `e2e-test-event-1790173781`, escrow
+`95Z2hU57wKpphvhLUUXKBMb17hwrLV5s4G33vV3Q8f8a`:
+
+```
+[PASS] Escrow initialized and confirmed: 95Z2hU57… (initialized)
+[PASS] Deposit verified via webhook
+[PASS] Deposit verified on-chain (version=1)        amount 1000000
+[PASS] checked_in=true on-chain
+[PASS] AttendeeDeposit closed
+[E2E]   Attendee USDC: 8999980 -> 9999980 (raw)
+[E2E]   Vault USDC:    0 (raw)
+[PASS] Full escrow cycle verified!
+```
+
+The first two runs failed. Four drifts between the script and the Worker had
+never surfaced because the script had not been run since they landed:
+
+1. **`/api/escrow/create-vault-ata` + `/api/escrow/create-event` no longer
+   exist.** Both were folded into `POST /api/escrow/init` (one transaction:
+   idempotent vault ATA + `create_event`). The script got an empty body and
+   died at step 3. Now: `init` → sign → send → `POST /api/escrow/confirm-init`,
+   which re-derives the PDA and checks it on-chain before writing
+   `escrow_address` back. That replaces a raw `PUT /api/events/{id}`, which
+   would have recorded an address nobody had checked.
+2. **The webhook's `confirmed:false` was treated as a warning.** Since H8 the
+   verification is detached, so the first reply is *always* `false`; re-sending
+   the same signature is an idempotent no-op that answers `true` once the
+   background check lands. The script now polls it and fails if it never
+   verifies. It verified on the second poll.
+3. **Step 9 decoded an account the refund had closed.** `/api/escrow/refund`
+   builds `refund` + `close_deposit` in one transaction, so a successful refund
+   leaves no `AttendeeDeposit` to read. The old step 9 would therefore fail on
+   every *successful* run ("account not found after 10 retries"). It now asserts
+   the PDA is gone, that the attendee's USDC rose by exactly `DEPOSIT_AMOUNT` (raw
+   base units from a pre-refund snapshot), and that the single-depositor vault is 0.
+4. **`checked_in` was only asserted in step 9**, i.e. on the closed account. It is
+   now asserted in step 6, right after `mark_checked_in` confirms, while the
+   account still exists.
+
+Also: the fixed `sleep 130` before the refund became a wait until
+`event_end + 15 s` (one `EVENT_END_S` constant feeds both the event body and the
+wait), and the steps are renumbered 0–8.
+
+**The new assertions were checked in both directions**, not only on the green
+run: `poll_deposit_field` on the now-closed PDA returns failure; a zero USDC delta
+is rejected; `getTokenAccountBalance` on a non-token account yields `""`, not
+`"0"`, so a wrong vault address cannot pass as an empty vault.
+
+**Relevance to [141](141_preflight_suite_is_self_contradictory_on_one_fixture.md):**
+`flow-harness/README.md` says a fixture's escrow must be initialized by hand from
+Manage Events. This run shows that it need not be: `init` + `confirm-init`, signed
+with the organizer keypair, is an unattended path, and it is the seeding step
+141's Phase A and Phase B both need.
 
 ## Verification against real devnet accounts — 2026-09-17
 
