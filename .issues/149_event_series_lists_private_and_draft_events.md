@@ -1,7 +1,8 @@
 # 149: The public event-series endpoint lists private and draft events
 
-**Status:** open. Found from code; not reproduced against live data. No
-campaign is yet known to hold a private or draft event.
+**Status:** fixed on develop 2026-09-24 (session `event-checkin-aa`), not
+deployed. Found from code; the live repro query below has not been run, so
+whether anything leaked in prod is still unknown.
 **Found by:** session `event-checkin-9f`, while fixing `.plans/028` W4 (the
 private-event `Cache-Control` bug).
 **Severity:** low-medium. It is an information disclosure: names and slugs
@@ -48,3 +49,25 @@ WHERE e.visibility <> 'public' OR e.status NOT IN ('active','completed');
 
 An empty result means nothing has leaked so far. The fix is still owed,
 because the endpoint makes no promise about what a campaign contains.
+
+## Fix (develop, 2026-09-24)
+
+- `db/campaigns/series.rs::series_summaries_sql()` is now a pure builder:
+  `INNER JOIN events` plus `e.visibility = 'public' AND e.status IN
+  ('active', 'completed')`, spelled from `EventVisibility::as_str` and
+  `EventStatus::as_str`.
+- `handlers/event_series.rs` returns 404 when the requested event is not in
+  the filtered list (private, draft, archived or dangling), so its campaign is
+  not named either.
+- Test `db::campaigns::tests::series_sql_lists_only_public_live_events`.
+  Mutant (visibility line deleted) → 1 red. The SQL was also run against a
+  scratch SQLite table with one event of each kind plus a dangling link: only
+  the public active and public completed rows came back.
+- Not covered natively: the handler's 404 branch (needs D1). Check it on
+  staging with a private event in a campaign.
+- Behaviour change: a dangling `campaign_events` row used to return the
+  series with `current_index = -1`; it is now a 404, which `SeriesNav`
+  already treats as "hide".
+- Left alone: `get_campaign_for_event` does not check the campaign's own
+  `status`, so a `draft` campaign's title is served for any public member
+  event. File separately if drafts are meant to be secret.
