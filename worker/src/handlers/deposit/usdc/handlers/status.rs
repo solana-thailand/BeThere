@@ -1,6 +1,6 @@
 //! GET /api/deposit/status/{attendee_id}
 
-use axum::{extract::Path, extract::Query, extract::State};
+use axum::{extract::Path, extract::Query, extract::State, http::HeaderMap};
 use event_checkin_domain::models::deposit::DepositStatusResponse;
 
 use crate::error::{ApiOk, WorkerError};
@@ -8,7 +8,7 @@ use crate::event_store;
 use crate::handlers::deposit::usdc::{
     check_and_switch_deadline, check_in_person_capacity, recover_and_verify_deposit,
 };
-use crate::handlers::ext::EventIdQuery;
+use crate::handlers::ext::{EventIdQuery, get_attendee_for_public};
 use crate::state::AppState;
 
 /// Check deposit status for an attendee.
@@ -18,6 +18,7 @@ pub async fn get_deposit_status_handler(
     State(state): State<AppState>,
     Path(attendee_id): Path<String>,
     Query(query): Query<EventIdQuery>,
+    headers: HeaderMap,
 ) -> Result<ApiOk<DepositStatusResponse>, WorkerError> {
     let kv = state.events_kv.as_ref();
     let d1 = state.d1.as_deref();
@@ -51,14 +52,8 @@ pub async fn get_deposit_status_handler(
 
     if status.is_none() && event.deposit_deadline_hours.is_some() {
         // Look up the attendee to get registration_date and participation_type
-        if let Ok(Some(attendee)) = crate::sheets::get_attendee_by_id(
-            &attendee_id,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            kv,
-        )
-        .await
+        if let Ok(Some(attendee)) =
+            get_attendee_for_public(&state, &headers, &attendee_id, &event, kv).await
         {
             registration_date = attendee.registration_date.clone();
 
@@ -93,17 +88,11 @@ pub async fn get_deposit_status_handler(
     // instruction. Only fetched when a deposit exists — no-show vs checked-in
     // is irrelevant without an on-chain deposit to refund.
     let checked_in = if status.is_some() {
-        crate::sheets::get_attendee_by_id(
-            &attendee_id,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            kv,
-        )
-        .await
-        .ok()
-        .flatten()
-        .is_some_and(|a| a.is_checked_in())
+        get_attendee_for_public(&state, &headers, &attendee_id, &event, kv)
+            .await
+            .ok()
+            .flatten()
+            .is_some_and(|a| a.is_checked_in())
     } else {
         false
     };

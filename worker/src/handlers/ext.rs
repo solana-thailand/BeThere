@@ -79,3 +79,34 @@ pub async fn resolve_event(
 pub fn resolve_kv(state: &AppState) -> Option<&worker::KvStore> {
     state.events_kv.as_ref().or(state.quiz_kv.as_ref())
 }
+
+/// Attendee lookup for unauthenticated routes. D1 first; a miss falls back to
+/// reading the whole Google Sheet only while the caller's per-IP budget lasts
+/// (plan 028 W7), otherwise `AppError::RateLimited`. The Sheet stays reachable
+/// because rows added to it directly reach D1 only after a manual sync.
+pub async fn get_attendee_for_public(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+    attendee_id: &str,
+    event: &EventConfig,
+    kv: Option<&worker::KvStore>,
+) -> Result<Option<event_checkin_domain::models::attendee::Attendee>, AppError> {
+    if let Some(attendee) = crate::sheets::get_attendee_by_id_from_d1(attendee_id, state).await {
+        return Ok(Some(attendee));
+    }
+    if !crate::middleware::rate_limit::allow_sheets_fallback(state, headers).await {
+        tracing::warn!(attendee_id = %attendee_id, "public lookup: Sheets fallback rate-limited");
+        return Err(AppError::RateLimited(
+            "too many unknown attendee lookups".into(),
+        ));
+    }
+    crate::sheets::get_attendee_by_id_from_sheets(
+        attendee_id,
+        state,
+        &event.sheet_id,
+        &event.sheet_name,
+        kv,
+    )
+    .await
+    .map_err(AppError::Internal)
+}

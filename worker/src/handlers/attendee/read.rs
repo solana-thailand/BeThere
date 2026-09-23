@@ -16,7 +16,9 @@ use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::safe_map_url;
 
-use crate::handlers::ext::{EventIdQuery, resolve_event, resolve_event_with_access, resolve_kv};
+use crate::handlers::ext::{
+    EventIdQuery, get_attendee_for_public, resolve_event, resolve_event_with_access, resolve_kv,
+};
 use crate::sheets;
 use crate::state::AppState;
 
@@ -119,28 +121,9 @@ pub async fn get_public_ticket(
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
     let kv = resolve_kv(&state);
-    // A D1 miss would read the whole Google Sheet for an unauthenticated
-    // caller. Rate-limit only that path (plan 028 W7): rows added straight to
-    // the Sheet stay reachable, and D1 hits never spend the budget.
-    let lookup = match sheets::get_attendee_by_id_from_d1(&id, &state).await {
-        Some(a) => Ok(Some(a)),
-        None if !crate::middleware::rate_limit::allow_sheets_fallback(&state, &headers).await => {
-            tracing::warn!(attendee_id = %id, "public ticket: Sheets fallback rate-limited");
-            return Err(AppError::RateLimited("too many unknown ticket lookups".into()).into());
-        }
-        None => {
-            sheets::get_attendee_by_id_from_sheets(
-                &id,
-                &state,
-                &event.sheet_id,
-                &event.sheet_name,
-                kv,
-            )
-            .await
-        }
-    };
-    let attendee = match lookup {
+    let attendee = match get_attendee_for_public(&state, &headers, &id, &event, kv).await {
         Ok(Some(a)) => a,
+        Err(e @ AppError::RateLimited(_)) => return Err(e.into()),
         Ok(None) => {
             return Err(AppError::NotFound(format!("attendee with id '{id}' not found")).into());
         }
