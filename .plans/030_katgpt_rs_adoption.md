@@ -151,10 +151,15 @@ owner decision.
     `domain/tests/common/counting_alloc.rs`, shared with `alloc_count.rs`.
     `assert_installed()` must count a `Box::new` before any 0 is trusted.
   - **Treat counts as relative:** dlmalloc on wasm differs from native.
-- [ ] **`.claude/skills/deploy-guard/SKILL.md`**:
-  - D1 backup → size budgets → `issue_ledger.py --strict` → `deploy.sh` →
-    post-deploy smoke → write-volume check → Status updates;
-  - a capped run log.
+- [x] **`.claude/skills/deploy-guard/SKILL.md`** (2026-09-24):
+  - owner-go gate → tree/SHA → D1 backup → build + size budgets →
+    `issue_ledger.py --strict` → migrations + schema read-back → `deploy.sh` +
+    `deployments list` → post-deploy smoke → write-volume check → Status
+    updates; each step has a stop condition;
+  - a capped run log in `.git/deploy-guard.log` (200 lines, never committed);
+  - the ledger step stops on flags that name a shipped issue or a rising
+    count, not on the red exit: `--strict` already carries 28 old flags
+    (26 `UNVERIFIABLE`, 2 `BRANCH_GONE`).
 - [ ] **Toolchain pin.** Add `rust-toolchain.toml`, listing `targets`
   explicitly (the katgpt wasm32 trap), plus a weekly `RUSTUP_TOOLCHAIN=stable`
   rot lane. **After RTM#6**, because it can change builds.
