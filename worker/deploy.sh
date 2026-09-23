@@ -271,6 +271,47 @@ verify_content_types() {
   return 0
 }
 
+# .issues/144: once run_worker_first became an array, HTML pages were served
+# asset-first and silently lost CSP / X-Frame-Options / HSTS — the Content-Type
+# check above stayed green. Asset-first pages get these from
+# frontend-leptos/_headers (/*), Worker-served ones from SECURITY_HEADERS.
+# Usage: verify_security_headers strict|warn — `warn` for the PUT-API fallback,
+# which cannot upload _headers (#057).
+verify_security_headers() {
+  local mode="$1"
+  local base="https://${WORKER_NAME}.solana-thailand.workers.dev"
+  local bad=0 hdrs path name missing
+  echo "🔎 Verifying security headers..."
+  # `/` is an asset, `/ticket/_smoke` exercises the SPA fallback, `/api/health` the Worker.
+  for path in "/" "/ticket/_smoke" "/api/health"; do
+    for _ in 1 2 3 4 5; do
+      hdrs=$(curl -s -D - -o /dev/null "${base}${path}" | tr -d '\r' | tr '[:upper:]' '[:lower:]')
+      echo "$hdrs" | grep -q '^content-security-policy:' && echo "$hdrs" | grep -q '^x-frame-options:' && break
+      sleep 4
+    done
+    missing=""
+    for name in content-security-policy x-frame-options strict-transport-security; do
+      echo "$hdrs" | grep -q "^${name}:" || missing="${missing} ${name}"
+    done
+    if [ -n "$missing" ]; then
+      echo "   ❌ ${path} missing:${missing}"
+      bad=1
+    else
+      echo "   ✅ ${path} → CSP, X-Frame-Options, HSTS"
+    fi
+  done
+  if [ "$bad" -ne 0 ]; then
+    if [ "$mode" = "warn" ]; then
+      echo "   ⚠️  Security headers missing — expected on the PUT fallback (no _headers, #057)."
+      return 0
+    fi
+    echo "❌ Pages are served without security headers — check frontend-leptos/_headers /* (.issues/144)." >&2
+    return 1
+  fi
+  echo "✅ Security headers verified."
+  return 0
+}
+
 # Until 2026-09-23 no deploy recorded which commit it shipped: `wrangler
 # deployments list` showed version ids with no message, so "is fix X live?" was
 # answered from hand-written issue prose that went stale on the next deploy.
@@ -407,7 +448,7 @@ else
   if CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" --message "$(deploy_provenance)" 2>&1; then
     echo "✅ Deployed via wrangler"
     record_deploy_tag wrangler
-    if verify_content_types; then
+    if verify_content_types && verify_security_headers strict; then
       restore_pnp
       exit 0
     else
@@ -566,6 +607,7 @@ else
       restore_pnp
       exit 1
     fi
+    verify_security_headers warn
   else
     echo "❌ Deploy failed (HTTP ${HTTP_CODE})"
     echo "$BODY" | "$PYTHON_BIN" -m json.tool 2>/dev/null || echo "$BODY"

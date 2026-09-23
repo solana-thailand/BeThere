@@ -55,5 +55,9 @@ array, because `index.html` is a real asset.
 
 - [ ] Prod: after the next prod deploy, re-run the `curl -D -` table above.
       `/` should now have headers too.
-- [ ] Consider adding a security-header assertion to `deploy.sh`'s smoke test
-      next to the Content-Type check. It would have caught this at deploy time.
+- [x] `deploy.sh` now runs `verify_security_headers` after the Content-Type
+      check: `/` (asset), `/ticket/_smoke` (SPA fallback), `/api/health`
+      (Worker) must carry CSP + X-Frame-Options + HSTS. Strict on the wrangler
+      path, warn-only on the PUT fallback (cannot upload `_headers`, #057).
+      Checked both directions 2026-09-23: staging → pass (rc 0); prod → fails
+      on `/` (rc 1), the live pre-existing gap above.
