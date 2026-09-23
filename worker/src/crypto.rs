@@ -453,12 +453,25 @@ pub async fn create_verified_email_jwt(
     sign_session_claims(&claims, secret).await
 }
 
-async fn sign_session_claims(claims: &Claims, secret: &str) -> Result<String, String> {
+/// `header.payload`, the bytes HS256 signs. Pure, so the framing is pinned by
+/// the `jwt_hs256` golden vectors; the HMAC itself is WebCrypto's.
+fn session_signing_input(claims: &Claims) -> Result<String, String> {
     let payload_bytes =
         serde_json::to_vec(claims).map_err(|e| format!("failed to serialize JWT claims: {e}"))?;
     let payload_b64 = base64_url_encode(&payload_bytes);
+    Ok(format!("{JWT_HEADER_B64}.{payload_b64}"))
+}
 
-    let sign_input = format!("{JWT_HEADER_B64}.{payload_b64}");
+/// Decode a token's payload segment. Tokens issued before a field was added
+/// must still decode, or a deploy logs every session out.
+fn decode_session_payload(payload_b64: &str) -> Result<Claims, String> {
+    let payload_bytes = base64_url_decode(payload_b64)?;
+    serde_json::from_slice(&payload_bytes)
+        .map_err(|e| format!("failed to deserialize JWT claims: {e}"))
+}
+
+async fn sign_session_claims(claims: &Claims, secret: &str) -> Result<String, String> {
+    let sign_input = session_signing_input(claims)?;
     let signature = hmac_sha256(secret.as_bytes(), sign_input.as_bytes()).await?;
     let sig_b64 = base64_url_encode(&signature);
 
@@ -498,10 +511,7 @@ pub async fn verify_jwt(token: &str, secret: &str) -> Result<Claims, String> {
         return Err("JWT signature verification failed".to_string());
     }
 
-    // Decode payload
-    let payload_bytes = base64_url_decode(parts[1])?;
-    let claims: Claims = serde_json::from_slice(&payload_bytes)
-        .map_err(|e| format!("failed to deserialize JWT claims: {e}"))?;
+    let claims = decode_session_payload(parts[1])?;
 
     // Check expiration
     let now = chrono::Utc::now().timestamp() as u64;
@@ -574,5 +584,36 @@ mod tests {
         let header: serde_json::Value = serde_json::from_slice(&header_bytes).unwrap();
         assert_eq!(header["alg"], "HS256");
         assert_eq!(header["typ"], "JWT");
+    }
+
+    /// Tokens signed with Python `hmac` (`jwt_hs256` in the domain fixture):
+    /// our framing must rebuild `header.payload` byte for byte, and the payload
+    /// must decode back to the same claims, including legacy tokens that
+    /// predate `email_verified`.
+    #[test]
+    fn session_jwt_framing_matches_pinned_tokens() {
+        const FIXTURE: &str = include_str!("../../domain/tests/fixtures/golden_vectors.json");
+        let fixture: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture json");
+        let cases = fixture["jwt_hs256"]["cases"]
+            .as_array()
+            .expect("jwt_hs256.cases");
+        assert!(cases.len() >= 2, "fixture lost cases");
+        for case in cases {
+            let token = case["token"].as_str().expect("token");
+            let claims: Claims =
+                serde_json::from_value(case["claims"].clone()).expect("fixture claims");
+            let (sign_input, sig_b64) = token.rsplit_once('.').expect("3-part token");
+            let (_, payload_b64) = sign_input.split_once('.').expect("3-part token");
+
+            assert_eq!(decode_session_payload(payload_b64), Ok(claims.clone()));
+            assert_eq!(base64_url_decode(sig_b64).map(|sig| sig.len()), Ok(32));
+            match case["reissue_identical"]
+                .as_bool()
+                .expect("reissue_identical")
+            {
+                true => assert_eq!(session_signing_input(&claims).as_deref(), Ok(sign_input)),
+                false => assert_ne!(session_signing_input(&claims).as_deref(), Ok(sign_input)),
+            }
+        }
     }
 }

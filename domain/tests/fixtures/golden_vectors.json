@@ -89,5 +89,12 @@
       { "ix": "deposit", "args": [18446744073709551615], "hex": "01ffffffffffffffff" },
       { "ix": "rollover_deposit", "args": [15159210065911598203, 5055890856068877793], "hex": "087bcc2fee3c5560d2e18d2143f2212a46" }
     ]
+  },
+  "jwt_hs256": {
+    "_about": "Session JWTs (worker/src/crypto.rs). token = header.payload.sig, computed with Python json (compact separators) + hmac/hashlib SHA-256 under secret \"golden-vector-secret-not-a-real-key\", not our code. reissue_identical: re-serialising the decoded claims gives the same header.payload (false for legacy tokens, which lack email_verified).",
+    "cases": [
+      { "claims": { "email": "staff@example.com", "sub": "109876543210", "email_verified": true, "iat": 1790000000, "exp": 1790086400 }, "reissue_identical": true, "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InN0YWZmQGV4YW1wbGUuY29tIiwic3ViIjoiMTA5ODc2NTQzMjEwIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImlhdCI6MTc5MDAwMDAwMCwiZXhwIjoxNzkwMDg2NDAwfQ.tbXrthgL0FO949hjVCu83tM--ELPNvpWZKwCtySqVtw" },
+      { "claims": { "email": "legacy@example.com", "sub": "42", "email_verified": false, "iat": 1790000000, "exp": 1790086400 }, "reissue_identical": false, "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6ImxlZ2FjeUBleGFtcGxlLmNvbSIsInN1YiI6IjQyIiwiaWF0IjoxNzkwMDAwMDAwLCJleHAiOjE3OTAwODY0MDB9.Si3AcCkmKKzO0ZKYX-WJCtR8sPu17DGOi3fGEzhGPQY" }
+    ]
   }
 }

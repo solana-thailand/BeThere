@@ -111,9 +111,23 @@ owner decision.
   and checks each case's discriminator and `1 + 8 × args` length against the
   program's `#[instruction(discriminator = N)]` table. Mutants: swapped
   `create_event` arg order → 1 red; a wrong fixture discriminator → 1 red.
-  **Left:** JWT, the escrow-crate / flow-harness consumers, and the
-  indexer's decode side (`escrow_indexer::EscrowInstruction::from(u8)` still
-  keeps its own discriminator table). Original scope: one `domain` fixture of
+  **Indexer decode side, done 2026-09-24:** `EscrowInstruction::from(u8)`
+  now decodes through `EventIx::from_discriminator` and the
+  `CREATE_EVENT_`/`ROLLOVER_DEPOSIT_DISCRIMINATOR` consts, so encode and
+  decode share one table. An inline test in `escrow_indexer/mod.rs` reads the
+  same fixture and checks every case decodes to its `ix` name (the stored KV
+  value) and that `create_event`'s deposit amount comes from offset 9;
+  `golden_vectors.rs` checks `from_discriminator` inverts `discriminator` on
+  all 256 bytes. Mutants: a mis-mapped `EventIx` in the worker → 2 red; a
+  mis-mapped `from_discriminator` → 1 red in domain.
+  **JWT framing, done 2026-09-24:** `jwt_hs256` in the fixture holds two
+  tokens signed with Python `hmac` (a current one and a legacy one without
+  `email_verified`). `crypto::session_signing_input` must rebuild the current
+  token's `header.payload` byte for byte; `decode_session_payload` must decode
+  both; each signature is 32 bytes. The HMAC itself is WebCrypto's and cannot
+  run natively, so it is not pinned here. Mutant: a reordered JWT header
+  (`typ` before `alg`) → 1 red.
+  **Left:** the escrow-crate / flow-harness consumers. Original scope: one `domain` fixture of
   (input → expected bytes) for:
   - escrow PDA derivation and instruction-data encoding;
   - JWT signing;
