@@ -1,3 +1,4 @@
+use event_checkin_domain::onchain::EventIx;
 use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
@@ -33,7 +34,15 @@ pub async fn build_mark_checked_in_transaction(
         acct_w(attendee_deposit),
     ];
 
-    let tx_b64 = finalize_tx(rpc_url, kv, &ctx, instruction_accounts, ctx.ix_data(2), &[]).await?;
+    let tx_b64 = finalize_tx(
+        rpc_url,
+        kv,
+        &ctx,
+        instruction_accounts,
+        ctx.ix_data(EventIx::MarkCheckedIn),
+        &[],
+    )
+    .await?;
 
     Ok(MarkCheckedInTransaction {
         transaction_b64: tx_b64,

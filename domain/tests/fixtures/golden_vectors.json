@@ -73,5 +73,21 @@
         "vault": "JDgK9ugykMdtZkXSxWPcTVnxZWAJU6YEA463cPN8dYhE"
       }
     ]
+  },
+  "escrow_ix_data": {
+    "_about": "bethere-escrow instruction data: u8 discriminator, then each arg little-endian in declaration order (bethere-escrow/src/lib.rs). hex computed with Python struct.pack, not our encoder.",
+    "cases": [
+      { "ix": "create_event", "args": [15159210065911598203, 15000000, 1790000000, -1], "hex": "007bcc2fee3c5560d2c0e1e40000000000803bb16a00000000ffffffffffffffff" },
+      { "ix": "create_event", "args": [1, 0, 0, 1790604800], "hex": "000100000000000000000000000000000000000000000000000076ba6a00000000" },
+      { "ix": "deposit", "args": [15159210065911598203], "hex": "017bcc2fee3c5560d2" },
+      { "ix": "mark_checked_in", "args": [15159210065911598203], "hex": "027bcc2fee3c5560d2" },
+      { "ix": "refund", "args": [15159210065911598203], "hex": "037bcc2fee3c5560d2" },
+      { "ix": "claim_forfeited", "args": [15159210065911598203], "hex": "047bcc2fee3c5560d2" },
+      { "ix": "close_event", "args": [15159210065911598203], "hex": "057bcc2fee3c5560d2" },
+      { "ix": "deactivate_event", "args": [15159210065911598203], "hex": "067bcc2fee3c5560d2" },
+      { "ix": "close_deposit", "args": [15159210065911598203], "hex": "077bcc2fee3c5560d2" },
+      { "ix": "deposit", "args": [18446744073709551615], "hex": "01ffffffffffffffff" },
+      { "ix": "rollover_deposit", "args": [15159210065911598203, 5055890856068877793], "hex": "087bcc2fee3c5560d2e18d2143f2212a46" }
+    ]
   }
 }

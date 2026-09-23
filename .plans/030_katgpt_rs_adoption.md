@@ -102,9 +102,18 @@ owner decision.
   `scripts/verify/golden_vectors_check.sh` re-derives them (`--self-test`).
   Asserted by `domain/tests/golden_vectors.rs` and
   `worker/tests/golden_vectors_escrow.rs` (a planted wrong address went red).
-  **Left:** instruction-data encoding (the builders compose bytes inline;
-  needs pure encoders first), JWT, and the escrow-crate / flow-harness
-  consumers. Original scope: one `domain` fixture of
+  **Instruction data, done 2026-09-24:** `domain::onchain::EscrowIxData`
+  (typed: `CreateEvent`, `EventScoped { ix: EventIx, .. }`,
+  `RolloverDeposit`) is the one encoder; the worker tx builders
+  no longer compose bytes inline. The fixture's `escrow_ix_data` (11 cases, hex
+  from Python `struct.pack`) is asserted by `golden_vectors.rs`, and
+  `domain/tests/escrow_ix_program_sync.rs` reads `bethere-escrow/src/lib.rs`
+  and checks each case's discriminator and `1 + 8 × args` length against the
+  program's `#[instruction(discriminator = N)]` table. Mutants: swapped
+  `create_event` arg order → 1 red; a wrong fixture discriminator → 1 red.
+  **Left:** JWT, the escrow-crate / flow-harness consumers, and the
+  indexer's decode side (`escrow_indexer::EscrowInstruction::from(u8)` still
+  keeps its own discriminator table). Original scope: one `domain` fixture of
   (input → expected bytes) for:
   - escrow PDA derivation and instruction-data encoding;
   - JWT signing;

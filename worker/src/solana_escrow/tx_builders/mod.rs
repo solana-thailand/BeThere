@@ -1,6 +1,7 @@
 //! All public transaction builder functions.
 
 use base64::Engine;
+use event_checkin_domain::onchain::{EscrowIxData, EventIx};
 use worker::KvStore;
 
 use super::crypto::{find_program_address, get_associated_token_address, pubkey_from_base58};
@@ -143,11 +144,13 @@ impl EscrowCtx {
         get_associated_token_address(owner, &self.usdc_mint).await
     }
 
-    /// Build instruction data: `[discriminator] + [event_id u64 LE]`.
-    pub(crate) fn ix_data(&self, discriminator: u8) -> Vec<u8> {
-        let mut data = vec![discriminator];
-        data.extend_from_slice(&self.event_id.to_le_bytes());
-        data
+    /// Instruction data `[discriminator] + [event_id u64 LE]` for this event.
+    pub(crate) fn ix_data(&self, ix: EventIx) -> Vec<u8> {
+        EscrowIxData::EventScoped {
+            ix,
+            event_id: self.event_id,
+        }
+        .encode()
     }
 }
 

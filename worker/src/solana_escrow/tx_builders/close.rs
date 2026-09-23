@@ -1,3 +1,4 @@
+use event_checkin_domain::onchain::EventIx;
 use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
@@ -37,7 +38,15 @@ pub async fn build_deactivate_event_transaction(
     // Accounts: organizer(S,W), event_escrow(W)
     let instruction_accounts = vec![acct_sw(ctx.organizer), acct_w(ctx.event_escrow)];
 
-    let tx_b64 = finalize_tx(rpc_url, kv, &ctx, instruction_accounts, ctx.ix_data(6), &[]).await?;
+    let tx_b64 = finalize_tx(
+        rpc_url,
+        kv,
+        &ctx,
+        instruction_accounts,
+        ctx.ix_data(EventIx::DeactivateEvent),
+        &[],
+    )
+    .await?;
 
     Ok(DeactivateEventTransaction {
         transaction_b64: tx_b64,
@@ -82,7 +91,15 @@ pub async fn build_close_event_transaction(
         acct_r(ctx.token_program),
     ];
 
-    let tx_b64 = finalize_tx(rpc_url, kv, &ctx, instruction_accounts, ctx.ix_data(5), &[]).await?;
+    let tx_b64 = finalize_tx(
+        rpc_url,
+        kv,
+        &ctx,
+        instruction_accounts,
+        ctx.ix_data(EventIx::CloseEvent),
+        &[],
+    )
+    .await?;
 
     Ok(CloseEventTransaction {
         transaction_b64: tx_b64,
@@ -152,7 +169,7 @@ pub async fn build_claim_forfeited_transaction(
         kv,
         &ctx,
         instruction_accounts,
-        ctx.ix_data(4),
+        ctx.ix_data(EventIx::ClaimForfeited),
         &extra,
     )
     .await?;
@@ -203,7 +220,15 @@ pub async fn build_close_deposit_transaction(
         acct_r(ctx.system_program),
     ];
 
-    let tx_b64 = finalize_tx(rpc_url, kv, &ctx, instruction_accounts, ctx.ix_data(7), &[]).await?;
+    let tx_b64 = finalize_tx(
+        rpc_url,
+        kv,
+        &ctx,
+        instruction_accounts,
+        ctx.ix_data(EventIx::CloseDeposit),
+        &[],
+    )
+    .await?;
 
     Ok(CloseDepositTransaction {
         transaction_b64: tx_b64,

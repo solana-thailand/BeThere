@@ -1,3 +1,4 @@
+use event_checkin_domain::onchain::EventIx;
 use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
@@ -74,7 +75,7 @@ pub async fn build_refund_transaction(
         kv,
         &ctx,
         instruction_accounts,
-        ctx.ix_data(3),
+        ctx.ix_data(EventIx::Refund),
         &extra,
     )
     .await?;
@@ -139,7 +140,7 @@ pub async fn build_refund_and_close_transaction(
             .iter()
             .map(|m| get_index(&m.pubkey))
             .collect(),
-        data: ctx.ix_data(3),
+        data: ctx.ix_data(EventIx::Refund),
     };
     let close_ix = CompiledInstruction {
         program_id_index,
@@ -147,7 +148,7 @@ pub async fn build_refund_and_close_transaction(
             .iter()
             .map(|m| get_index(&m.pubkey))
             .collect(),
-        data: ctx.ix_data(7),
+        data: ctx.ix_data(EventIx::CloseDeposit),
     };
 
     let tx_b64 = serialize_to_b64(rpc_url, kv, &message_accounts, &[refund_ix, close_ix]).await?;
@@ -254,7 +255,7 @@ pub async fn build_batch_claim_forfeited_transaction(
         .map(|accounts| CompiledInstruction {
             program_id_index,
             accounts: accounts.iter().map(|m| get_index(&m.pubkey)).collect(),
-            data: ctx.ix_data(4),
+            data: ctx.ix_data(EventIx::ClaimForfeited),
         })
         .collect();
 
