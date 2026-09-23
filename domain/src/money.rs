@@ -61,3 +61,66 @@ pub fn usdc_ui_to_atomic(ui_amount: f64) -> Option<u64> {
         false => None,
     }
 }
+
+/// Smallest non-zero event deposit the form accepts: 0.01 USDC.
+pub const USDC_MIN_DEPOSIT_ATOMIC: u64 = USDC_ATOMIC_PER_UNIT / 100;
+
+/// Largest event deposit (SEC-003): 1,000 USDC. The worker enforces it too.
+pub const USDC_MAX_DEPOSIT_ATOMIC: u64 = 1_000 * USDC_ATOMIC_PER_UNIT;
+
+/// Verdict on a USDC deposit field, shared by the form's live hints and its
+/// submit path so the two cannot disagree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UsdcDepositCheck {
+    /// Blank or zero: no USDC deposit.
+    Empty,
+    /// Not a plain decimal with at most [`USDC_DECIMALS`] fraction digits.
+    Invalid,
+    /// Positive but below [`USDC_MIN_DEPOSIT_ATOMIC`].
+    BelowMin,
+    /// Above [`USDC_MAX_DEPOSIT_ATOMIC`].
+    AboveMax,
+    /// A usable amount in atomic units.
+    Valid(u64),
+}
+
+impl UsdcDepositCheck {
+    /// Atomic units to submit, or `None` when the field is unusable.
+    pub fn atomic(self) -> Option<u64> {
+        match self {
+            UsdcDepositCheck::Empty => Some(0),
+            UsdcDepositCheck::Valid(atomic) => Some(atomic),
+            UsdcDepositCheck::Invalid | UsdcDepositCheck::BelowMin | UsdcDepositCheck::AboveMax => {
+                None
+            }
+        }
+    }
+
+    /// User-facing reason the field is unusable, if it is.
+    pub fn error_message(self) -> Option<&'static str> {
+        match self {
+            UsdcDepositCheck::Empty | UsdcDepositCheck::Valid(_) => None,
+            UsdcDepositCheck::Invalid => {
+                Some("USDC amount must be a plain number with at most 6 decimals")
+            }
+            UsdcDepositCheck::BelowMin => Some("Minimum deposit is 0.01 USDC"),
+            UsdcDepositCheck::AboveMax => Some("Maximum deposit is 1,000 USDC"),
+        }
+    }
+}
+
+/// Classify a USDC deposit field with exact integer parsing
+/// ([`parse_usdc_atomic`]); no f64 anywhere, so `"1e3"` is `Invalid`.
+pub fn check_usdc_deposit(input: &str) -> UsdcDepositCheck {
+    let text = input.trim();
+    if text.is_empty() {
+        return UsdcDepositCheck::Empty;
+    }
+    match parse_usdc_atomic(text) {
+        None => UsdcDepositCheck::Invalid,
+        Some(0) => UsdcDepositCheck::Empty,
+        Some(atomic) if atomic < USDC_MIN_DEPOSIT_ATOMIC => UsdcDepositCheck::BelowMin,
+        Some(atomic) if atomic > USDC_MAX_DEPOSIT_ATOMIC => UsdcDepositCheck::AboveMax,
+        Some(atomic) => UsdcDepositCheck::Valid(atomic),
+    }
+}

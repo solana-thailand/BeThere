@@ -79,6 +79,7 @@
     "thb_settlement_ownership_guard tests/thb_settlement_ownership_guard.rs": 6,
     "ticket_name_guards tests/ticket_name_guards.rs": 6,
     "ticket_note tests/ticket_note.rs": 6,
+    "usdc_deposit_check tests/usdc_deposit_check.rs": 7,
     "vendored_jsqr_integrity tests/vendored_jsqr_integrity.rs": 2,
     "virtual_checkin_gate tests/virtual_checkin_gate.rs": 5,
     "virtual_checkin_guard tests/virtual_checkin_guard.rs": 5

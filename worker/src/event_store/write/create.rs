@@ -53,8 +53,8 @@ pub async fn create_event(
     let ticket_note_in_person = normalize_ticket_note(&req.ticket_note_in_person)?;
     let ticket_note_online = normalize_ticket_note(&req.ticket_note_online)?;
 
-    // SEC-003: Max deposit cap ($1,000 USDC = 1_000_000_000 smallest units, 6 decimals)
-    const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
+    // SEC-003: Max deposit cap ($1,000 USDC, shared with the form's check)
+    const MAX_DEPOSIT_USDC: u64 = event_checkin_domain::money::USDC_MAX_DEPOSIT_ATOMIC;
     if req.deposit_amount_usdc > MAX_DEPOSIT_USDC {
         return Err(format!(
             "deposit_amount_usdc exceeds maximum cap ({MAX_DEPOSIT_USDC} = $1,000 USDC)"

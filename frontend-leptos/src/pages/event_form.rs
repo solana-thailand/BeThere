@@ -7,7 +7,7 @@ use event_checkin_domain::models::event::{
     DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, MAX_TICKET_NOTE_CHARS,
     normalize_sheet_name,
 };
-use event_checkin_domain::money::parse_usdc_atomic;
+use event_checkin_domain::money::{UsdcDepositCheck, check_usdc_deposit, parse_usdc_atomic};
 use leptos::prelude::*;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
@@ -577,16 +577,10 @@ pub fn EventFormComponent(
 
         // Validate deposit fields when deposit is enabled
         if current_form.deposit_enabled {
-            let usdc_text = current_form.deposit_amount_usdc.trim();
-            let Some(usdc_atomic) = (match usdc_text {
-                "" => Some(0),
-                text => parse_usdc_atomic(text),
-            }) else {
-                components::show_toast(
-                    &set_toast,
-                    "USDC amount must be a plain number with at most 6 decimals",
-                    components::ToastType::Error,
-                );
+            let usdc_check = check_usdc_deposit(&current_form.deposit_amount_usdc);
+            let Some(usdc_atomic) = usdc_check.atomic() else {
+                let message = usdc_check.error_message().unwrap_or_default();
+                components::show_toast(&set_toast, message, components::ToastType::Error);
                 return;
             };
             let thb_val = current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0);
@@ -596,26 +590,6 @@ pub fn EventFormComponent(
                 components::show_toast(
                     &set_toast,
                     "At least one deposit amount (USDC or THB) is required when deposit is enabled",
-                    components::ToastType::Error,
-                );
-                return;
-            }
-
-            // USDC minimum precision (6 decimals → 0.01 smallest meaningful)
-            if usdc_atomic > 0 && usdc_atomic < 10_000 {
-                components::show_toast(
-                    &set_toast,
-                    "Minimum deposit is 0.01 USDC",
-                    components::ToastType::Error,
-                );
-                return;
-            }
-
-            // USDC max cap (SEC-003: backend enforces $1,000 = 1,000,000,000 lamports)
-            if usdc_atomic > 1_000_000_000 {
-                components::show_toast(
-                    &set_toast,
-                    "Maximum deposit is 1,000 USDC",
                     components::ToastType::Error,
                 );
                 return;
@@ -2089,22 +2063,20 @@ pub fn EventFormComponent(
                                 prop:value=move || form.get().deposit_amount_usdc
                                 on:input=move |ev| set_form.update(|f| f.deposit_amount_usdc = event_target_value(&ev))
                             />
+                            {move || {
+                                let current = form.get();
+                                current
+                                    .deposit_enabled
+                                    .then(|| check_usdc_deposit(&current.deposit_amount_usdc).error_message())
+                                    .flatten()
+                                    .map(|message| view! { <div class="hint-warning-xs">{message}</div> })
+                            }}
                             <Show
                                 when=move || {
-                                    let val = form.get().deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
-                                    form.get().deposit_enabled && val > 0.0 && val < 0.01
-                                }
-                                fallback=|| view! { <div></div> }
-                            >
-                                <div class="hint-warning-xs">
-                                    "Minimum deposit is 0.01 USDC"
-                                </div>
-                            </Show>
-                            <Show
-                                when=move || {
-                                    let val = form.get().deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
-                                    let thb = form.get().deposit_amount_thb.parse::<u64>().unwrap_or(0);
-                                    form.get().deposit_enabled && val == 0.0 && thb == 0
+                                    let current = form.get();
+                                    let usdc_empty = check_usdc_deposit(&current.deposit_amount_usdc) == UsdcDepositCheck::Empty;
+                                    let thb = current.deposit_amount_thb.parse::<u64>().unwrap_or(0);
+                                    current.deposit_enabled && usdc_empty && thb == 0
                                 }
                                 fallback=|| view! { <div></div> }
                             >
@@ -2114,17 +2086,6 @@ pub fn EventFormComponent(
                             </Show>
                             <span class="quiz-setting-hint">"Amount in whole USDC (e.g. 10 = 10 USDC). Max: 1,000 USDC"</span>
                         </div>
-                        <Show
-                            when=move || {
-                                let val = form.get().deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
-                                val > 1000.0
-                            }
-                            fallback=|| view! { <div></div> }
-                        >
-                            <div class="hint-warning-xs">
-                                "Maximum deposit is 1,000 USDC (SEC-003 cap)"
-                            </div>
-                        </Show>
                         <div class="quiz-setting-item">
                             <label class="quiz-field-label">"THB Amount"</label>
                             <input

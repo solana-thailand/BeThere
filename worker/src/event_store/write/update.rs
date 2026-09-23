@@ -128,8 +128,8 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
         }
     }
 
-    // SEC-003: Max deposit cap
-    const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
+    // SEC-003: Max deposit cap ($1,000 USDC, shared with the form's check)
+    const MAX_DEPOSIT_USDC: u64 = event_checkin_domain::money::USDC_MAX_DEPOSIT_ATOMIC;
     if let Some(v) = req.deposit_amount_usdc {
         if v > MAX_DEPOSIT_USDC {
             return Err(format!(
