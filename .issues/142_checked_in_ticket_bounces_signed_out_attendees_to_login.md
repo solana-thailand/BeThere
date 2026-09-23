@@ -1,8 +1,8 @@
 # 142 — A checked-in ticket sends signed-out attendees to /login
 
-**Status:** open, reproduced on staging 2026-09-23. **Not fixed**: it was found
-during `.plans/028` (performance) and is out of that scope, so it is filed
-rather than fixed.
+**Status:** fixed on `develop` 2026-09-23 (session 4), **not deployed**: prod
+still has the bug until the next owner-approved deploy. Reproduced on staging
+2026-09-23; it was found during `.plans/028` (performance).
 **Severity:** high for RTM#6 (2026-09-27). The ticket page is documented as "No
 auth required", and every in-person attendee opens it at the door.
 **Live in prod:** yes. `e346b24` (the chip) is on `main`.
@@ -51,3 +51,25 @@ landed in discover and the sibling path kept the bug).
 
 Same repro, signed out: expect no `/login` navigation and no chip. Then signed
 in with credit: expect the chip.
+
+## Resolution (2026-09-23, session 4)
+
+- New `api_get_json_if_signed_in<T>` in `frontend-leptos/src/api/mod.rs`
+  returns `None` when there is no live token, on a 401 or other non-2xx
+  status, or when the body can't be parsed. It never calls
+  `redirect_to_login_expired()`.
+- `get_credit_balance` and **`get_credit_refund_request_status`** both use it
+  now and return `Option`. The second one was the sibling path:
+  `RequestCreditRefundCard` mounts on the ticket page (`in_person_view.rs`)
+  when `dep.held_as_credit`, and it redirected in the same way. For the card,
+  signed out now reads as `Ready`, and pressing the button is what asks the
+  attendee to sign in (the POST still redirects on 401, which is intended).
+- Guard: `frontend-leptos/tests/public_ticket_page_never_redirects.rs` checks
+  three things:
+  - both endpoints use the helper;
+  - no file in `src/pages/ticket/` calls `api_get`/`api_get_json`/
+    `api_get_no_cache`/`get_me`;
+  - the helper never redirects and checks `is_authenticated()`.
+- Gate: wasm32 clippy with `-D warnings` is clean, and 229 frontend tests pass.
+- **Still to do:** the browser re-check on staging from "Verify after fixing"
+  above. It needs a checked-in fixture and a deploy of this commit to staging.

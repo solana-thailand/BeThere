@@ -800,21 +800,18 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
     // the backend idempotency is the safety net; this is the UX). A failed
     // read degrades to `Ready` so the attendee can still trigger the request
     // (the write path is idempotent — a duplicate just re-stamps the timestamp).
+    // Signed out also reads as `Ready`: the read never redirects, because this
+    // card mounts on the public ticket page (`.issues/142`); pressing the button
+    // is what asks a signed-out attendee to sign in.
     Effect::new(move |_| {
         leptos::task::spawn_local(async move {
-            match api::get_credit_refund_request_status().await {
-                Ok(status) => {
-                    if status.requested {
-                        set_state.set(RequestCreditRefundState::AlreadyRequested);
-                    } else {
-                        set_state.set(RequestCreditRefundState::Ready);
-                    }
-                }
-                Err(e) => {
-                    log::warn!("[credit-refund] failed to load status: {}", e.message);
-                    set_state.set(RequestCreditRefundState::Ready);
-                }
-            }
+            let requested = api::get_credit_refund_request_status()
+                .await
+                .is_some_and(|status| status.requested);
+            set_state.set(match requested {
+                true => RequestCreditRefundState::AlreadyRequested,
+                false => RequestCreditRefundState::Ready,
+            });
         });
     });
 

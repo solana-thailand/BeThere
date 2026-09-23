@@ -116,16 +116,17 @@ fn chip_view(balance: &CreditBalanceResponse) -> Option<AnyView> {
 
 /// Fetch the caller's own balance once on mount.
 ///
-/// A failed read degrades to `None` — "render nothing" — because every surface
-/// built on this is informational, and a broken read must never imply zero
-/// credit.
+/// Signed out or a failed read degrades to `None` — "render nothing" — because
+/// every surface built on this is informational, and a broken read must never
+/// imply zero credit. `get_credit_balance` never redirects: the ticket page is
+/// public, and a signed-out attendee is the normal case there (`.issues/142`).
 fn balance_signal(tag: &'static str) -> ReadSignal<Option<CreditBalanceResponse>> {
     let (balance, set_balance) = signal(None::<CreditBalanceResponse>);
     Effect::new(move |_| {
         leptos::task::spawn_local(async move {
             match api::get_credit_balance().await {
-                Ok(loaded) => set_balance.set(Some(loaded)),
-                Err(e) => log::warn!("[{tag}] balance unavailable: {}", e.message),
+                Some(loaded) => set_balance.set(Some(loaded)),
+                None => log::debug!("[{tag}] no balance (signed out or read failed)"),
             }
         });
     });

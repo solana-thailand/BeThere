@@ -3,7 +3,7 @@
 // serde derives used via full path in attribute macros
 
 use super::types::ApiError;
-use super::{api_get_json, api_post_json};
+use super::{api_get_json, api_get_json_if_signed_in, api_post_json};
 
 // ===== Deposit/Refund Types =====
 
@@ -618,9 +618,13 @@ pub struct CreditRefundRequestStatus {
     pub requested: bool,
 }
 
-/// GET /api/deposit/credit-refund-request — read the attendee's own flag state.
-pub async fn get_credit_refund_request_status() -> Result<CreditRefundRequestStatus, ApiError> {
-    api_get_json("/deposit/credit-refund-request").await
+/// GET /api/deposit/credit-refund-request — the attendee's own flag state, or
+/// `None` when signed out or the read fails.
+///
+/// Never redirects to /login: the card that reads this mounts on the public
+/// ticket page (`.issues/142`, the sibling of the credit chip).
+pub async fn get_credit_refund_request_status() -> Option<CreditRefundRequestStatus> {
+    api_get_json_if_signed_in("/deposit/credit-refund-request").await
 }
 
 /// One row in the admin "credit refund requested" listing (Issue #061 Phase 3).
@@ -817,7 +821,11 @@ pub async fn hold_deposit(body: &HoldDepositRequest) -> Result<HoldDepositRespon
     api_post_json("/deposit/hold", body).await
 }
 
-/// GET /api/deposit/credit-balance — fetch the authenticated attendee's rolling credit balance.
-pub async fn get_credit_balance() -> Result<CreditBalanceResponse, ApiError> {
-    api_get_json("/deposit/credit-balance").await
+/// GET /api/deposit/credit-balance — the signed-in attendee's rolling credit
+/// balance, or `None` when signed out or the read fails.
+///
+/// Never redirects to /login: the chip built on this mounts on the public ticket
+/// page, where a signed-out attendee is the normal case (`.issues/142`).
+pub async fn get_credit_balance() -> Option<CreditBalanceResponse> {
+    api_get_json_if_signed_in("/deposit/credit-balance").await
 }
