@@ -64,6 +64,7 @@
     "safe_document_link tests/safe_document_link.rs": 2,
     "safe_redirect_path tests/safe_redirect_path.rs": 2,
     "security_headers_parity tests/security_headers_parity.rs": 2,
+    "security_spike_alert tests/security_spike_alert.rs": 7,
     "serde_contract tests/serde_contract.rs": 39,
     "sheet_name_validation tests/sheet_name_validation.rs": 7,
     "size_budget_guards tests/size_budget_guards.rs": 10,

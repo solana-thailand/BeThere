@@ -62,7 +62,17 @@
       follows the bytes instead of the label. Tests: `domain/tests/image_kind.rs`
       (5) and `worker/tests/slip_magic_bytes.rs` (6). Found on the way: the
       refund-proof URL has no validation at all (`.issues/145`).
-- [ ] Alert on 401 and 429 spikes through the existing Slack alert (8.16).
+- [x] Alert on 401 and 429 spikes through the existing Slack alert (8.16),
+      2026-09-24. `worker/src/spike.rs` runs a fixed-window counter per isolate:
+      ≥20 credentialed 401s or ≥10 429s within 60 s posts one Slack message,
+      then a 15-minute cooldown. The free plan has no cheap shared counter (KV is
+      about 1k writes a day, and DOs are blocked by the PUT fallback), so the
+      count is a lower bound. A signed-out 401 does not count, nor does a 401
+      on `/api/auth/me`: the landing and discover pages probe it for every
+      visitor. The message carries the method and path only. Tests:
+      `worker/tests/security_spike_alert.rs` (7). Not yet seen firing in a real
+      Slack channel; after deploy, hit a staging endpoint with a bad bearer
+      token 20× within a minute.
 - [x] Swap the real email in `worker/scripts/seed_dev.sh` for `example.test` (8.33).
 - [ ] Self-host jsQR: same-origin, precompressed, and no CDN on venue Wi-Fi.
       This would let the CSP drop `cdn.jsdelivr.net`.
