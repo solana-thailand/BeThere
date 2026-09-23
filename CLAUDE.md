@@ -115,6 +115,7 @@ that cannot fail is not a gate.
 | `post_deploy_smoke.sh` | status **and** Content-Type after a deploy |
 | `golden_vectors_check.sh` | escrow PDA/ATA fixture vs. the Solana CLI |
 | `wasm_leak_scan.sh` | build-host paths (report-only) and secrets in shipped wasm/js |
+| `domain_import_fence.py` | `domain`'s wasm32 graph reaching app/platform crates; JS bridge pinned both ways |
 
 ## Deploy (owner-gated)
 

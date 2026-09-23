@@ -28,10 +28,21 @@ reflex-site has no license, so its code is a pattern only.
 - [ ] **License hygiene:** `cargo about` → `THIRD_PARTY_LICENSES.md` for the
   served wasm, plus `[licenses]` in `deny.toml`. The root `LICENSE` for this
   public repo is the owner's decision (already on the owner list).
-- [ ] **`domain` import fence:** `cargo tree -p event-checkin-domain --target
-  wasm32-unknown-unknown -e normal` must not reach `worker`/`frontend-leptos`.
-  Pins fail in both directions, and a blindness floor exits 2. First check
-  whether chrono's `wasmbind` already pulls in `js-sys`.
+- [x] **`domain` import fence** (2026-09-24):
+  `scripts/verify/domain_import_fence.py`, run in CI `build-test`.
+  - **What it checks:** `domain`'s wasm32 normal graph (31 crates, all
+    features) must not reach our app crates or platform crates (workers-rs,
+    leptos*, web-sys, gloo*, solana-*, tokio, reqwest, axum).
+  - **The chrono question:** chrono's default `wasmbind` *does* pull `js-sys`
+    plus the 4 `wasm-bindgen*` crates. That is pinned, not fixed:
+    `Utc::now()` on wasm32 needs it, so removing it would change runtime.
+  - **The pin fails both ways:** a new bridge crate fails, and so does a
+    pinned crate leaving the graph.
+  - **Blindness floor:** exits 2 when `domain`, `serde` or `chrono` is
+    missing, or the graph has fewer than 10 crates.
+  - **Proof:** `--self-test` passes 11/11. A/B on real `cargo tree` output: a
+    planted `web-sys` gave exit 1, and a removed `js-sys` gave exit 1 as a
+    stale pin.
 - [ ] **Bench-record rules** for `.plans/028` M1:
   - a numbered file per rung;
   - a correctness gate that is green before a number is quoted;

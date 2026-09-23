@@ -89,6 +89,15 @@ jobs:
           python3 scripts/verify/test_count_floor.py --suite workspace "$RUNNER_TEMP/test-workspace.log"
           python3 scripts/verify/test_count_floor.py --suite domain-alloc-count "$RUNNER_TEMP/test-alloc-count.log"
 
+      - name: domain import fence (wasm32 graph)
+        # Plan 031. domain must not reach worker/frontend or a platform crate
+        # (workers-rs, leptos, web-sys). The JS bridge that chrono's wasmbind
+        # pulls is pinned both ways. `cargo tree --target` reads metadata only,
+        # so no wasm32 target install is needed here.
+        run: |
+          python3 scripts/verify/domain_import_fence.py --self-test
+          python3 scripts/verify/domain_import_fence.py
+
       - name: Security and notification SQL behavior
         env:
           PYTHONDONTWRITEBYTECODE: "1"
