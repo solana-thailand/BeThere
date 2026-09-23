@@ -1,4 +1,5 @@
-//! `.plans/028` W12 — the per-isolate cache behind the HMAC `CryptoKey` reuse.
+//! `.plans/028` W12 and W11 — the per-isolate cache behind the HMAC `CryptoKey`
+//! reuse and the slug → event id locator.
 
 use event_checkin_worker::isolate_cache::BoundedCache;
 
@@ -37,4 +38,13 @@ fn zero_capacity_caches_nothing() {
     let mut cache = BoundedCache::new(0);
     cache.insert(1, "a");
     assert_eq!(cache.get(&1), None);
+}
+
+/// W11 keys by `String` and looks up with the request's `&str`.
+#[test]
+fn string_keys_are_found_by_str() {
+    let mut cache: BoundedCache<String, String> = BoundedCache::new(2);
+    cache.insert("rtm-6".to_string(), "evt-1".to_string());
+    assert_eq!(cache.get("rtm-6"), Some("evt-1".to_string()));
+    assert_eq!(cache.get("rtm-7"), None);
 }

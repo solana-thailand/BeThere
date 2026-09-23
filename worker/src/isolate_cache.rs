@@ -5,6 +5,8 @@
 //! per isolate instead of once per request. Lookup is linear, so keep `cap`
 //! small; the oldest entry is evicted first.
 
+use std::borrow::Borrow;
+
 pub struct BoundedCache<K, V> {
     cap: usize,
     entries: Vec<(K, V)>,
@@ -18,10 +20,14 @@ impl<K: PartialEq, V: Clone> BoundedCache<K, V> {
         }
     }
 
-    pub fn get(&self, key: &K) -> Option<V> {
+    pub fn get<Q>(&self, key: &Q) -> Option<V>
+    where
+        K: Borrow<Q>,
+        Q: PartialEq + ?Sized,
+    {
         self.entries
             .iter()
-            .find(|(k, _)| k == key)
+            .find(|(k, _)| k.borrow() == key)
             .map(|(_, v)| v.clone())
     }
 

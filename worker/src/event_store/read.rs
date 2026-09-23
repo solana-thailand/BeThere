@@ -314,6 +314,29 @@ async fn with_kv_only_fields(kv: Option<&KvStore>, mut config: EventConfig) -> E
 // Slug-based resolution (KV → D1 fallback)
 // ---------------------------------------------------------------------------
 
+/// Slugs this isolate has resolved. A handful of events are live at a time.
+const SLUG_ID_CACHE_CAP: usize = 16;
+
+thread_local! {
+    /// slug → event id for this isolate (plan 028 W11). Saves the read and the
+    /// full parse of the KV `events` index on every public event request. It
+    /// is only a locator: a hit is served only when the config it points at
+    /// still carries the slug, so a renamed, reassigned or deleted slug falls
+    /// back to the index scan instead of serving the old event.
+    static SLUG_IDS: std::cell::RefCell<crate::isolate_cache::BoundedCache<String, String>> =
+        const { std::cell::RefCell::new(crate::isolate_cache::BoundedCache::new(SLUG_ID_CACHE_CAP)) };
+}
+
+/// The event config for a slug this isolate resolved before, if the config
+/// still carries that slug.
+async fn config_for_cached_slug(kv: &KvStore, slug: &str) -> Option<EventConfig> {
+    let id = SLUG_IDS.with_borrow(|ids| ids.get(slug))?;
+    match get_event_config(kv, &id).await {
+        Ok(Some(config)) if config.slug == slug => Some(config),
+        _ => None,
+    }
+}
+
 /// Resolve an event by slug, trying KV index → D1 fallback.
 ///
 /// 1. If `events_kv` is `Some` → scan KV index for slug → load full config
@@ -330,10 +353,14 @@ pub async fn resolve_event_by_slug(
 ) -> Result<EventConfig, ResolveError> {
     // Try KV first
     if let Some(kv) = events_kv {
+        if let Some(config) = config_for_cached_slug(kv, slug).await {
+            return Ok(config);
+        }
         let index = get_event_index(kv).await.map_err(ResolveError::Backend)?;
         if let Some(meta) = index.events.iter().find(|e| e.slug == slug)
             && let Ok(Some(config)) = get_event_config(kv, &meta.id).await
         {
+            SLUG_IDS.with_borrow_mut(|ids| ids.insert(slug.to_string(), config.id.clone()));
             return Ok(config);
         }
     }
