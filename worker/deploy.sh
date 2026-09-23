@@ -216,15 +216,22 @@ verify_content_types() {
   local index="${DIST_DIR}/index.html"
   [ -f "$index" ] || { echo "ℹ️  no ${index} — skipping content-type verification."; return 0; }
 
-  local js
+  local js wasm
   js=$(grep -o 'event-checkin-frontend-[a-z0-9]*\.js' "$index" | head -1)
+  wasm=$(grep -o 'event-checkin-frontend-[a-z0-9]*_bg\.wasm' "$index" | head -1)
 
   echo "🔎 Verifying served Content-Type (edge propagation may lag a few seconds)..."
   local bad=0 ct expected
-  for path in "/" "/$js"; do
-    [ "$path" = "/" ] || [ -n "$js" ] || continue
-    expected="text/html"
-    [ "$path" = "/" ] || expected="text/javascript"
+  # /api/health guards wrangler.toml's run_worker_first list: drop "/api/*" from
+  # it and SPA fallback answers the API with index.html — 200, but text/html.
+  # The wasm is Worker-served pre-compressed (worker/src/precompressed.rs).
+  for path in "/" "/$js" "/$wasm" "/api/health"; do
+    case "$path" in
+      /) expected="text/html" ;;
+      /api/*) expected="application/json" ;;
+      *.wasm) expected="application/wasm" ;;
+      *) expected="text/javascript" ;;
+    esac
     # Retry a few times to ride out edge propagation right after deploy.
     for _ in 1 2 3 4 5; do
       ct=$(curl -s -D - -o /dev/null "${base}${path}" | tr -d '\r' | grep -i '^content-type:' | sed 's/[Cc]ontent-[Tt]ype: *//')
@@ -238,6 +245,18 @@ verify_content_types() {
       echo "   ✅ ${path} → ${ct}"
     fi
   done
+
+  # Warn-only: without the .br sibling the Worker falls back to the plain wasm,
+  # which is correct but ~380 KB heavier per first load.
+  if [ -n "$wasm" ]; then
+    local enc
+    enc=$(curl -s -H 'Accept-Encoding: br' -D - -o /dev/null "${base}/${wasm}" | tr -d '\r' | grep -i '^content-encoding:' | sed 's/[Cc]ontent-[Ee]ncoding: *//')
+    if [ "$enc" = "br" ]; then
+      echo "   ✅ /${wasm} served pre-compressed (content-encoding: br)"
+    else
+      echo "   ⚠️  /${wasm} not served as br (got ${enc:-<none>}) — precompression inactive"
+    fi
+  fi
 
   if [ "$bad" -ne 0 ]; then
     echo ""

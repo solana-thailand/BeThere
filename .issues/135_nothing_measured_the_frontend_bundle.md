@@ -1,6 +1,6 @@
 # 135 — Nothing measured the frontend bundle, and it is the bigger half
 
-**Status:** gate built, wired into CI, baseline recorded — 2026-09-22.
+**Status:** gate built, wired into CI, baseline recorded — 2026-09-22. **Precompression (§6.3) built and verified on staging 2026-09-23 (§9); prod deploy owner-gated.**
 **Found:** while writing up `.issues/134`, whose recommended path (move the QR
 decoder to the frontend) could not be costed because there was no number to
 cost it against.
@@ -230,11 +230,12 @@ dominates the critical path this completely.
 
 ## 7. Remaining
 
-- [ ] **Precompression (§6.3)** — the 380 KB. Needs a staging deploy to verify
-      edge behaviour. The single highest-value frontend change available.
+- [x] **Precompression (§6.3)** — built and verified on staging, see §9.
+      Ships with the next prod deploy (owner-gated).
 - [ ] **Split the 22 render-blocking stylesheets** (§6.4) — hygiene, ~0 bytes
       while the wasm dominates. Low priority, now that it is measured.
-- [ ] **Delete or fix `frontend-leptos/optimize-wasm.sh`** (§6.1). It is dead
+- [x] **Delete or fix `frontend-leptos/optimize-wasm.sh`** (§6.1) — fixed to
+      `-O2` in 7e40a6f (already on `develop`); still invoked from nowhere. It is dead
       code that, if ever wired up, makes the shipped bundle bigger. Leaving a
       loaded footgun in the tree with an encouraging name is the risk.
 - [ ] De-duplicate the two gates. They share their parse-don't-source logic,
@@ -246,6 +247,46 @@ dominates the critical path this completely.
       `both_size_gates_keep_the_properties_that_make_them_trustworthy` asserts
       the four properties on both scripts at once, so the duplication cannot
       drift silently while it waits.
+
+## 9. Precompression, built (2026-09-23)
+
+The §6.3 objections were answered by routing, not by `_headers`:
+
+- `wrangler.toml` `[assets]` gains `binding = "ASSETS"` and
+  `run_worker_first = ["/api/*", "/event-checkin-frontend-*_bg.wasm"]`.
+- `frontend-leptos/build.sh` writes `<wasm>.br` at q11 (node zlib, with a
+  round-trip check before writing).
+- `worker/src/precompressed.rs` **negotiates**: `Accept-Encoding` admits `br`
+  and the `.br` exists → those bytes with `content-encoding: br` and
+  `encodeBody: "manual"`; anything else → the plain asset exactly as before.
+  So the "no content negotiation" objection is gone, and every failure mode
+  (no `.br`, no brotli, ASSETS error) degrades to today's behaviour.
+
+Verified on staging (`bethere-staging`, version `6d8deef0`):
+
+| request | result |
+|---|---|
+| `Accept-Encoding: br` | 200, `application/wasm`, `br`, **1,291,073 bytes**, `cmp`-identical to local `.br` |
+| `Accept-Encoding: gzip` | 200, gzip 1,856,534, decodes to the local wasm |
+| `identity` | 200, raw bytes identical to the local wasm |
+| `If-None-Match` | 304 |
+| Chrome, cold context | app boots, no SRI error (SRI hashes the decoded body, as specced) |
+
+Served wasm **1,675,993 → 1,291,073 bytes: −384,920 (−23 %)** per first load.
+
+**A regression found on the way, and now guarded.** The first staging deploy
+listed only the wasm pattern. Once `run_worker_first` is an array, every
+unmatched path is asset-first, and `not_found_handling = SPA` then answered
+`/api/*` with `index.html` — 200, `text/html`, whole API dark while the page
+still "loaded". Staging only, ~6 minutes. `"/api/*"` is now in the list with a
+comment saying why, and `deploy.sh`'s smoke test checks `/api/health` →
+`application/json` and the wasm → `application/wasm` (+ a warn if it is not
+served `br`) — the check that would have caught it.
+
+Cost: one Worker invocation per wasm fetch (first load only — the asset is
+`immutable` and SW-cached) and negligible CPU (a streamed pass-through).
+The PUT-API fallback cannot carry `run_worker_first`; if it fires, the wasm is
+simply served asset-first as before.
 
 ## Related
 

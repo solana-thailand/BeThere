@@ -30,6 +30,17 @@ compatibility_flags = ["nodejs_compat"]
 [assets]
 directory = "../frontend-leptos/dist"
 not_found_handling = "single-page-application"
+# The Worker serves the frontend wasm itself so it can send the brotli-11
+# sibling build.sh writes (`<wasm>.br`) instead of Cloudflare's on-the-fly ~q4:
+# 380 KB less per first load. Everything else is still served asset-first.
+# See worker/src/precompressed.rs and .issues/135 §6.3.
+#
+# "/api/*" MUST stay in this list. Once run_worker_first is an array, every
+# path it does not match is served asset-first, and not_found_handling = SPA
+# then answers /api/* with index.html (200, text/html) — the whole API goes
+# dark while the site still "loads". Seen on staging 2026-09-23.
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/event-checkin-frontend-*_bg.wasm"]
 
 # Build configuration for workers-rs (Rust → WASM)
 # Manual build instead of worker-build to reduce memory usage.
