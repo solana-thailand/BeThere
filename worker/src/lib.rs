@@ -46,6 +46,8 @@ mod virtual_checkin;
 pub use durable_objects::EventDurableObject;
 // Mirrored into `frontend-leptos/_headers`; `tests/security_headers_parity.rs`.
 pub use middleware::headers::SECURITY_HEADERS;
+// Public so `tests/public_cache_policy.rs` can drive the public-cache rule (.plans/028 W4).
+pub use middleware::cache::{CACHE_PRIVATE_NO_STORE, with_public_cache};
 
 use std::sync::OnceLock;
 

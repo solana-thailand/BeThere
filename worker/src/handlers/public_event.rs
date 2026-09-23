@@ -2,6 +2,7 @@
 //! No authentication required for public events. Private events require auth.
 
 use axum::extract::{Path, State};
+use axum::response::IntoResponse;
 use serde_json::{Value, json};
 
 use crate::error::ApiOk;
@@ -109,7 +110,7 @@ pub async fn get_public_event(
     State(state): State<AppState>,
     Path(slug): Path<String>,
     request: axum::extract::Request,
-) -> Result<ApiOk<Value>, crate::error::WorkerError> {
+) -> Result<axum::response::Response, crate::error::WorkerError> {
     // Resolve slug → event config via D1-first, KV fallback
     let config = crate::event_store::read::resolve_event_by_slug(
         state.events_kv.as_ref(),
@@ -257,7 +258,16 @@ pub async fn get_public_event(
         serde_json::Value::Bool(post_event_registration_accepting),
     );
 
-    Ok(ApiOk::new(response))
+    // A private event's body is per-viewer: it must not land in a shared
+    // cache under the public route's `public, max-age=120` (.plans/028 W4).
+    let mut http_response = ApiOk::new(response).into_response();
+    if config.visibility == EventVisibility::Private {
+        http_response.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            crate::middleware::cache::CACHE_PRIVATE_NO_STORE.clone(),
+        );
+    }
+    Ok(http_response)
 }
 
 /// `GET /api/public/events/past`
