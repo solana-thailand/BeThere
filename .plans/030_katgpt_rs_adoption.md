@@ -73,11 +73,15 @@ owner decision.
   - **Zero-check exits: none found.** `post_deploy_smoke.sh` and the claim
     window script are linear and exit early on missing fixtures; the size
     budgets exit 0 only on a measured result.
-- [ ] **Commit hygiene** in a repo `CLAUDE.md`, about 150 lines, index-style;
-  its narratives go to HISTORY:
-  - stage named files only;
-  - a `Session: <name>, <epoch>` trailer via `-F`;
+- [x] **Commit hygiene** in a repo `CLAUDE.md` (2026-09-23), 151 lines,
+  index-style; the reasoning stays in issues/docs and is linked:
+  - stage named files only (plus the deleted sibling on a file → dir split);
+  - a `Session: <name>, <epoch>` trailer via `-F`; the epoch is fixed per
+    session because session names get reused;
   - `git fetch` before recording a negative result.
+  - Also indexes: `numbering_gate.py --next`, the Status vocabulary, the
+    local gate commands, `test_count_floor.py`, the `scripts/verify/` gates,
+    the owner-gated deploy steps and the data rules from memory.
 - [x] `forbid(unsafe_code)` in `frontend-leptos` (2026-09-23), in both `lib.rs`
   and `main.rs`. The wasm-bindgen extern blocks compile under it. wasm32
   clippy `-D warnings` and fmt are clean, and the native tests pass (229). A
