@@ -65,8 +65,10 @@ owner decision.
   - stage named files only;
   - a `Session: <name>, <epoch>` trailer via `-F`;
   - `git fetch` before recording a negative result.
-- [ ] `forbid(unsafe_code)` in `frontend-leptos`, if the wasm-bindgen extern
-  blocks allow it. It has not been tried yet.
+- [x] `forbid(unsafe_code)` in `frontend-leptos` (2026-09-23), in both `lib.rs`
+  and `main.rs`. The wasm-bindgen extern blocks compile under it. wasm32
+  clippy `-D warnings` and fmt are clean, and the native tests pass (229). A
+  probe `unsafe` block failed to compile, which shows the forbid is enforced.
 
 ## 3. Ungated, medium (M)
 
