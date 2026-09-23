@@ -18,6 +18,7 @@
   },
   "workspace": {
     "a1_range_guard tests/a1_range_guard.rs": 2,
+    "ab_timing tests/ab_timing.rs": 10,
     "alloc_count tests/alloc_count.rs": 0,
     "auth_hardening_guard tests/auth_hardening_guard.rs": 3,
     "campaign_reward tests/campaign_reward.rs": 15,

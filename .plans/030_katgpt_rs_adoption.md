@@ -113,12 +113,22 @@ owner decision.
   Assert it by value from the worker tests, the escrow tests and
   flow-harness, with a generator binary. This catches the class of
   `[[onchain-struct-offset-drift]]`.
-- [ ] **Interleaved A/B timing helper** for CPU-budget claims against the
-  free plan's 10 ms/request:
-  - median of ratios, per-iteration input, `black_box`, fail on 0 ns;
-  - report tail support instead of "p99" when n < 100.
-
-  Feeds `.plans/028`. Native wall time is only a proxy for Workers CPU.
+- [x] **Interleaved A/B timing helper** (2026-09-24):
+  `event_checkin_domain::ab_timing` (native only; `cfg(not(wasm32))`, no
+  deps, so neither shipped wasm graph changes).
+  - **What it does:** `interleaved(rounds, input, a, b)` alternates the lanes
+    and flips which lane leads each round. It builds a fresh `input(round)`
+    per lane outside the timed region, and `black_box`es the input and the
+    output. `summarize` returns the median of per-round B/A ratios, fails on
+    0 ns (naming the lane and round), and reports `Tail::Support {n, max}`
+    instead of a p99 below 100 rounds.
+  - **Tests:** `domain/tests/ab_timing.rs`, 10 tests, floored. They include a
+    case where the median of ratios and the unpaired medians disagree.
+  - **Mutants:** always leading with A → 1 red; dropping the lane-A 0 ns
+    check → 2 red.
+  - **Scope:** it feeds `.plans/028` and `.benchmarks/` (the `Lanes: … vs …,
+    interleaved` header). Native wall time stays a proxy; the Workers claim
+    is `cpuTime` on staging.
 - [ ] **Counting-allocator test** for the check-in hot path (feature-gated,
   proves it is installed). The wire-decode audit (`domain/tests/alloc_count.rs`)
   already exists and now runs in CI; the check-in path itself is still uncovered. Treat the counts as relative: dlmalloc on wasm

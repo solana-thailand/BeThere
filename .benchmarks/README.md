@@ -15,7 +15,9 @@ from the riir ladder (`docs/gist_rs_study.md`). Checked by
    No green gate means no number.
 3. **One session, interleaved.** Put the lanes of a comparison (A vs B) in the
    same session, alternating A, B, A, B, and do not run them on different days.
-   `Lanes:` says `<A> vs <B>, interleaved`, or `single`.
+   `Lanes:` says `<A> vs <B>, interleaved`, or `single`. For native timings,
+   `event_checkin_domain::ab_timing::interleaved` does the alternation, the
+   median of ratios and the tail rule.
 4. **Write down the load.** `Load:` records the box or environment (for
    example "staging, 1 isolate, idle laptop" or "native --release, 3 peers
    building"). The gate for Workers CPU is `wrangler tail` `cpuTime` on
