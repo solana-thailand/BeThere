@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod adventure;
 mod audit_store;
 mod auth;
