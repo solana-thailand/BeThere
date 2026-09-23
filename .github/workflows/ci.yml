@@ -68,7 +68,7 @@ jobs:
           set -o pipefail
           cargo test --workspace --locked 2>&1 | tee "$RUNNER_TEMP/test-workspace.log"
 
-      - name: cargo test (domain zero-alloc audit, wire + alloc_count)
+      - name: cargo test (domain zero-alloc audits, wire + alloc_count)
         # domain/tests/alloc_count.rs is `#![cfg(feature = "alloc_count")]`, so
         # the workspace run above compiles it to 0 tests. Until 2026-09-23 no CI
         # step enabled the feature and the audit never ran. One thread: the
@@ -76,7 +76,7 @@ jobs:
         run: |
           set -o pipefail
           cargo test -p event-checkin-domain --locked --features wire,alloc_count \
-            --test alloc_count -- --test-threads=1 2>&1 | tee "$RUNNER_TEMP/test-alloc-count.log"
+            --test alloc_count --test alloc_count_checkin -- --test-threads=1 2>&1 | tee "$RUNNER_TEMP/test-alloc-count.log"
 
       - name: Test-count floors (workspace)
         # Plan 030 green-zero guard. `test result: ok. 0 passed` exits 0, so a

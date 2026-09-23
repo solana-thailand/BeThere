@@ -129,10 +129,28 @@ owner decision.
   - **Scope:** it feeds `.plans/028` and `.benchmarks/` (the `Lanes: … vs …,
     interleaved` header). Native wall time stays a proxy; the Workers claim
     is `cpuTime` on staging.
-- [ ] **Counting-allocator test** for the check-in hot path (feature-gated,
-  proves it is installed). The wire-decode audit (`domain/tests/alloc_count.rs`)
-  already exists and now runs in CI; the check-in path itself is still uncovered. Treat the counts as relative: dlmalloc on wasm
-  differs from native.
+- [x] **Counting-allocator test** for the check-in hot path (2026-09-24):
+  `domain/tests/alloc_count_checkin.rs`, which runs in the CI alloc step and is
+  floored (5).
+  - **Scope:** the pure part of `POST /api/checkin/{id}`: the
+    `can_check_in` / `can_check_in_virtually` accept paths and
+    `CheckInResponse` serialization into a reused buffer. All assert 0
+    allocations. Reject paths allocate (the error carries a `String`) and are
+    not the hot path.
+  - **Finding, fixed:** the gate allocated once per call, because
+    `ParticipationType::parse` called `to_lowercase()`. It now uses ASCII
+    case folding. That is equivalent because every needle is lowercase ASCII
+    without a `k`, and the Kelvin sign is the only non-ASCII char that
+    lowercases to ASCII. `domain/tests/participation_type_parse.rs` pins it
+    against the old implementation (corpus plus every case variant of each
+    needle); a case-sensitive mutant turned all 3 tests red. The same parse
+    runs once per attendee in the W3 counting paths (`.plans/028`).
+  - **A/B:** with the old parse restored, `can_check_in("In-Person")`
+    counted 1 and the parse pair 2, so both tests went red.
+  - **Canary before zero:** the allocator now lives in
+    `domain/tests/common/counting_alloc.rs`, shared with `alloc_count.rs`.
+    `assert_installed()` must count a `Box::new` before any 0 is trusted.
+  - **Treat counts as relative:** dlmalloc on wasm differs from native.
 - [ ] **`.claude/skills/deploy-guard/SKILL.md`**:
   - D1 backup → size budgets → `issue_ledger.py --strict` → `deploy.sh` →
     post-deploy smoke → write-volume check → Status updates;

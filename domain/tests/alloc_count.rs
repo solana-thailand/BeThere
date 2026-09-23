@@ -44,57 +44,15 @@
 //! `--test-threads=1` is required: the counter is process-global, so parallel
 //! tests would cross-contaminate each other's measurements.
 
-use std::alloc::{GlobalAlloc, Layout, System};
-use std::sync::atomic::{AtomicUsize, Ordering};
+mod common;
 
+use common::counting_alloc::{assert_installed, counter_snapshot, reset_counter};
 use event_checkin_domain::models::adventure::LevelScore;
 use event_checkin_domain::wire;
 
-/// Allocation counter. Incremented by the global allocator on every
-/// `alloc` / `alloc_zeroed` / `realloc` (grown) call. Reset by tests via
-/// [`reset_counter`] before each measurement.
-static ALLOC_COUNT: AtomicUsize = AtomicUsize::new(0);
-
-/// Counting wrapper around `System`. Forwards every call but counts the
-/// allocating ones. `dealloc` is not counted — we measure *allocation* sites,
-/// not frees (the audit question is "does decode grow the heap?").
-struct CountingAllocator;
-
-unsafe impl GlobalAlloc for CountingAllocator {
-    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-        // SAFETY: forwarding to System with the caller-provided layout.
-        // The unsafe block is required by Rust 2024's unsafe-op-in-unsafe-fn.
-        unsafe { System.alloc(layout) }
-    }
-    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-        // SAFETY: see `alloc`.
-        unsafe { System.alloc_zeroed(layout) }
-    }
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        // SAFETY: see `alloc`.
-        unsafe { System.dealloc(ptr, layout) }
-    }
-    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        // Only count growths — in-place shrinks/grows don't allocate.
-        if new_size > layout.size() {
-            ALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
-        }
-        // SAFETY: see `alloc`.
-        unsafe { System.realloc(ptr, layout, new_size) }
-    }
-}
-
-#[global_allocator]
-static GLOBAL_ALLOC: CountingAllocator = CountingAllocator;
-
-fn reset_counter() {
-    ALLOC_COUNT.store(0, Ordering::Relaxed);
-}
-
-fn counter_snapshot() -> usize {
-    ALLOC_COUNT.load(Ordering::Relaxed)
+#[test]
+fn counting_allocator_is_installed() {
+    assert_installed();
 }
 
 fn make_level_score(i: u32) -> LevelScore {

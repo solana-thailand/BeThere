@@ -1,6 +1,7 @@
 {
   "domain-alloc-count": {
-    "alloc_count tests/alloc_count.rs": 10
+    "alloc_count tests/alloc_count.rs": 11,
+    "alloc_count_checkin tests/alloc_count_checkin.rs": 5
   },
   "frontend": {
     "cluster_networks tests/cluster_networks.rs": 5,
@@ -20,6 +21,7 @@
     "a1_range_guard tests/a1_range_guard.rs": 2,
     "ab_timing tests/ab_timing.rs": 10,
     "alloc_count tests/alloc_count.rs": 0,
+    "alloc_count_checkin tests/alloc_count_checkin.rs": 0,
     "auth_hardening_guard tests/auth_hardening_guard.rs": 3,
     "campaign_reward tests/campaign_reward.rs": 15,
     "capacity_count_single_home tests/capacity_count_single_home.rs": 3,
@@ -57,6 +59,7 @@
     "not_null_column_guard tests/not_null_column_guard.rs": 5,
     "notification_identity_guard tests/notification_identity_guard.rs": 2,
     "onchain_event_id_exactness tests/onchain_event_id_exactness.rs": 6,
+    "participation_type_parse tests/participation_type_parse.rs": 3,
     "pod tests/pod.rs": 9,
     "precompressed_asset tests/precompressed_asset.rs": 2,
     "public_health_no_counts tests/public_health_no_counts.rs": 2,
