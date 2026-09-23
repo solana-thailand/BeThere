@@ -140,3 +140,78 @@ Checked and **not** useful:
 | One canonical home, detect drift instead of copying | `SECURITY_HEADERS` is a single table; `_headers` mirrors it and a parity test fails on drift. The escrow cargo-audit reads its ignore IDs from `deny.toml`. |
 | Toolchain / supply-chain hygiene (we went further than katgpt-rs) | SHA-pinned actions, least-privilege tokens, concurrency, CODEOWNERS |
 | `#![forbid(unsafe_code)]` (`katgpt-device-verify/src/lib.rs:59`) | Added to `domain` and `worker` |
+
+## 7. What katgpt-rs is worth on its own (added 2026-09-23, HEAD `1ac48a91`)
+
+This section answers a second question: what is valuable in katgpt-rs itself,
+not just what bethere can borrow. It comes from three more read-only passes
+(the headline-claims audit, general-purpose assets, consumers and health),
+spot-checked by hand where marked ✔.
+
+### Headline numbers: mostly toy-scale or not in-repo
+I audited 10 rows of the README "Key Results" table:
+- **Real in-repo measurements at toy scale (3):**
+  - MUX 29× TTFT: random weights, n_embd 64, debug build, logit cosine 0.55.
+  - GDN 7.09×: a chain tree only; realistic trees give 1.18–1.40×.
+  - Manifold 7.10 ns/step.
+- **True by construction, analytic, or circular (4):**
+  - 93.8% KV (= 1 − 16/256);
+  - 64× fewer FMAs (a formula, not a timing);
+  - PFlash 100% NIAH (the drafter is simulated to peak on the needle);
+  - 100% playability (the walk only visits viable nodes).
+- **Misattributed or paper-sourced (3):**
+  - RMSNorm 2.4× is a different SIMD rewrite. Kog's own result is 1.022×, and
+    it is ~5% slower on the micro config ✔ `.plans/160`.
+  - Self-Advantage 18× is a paper number; the repo measured 2.68–6.76×.
+  - Zone +41.54% comes from another repo; in-repo it is +19.4%.
+- **Sudoku 7,079×** measures a convex hull of a trace, not the ConstraintPruner.
+
+Other findings:
+- No headline row is regression-gated. 477 integration and 176 bench targets
+  run automatically nowhere, and the scheduled CI has been suspended since
+  2026-09-09.
+- "GOAT-proved" is not uniform. `swir_switch_thinking` is default-on with
+  **G1 accuracy 0%** on Gemma 2 2B ✔ `.benchmarks/275`, which breaks the repo's
+  own promotion rule.
+- The latest `main` push is red on Full gate, required-features and Docs ✔
+  (`gh run list`, 2026-09-23 14:41).
+
+### Real value: solid, tested numerics
+They are buried inside heavy crates.
+
+| Asset | Size / tests | Standalone? | Use outside ML |
+|---|---|---|---|
+| `katgpt-dec` (discrete exterior calculus, Hodge decomposition with a CG solver, heat kernel) | 23 k lines / 304 ✔ | **Yes, zero deps** ✔, wasm-clean | Helmholtz split of flow fields, graph-flow analysis. The most publishable crate. Limitation: identity metric only (uniform grids). |
+| SIMD kernels, `katgpt-types/src/simd` (NEON / AVX2 / wasm simd128) | 15 k / ~180 | No: always pulls rayon ✔ | Portable wasm vector maths. Would need extracting. |
+| `katgpt-core/src/linalg` (symmetric eig, Cholesky/ridge, Tucker) | 60+ tests | Inside katgpt-core | Small dense LA without LAPACK (PCA, least squares). |
+| Procrustes (Higham polar) | 1.3 k / 18 | Heavy crate | Point-cloud / pose registration. |
+| Generic MCTS + Elo/Plackett-Luce | 1.4 k / 26 | Inside katgpt-core | Turn-based game AI, tournament ladders. |
+| QMC (Sobol / lattice / Owen shift) | 1.1 k / 68 | Inside katgpt-core | MC integration. Not Joe-Kuo numbers, so higher dimensions are weaker. |
+| Quant codecs (Lloyd-Max, octahedral) | 9 k / 173 | Needs core for 3 fns | Embedding compression, normal packing. |
+| Pruners' small data structures (roaring bitmap, SimHash LSH, grid/multi-floor A\*, map generator) | 15–25 tests each | Files are self-contained; the crate is 134 k lines | Games, indexing. Easy to copy. |
+| `katgpt-tokenizer` | 7.6 k / 107 | serde only | Private vocabularies only: no GPT-2/cl100k regex, no tiktoken/HF loading. |
+
+### Who actually uses it
+- **Consumers:** 4 real ones: another-you (micro-belief, claim), afterswap
+  (ruliology, git rev pin), to-do (katgpt-core 0.2 from crates.io), and
+  line_gate (katgpt-core from the stale `~/src` clone).
+- **Crate coverage:** they use 4 of 31 crates. None uses pruners, speculative,
+  attn, forward, transformer or kv.
+- **Estimated load-bearing share:** 5–15% of ~1 M lines.
+- **Development:** effectively one author (6,180 of ~6,200 commits), with
+  1,753 commits in 30 days.
+
+### Verdict
+The repo's value is in:
+1. its process discipline (§2–§4);
+2. a dozen well-tested numerical and data-structure modules;
+3. two clean leaf crates (`katgpt-dec`, `katgpt-device-verify`).
+
+The ML headline results should not be quoted as evidence. Most are toy-scale,
+tautological or paper numbers, and none is regression-gated.
+
+The best reuse path for any project is **copying files** (MIT, keep the notice),
+not depending on crates. This conclusion is unchanged from §1.
+
+For bethere nothing new transfers: §5 still holds. The one addition would be
+`katgpt-dec`, which has no bethere use.
