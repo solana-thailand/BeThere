@@ -1,7 +1,8 @@
 # 150: Renaming an event could take a slug another event already uses
 
 **Status:** fixed on develop 2026-09-24 (session `event-checkin-72`), not
-deployed. Prod had no collisions when checked (read-only query below), so
+deployed to prod. On staging since 2026-09-25 (version `aceb3d5a`, git `bff67c3`):
+a rename onto a taken slug returned 400 with the new message, and the write smoke passed. Prod had no collisions when checked (read-only query below), so
 nothing needs repairing.
 **Found by:** session `event-checkin-d6`, while doing `.plans/028` W11 (recorded
 there as a known limit).
