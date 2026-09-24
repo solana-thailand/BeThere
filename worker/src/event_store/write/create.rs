@@ -76,26 +76,31 @@ pub async fn create_event(
 
     // Auto-deduplicate slug on collision (e.g. "my-event" → "my-event-1" → "my-event-2")
     // Supports recurring events with the same name.
-    // Collect existing IDs from KV index + D1 for deduplication.
+    // Collect every existing locator — ids AND slugs, from KV index + D1. The
+    // new event uses one string for both, so it must match neither: after a
+    // rename (`PUT /events/{id}`) an event's slug is no longer its id.
     let kv_index = if let Some(kv_ref) = kv {
         get_event_index(kv_ref).await?
     } else {
         EventIndex::default()
     };
-    let mut existing_ids: Vec<String> = kv_index.events.iter().map(|e| e.id.clone()).collect();
+    let mut taken: Vec<String> = kv_index
+        .events
+        .iter()
+        .flat_map(|e| [e.id.clone(), e.slug.clone()])
+        .collect();
     if let Some(db) = d1
         && let Ok(d1_rows) = crate::db::events::list_events(db).await
     {
-        for row in d1_rows {
-            if let Some(row_id) = row.id
-                && !existing_ids.iter().any(|id| id == &row_id)
-            {
-                existing_ids.push(row_id);
-            }
-        }
+        taken.extend(
+            d1_rows
+                .into_iter()
+                .flat_map(|row| [row.id, row.slug])
+                .flatten(),
+        );
     }
-    let existing_id_refs: Vec<&str> = existing_ids.iter().map(|s| s.as_str()).collect();
-    let (id, slug) = deduplicate_slug(&slug, &existing_id_refs);
+    let taken_refs: Vec<&str> = taken.iter().map(String::as_str).collect();
+    let (id, slug) = deduplicate_slug(&slug, &taken_refs);
 
     let now = chrono::Utc::now().to_rfc3339();
 

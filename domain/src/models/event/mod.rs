@@ -14,6 +14,7 @@ mod map_url;
 mod requests;
 mod responses;
 mod sheet_name;
+mod slug;
 mod ticket_note;
 
 #[cfg(test)]
@@ -31,4 +32,5 @@ pub use sheet_name::{
     DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, MAX_SHEET_NAME_CHARS,
     normalize_sheet_name,
 };
+pub use slug::slug_taken_by_other;
 pub use ticket_note::{MAX_TICKET_NOTE_CHARS, normalize_ticket_note};

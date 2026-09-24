@@ -13,6 +13,7 @@ pub mod dashboard;
 pub mod deposit_statuses;
 pub mod developers;
 pub mod escrow_index;
+pub mod event_slugs;
 pub mod event_staff;
 pub mod event_summaries;
 pub mod events;

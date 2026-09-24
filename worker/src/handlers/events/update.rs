@@ -112,7 +112,9 @@ pub async fn update_event(
 
     // Apply partial update to existing config (works regardless of KV vs D1 source)
     let mut config = existing_event.clone();
-    crate::event_store::apply_update(&mut config, &body).map_err(AppError::Validation)?;
+    crate::event_store::apply_update_checked(kv, state.d1.as_deref(), &mut config, &body)
+        .await
+        .map_err(AppError::Validation)?;
 
     // Only gate the transitions that can newly expose attendees to the quiz.
     // Existing active events with legacy-invalid data remain editable so an
