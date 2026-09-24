@@ -238,7 +238,7 @@ pub fn EscrowInitPanel(
                                             let save_body = api::UpdateEventBody {
                                                 organizer_wallet: Some(pk.clone()),
                                                 deposit_enabled: Some(f.deposit_enabled),
-                                                deposit_amount_usdc: Some((f.deposit_amount_usdc.parse::<f64>().unwrap_or(0.0) * 1_000_000.0) as u64),
+                                                deposit_amount_usdc: Some(event_checkin_domain::money::parse_usdc_atomic(&f.deposit_amount_usdc).unwrap_or(0)),
                                                 deposit_amount_thb: Some(f.deposit_amount_thb.parse::<u64>().unwrap_or(0)),
                                                 refund_deadline_hours: Some(f.refund_deadline_hours.parse::<u32>().unwrap_or(0)),
                                                 // Include expected_updated_at for optimistic concurrency.

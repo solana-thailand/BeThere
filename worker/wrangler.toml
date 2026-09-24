@@ -30,6 +30,17 @@ compatibility_flags = ["nodejs_compat"]
 [assets]
 directory = "../frontend-leptos/dist"
 not_found_handling = "single-page-application"
+# The Worker serves the frontend wasm itself so it can send the brotli-11
+# sibling build.sh writes (`<wasm>.br`) instead of Cloudflare's on-the-fly ~q4:
+# 380 KB less per first load. Everything else is still served asset-first.
+# See worker/src/precompressed.rs and .issues/135 §6.3.
+#
+# "/api/*" MUST stay in this list. Once run_worker_first is an array, every
+# path it does not match is served asset-first, and not_found_handling = SPA
+# then answers /api/* with index.html (200, text/html) — the whole API goes
+# dark while the site still "loads". Seen on staging 2026-09-23.
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/event-checkin-frontend-*_bg.wasm"]
 
 # Build configuration for workers-rs (Rust → WASM)
 # Manual build instead of worker-build to reduce memory usage.
@@ -67,6 +78,39 @@ SHIM
 # Set to 1 only after migration 0030 and verified sender setup (docs/notifications.md).
 NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""
+# What a cron dispatch run does with a queued message that has sat past its
+# kind's useful life (`.issues/128`). Ages are per kind, in
+# `notifications::policy::max_age_secs` — 3 days for a survey, 2 for a reminder,
+# 14 for a registration or deposit receipt.
+#   off    — no age check; every due row is claimable. Escape hatch only.
+#   report — stale rows are withheld from the claim loop and logged by kind,
+#            but not modified. DEFAULT.
+#   cancel — stale rows are retired with error_code = 'STALE'.
+# Starts at `report` for the same reason THB_SLIP_DUPLICATE_MODE does: the
+# queue has never drained, so the first run of this guard meets 268 pending
+# rows and being wrong either way is expensive. `report` puts the real numbers
+# in the logs before anything is destroyed. Anything unrecognised also parses
+# as `report`, so a typo here can neither disable the guard nor start deleting
+# queued mail.
+NOTIFICATIONS_STALENESS = "report"
+# How many queued messages one cron dispatch run will send. Default 25, the
+# value the claim loop hardcoded before it was named; clamped to 1..=100, and
+# anything unparseable falls back to 25 rather than stopping the queue.
+# Lower it to watch a first enable go out slowly. The cron is daily, so this is
+# also the daily ceiling.
+NOTIFICATIONS_MAX_PER_RUN = "25"
+# What the THB slip upload handlers do when an uploaded payment slip is
+# byte-identical to another attendee's, within the same event (`.issues/129`).
+#   off    — hash and store, do not compare. Escape hatch during an event.
+#   report — record the collision and let the upload through. DEFAULT.
+#   reject — refuse the upload (attendee path only; an organizer uploading on
+#            someone's behalf is never blocked).
+# Starts at `report` on purpose: this is the first pass of a check that can
+# turn a paying attendee away at the door, so it earns `reject` by running
+# over a real event first and producing no false positives. Anything
+# unrecognised also parses as `report`, so a typo here cannot silently
+# disable the check OR silently start rejecting people.
+THB_SLIP_DUPLICATE_MODE = "report"
 SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 # Issue 071: claim/quiz/adventure capability tokens travel in the URL path, so
@@ -148,7 +192,15 @@ EVENT_END_MS = "1777183200000"
 # - GOOGLE_SERVICE_ACCOUNT_TOKEN_URI
 # - GOOGLE_SHEET_ID
 # - STAFF_EMAILS
+# - SUPER_ADMIN_EMAILS          (secret or [vars])
+# - WEBHOOK_SECRET              (bearer for the deposit/escrow webhooks; compared in constant time)
+# - GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_REDIRECT_URI  (social linking)
+# - TELEGRAM_BOT_TOKEN          (TELEGRAM_BOT_USERNAME may be a secret or a var)
+# - CROSSMINT_API_KEY           (cNFT minting; CROSSMINT_HOST / _COLLECTION_ID may be vars)
+# - SLACK_WEBHOOK_URL           (ops alerts)
 # - PLATFORM_SHEET_ID (env var, not secret — set in [vars])
+# Source of truth: every get_secret(..)/env.secret(..) call in src/ — re-derive
+# with `rg -o 'get_secret[a-z_]*\([^"]*"[A-Z_0-9]+"' src` when this list is edited.
 
 # Phase 2 secrets (Solana / Helius NFT minting):
 # - HELIUS_RPC_URL          (optional — defaults to https://devnet.helius-rpc.com)
@@ -197,6 +249,16 @@ name = "WEBHOOK_RATE_LIMITER"
 namespace_id = "63204"
 [ratelimits.simple]
 limit = 120
+period = 60
+
+# Public lookups that miss D1 and would read the whole Google Sheet (plan 028
+# W7). Charged per miss, not per request. Keep in sync with
+# RATE_LIMIT_SHEETS_FALLBACK in worker/src/middleware/rate_limit.rs.
+[[ratelimits]]
+name = "SHEETS_FALLBACK_RATE_LIMITER"
+namespace_id = "63205"
+[ratelimits.simple]
+limit = 10
 period = 60
 
 # Phase 4: Quiz KV namespace — REMOVED (Option C).
@@ -290,6 +352,12 @@ CLAIM_TOKEN_TTL_SECS = "2592000"
 # staging-only credentials and resources are deliberately configured.
 NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""
+# Vars are non-inheritable: staging must redeclare this or it falls back to the
+# in-code default, which is the same `report` but not visibly so.
+NOTIFICATIONS_STALENESS = "report"
+NOTIFICATIONS_MAX_PER_RUN = "25"
+# Same default as production — staging is where `reject` gets tried first.
+THB_SLIP_DUPLICATE_MODE = "report"
 TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
 # The staging Worker has a HELIUS_API_KEY secret. Use the authenticated Devnet
 # endpoint rather than unauthenticated public RPCs, which may block Cloudflare
@@ -361,6 +429,13 @@ name = "WEBHOOK_RATE_LIMITER"
 namespace_id = "63304"
 [env.staging.ratelimits.simple]
 limit = 120
+period = 60
+
+[[env.staging.ratelimits]]
+name = "SHEETS_FALLBACK_RATE_LIMITER"
+namespace_id = "63305"
+[env.staging.ratelimits.simple]
+limit = 10
 period = 60
 
 # NOTE: DO bindings (EVENT_DO) remain commented out for staging too — the PUT API

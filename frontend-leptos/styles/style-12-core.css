@@ -248,6 +248,57 @@
     flex-shrink: 0;
 }
 
+.ticket-announcement-card {
+    align-items: flex-start;
+}
+
+/* Organizer announcement on the ticket page (migration 0049). Shares the
+   Access & Logistics card shell so the two read as one family of "things to
+   know before the event", and sits directly above it on the in-person view. */
+.ticket-announcement-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.ticket-announcement-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.ticket-announcement-title .icon-sm {
+    color: var(--info);
+    flex-shrink: 0;
+}
+
+/* `pre-wrap` is what preserves the organizer's line breaks and blank lines.
+   The component deliberately does not emit <br>, so this rule is the whole
+   line-break contract - changing it silently reflows every announcement.
+   `overflow-wrap` keeps a long pasted URL from widening the card on mobile. */
+.ticket-announcement-body {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.ticket-announcement-link {
+    color: var(--info);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.ticket-announcement-link:hover {
+    color: var(--text-primary);
+}
+
 /* Public event page community links */
 .pe-community-title-icon {
     display: inline-flex;

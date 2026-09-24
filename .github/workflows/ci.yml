@@ -5,6 +5,13 @@ on:
     branches: [develop, main]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
@@ -16,15 +23,16 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
         with:
+          toolchain: stable
           components: clippy, rustfmt
 
       - name: Cache cargo registry + target
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Stub frontend dist for worker include_str!
         # `worker/src/lib.rs` does `include_str!("../../frontend-leptos/dist/index.html")`
@@ -54,7 +62,41 @@ jobs:
         run: cargo clippy --workspace --locked --all-targets -- -D warnings
 
       - name: cargo test (workspace)
-        run: cargo test --workspace --locked
+        # Output is saved for the floor gate below. pipefail is explicit because
+        # a bare `run:` is `bash -e`, so a failing `cargo test | tee` would exit 0.
+        run: |
+          set -o pipefail
+          cargo test --workspace --locked 2>&1 | tee "$RUNNER_TEMP/test-workspace.log"
+
+      - name: cargo test (domain zero-alloc audits, wire + alloc_count)
+        # domain/tests/alloc_count.rs is `#![cfg(feature = "alloc_count")]`, so
+        # the workspace run above compiles it to 0 tests. Until 2026-09-23 no CI
+        # step enabled the feature and the audit never ran. One thread: the
+        # allocation counter is process-global.
+        run: |
+          set -o pipefail
+          cargo test -p event-checkin-domain --locked --features wire,alloc_count \
+            --test alloc_count --test alloc_count_checkin -- --test-threads=1 2>&1 | tee "$RUNNER_TEMP/test-alloc-count.log"
+
+      - name: Test-count floors (workspace)
+        # Plan 030 green-zero guard. `test result: ok. 0 passed` exits 0, so a
+        # test file that stops running (a dropped `mod`, a feature never
+        # enabled) reads as green. Each binary must pass at least its count in
+        # scripts/verify/test_floors.json; lowering one takes --allow-decrease
+        # in a commit that says why.
+        run: |
+          python3 scripts/verify/test_count_floor.py --self-test
+          python3 scripts/verify/test_count_floor.py --suite workspace "$RUNNER_TEMP/test-workspace.log"
+          python3 scripts/verify/test_count_floor.py --suite domain-alloc-count "$RUNNER_TEMP/test-alloc-count.log"
+
+      - name: domain import fence (wasm32 graph)
+        # Plan 031. domain must not reach worker/frontend or a platform crate
+        # (workers-rs, leptos, web-sys). The JS bridge that chrono's wasmbind
+        # pulls is pinned both ways. `cargo tree --target` reads metadata only,
+        # so no wasm32 target install is needed here.
+        run: |
+          python3 scripts/verify/domain_import_fence.py --self-test
+          python3 scripts/verify/domain_import_fence.py
 
       - name: Security and notification SQL behavior
         env:
@@ -69,15 +111,16 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable, wasm32 target)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
         with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry + target
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Stub frontend dist for worker include_str!
         # Same reason as build-test: worker/src/lib.rs include_str!s the SPA shell
@@ -93,6 +136,57 @@ jobs:
         # (platform-gated APIs, non-wasm deps) would otherwise slip through to
         # `deploy.sh` and fail mid-build. --locked mirrors the deploy toolchain.
         run: cargo build -p event-checkin-worker --target wasm32-unknown-unknown --locked --release
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+        with:
+          version: 10
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: worker/pnpm-lock.yaml
+
+      - name: Install worker node deps
+        # Needed for `wrangler deploy --dry-run`, which is how the size gate
+        # gets a bundle. The [alias] block in wrangler.toml points esbuild at
+        # exact paths under node_modules, so --frozen-lockfile is required for
+        # those to resolve.
+        working-directory: worker
+        run: pnpm install --frozen-lockfile
+
+      - name: Install wasm-bindgen CLI
+        # Pinned to the crate version; wasm-bindgen's CLI and crate halves must
+        # match exactly or the bindgen step fails with a schema error.
+        uses: taiki-e/install-action@7623a79cdfecb99d681017af368ca353d9f49bb5 # v2.87.19
+        with:
+          tool: wasm-bindgen-cli@0.2.118
+
+      - name: Worker upload-size budget
+        # Cloudflare enforces the Worker limit on the COMPRESSED bundle, and
+        # this account is on the free plan: 3 MiB after gzip. Until 2026-09-22
+        # nothing measured it — this job built the wasm and discarded the
+        # number, and deploy.sh had no check at all, so "does it still fit?"
+        # was answered by guessing. Measured 2026-09-22: 1,557,187 bytes gzip,
+        # 49.5% of the ceiling.
+        #
+        # The gate measures wrangler's own dry-run bundle (shim.js + wasm) —
+        # exactly what gets uploaded — and fails at 85% of the ceiling so the
+        # wall is hit in a PR and not during a deploy. Thresholds live in
+        # worker/.size-budget.
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: bash scripts/verify/worker_size_budget.sh --keep "$RUNNER_TEMP/worker-bundle"
+
+      - name: Worker wasm leak scan (report-only)
+        # Same scan as the frontend step, on the bundle the budget step kept
+        # (.plans/031 §2). Paths are reported until --remap-path-prefix lands;
+        # secret-shaped strings fail. The PEM arm needs key material after the
+        # header, because worker/src/crypto.rs ships the bare marker constant.
+        run: |
+          set -euo pipefail
+          bash scripts/verify/wasm_leak_scan.sh --self-test
+          bash scripts/verify/wasm_leak_scan.sh --report-only "$RUNNER_TEMP"/worker-bundle/*.wasm "$RUNNER_TEMP"/worker-bundle/*.js
 
   frontend-clippy:
     name: frontend wasm32 clippy + native tests
@@ -113,16 +207,17 @@ jobs:
       run:
         working-directory: frontend-leptos
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable, wasm32 target)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
         with:
+          toolchain: stable
           components: clippy, rustfmt
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry + target
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: frontend-leptos
 
@@ -146,7 +241,13 @@ jobs:
       - name: cargo test (frontend, host target)
         # Host target on purpose: these are plain #[test] cases, and the wasm32
         # target has no test runner on the runner box.
-        run: cargo test --locked
+        run: |
+          set -o pipefail
+          cargo test --locked 2>&1 | tee "$RUNNER_TEMP/test-frontend.log"
+
+      - name: Test-count floors (frontend)
+        # Plan 030 green-zero guard; see the workspace step in build-test.
+        run: python3 ../scripts/verify/test_count_floor.py --suite frontend "$RUNNER_TEMP/test-frontend.log"
 
   e2e:
     name: playwright e2e (SPA served by the worker)
@@ -165,15 +266,16 @@ jobs:
     # D1/KV/R2 in-process, and `.dev.vars` is absent. Verified locally that the run
     # makes zero `sheets::` calls — nothing in this job can reach a live Google Sheet.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable, wasm32 target)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
         with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo registry + target
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: |
             .
@@ -183,7 +285,7 @@ jobs:
         # trunk builds the Leptos SPA; wasm-bindgen is invoked directly by the
         # worker's [build] command in wrangler.toml and must be on PATH at the
         # exact crate version (a mismatch fails the bindgen step, not the build).
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@7623a79cdfecb99d681017af368ca353d9f49bb5 # v2.87.19
         with:
           tool: trunk@0.21.7,wasm-bindgen-cli@0.2.118
 
@@ -192,11 +294,36 @@ jobs:
         working-directory: frontend-leptos
         run: trunk build
 
-      - uses: pnpm/action-setup@v4
+      - name: Frontend first-load size budget
+        # The sibling of wasm-build's worker size gate. This is the only job
+        # that builds the SPA, so it is the only place the frontend can be
+        # measured — and until 2026-09-22 nothing measured it at all, while the
+        # worker had a gate. The frontend is the bigger of the two.
+        #
+        # `--dir` rather than `--build`: trunk has already produced the bundle
+        # above, and --dir also skips the staleness check, which is meaningless
+        # on a fresh checkout where every mtime is identical.
+        #
+        # Verified locally that a plain `trunk build` dist and a `build.sh` dist
+        # measure within 4 bytes of each other, so the baseline recorded from
+        # build.sh does not spuriously red this step.
+        run: bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
+
+      - name: Frontend wasm leak scan (report-only)
+        # .plans/031: build-host paths (/home/runner/... here, /Users/... on a
+        # laptop build) are reported, not failed, until --remap-path-prefix
+        # lands after RTM#6. Secret-shaped strings fail the step even now.
+        # The self-test runs first so a scan that cannot fail is caught.
+        run: |
+          set -euo pipefail
+          bash scripts/verify/wasm_leak_scan.sh --self-test
+          bash scripts/verify/wasm_leak_scan.sh --report-only frontend-leptos/dist/*.wasm frontend-leptos/dist/*.js
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
           cache: pnpm
@@ -235,7 +362,7 @@ jobs:
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report
           path: worker/playwright-report/
@@ -266,10 +393,12 @@ jobs:
       run:
         working-directory: bethere-escrow
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Rust (stable)
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
+        with:
+          toolchain: stable
       # No rust-cache here: the dev-dep `bethere-escrow-client` is a path dep under
       # target/ generated by `quasar build`, so `cargo metadata` fails until the build
       # runs — rust-cache would error and cache nothing.
@@ -306,7 +435,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: ShellCheck every tracked shell script
         # `worker/deploy.sh` used to embed Python inside double-quoted
@@ -328,7 +457,7 @@ jobs:
           bash scripts/verify/shellcheck_gate.sh
 
       - name: Setup Python (3.11+ for tomllib)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
 
@@ -339,6 +468,30 @@ jobs:
         # the JSON assertion, and that every script still resolves the helpers
         # it calls.
         run: bash scripts/verify/e2e_lib_smoke.sh
+
+      - name: Issue / plan / handover numbering gate
+        # Plan 030. Concurrent sessions numbered files by eye and collided
+        # (plan 014, handovers 001/124/126 are pinned legacy cases). The
+        # self-test runs first so a gate that can no longer fail goes red too.
+        run: |
+          python3 scripts/verify/numbering_gate.py --self-test
+          python3 scripts/verify/numbering_gate.py
+
+      - name: Benchmark records and citations
+        # Plan 031 §2. Rules in .benchmarks/README.md: a green correctness gate
+        # before a number, interleaved lanes, retractions in place, and every
+        # .benchmarks/NNN citation resolving to a record that is not retracted.
+        run: |
+          python3 scripts/verify/bench_records.py --self-test
+          python3 scripts/verify/bench_records.py
+
+      - name: Issue Status verdict vocabulary
+        # Plan 030. Issues above 144 must open Status with a fixed verdict word
+        # so stale prose is machine-checkable (.issues/140). --vocab needs no git
+        # history, so the shallow checkout is enough.
+        run: |
+          python3 scripts/verify/issue_ledger.py --self-test
+          python3 scripts/verify/issue_ledger.py --vocab
 
       - name: Install blake3 (wrangler-compatible asset hashing)
         run: python3 -m pip install --quiet blake3

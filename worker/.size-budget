@@ -1,0 +1,38 @@
+# Worker upload-size budget — gzip bytes.
+#
+# Cloudflare enforces the Worker size limit on the COMPRESSED bundle. The free
+# plan ceiling is 3 MiB (paid is 10 MiB); BeThere is on the free plan, so 3 MiB
+# is the number that matters. Nothing measured this until 2026-09-22 — deploy.sh
+# had no size check and CI's wasm-build job built the wasm and discarded it.
+#
+# Read by scripts/verify/worker_size_budget.sh. `KEY=value`, `#` comments.
+
+# Cloudflare Workers free plan, after gzip. 3 * 1024 * 1024.
+CEILING_BYTES=3145728
+
+# Fail the gate at 85% of the ceiling (2.55 MiB). Deliberately not 100%: the
+# remaining ~460 KiB is emergency headroom, so the limit is discovered by a red
+# CI run and not by a failed deploy during an incident.
+FAIL_PCT=85
+
+# Warn at 70% (2.15 MiB). Crossing this is the signal to stop adding
+# dependencies to the worker and start asking what can move out of it.
+WARN_PCT=70
+
+# Recorded baseline — the deployed bundle as measured on 2026-09-22, via
+# `wrangler deploy --dry-run` (wrangler's own bundler output: shim.js + the
+# wasm-bindgen wasm). The gate prints the delta against this so growth is
+# visible per-commit instead of only when a ceiling is hit.
+#
+# Update it deliberately, in the same commit as the change that grew the
+# bundle, with `--update-baseline`. An unexplained baseline bump in a diff is
+# the thing this line exists to make visible.
+# 2026-09-22: moved 1569688 -> 1574121. Composition, so nobody re-derives it:
+# +4332 is the ticket announcement feature (.issues/132); the remaining +101 is
+# growth from a8175cb that was never recorded. Note the OLD 1569688 figure
+# carried a known -33 byte staging offset, so deltas printed against it
+# overstated growth by 33 — real growth for a8175cb was +68, not +101. This new
+# baseline is a direct measurement and carries no offset, which retires the
+# separate "fix the -33" item in .plans/027.
+BASELINE_BYTES=1574121
+BASELINE_DATE=2026-09-22

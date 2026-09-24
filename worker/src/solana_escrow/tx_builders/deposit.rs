@@ -1,3 +1,4 @@
+use event_checkin_domain::onchain::EventIx;
 use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
@@ -46,7 +47,15 @@ pub async fn build_deposit_transaction(
         acct_r(ctx.system_program),
     ];
 
-    let tx_b64 = finalize_tx(rpc_url, kv, &ctx, instruction_accounts, ctx.ix_data(1), &[]).await?;
+    let tx_b64 = finalize_tx(
+        rpc_url,
+        kv,
+        &ctx,
+        instruction_accounts,
+        ctx.ix_data(EventIx::Deposit),
+        &[],
+    )
+    .await?;
     let amount_display = deposit_amount as f64 / 1_000_000.0;
 
     Ok(DepositTransaction {

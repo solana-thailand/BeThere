@@ -1,10 +1,10 @@
 //! Cryptographic primitives: SHA-256, base58, PDA derivation, ATA derivation.
 
-#[cfg(not(test))]
+#[cfg(target_arch = "wasm32")]
 use js_sys::{Object, Reflect, Uint8Array};
-#[cfg(not(test))]
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
-#[cfg(not(test))]
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::JsFuture;
 
 use super::{ASSOCIATED_TOKEN_PROGRAM_ID, EscrowError, PubkeyBytes, TOKEN_PROGRAM_ID};
@@ -15,20 +15,21 @@ use super::{ASSOCIATED_TOKEN_PROGRAM_ID, EscrowError, PubkeyBytes, TOKEN_PROGRAM
 
 /// Compute SHA-256 hash.
 /// In WASM (worker runtime): uses Web Crypto SubtleCrypto.
-/// In native (tests): uses pure Rust implementation.
+/// Native (unit and `tests/` integration tests): pure Rust implementation.
+/// Gated on the target, not `cfg(test)`, which integration tests don't set.
 pub(crate) async fn sha256(data: &[u8]) -> Result<[u8; 32], EscrowError> {
-    #[cfg(not(test))]
+    #[cfg(target_arch = "wasm32")]
     {
         sha256_wasm(data).await
     }
-    #[cfg(test)]
+    #[cfg(not(target_arch = "wasm32"))]
     {
         sha256_native(data)
     }
 }
 
-/// Pure Rust SHA-256 for native test builds.
-#[cfg(test)]
+/// Pure Rust SHA-256 for native builds (tests only; the Worker is wasm32).
+#[cfg(not(target_arch = "wasm32"))]
 fn sha256_native(data: &[u8]) -> Result<[u8; 32], EscrowError> {
     // Minimal SHA-256 implementation (no external dependency needed for tests)
     let mut state: [u32; 8] = [
@@ -121,7 +122,7 @@ fn sha256_native(data: &[u8]) -> Result<[u8; 32], EscrowError> {
 }
 
 /// Web Crypto SubtleCrypto SHA-256 for WASM worker runtime.
-#[cfg(not(test))]
+#[cfg(target_arch = "wasm32")]
 async fn sha256_wasm(data: &[u8]) -> Result<[u8; 32], EscrowError> {
     let global = js_sys::global();
 

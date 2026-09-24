@@ -1,0 +1,68 @@
+# 145: Refund-proof URL accepts any scheme and is rendered as an attendee link
+
+**Status:** fixed on develop 2026-09-24 (server + frontend). Not deployed. The staging browser repro and the
+prod row count (§Fix 3) have not been run; the prod read was refused in the agent session, so the owner runs it.
+**Found by:** session `event-checkin-df`, reading every writer that shares `maybe_upload_to_r2`.
+**Severity:** medium-low. Planting a link needs a staff account, but it then runs
+script in an attendee's session on click.
+
+## What happens
+
+- `POST` mark-refund (`worker/src/handlers/deposit/thb/handlers/refund.rs:76`)
+  checks only that `refund_proof_url` is non-empty. Slips go through
+  `validate_slip_url`, which accepts only `data:image/*` (now magic-byte
+  checked) or `http(s)://`. The refund proof gets no check at all.
+- The admin UI (`frontend-leptos/src/pages/admin_deposit.rs:922`) collects it
+  as free text: "Paste refund proof URL (transfer receipt)".
+- The attendee's ticket page renders it verbatim as
+  `<a href=url target="_blank">` in `RefundCard`
+  (`frontend-leptos/src/pages/ticket/action_cards.rs:165`). The admin
+  refunded list does the same (`admin_deposit.rs:1069`).
+- The CSP's `script-src` includes `'unsafe-inline'`
+  (`worker/src/middleware/headers.rs:41`), so a `javascript:` URL is not
+  blocked by CSP.
+
+A staff member, or anyone holding a staff session, can set a refund proof of
+`javascript:…`. It runs on the bethere origin when the attendee clicks
+"View Refund Receipt".
+
+Not reproduced in a browser yet. This is from reading the code; the repro below
+is the check.
+
+## Fix (proposed)
+
+1. Server: validate `refund_proof_url` in `mark_refund_handler`, and in any
+   batch or manual path that writes the column, against the same allow-list
+   as slips. Either reuse `validate_slip_url` or add a sibling that accepts
+   `https://` plus image data URLs. Reject everything else with a 400.
+2. Frontend: render the link only when the value starts with `https://` or
+   `/api/storage/`. This is defence in depth for rows already stored.
+3. Read-only prod check: count rows whose `refund_proof_url` is non-empty and
+   matches neither prefix:
+   `SELECT COUNT(*) FROM thb_deposits WHERE refund_proof_url <> '' AND refund_proof_url NOT LIKE 'https://%' AND refund_proof_url NOT LIKE '/api/storage/%'`.
+
+## Repro (staging)
+
+As staff, mark a verified THB deposit refunded with proof
+`javascript:alert(document.domain)`. Then open that attendee's ticket page and
+click "View Refund Receipt". Expected after the fix: a 400 at step one.
+
+## Fix applied (2026-09-24)
+
+- `domain::validation::safe_document_link` is one predicate for both sides. It
+  accepts `https://<host>…` and same-origin `/api/storage/…` paths, and rejects
+  every other scheme, `//host`, backslashes, whitespace and control characters.
+  Tests: `domain/tests/safe_document_link.rs`.
+- `mark_refund_handler` checks a `data:` proof like a slip (MIME + magic bytes)
+  and requires `safe_document_link` for everything else. Both checks run before
+  `maybe_upload_to_r2`. The batch path reuses the stored value and the manual
+  path writes `refund_link` only to the Sheet (not rendered), so neither takes
+  new input.
+- `RefundCard` (ticket page) and the admin refunded list render the link only
+  when `safe_document_link` accepts it. Existing rows with any other value show
+  no link. `http://` proofs, if prod has any, stop being clickable, which is
+  intended.
+- `worker/tests/refund_proof_link_guard.rs` pins that the checks exist and run
+  before the store.
+- Staging has 1 `thb_deposits` row and 0 refund proofs (read 2026-09-24), so
+  there is nothing to compare there.

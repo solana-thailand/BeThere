@@ -692,11 +692,14 @@ mod tests {
     fn sample_event() -> EventConfig {
         use event_checkin_domain::models::event::*;
         EventConfig {
+            comp_emails: Vec::new(),
             id: "evt-1".into(),
             name: String::new(),
             slug: String::new(),
             tagline: String::new(),
             link: String::new(),
+            ticket_note_in_person: String::new(),
+            ticket_note_online: String::new(),
             status: EventStatus::Active,
             event_start_ms: 1_700_000_000_000,
             event_end_ms: 1_700_003_600_000,

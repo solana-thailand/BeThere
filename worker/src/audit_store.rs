@@ -1,6 +1,7 @@
-//! Append-only audit log stored in the EVENTS KV namespace.
+//! Append-only audit log. D1 `audit_log` is primary; the EVENTS KV arrays
+//! below are written only when D1 is unbound or its insert fails.
 //!
-//! Key schema:
+//! KV key schema (fallback):
 //!   "event:{id}:audit"  → JSON array of `AuditEntry` (per-event log, max 500)
 //!   "audit:global"      → JSON array of `AuditEntry` (system-wide log, max 1000)
 
@@ -101,6 +102,15 @@ pub enum AuditAction {
     /// LINE/email). Skips the VULN-012 email-match gate (admin-authed +
     /// audited instead). Sibling of `DepositSubmitted` / `DepositVerified`.
     SlipRecordedByAdmin,
+    /// Admin admitted an attendee WITHOUT accepting their payment as cash: the
+    /// deposit is reclassified `comp`, the ticket QR is issued, and no refund
+    /// is owed (`.issues/129` Gap 1).
+    ///
+    /// Separately auditable from `DepositVerified` on purpose. It is the one
+    /// action that hands somebody a ticket while writing off money they claim
+    /// to have sent, so "who decided this, and when" must be answerable without
+    /// inferring it from a deposit's current state.
+    DepositCompedByAdmin,
 
     // Privacy (PDPA)
     DataDeletionRequested,
@@ -198,66 +208,67 @@ async fn write_entries(
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Append an audit entry to an event's audit log (max 500 entries).
+/// Insert `entry` into D1's `audit_log`. `true` means it is durably recorded
+/// and the KV copy can be skipped.
+///
+/// D1 is the read path (`get_event_audit` / `get_global_audit` return D1 rows
+/// whenever there are any), so the KV array is only a fallback for when D1 is
+/// unbound or the insert failed. Writing it unconditionally cost one KV
+/// read-modify-write of a ≤500-entry array on every check-in — against the
+/// free plan's 1,000 KV writes/day, and lossy under concurrent scanners.
+async fn append_d1(db: Option<&worker::D1Database>, event_id: &str, entry: &AuditEntry) -> bool {
+    let Some(db) = db else { return false };
+    let action_str = serde_json::to_string(&entry.action)
+        .unwrap_or_default()
+        .trim_matches('"')
+        .to_string();
+    let metadata_str = entry.metadata.as_ref().map(|v| v.to_string());
+    match crate::db::append_audit(
+        db,
+        event_id,
+        &entry.actor,
+        &action_str,
+        &entry.target,
+        &entry.description,
+        metadata_str.as_deref(),
+    )
+    .await
+    {
+        Ok(()) => true,
+        Err(e) => {
+            tracing::warn!(event_id, error = %e, "D1 audit insert failed, falling back to KV");
+            false
+        }
+    }
+}
+
+/// Append an audit entry to an event's audit log: D1, or KV (max 500) if D1
+/// could not take it.
 pub async fn append_event_audit(
     kv: &KvStore,
     event_id: &str,
     entry: AuditEntry,
     d1: Option<&worker::D1Database>,
 ) -> Result<(), String> {
-    // D1 path: O(1) INSERT — always attempt if available
-    if let Some(db) = d1 {
-        let action_str = serde_json::to_string(&entry.action)
-            .unwrap_or_default()
-            .trim_matches('"')
-            .to_string();
-        let metadata_str = entry.metadata.as_ref().map(|v| v.to_string());
-        let _ = crate::db::append_audit(
-            db,
-            event_id,
-            &entry.actor,
-            &action_str,
-            &entry.target,
-            &entry.description,
-            metadata_str.as_deref(),
-        )
-        .await;
-        // Fire-and-forget D1 write — KV is still the primary read source
+    if append_d1(d1, event_id, &entry).await {
+        return Ok(());
     }
-
-    // KV fallback (always runs for read compatibility)
     let key = format!("event:{event_id}:audit");
     let mut entries = read_entries(kv, &key).await;
     entries.push(entry);
     write_entries(kv, &key, &entries, MAX_EVENT_AUDIT).await
 }
 
-/// Append an audit entry to the global audit log (max 1000 entries).
+/// Append an audit entry to the global audit log: D1 (`__global__`), or KV
+/// (max 1000) if D1 could not take it.
 pub async fn append_global_audit(
     kv: &KvStore,
     entry: AuditEntry,
     d1: Option<&worker::D1Database>,
 ) -> Result<(), String> {
-    // D1 path: append to global audit using "__global__" event_id
-    if let Some(db) = d1 {
-        let action_str = serde_json::to_string(&entry.action)
-            .unwrap_or_default()
-            .trim_matches('"')
-            .to_string();
-        let metadata_str = entry.metadata.as_ref().map(|v| v.to_string());
-        let _ = crate::db::append_audit(
-            db,
-            "__global__",
-            &entry.actor,
-            &action_str,
-            &entry.target,
-            &entry.description,
-            metadata_str.as_deref(),
-        )
-        .await;
+    if append_d1(d1, "__global__", &entry).await {
+        return Ok(());
     }
-
-    // KV fallback (always runs for read compatibility)
     let key = "audit:global";
     let mut entries = read_entries(kv, key).await;
     entries.push(entry);

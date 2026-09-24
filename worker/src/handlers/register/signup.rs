@@ -187,7 +187,15 @@ pub async fn register_attendee(
         || state
             .config
             .super_admin_emails
-            .contains(&email.to_lowercase());
+            .contains(&email.to_lowercase())
+        // Guests the organizer decided do not pay — speakers, sponsors, VIPs
+        // (`EventConfig::comp_emails`). Same comp path as staff, but grants no
+        // privileges: this list is read here and nowhere else, whereas
+        // `is_staff` gates the entire admin router.
+        //
+        // The list is stored already lowercased and trimmed by `apply_update`,
+        // so this is a plain membership test.
+        || config.comp_emails.contains(&email.to_lowercase());
 
     // 3e. Validate deposit agreement if deposit is enabled — skip for Online
     // attendees and for waived staff/organizers.
@@ -835,6 +843,15 @@ async fn record_staff_comp(
         bank_name: None,
         account_name: None,
         refund_proof_url: None,
+        // A comp has no slip — there is no image and no payment. None is the
+        // honest value: this row can never be anyone's duplicate, and must
+        // never be anyone's match either.
+        slip_blake3: None,
+        // A staff comp is the one case that HAS always been decided at creation.
+        // Recording it outright means this row no longer depends on anyone
+        // recognising the `STAFF_COMP_WAIVED` / `SYSTEM_STAFF_WAIVE` sentinels —
+        // though `source()` still honours them, for the rows written before 0047.
+        deposit_source: Some(event_checkin_domain::models::deposit::DepositSource::Comp),
     };
     if let Some(kv) = state.events_kv.as_ref()
         && let Err(e) = crate::event_store::save_thb_deposit(kv, &comp, state.d1.as_deref()).await

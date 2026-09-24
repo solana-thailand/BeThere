@@ -1,3 +1,4 @@
+use event_checkin_domain::onchain::EscrowIxData;
 use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
@@ -50,10 +51,11 @@ pub async fn build_rollover_deposit_transaction(
         acct_r(source_ctx.system_program),
     ];
 
-    // Instruction data: [8] + [source_event_id u64 LE] + [target_event_id u64 LE]
-    let mut ix_data = vec![8];
-    ix_data.extend_from_slice(&source_event_id.to_le_bytes());
-    ix_data.extend_from_slice(&target_event_id.to_le_bytes());
+    let ix_data = EscrowIxData::RolloverDeposit {
+        source_event_id,
+        target_event_id,
+    }
+    .encode();
 
     // ATA program for CPI init of target_deposit
     let extra = vec![acct_r(target_ctx.ata_program)];

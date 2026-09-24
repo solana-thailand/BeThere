@@ -1,0 +1,54 @@
+# cargo-deny — CI job `advisories` in .github/workflows/security.yml, run once
+# per lockfile with `--config deny.toml` (root workspace, frontend-leptos).
+# bethere-escrow cannot resolve its graph without `quasar build` (a dev-dep
+# lives under target/), so CI scans its Cargo.lock with `cargo audit`, feeding
+# it the RUSTSEC ids below — this file stays the single ignore list. Local: `cargo deny --manifest-path <m> --config deny.toml check advisories`.
+#
+# Licenses: third-party crates must carry one of the permissive licenses in
+# [licenses].allow. First-party crates are `publish = false` and skipped via
+# [licenses.private]; the repo's own LICENSE is an owner call (.plans/029 §4).
+# Local: `cargo deny --manifest-path <m> --config deny.toml check licenses`.
+
+[advisories]
+version = 2
+yanked = "warn"
+# Every entry is an "unmaintained"/"unsound" notice on a transitive build-time
+# or toolchain crate, not an exploitable vulnerability in our use. Re-check when the pinning dep moves;
+# delete the entry once `cargo deny` stops reporting it.
+ignore = [
+  # frontend-leptos + bethere-escrow: proc-macro helper, via leptos / solana.
+  { id = "RUSTSEC-2024-0436", reason = "paste: unmaintained, build-time proc-macro only; moves with leptos/solana" },
+  # frontend-leptos: proc-macro helper, via leptos.
+  { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2: unmaintained, build-time only; moves with leptos" },
+  # bethere-escrow: Solana toolchain transitive deps — move only with the SBPF
+  # toolchain decision (scripts/check_sbpf_v3_gate.sh).
+  { id = "RUSTSEC-2025-0141", reason = "bincode: unmaintained, Solana toolchain transitive" },
+  { id = "RUSTSEC-2024-0388", reason = "derivative: unmaintained, Solana toolchain transitive" },
+  { id = "RUSTSEC-2025-0161", reason = "libsecp256k1: unmaintained, Solana toolchain transitive" },
+  # Only cargo-audit's lockfile scan reports this one (cargo-deny's resolved
+  # graph does not reach rand 0.7 in the escrow build).
+  { id = "RUSTSEC-2026-0097", reason = "rand 0.7.3: unsound only with a custom logger calling rand::rng(); Solana toolchain transitive" },
+]
+
+[licenses]
+version = 2
+# Permissive only. An OR expression passes when any branch is allowed, so
+# "MIT OR LGPL-2.1-or-later" passes on MIT. A copyleft-only crate fails.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "CC0-1.0",
+  "Unicode-3.0",
+  "Zlib",
+]
+confidence-threshold = 0.9
+# One file serves two graphs (workspace, frontend-leptos); an allowance used
+# by only one of them is not stale.
+unused-allowed-license = "allow"
+
+[licenses.private]
+ignore = true

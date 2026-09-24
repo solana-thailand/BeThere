@@ -112,26 +112,38 @@ impl ParticipationType {
     ///
     /// In-person is checked first to preserve prior `is_in_person` behavior
     /// for ambiguous values that mention both tracks.
+    ///
+    /// Allocation-free: it runs on every check-in and once per attendee in
+    /// the counting paths. ASCII case folding gives the same answers as
+    /// `to_lowercase()` here, because every needle is lowercase ASCII without
+    /// a `k`. The only non-ASCII char that lowercases to ASCII is the Kelvin
+    /// sign (to `k`). `domain/tests/participation_type_parse.rs` pins the
+    /// equivalence.
     pub fn parse(s: &str) -> Self {
-        let lower = s.trim().to_lowercase();
-        if lower.is_empty() {
+        let value = s.trim();
+        if value.is_empty() {
             return Self::InPerson;
         }
-        if lower.contains("in-person")
-            || lower.contains("in person")
-            || lower.contains("in_person")
-            || lower.contains("physical")
-        {
+        let has = |needle: &str| contains_ignore_ascii_case(value, needle);
+        if has("in-person") || has("in person") || has("in_person") || has("physical") {
             return Self::InPerson;
         }
-        if lower.contains("online") || lower.contains("virtual") {
+        if has("online") || has("virtual") {
             return Self::Online;
         }
-        if lower == "retrospective" {
+        if value.eq_ignore_ascii_case("retrospective") {
             return Self::Retrospective;
         }
         Self::Other
     }
+}
+
+/// `needle` must be lowercase ASCII.
+fn contains_ignore_ascii_case(haystack: &str, needle: &str) -> bool {
+    haystack
+        .as_bytes()
+        .windows(needle.len())
+        .any(|window| window.eq_ignore_ascii_case(needle.as_bytes()))
 }
 
 impl FromStr for ParticipationType {

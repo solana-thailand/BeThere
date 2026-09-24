@@ -237,7 +237,7 @@ pub async fn onchain_webhook_handler(
         .get("authorization")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    if auth_header != expected {
+    if !crate::crypto::constant_time_eq(auth_header.as_bytes(), expected.as_bytes()) {
         // A rejected value is still credential material; never copy it into logs.
         tracing::warn!(
             auth_present = !auth_header.is_empty(),

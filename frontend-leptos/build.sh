@@ -64,7 +64,37 @@ bump_sw_version() {
     ver="$(shasum -a 256 dist/index.html | cut -c1-16)"
     sed -i.bak -E "s/var CACHE_VERSION = \"[^\"]*\";/var CACHE_VERSION = \"bethere-${ver}\";/" dist/sw.js
     rm -f dist/sw.js.bak
+    # sed exits 0 on no match. A missed bump means activate never purges the
+    # previous build's caches (plan 028 F1), so fail the build instead.
+    if ! grep -q "var CACHE_VERSION = \"bethere-${ver}\";" dist/sw.js; then
+        echo "❌ SW cache version bump did not apply — check the CACHE_VERSION line in sw.js" >&2
+        exit 1
+    fi
     echo "🔁 SW cache version → bethere-${ver} (auto-invalidates stale caches on deploy)"
+}
+
+precompress_wasm() {
+    # Cloudflare compresses assets on the fly at ~brotli q4; q11 done once here
+    # saves ~380 KB per first load (.issues/135 §6.3). The Worker serves this
+    # sibling to clients that accept br (worker/src/precompressed.rs) and falls
+    # back to the plain file otherwise, so a missing .br only costs bytes.
+    local wasm
+    for wasm in dist/event-checkin-frontend-*_bg.wasm; do
+        [[ -f "$wasm" ]] || { echo "⚠️  No wasm in dist/ — skipping precompression"; return; }
+        # shellcheck disable=SC2016 # ${...} below is a JS template literal
+        node -e '
+const fs = require("fs"), z = require("zlib");
+const [src] = process.argv.slice(1);
+const raw = fs.readFileSync(src);
+const br = z.brotliCompressSync(raw, { params: {
+  [z.constants.BROTLI_PARAM_QUALITY]: 11,
+  [z.constants.BROTLI_PARAM_SIZE_HINT]: raw.length,
+}});
+if (!z.brotliDecompressSync(br).equals(raw)) { console.error("brotli round-trip mismatch"); process.exit(1); }
+fs.writeFileSync(src + ".br", br);
+console.log(`🗜️  ${src}.br: ${raw.length} → ${br.length} bytes (brotli q11)`);
+' "$wasm"
+    done
 }
 
 build() {
@@ -87,6 +117,7 @@ build() {
 
     cleanup_html
     bump_sw_version
+    precompress_wasm
 }
 
 # --watch mode: auto-rebuild on file changes

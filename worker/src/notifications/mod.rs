@@ -4,10 +4,11 @@ mod content;
 mod outbox;
 mod policy;
 mod prepare;
+mod staleness;
 mod transport;
 
 pub use outbox::{list, list_for_attendee, mark_all_read, mark_read, retry};
-use policy::{failure_state, retry_delay};
+use policy::{StalenessMode, failure_state, max_per_run, retry_delay};
 use prepare::{Prepared, prepare};
 
 use crate::db::d1_safe::safe_all_rows;
@@ -61,27 +62,40 @@ pub struct InboxNotification {
     pub read_at: Option<i64>,
 }
 
+/// An optional `[vars]` entry as a plain string. Absent and empty read the same
+/// to every caller here, which is what a redeclared-but-blank staging var is.
+fn env_var(env: &Env, name: &str) -> Option<String> {
+    env.var(name).ok().map(|v| v.to_string())
+}
+
 pub async fn dispatch(env: &Env) -> Result<(), String> {
-    if env
-        .var("NOTIFICATIONS_ENABLED")
-        .map(|v| v.to_string())
-        .unwrap_or_default()
-        != "1"
-    {
+    if env_var(env, "NOTIFICATIONS_ENABLED").unwrap_or_default() != "1" {
         return Ok(());
     }
     // Validate transport before taking any jobs. Disabled/misconfigured systems don't burn attempts.
     let sender = transport::Sender::from_env(env)?;
+    let mode = StalenessMode::parse(env_var(env, "NOTIFICATIONS_STALENESS").as_deref());
     let db = env.d1("DB").map_err(|e| e.to_string())?;
     outbox::run_sql(&db, include_str!("sql/recover.sql")).await?;
     // No recipient/payload copies are stored in the queue.
     outbox::run_sql(&db, include_str!("sql/cancel.sql")).await?;
+    // Age guard before the claim loop, so a run's budget is spent on messages
+    // still worth sending rather than on a backlog (`.issues/128`).
+    staleness::sweep(&db, mode).await?;
     // A single UPDATE claims each row before sending; overlapping crons cannot take the same job.
-    for _ in 0..25 {
-        let rows = safe_all_rows(&db.prepare(include_str!("sql/claim.sql"))).await?;
+    let claim = staleness::claim_sql();
+    let budget = max_per_run(env_var(env, "NOTIFICATIONS_MAX_PER_RUN").as_deref());
+    let mut claimed = 0usize;
+    for _ in 0..budget {
+        let claim_stmt = db
+            .prepare(&claim)
+            .bind_refs(&[D1Type::Text(mode.as_str())])
+            .map_err(|e| e.to_string())?;
+        let rows = safe_all_rows(&claim_stmt).await?;
         let Some(value) = rows.into_iter().next() else {
             break;
         };
+        claimed += 1;
         let job: Notification = serde_json::from_value(value).map_err(|e| e.to_string())?;
         let result = prepare(&db, &job, &sender.base_url).await;
         let (status, message_id, code, delay) = match result {
@@ -136,6 +150,18 @@ pub async fn dispatch(env: &Env) -> Result<(), String> {
             notification_id = job.id,
             status,
             "notification attempt completed"
+        );
+    }
+    // The loop stopping because it ran out of budget rather than out of work is
+    // the only outward sign that the queue is behind; without it a backlog
+    // draining 25 a day looks exactly like a queue that is up to date. A queue
+    // holding exactly `budget` rows logs this once and is then empty, which is
+    // why the wording is "may" — proving it would cost a second count query
+    // every run to sharpen a line nobody acts on automatically.
+    if claimed == budget {
+        tracing::warn!(
+            budget,
+            "dispatch run spent its whole per-run budget; the queue may still hold work"
         );
     }
     Ok(())

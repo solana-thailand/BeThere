@@ -4,7 +4,7 @@ use worker::KvStore;
 
 use event_checkin_domain::models::event::{
     DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus, EventConfig,
-    UpdateEventRequest, normalize_map_url, normalize_sheet_name,
+    UpdateEventRequest, normalize_map_url, normalize_sheet_name, normalize_ticket_note,
 };
 
 use crate::event_store::read::get_event_index;
@@ -79,6 +79,19 @@ pub async fn update_event(
 /// Validates escrow-critical field locks and deposit caps.
 /// Does NOT save — caller is responsible for persisting to KV/D1.
 pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Result<(), String> {
+    // Deposit-waived emails. Normalised to lowercase and de-blanked here, once,
+    // so every later comparison is a plain `contains` and cannot be defeated by
+    // the casing someone typed into the admin form.
+    if let Some(ref emails) = req.comp_emails {
+        config.comp_emails = emails
+            .iter()
+            .map(|e| e.trim().to_lowercase())
+            .filter(|e| !e.is_empty())
+            .collect();
+        config.comp_emails.sort();
+        config.comp_emails.dedup();
+    }
+
     // SEC-002: Lock escrow-critical fields after on-chain init.
     let is_escrow_reset = req
         .escrow_status
@@ -115,8 +128,8 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
         }
     }
 
-    // SEC-003: Max deposit cap
-    const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
+    // SEC-003: Max deposit cap ($1,000 USDC, shared with the form's check)
+    const MAX_DEPOSIT_USDC: u64 = event_checkin_domain::money::USDC_MAX_DEPOSIT_ATOMIC;
     if let Some(v) = req.deposit_amount_usdc {
         if v > MAX_DEPOSIT_USDC {
             return Err(format!(
@@ -300,6 +313,15 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     if let Some(ref links) = req.community_links {
         config.community_links = links.clone();
     }
+    // Normalised, not just trimmed: bounds the size of the event JSON that KV
+    // serves on every ticket page load, and folds CRLF so a browser textarea
+    // does not add blank lines under `white-space: pre-wrap`.
+    if let Some(ref note) = req.ticket_note_in_person {
+        config.ticket_note_in_person = normalize_ticket_note(note)?;
+    }
+    if let Some(ref note) = req.ticket_note_online {
+        config.ticket_note_online = normalize_ticket_note(note)?;
+    }
     if let Some(ref url) = req.calendar_subscribe_url {
         config.calendar_subscribe_url = url.clone();
     }
@@ -342,5 +364,103 @@ fn fallback<'a>(current: &'a str, default: &'a str) -> &'a str {
     match current.trim().is_empty() {
         true => default,
         false => current,
+    }
+}
+
+#[cfg(test)]
+mod comp_email_tests {
+    use super::*;
+
+    /// `EventConfig` has no `Default` (its enum fields have no canonical
+    /// default), and only three fields matter here, so build it from the
+    /// global-config constructor and adjust.
+    fn cfg() -> EventConfig {
+        let mut c = EventConfig::from_global_config(
+            "Test Event",
+            "",
+            "",
+            0,
+            0,
+            "sheet",
+            "Attendees",
+            "Staff",
+            "",
+            "",
+            "",
+            "",
+            Vec::new(),
+            Vec::new(),
+            "",
+            "",
+        );
+        c.id = "evt".into();
+        c.comp_emails = Vec::new();
+        c
+    }
+
+    fn req_with(emails: Option<Vec<&str>>) -> UpdateEventRequest {
+        UpdateEventRequest {
+            comp_emails: emails.map(|v| v.into_iter().map(str::to_string).collect()),
+            ..Default::default()
+        }
+    }
+
+    /// The list is typed by a human into an admin form; the email arrives from
+    /// an OAuth provider. If those disagree on casing or stray whitespace, the
+    /// waiver silently does nothing and the VIP is asked for ฿500 at the door
+    /// with no indication why. Normalise once, on write.
+    #[test]
+    fn emails_are_lowercased_trimmed_and_deduped_on_write() {
+        let mut c = cfg();
+        apply_update(
+            &mut c,
+            &req_with(Some(vec![
+                "  VIP@Example.COM ",
+                "vip@example.com",
+                "Speaker@Example.com",
+                "   ",
+                "",
+            ])),
+        )
+        .expect("update applies");
+        assert_eq!(
+            c.comp_emails,
+            vec!["speaker@example.com", "vip@example.com"],
+            "expected lowercased, trimmed, blank-stripped, deduped and sorted"
+        );
+    }
+
+    /// `None` means "this request is not about the guest list". Without that,
+    /// renaming an event or changing its venue would silently wipe it.
+    #[test]
+    fn an_update_that_does_not_mention_the_list_leaves_it_alone() {
+        let mut c = cfg();
+        c.comp_emails = vec!["vip@example.com".into()];
+        apply_update(&mut c, &req_with(None)).expect("update applies");
+        assert_eq!(c.comp_emails, vec!["vip@example.com"]);
+    }
+
+    /// An explicit empty list is how the organizer clears it, and must be
+    /// distinguishable from "not mentioned".
+    #[test]
+    fn an_explicit_empty_list_clears_it() {
+        let mut c = cfg();
+        c.comp_emails = vec!["vip@example.com".into()];
+        apply_update(&mut c, &req_with(Some(vec![]))).expect("update applies");
+        assert!(c.comp_emails.is_empty());
+    }
+
+    /// The membership test `signup` performs, spelled out here so the contract
+    /// between the two is visible in one place.
+    #[test]
+    fn a_normalised_list_matches_however_the_provider_cases_the_email() {
+        let mut c = cfg();
+        apply_update(&mut c, &req_with(Some(vec!["VIP@Example.COM"]))).expect("applies");
+        for arriving in ["vip@example.com", "VIP@EXAMPLE.COM", "Vip@Example.Com"] {
+            assert!(
+                c.comp_emails.contains(&arriving.to_lowercase()),
+                "{arriving} must match the stored list"
+            );
+        }
     }
 }

@@ -4,8 +4,10 @@
 //! that renders the full form UI with validation, save, and escrow init logic.
 
 use event_checkin_domain::models::event::{
-    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, normalize_sheet_name,
+    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, MAX_TICKET_NOTE_CHARS,
+    normalize_sheet_name,
 };
+use event_checkin_domain::money::{UsdcDepositCheck, check_usdc_deposit, parse_usdc_atomic};
 use leptos::prelude::*;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
@@ -63,6 +65,9 @@ pub struct EventForm {
     pub max_refundable_deposits: String,
     pub location: String,
     pub location_map_url: String,
+    /// Deposit-waived emails, as typed: one per line or comma-separated. Parsed
+    /// on submit; normalised server-side so casing here does not matter.
+    pub comp_emails: String,
     pub video_url: String,
     pub in_person_capacity: String,
     pub online_capacity: String,
@@ -73,6 +78,10 @@ pub struct EventForm {
     pub updated_at: String,
     pub community_links: Vec<crate::api::CommunityLink>,
     pub calendar_subscribe_url: String,
+    /// Ticket-page announcement shown to in-person attendees (migration 0049).
+    pub ticket_note_in_person: String,
+    /// Ticket-page announcement shown to online attendees (migration 0049).
+    pub ticket_note_online: String,
 }
 
 // ===== Helpers =====
@@ -204,6 +213,7 @@ pub fn default_form() -> EventForm {
         max_refundable_deposits: String::new(),
         location: String::new(),
         location_map_url: String::new(),
+        comp_emails: String::new(),
         video_url: String::new(),
         in_person_capacity: String::new(),
         online_capacity: String::new(),
@@ -214,6 +224,8 @@ pub fn default_form() -> EventForm {
         updated_at: String::new(),
         community_links: vec![],
         calendar_subscribe_url: String::new(),
+        ticket_note_in_person: String::new(),
+        ticket_note_online: String::new(),
     }
 }
 
@@ -298,6 +310,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         },
         location: detail.location.clone(),
         location_map_url: detail.location_map_url.clone(),
+        comp_emails: detail.comp_emails.join("\n"),
         video_url: detail.video_url.clone(),
         in_person_capacity: detail
             .in_person_capacity
@@ -316,6 +329,8 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         visibility: detail.visibility.clone(),
         updated_at: detail.updated_at.clone(),
         community_links: detail.community_links.clone(),
+        ticket_note_in_person: detail.ticket_note_in_person.clone(),
+        ticket_note_online: detail.ticket_note_online.clone(),
         calendar_subscribe_url: detail.calendar_subscribe_url.clone(),
     }
 }
@@ -377,6 +392,7 @@ pub fn EventFormComponent(
     let (sec_capacity_open, set_sec_capacity_open) = signal(true);
     let (sec_people_open, set_sec_people_open) = signal(true);
     let (sec_community_open, set_sec_community_open) = signal(false);
+    let (sec_announce_open, set_sec_announce_open) = signal(false);
     let (sec_poster_open, set_sec_poster_open) = signal(true);
 
     // Community links — managed as a separate signal for easier row-level editing
@@ -561,37 +577,19 @@ pub fn EventFormComponent(
 
         // Validate deposit fields when deposit is enabled
         if current_form.deposit_enabled {
-            let usdc_val = current_form
-                .deposit_amount_usdc
-                .parse::<f64>()
-                .unwrap_or(0.0);
+            let usdc_check = check_usdc_deposit(&current_form.deposit_amount_usdc);
+            let Some(usdc_atomic) = usdc_check.atomic() else {
+                let message = usdc_check.error_message().unwrap_or_default();
+                components::show_toast(&set_toast, message, components::ToastType::Error);
+                return;
+            };
             let thb_val = current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0);
 
             // At least one deposit amount must be set
-            if usdc_val == 0.0 && thb_val == 0 {
+            if usdc_atomic == 0 && thb_val == 0 {
                 components::show_toast(
                     &set_toast,
                     "At least one deposit amount (USDC or THB) is required when deposit is enabled",
-                    components::ToastType::Error,
-                );
-                return;
-            }
-
-            // USDC minimum precision (6 decimals → 0.01 smallest meaningful)
-            if usdc_val > 0.0 && usdc_val < 0.01 {
-                components::show_toast(
-                    &set_toast,
-                    "Minimum deposit is 0.01 USDC",
-                    components::ToastType::Error,
-                );
-                return;
-            }
-
-            // USDC max cap (SEC-003: backend enforces $1,000 = 1,000,000,000 lamports)
-            if usdc_val > 1000.0 {
-                components::show_toast(
-                    &set_toast,
-                    "Maximum deposit is 1,000 USDC",
                     components::ToastType::Error,
                 );
                 return;
@@ -608,7 +606,7 @@ pub fn EventFormComponent(
             }
 
             // In Create mode with USDC deposit > 0, wallet connection is required
-            if is_create && usdc_val > 0.0 && create_wallet_pk.get().is_empty() {
+            if is_create && usdc_atomic > 0 && create_wallet_pk.get().is_empty() {
                 components::show_toast(
                     &set_toast,
                     "Connect your Solana wallet to create event with USDC deposit escrow",
@@ -620,7 +618,7 @@ pub fn EventFormComponent(
             // Escrow init requires USDC amount — check early when wallet is connected
             let do_escrow_init =
                 !create_wallet_pk.get().is_empty() && !create_wallet_name.get().is_empty();
-            if do_escrow_init && usdc_val == 0.0 {
+            if do_escrow_init && usdc_atomic == 0 {
                 components::show_toast(
                     &set_toast,
                     "USDC deposit amount is required to initialize on-chain escrow",
@@ -670,11 +668,8 @@ pub fn EventFormComponent(
                 organizer_emails: parse_emails(&current_form.organizer_emails),
                 staff_emails: parse_emails(&current_form.staff_emails),
                 deposit_enabled: current_form.deposit_enabled,
-                deposit_amount_usdc: (current_form
-                    .deposit_amount_usdc
-                    .parse::<f64>()
-                    .unwrap_or(0.0)
-                    * 1_000_000.0) as u64,
+                deposit_amount_usdc: parse_usdc_atomic(&current_form.deposit_amount_usdc)
+                    .unwrap_or(0),
                 deposit_amount_thb: current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),
                 promptpay_id: current_form.promptpay_id.trim().to_string(),
                 escrow_address: current_form.escrow_address.trim().to_string(),
@@ -702,6 +697,9 @@ pub fn EventFormComponent(
                     Some(current_form.location.trim().to_string())
                 },
                 location_map_url: current_form.location_map_url.trim().to_string(),
+                // A brand-new event starts with nobody waived; the list is
+                // managed from the edit form once the event exists.
+                comp_emails: Vec::new(),
                 video_url: current_form.video_url.trim().to_string(),
                 in_person_capacity: current_form.in_person_capacity.trim().parse::<u32>().ok(),
                 online_capacity: current_form.online_capacity.trim().parse::<u32>().ok(),
@@ -714,6 +712,8 @@ pub fn EventFormComponent(
                     .ok(),
                 visibility: current_form.visibility.clone(),
                 community_links: cl_links.get(),
+                ticket_note_in_person: current_form.ticket_note_in_person.clone(),
+                ticket_note_online: current_form.ticket_note_online.clone(),
                 calendar_subscribe_url: current_form.calendar_subscribe_url.trim().to_string(),
             };
 
@@ -912,11 +912,7 @@ pub fn EventFormComponent(
                 staff_emails: Some(parse_emails(&current_form.staff_emails)),
                 deposit_enabled: Some(current_form.deposit_enabled),
                 deposit_amount_usdc: Some(
-                    (current_form
-                        .deposit_amount_usdc
-                        .parse::<f64>()
-                        .unwrap_or(0.0)
-                        * 1_000_000.0) as u64,
+                    parse_usdc_atomic(&current_form.deposit_amount_usdc).unwrap_or(0),
                 ),
                 deposit_amount_thb: Some(
                     current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),
@@ -954,6 +950,17 @@ pub fn EventFormComponent(
                 },
                 // Always sent so clearing the field removes the link.
                 location_map_url: Some(current_form.location_map_url.trim().to_string()),
+                // Always sent, so emptying the box really does clear the list.
+                // Split on newlines AND commas because people paste both.
+                comp_emails: Some(
+                    current_form
+                        .comp_emails
+                        .split(['\n', ','])
+                        .map(str::trim)
+                        .filter(|e| !e.is_empty())
+                        .map(str::to_string)
+                        .collect(),
+                ),
                 video_url: Some(current_form.video_url.trim().to_string()),
                 in_person_capacity: Some(
                     current_form.in_person_capacity.trim().parse::<u32>().ok(),
@@ -970,6 +977,8 @@ pub fn EventFormComponent(
                 ),
                 visibility: Some(current_form.visibility.clone()),
                 community_links: Some(cl_links.get()),
+                ticket_note_in_person: Some(current_form.ticket_note_in_person.clone()),
+                ticket_note_online: Some(current_form.ticket_note_online.clone()),
                 calendar_subscribe_url: Some(
                     current_form.calendar_subscribe_url.trim().to_string(),
                 ),
@@ -1228,6 +1237,19 @@ pub fn EventFormComponent(
                             on:input=move |ev| set_form.update(|f| f.location_map_url = event_target_value(&ev))
                         />
                         <span class="quiz-setting-hint">"Google Maps → Share → Copy link. Attendees tap the location to open the map"</span>
+                    </div>
+                    <div class="quiz-setting-item event-form-span-full">
+                        <label class="quiz-field-label">"Guests who don\'t pay a deposit"<span class="field-optional-badge">"Optional"</span></label>
+                        <textarea
+                            class="quiz-number-input"
+                            rows="3"
+                            placeholder="speaker@example.com\nsponsor@example.com"
+                            prop:value=move || form.get().comp_emails
+                            on:input=move |ev| set_form.update(|f| f.comp_emails = event_target_value(&ev))
+                        ></textarea>
+                        <span class="quiz-setting-hint">
+                            "One email per line (or comma-separated). When they register, the deposit is waived automatically and no refund is owed — they still get a ticket QR. Case doesn\'t matter. This grants no admin access."
+                        </span>
                     </div>
                     <div class="quiz-setting-item event-form-span-full">
                         <label class="quiz-field-label">"Video / Livestream URL"<span class="field-optional-badge">"Optional"</span></label>
@@ -2041,22 +2063,20 @@ pub fn EventFormComponent(
                                 prop:value=move || form.get().deposit_amount_usdc
                                 on:input=move |ev| set_form.update(|f| f.deposit_amount_usdc = event_target_value(&ev))
                             />
+                            {move || {
+                                let current = form.get();
+                                current
+                                    .deposit_enabled
+                                    .then(|| check_usdc_deposit(&current.deposit_amount_usdc).error_message())
+                                    .flatten()
+                                    .map(|message| view! { <div class="hint-warning-xs">{message}</div> })
+                            }}
                             <Show
                                 when=move || {
-                                    let val = form.get().deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
-                                    form.get().deposit_enabled && val > 0.0 && val < 0.01
-                                }
-                                fallback=|| view! { <div></div> }
-                            >
-                                <div class="hint-warning-xs">
-                                    "Minimum deposit is 0.01 USDC"
-                                </div>
-                            </Show>
-                            <Show
-                                when=move || {
-                                    let val = form.get().deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
-                                    let thb = form.get().deposit_amount_thb.parse::<u64>().unwrap_or(0);
-                                    form.get().deposit_enabled && val == 0.0 && thb == 0
+                                    let current = form.get();
+                                    let usdc_empty = check_usdc_deposit(&current.deposit_amount_usdc) == UsdcDepositCheck::Empty;
+                                    let thb = current.deposit_amount_thb.parse::<u64>().unwrap_or(0);
+                                    current.deposit_enabled && usdc_empty && thb == 0
                                 }
                                 fallback=|| view! { <div></div> }
                             >
@@ -2066,17 +2086,6 @@ pub fn EventFormComponent(
                             </Show>
                             <span class="quiz-setting-hint">"Amount in whole USDC (e.g. 10 = 10 USDC). Max: 1,000 USDC"</span>
                         </div>
-                        <Show
-                            when=move || {
-                                let val = form.get().deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
-                                val > 1000.0
-                            }
-                            fallback=|| view! { <div></div> }
-                        >
-                            <div class="hint-warning-xs">
-                                "Maximum deposit is 1,000 USDC (SEC-003 cap)"
-                            </div>
-                        </Show>
                         <div class="quiz-setting-item">
                             <label class="quiz-field-label">"THB Amount"</label>
                             <input
@@ -2355,6 +2364,44 @@ pub fn EventFormComponent(
                             <span class="quiz-setting-hint">"Comma-separated"</span>
                         </div>
                     </div>
+                    </div>
+                </div>
+
+                // ── Ticket announcements ──
+                // Two boxes rather than one: the two audiences need opposite
+                // things on the day, and each attendee is shown only the one
+                // that matches how they are taking part.
+                <div class="form-section">
+                    <div class="form-section-header" on:click=move |_| set_sec_announce_open.update(|v| *v = !*v)>
+                        <span class="form-section-icon form-section-icon-community"></span>
+                        <span class="form-section-title">"Ticket Announcements"</span>
+                        <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                        <span class="form-section-toggle" class:form-section-toggle-open=move || sec_announce_open.get()>"▼"</span>
+                    </div>
+                    <div class="form-section-body" class:form-section-body-hidden=move || !sec_announce_open.get()>
+                        <p class="quiz-setting-hint">
+                            "Shown on each attendee's ticket page. Everyone sees only the box that matches how they are attending. Leave one empty to hide it for that audience. Links starting with http:// or https:// become clickable; line breaks are kept."
+                        </p>
+                        <div class="quiz-setting-item">
+                            <label class="quiz-field-label">"In-person attendees"</label>
+                            <textarea
+                                class="quiz-textarea"
+                                maxlength=MAX_TICKET_NOTE_CHARS
+                                placeholder="Doors open 12:30 at Building B. Free parking in the basement — tell the guard you are here for the meetup.\n\nSlides: https://example.com/deck\nJoin the group: https://example.com/invite"
+                                prop:value=move || form.get().ticket_note_in_person
+                                on:input=move |ev| set_form.update(|f| f.ticket_note_in_person = event_target_value(&ev))
+                            ></textarea>
+                        </div>
+                        <div class="quiz-setting-item">
+                            <label class="quiz-field-label">"Online attendees"</label>
+                            <textarea
+                                class="quiz-textarea"
+                                maxlength=MAX_TICKET_NOTE_CHARS
+                                placeholder="The YouTube live link goes up about 30 minutes before we start.\n\nWatch: https://example.com/live\nClaim your badge from this page once the session begins."
+                                prop:value=move || form.get().ticket_note_online
+                                on:input=move |ev| set_form.update(|f| f.ticket_note_online = event_target_value(&ev))
+                            ></textarea>
+                        </div>
                     </div>
                 </div>
 

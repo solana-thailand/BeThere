@@ -1,7 +1,10 @@
 # 025 — Linked emails: several emails, one person
 
-Status: **Phase 1 built locally (2026-09-18), not deployed.** §6.1–6.3 are
-still open, and only the tasks they gate are left undone.
+Status: **Phase 1 and the 7.6/7.7 guards are deployed** (checked 2026-09-24).
+Prod D1 reports no pending migrations, so `0043` is applied. Prod version
+`70989bdb` (2026-09-23) answers `/api/auth/email-link` with a JSON 401, and a
+made-up sibling route with a 404. §6.1–6.3 are still open, and only the tasks
+they gate are left undone, plus 7.5, which needs the owner.
 Origin: [#122](../.issues/122_credit_invisible_when_registered_with_other_email.md).
 The owner chose option C (2026-09-18) and asked that one person with several emails
 be treated as one person for money and, where possible, for NFT claims.
@@ -149,9 +152,30 @@ otherwise.
 
 - [ ] 6.1 **Admin link:** allow super-admin manual linking with a mandatory reason
       and audit? (Recommended: yes. It's needed for non-Google emails.)
+      **Blocked on owner decision.** Gates 7.4.
 - [ ] 6.2 **One badge per wallet per event** (§5.3)? (Recommended: yes.)
+      **Blocked on owner decision.** Gates 7.8.
+      **Correction (2026-09-24):** §5.3's index names
+      `recipient_wallet`, which no migration creates. `attendees` doesn't store
+      the recipient: `claim_attendee` in `db/attendees/writes.rs` writes only
+      `claimed_at`, `claim_asset_id` and `claim_signature`. The recipient *is*
+      persisted in `claim_locks.wallet` (`0001_initial.sql`, PK `(event_id,
+      token)`). Both claim paths insert that row before minting, and nothing
+      prunes finalized rows (`0029` notes this). So the index belongs on
+      `claim_locks (event_id, LOWER(wallet))`, not on `attendees`. Caveats to
+      settle before the migration:
+      (a) the Durable Object lock path keeps its own SQLite copy
+      (`durable_objects/event_do/schema.rs`), so it needs the same constraint
+      or has to stay unbound;
+      (b) a failed mint deletes its lock row, so a retry to the same wallet
+      stays allowed, as it should;
+      (c) the index won't apply over existing duplicate pairs, so count them in
+      prod first (an aggregate `GROUP BY ... HAVING COUNT(*) > 1`, no PII);
+      (d) claims older than `0001` have no lock row, so the guard doesn't cover
+      them.
 - [ ] 6.3 **Possible-duplicate roster flag** (§5)? (Recommended: yes, but after
-      Phase 1.)
+      Phase 1.) **Blocked on owner decision.** Gates 7.9. Phase 1 is now
+      deployed, so the "after Phase 1" condition is met.
 
 ## 7. Tasks
 
@@ -210,6 +234,8 @@ Phase 2
 
 Phase 3 (only if needed)
 - [ ] 7.10 Canonical session email (primary) across email-keyed tables.
+      **Out of scope by owner decision 6.0** (2026-09-18: sessions keep the
+      email used). Reopen only if the owner reverses 6.0.
 
 ## 8. Deploy (owner)
 

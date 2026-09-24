@@ -90,6 +90,9 @@ pub struct D1EventRow {
     pub dev_profile_enabled: Option<i64>,
     // Columns added for community links
     pub community_links: Option<String>,
+    // Columns added by migration 0049 (ticket announcements)
+    pub ticket_note_in_person: Option<String>,
+    pub ticket_note_online: Option<String>,
     // Columns added for Issue #053 Phase 3f
     pub form_config: Option<String>,
     // Columns added for organization calendar subscribe
@@ -250,6 +253,11 @@ impl D1EventRow {
             .collect();
 
         EventConfig {
+            // D1 does not carry the waived-email list; KV is its home. An empty
+            // vec here means "unknown from this source", never "nobody is waived".
+            // The event resolvers restore it from KV by id
+            // (`event_store::read::with_kv_only_fields`, `.issues/139`).
+            comp_emails: Vec::new(),
             id: self.id.clone().unwrap_or_default(),
             name: self.name.clone().unwrap_or_default(),
             slug: self.slug.clone().unwrap_or_default(),
@@ -313,6 +321,8 @@ impl D1EventRow {
                     .unwrap_or_else(|| "[]".to_string()),
             )
             .unwrap_or_default(),
+            ticket_note_in_person: self.ticket_note_in_person.clone().unwrap_or_default(),
+            ticket_note_online: self.ticket_note_online.clone().unwrap_or_default(),
             calendar_subscribe_url: self.calendar_subscribe_url.clone().unwrap_or_default(),
             location_map_url: self.location_map_url.clone().unwrap_or_default(),
             poster_url: self.poster_url.clone().unwrap_or_default(),
@@ -531,7 +541,8 @@ pub async fn upsert_event(
          in_person_capacity, online_capacity, \
          online_open_mode, online_registration_open, \
          deposit_deadline_hours, updated_by, dev_profile_enabled, community_links, \
-         calendar_subscribe_url, poster_url, recap_published, location_map_url) \
+         calendar_subscribe_url, poster_url, recap_published, location_map_url, \
+         ticket_note_in_person, ticket_note_online) \
          VALUES (?, ?, ?, ?, ?, \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
@@ -550,7 +561,8 @@ pub async fn upsert_event(
          {in_person_capacity}, {online_capacity}, \
          ?, {online_registration_open}, \
          {deposit_deadline_hours}, ?, {dev_profile_enabled}, ?, \
-         ?, ?, {recap_published}, ?) \
+         ?, ?, {recap_published}, ?, \
+         ?, ?) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -599,7 +611,9 @@ pub async fn upsert_event(
          calendar_subscribe_url = excluded.calendar_subscribe_url, \
          poster_url = excluded.poster_url, \
          recap_published = excluded.recap_published, \
-         location_map_url = excluded.location_map_url",
+         location_map_url = excluded.location_map_url, \
+         ticket_note_in_person = excluded.ticket_note_in_person, \
+         ticket_note_online = excluded.ticket_note_online",
         event_start_ms = config.event_start_ms,
         event_end_ms = config.event_end_ms,
         deposit_enabled = config.deposit_enabled as i32,
@@ -665,6 +679,8 @@ pub async fn upsert_event(
         D1Type::Text(&config.calendar_subscribe_url),
         D1Type::Text(&config.poster_url),
         D1Type::Text(&config.location_map_url),
+        D1Type::Text(&config.ticket_note_in_person),
+        D1Type::Text(&config.ticket_note_online),
     ];
 
     db.prepare(&sql)

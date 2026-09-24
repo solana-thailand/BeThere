@@ -142,6 +142,46 @@ check_wasm_bindgen_version() {
   return 0
 }
 
+# ── Worker upload-size budget gate ──────────────────────────────────────────
+# Cloudflare enforces the Worker size limit on the COMPRESSED bundle, and this
+# account is on the free plan: 3 MiB after gzip. Nothing measured that until
+# 2026-09-22 — the first sign of a problem would have been a rejected deploy.
+#
+# The bundle only exists after wrangler runs the [build] command, so gating
+# "before upload" means bundling twice: once with --dry-run to measure, then
+# for real. The second pass is cheap (cargo is warm; only wasm-bindgen and
+# esbuild re-run), and the dry-run doubles as a bundling smoke test — a broken
+# bundle now fails here instead of halfway through an upload.
+#
+# Measured on the dry-run outdir, which is exactly what gets uploaded, rather
+# than on the raw cargo artifact.
+run_size_budget_gate() {
+  local gate="../scripts/verify/worker_size_budget.sh"
+  local outdir rc
+
+  if [ ! -f "$gate" ]; then
+    echo "❌ Size budget gate not found: $gate" >&2
+    echo "   The gate is required — a deploy that cannot measure its own size" >&2
+    echo "   is the situation the gate exists to prevent." >&2
+    return 1
+  fi
+
+  outdir=$(mktemp -d)
+  echo "📏 Measuring worker bundle size (dry-run bundle)..."
+  if ! CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" --dry-run --outdir "$outdir" >/dev/null 2>&1; then
+    echo "❌ Dry-run bundling failed — deploy aborted before upload." >&2
+    echo "   Reproduce with:" >&2
+    echo "     cd worker && npx wrangler deploy ${WRANGLER_ENV_ARGS[*]} --dry-run --outdir /tmp/x" >&2
+    rm -rf "$outdir"
+    return 1
+  fi
+
+  bash "$gate" --dir "$outdir"
+  rc=$?
+  rm -rf "$outdir"
+  return $rc
+}
+
 # ── Post-deploy content-type verification ───────────────────────────────────
 # Find a Python interpreter able to run the PUT-fallback generators.
 # Sets PYTHON_BIN. Requires 3.11+ (tomllib) and the blake3 package.
@@ -176,15 +216,22 @@ verify_content_types() {
   local index="${DIST_DIR}/index.html"
   [ -f "$index" ] || { echo "ℹ️  no ${index} — skipping content-type verification."; return 0; }
 
-  local js
+  local js wasm
   js=$(grep -o 'event-checkin-frontend-[a-z0-9]*\.js' "$index" | head -1)
+  wasm=$(grep -o 'event-checkin-frontend-[a-z0-9]*_bg\.wasm' "$index" | head -1)
 
   echo "🔎 Verifying served Content-Type (edge propagation may lag a few seconds)..."
   local bad=0 ct expected
-  for path in "/" "/$js"; do
-    [ "$path" = "/" ] || [ -n "$js" ] || continue
-    expected="text/html"
-    [ "$path" = "/" ] || expected="text/javascript"
+  # /api/health guards wrangler.toml's run_worker_first list: drop "/api/*" from
+  # it and SPA fallback answers the API with index.html — 200, but text/html.
+  # The wasm is Worker-served pre-compressed (worker/src/precompressed.rs).
+  for path in "/" "/$js" "/$wasm" "/api/health"; do
+    case "$path" in
+      /) expected="text/html" ;;
+      /api/*) expected="application/json" ;;
+      *.wasm) expected="application/wasm" ;;
+      *) expected="text/javascript" ;;
+    esac
     # Retry a few times to ride out edge propagation right after deploy.
     for _ in 1 2 3 4 5; do
       ct=$(curl -s -D - -o /dev/null "${base}${path}" | tr -d '\r' | grep -i '^content-type:' | sed 's/[Cc]ontent-[Tt]ype: *//')
@@ -199,6 +246,18 @@ verify_content_types() {
     fi
   done
 
+  # Warn-only: without the .br sibling the Worker falls back to the plain wasm,
+  # which is correct but ~380 KB heavier per first load.
+  if [ -n "$wasm" ]; then
+    local enc
+    enc=$(curl -s -H 'Accept-Encoding: br' -D - -o /dev/null "${base}/${wasm}" | tr -d '\r' | grep -i '^content-encoding:' | sed 's/[Cc]ontent-[Ee]ncoding: *//')
+    if [ "$enc" = "br" ]; then
+      echo "   ✅ /${wasm} served pre-compressed (content-encoding: br)"
+    else
+      echo "   ⚠️  /${wasm} not served as br (got ${enc:-<none>}) — precompression inactive"
+    fi
+  fi
+
   if [ "$bad" -ne 0 ]; then
     echo ""
     echo "❌ DEPLOY SERVED an invalid Content-Type — the site may download or render HTML for an asset." >&2
@@ -210,6 +269,72 @@ verify_content_types() {
   fi
   echo "✅ Content-Type verification passed."
   return 0
+}
+
+# .issues/144: once run_worker_first became an array, HTML pages were served
+# asset-first and silently lost CSP / X-Frame-Options / HSTS — the Content-Type
+# check above stayed green. Asset-first pages get these from
+# frontend-leptos/_headers (/*), Worker-served ones from SECURITY_HEADERS.
+# Usage: verify_security_headers strict|warn — `warn` for the PUT-API fallback,
+# which cannot upload _headers (#057).
+verify_security_headers() {
+  local mode="$1"
+  local base="https://${WORKER_NAME}.solana-thailand.workers.dev"
+  local bad=0 hdrs path name missing
+  echo "🔎 Verifying security headers..."
+  # `/` is an asset, `/ticket/_smoke` exercises the SPA fallback, `/api/health` the Worker.
+  for path in "/" "/ticket/_smoke" "/api/health"; do
+    for _ in 1 2 3 4 5; do
+      hdrs=$(curl -s -D - -o /dev/null "${base}${path}" | tr -d '\r' | tr '[:upper:]' '[:lower:]')
+      echo "$hdrs" | grep -q '^content-security-policy:' && echo "$hdrs" | grep -q '^x-frame-options:' && break
+      sleep 4
+    done
+    missing=""
+    for name in content-security-policy x-frame-options strict-transport-security; do
+      echo "$hdrs" | grep -q "^${name}:" || missing="${missing} ${name}"
+    done
+    if [ -n "$missing" ]; then
+      echo "   ❌ ${path} missing:${missing}"
+      bad=1
+    else
+      echo "   ✅ ${path} → CSP, X-Frame-Options, HSTS"
+    fi
+  done
+  if [ "$bad" -ne 0 ]; then
+    if [ "$mode" = "warn" ]; then
+      echo "   ⚠️  Security headers missing — expected on the PUT fallback (no _headers, #057)."
+      return 0
+    fi
+    echo "❌ Pages are served without security headers — check frontend-leptos/_headers /* (.issues/144)." >&2
+    return 1
+  fi
+  echo "✅ Security headers verified."
+  return 0
+}
+
+# Until 2026-09-23 no deploy recorded which commit it shipped: `wrangler
+# deployments list` showed version ids with no message, so "is fix X live?" was
+# answered from hand-written issue prose that went stale on the next deploy.
+# Provenance is now recorded both ways: the Worker Version message carries the
+# commit (prod → git), and a local tag marks the commit (git → prod). A dirty
+# tree is recorded as such rather than refused — the tag is evidence, not a gate.
+deploy_provenance() {
+  local sha dirty=""
+  sha=$(git rev-parse HEAD 2>/dev/null || echo "unknown")
+  [ -n "$(git status --porcelain 2>/dev/null)" ] && dirty="+dirty"
+  printf 'git:%s%s' "$sha" "$dirty"
+}
+
+# Tag HEAD as deploy/<env>/<UTC timestamp>. Local only — pushing tags to the
+# public remote is the owner's call. Never fails the deploy.
+record_deploy_tag() {
+  local tag
+  tag="deploy/${DEPLOY_ENV}/$(date -u +%Y%m%dT%H%M%SZ)"
+  if git tag -a "$tag" -m "$(deploy_provenance) via $1" HEAD 2>/dev/null; then
+    echo "🏷️  Recorded ${tag} → $(deploy_provenance)"
+  else
+    echo "⚠️  Could not record deploy tag ${tag} (deploy itself succeeded)." >&2
+  fi
 }
 
 # ── §3.5 Preflight gate (opt-in, production-only) ────────────────────────────
@@ -311,10 +436,19 @@ else
     echo "📋 Copied _headers to ${DIST_DIR}/_headers for edge asset cache rules."
   fi
 
+  # Size budget BEFORE upload — a bundle over the free-plan ceiling must never
+  # leave this machine.
+  if ! run_size_budget_gate; then
+    echo "❌ Worker bundle failed the size budget — deploy aborted (nothing uploaded)." >&2
+    restore_pnp
+    exit 1
+  fi
+
   # ── Step 1: Try standard wrangler deploy ──
-  if CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" 2>&1; then
+  if CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" --message "$(deploy_provenance)" 2>&1; then
     echo "✅ Deployed via wrangler"
-    if verify_content_types; then
+    record_deploy_tag wrangler
+    if verify_content_types && verify_security_headers strict; then
       restore_pnp
       exit 0
     else
@@ -456,6 +590,7 @@ else
   if [ "$HTTP_CODE" = "200" ]; then
     STARTUP_MS=$(echo "$BODY" | "$PYTHON_BIN" -c "import json,sys; r=json.load(sys.stdin); print(r.get('result',{}).get('startup_time_ms','?'))" 2>/dev/null || echo "?")
     echo "✅ Deployed successfully! (startup: ${STARTUP_MS}ms)"
+    record_deploy_tag put-api
     echo "   https://${WORKER_NAME}.solana-thailand.workers.dev"
 
     # Verify assets are served
@@ -472,6 +607,7 @@ else
       restore_pnp
       exit 1
     fi
+    verify_security_headers warn
   else
     echo "❌ Deploy failed (HTTP ${HTTP_CODE})"
     echo "$BODY" | "$PYTHON_BIN" -m json.tool 2>/dev/null || echo "$BODY"

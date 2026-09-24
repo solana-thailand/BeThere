@@ -304,11 +304,14 @@ mod tests {
     /// Minimal valid EventConfig for tests — only the fields `generate` reads.
     fn sample_event() -> EventConfig {
         EventConfig {
+            comp_emails: Vec::new(),
             id: "evt-1".into(),
             name: "Solana Bangkok 2025".into(),
             slug: "solana-bangkok-2025".into(),
             tagline: "The Road to Mainnet".into(),
             link: String::new(),
+            ticket_note_in_person: String::new(),
+            ticket_note_online: String::new(),
             status: EventStatus::Active,
             event_start_ms: 1_700_000_000_000, // 2023-11-14 22:13:20 UTC
             event_end_ms: 1_700_003_600_000,   // +1 hour

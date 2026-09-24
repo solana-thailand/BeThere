@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod adventure;
 mod audit_store;
 mod auth;
@@ -21,14 +23,20 @@ mod escrow_indexer;
 pub mod event_store;
 mod handlers;
 mod http;
+pub mod isolate_cache;
 mod middleware;
 pub mod notifications;
 mod org_store;
+// Public so `worker/tests/precompressed_asset.rs` can drive the pure helpers.
+pub mod precompressed;
 mod quiz;
 
 mod sheets;
 mod solana;
-mod solana_escrow;
+// Public so `worker/tests/golden_vectors_escrow.rs` can pin PDA derivation.
+pub mod solana_escrow;
+// Public so `worker/tests/security_spike_alert.rs` can drive the detector.
+pub mod spike;
 mod state;
 // Public for the same reason as `db` above: `worker/tests/r2_cache_policy.rs`
 // drives `Visibility` and `if_none_match_hits` directly (`.issues/114`).
@@ -37,6 +45,10 @@ mod virtual_checkin;
 
 // Export DO class for workers-rs macro registration
 pub use durable_objects::EventDurableObject;
+// Mirrored into `frontend-leptos/_headers`; `tests/security_headers_parity.rs`.
+pub use middleware::headers::SECURITY_HEADERS;
+// Public so `tests/public_cache_policy.rs` can drive the public-cache rule (.plans/028 W4).
+pub use middleware::cache::{CACHE_PRIVATE_NO_STORE, with_public_cache};
 
 use std::sync::OnceLock;
 
@@ -127,6 +139,11 @@ async fn fetch(
     // build fails. Static assets (JS/CSS/WASM) are served by Cloudflare's
     // [assets] binding before the worker is invoked.
     let path = req.uri().path();
+    // The frontend wasm is routed here by `run_worker_first` so it can be
+    // served pre-compressed (brotli 11) instead of Cloudflare's on-the-fly q4.
+    if precompressed::is_precompressed_asset(path) {
+        return precompressed::serve(req, &env).await;
+    }
     if is_spa_route(path) {
         return Ok(spa_fallback().await);
     }
@@ -196,7 +213,32 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     };
     let d1 = env.d1("DB").ok();
 
-    cleanup::run_cleanup(&events_kv, d1.as_ref()).await;
+    // Daily KV/D1 retention pass. Its failures used to be log-only, so a
+    // malformed event index aborted every nightly run on staging from
+    // 2026-09-19 and stayed invisible for four days. Alert like the other two
+    // nightly reconciles below.
+    let cleanup_summary = cleanup::run_cleanup(&events_kv, d1.as_ref()).await;
+    if !cleanup_summary.is_clean() {
+        tracing::error!(
+            failures = cleanup_summary.failures.len(),
+            "daily cleanup did not complete"
+        );
+        if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
+            && !webhook.is_empty()
+        {
+            let detail = cleanup_summary
+                .failures
+                .iter()
+                .map(|f| f.to_string())
+                .collect::<Vec<_>>()
+                .join("\n• ");
+            let msg = format!(
+                ":rotating_light: BeThere daily cleanup did not complete — {} failure(s):\n• {detail}",
+                cleanup_summary.failures.len()
+            );
+            let _ = middleware::alert::post_slack(&webhook, &msg).await;
+        }
+    }
 
     // Daily credit-ledger reconciliation — the safety net that would have caught
     // the 2026-08-14 silent credit loss on day one. Alerts (Slack) if any held

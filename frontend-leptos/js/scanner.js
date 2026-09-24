@@ -64,9 +64,16 @@ export function startCamera() {
 
   (async function () {
     try {
-      // Ensure QR libraries are loaded before starting scanner
-      await _loadQrLibraries();
-      console.log("[scanner] QR libraries ready, requesting camera access...");
+      // Fetch the decoder IN PARALLEL with the camera prompt. It used to be
+      // awaited first, so the camera waited on a CDN round trip, and a slow or
+      // blocked jsdelivr on venue Wi-Fi failed the whole scanner — even on
+      // browsers with a native BarcodeDetector that never use jsQR. jsQR is
+      // now same-origin (lazy_assets.js), but a failed load is still only
+      // fatal below, on the one branch that needs jsQR.
+      var decoderReady = _loadQrLibraries().catch(function (e) {
+        console.warn("[scanner] jsQR fallback failed to load:", e);
+      });
+      console.log("[scanner] requesting camera access...");
       var stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
       });
@@ -117,6 +124,7 @@ export function startCamera() {
 
       // Choose QR detection backend
       var hasBarcodeDetector = "BarcodeDetector" in window;
+      if (!hasBarcodeDetector) await decoderReady;
       if (hasBarcodeDetector) {
         console.log("[scanner] using BarcodeDetector API");
         var detector = new BarcodeDetector({ formats: ["qr_code"] });
@@ -139,14 +147,24 @@ export function startCamera() {
         })();
       } else if (typeof jsQR === "function") {
         console.log("[scanner] using jsQR fallback");
+        // This branch is every iPhone (Safari has no BarcodeDetector), so it
+        // runs for a whole door shift. willReadFrequently keeps the canvas on
+        // the CPU so getImageData is not a GPU readback per frame, and the
+        // canvas is only resized when the video size changes (assigning
+        // width/height reallocates and clears it, even to the same value).
         var canvas = document.createElement("canvas");
-        var ctx = canvas.getContext("2d");
+        var ctx = canvas.getContext("2d", { willReadFrequently: true });
         (async function scanLoop() {
           while (window.__scannerActive) {
             try {
               if (video.readyState >= 2) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
+                if (
+                  canvas.width !== video.videoWidth ||
+                  canvas.height !== video.videoHeight
+                ) {
+                  canvas.width = video.videoWidth;
+                  canvas.height = video.videoHeight;
+                }
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 var imageData = ctx.getImageData(
                   0,
@@ -154,10 +172,13 @@ export function startCamera() {
                   canvas.width,
                   canvas.height,
                 );
+                // Tickets are dark-on-light (domain qr::generator), so the
+                // default "attemptBoth" second, inverted pass is pure cost.
                 var code = jsQR(
                   imageData.data,
                   imageData.width,
                   imageData.height,
+                  { inversionAttempts: "dontInvert" },
                 );
                 if (code && !window.__qrResult) {
                   window.__qrResult = code.data;

@@ -1,5 +1,6 @@
 use axum::{Extension, Json, extract::State};
 use chrono::Utc;
+use event_checkin_domain::image_kind::ImageKind;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::deposit::{DepositMethod, DepositStatus, ThbDeposit};
 use event_checkin_domain::models::error::AppError;
@@ -16,6 +17,7 @@ use crate::state::AppState;
 ///
 /// Ensures:
 /// - Data URLs have an allowed MIME type (image/jpeg, image/png, image/webp)
+/// - Data URLs actually contain a JPEG, PNG or WebP (magic bytes, not the label)
 /// - Data URLs are within size limits (decoded ≤ 5MB, encoded ≤ 7MB)
 /// - SVG is rejected (XSS risk)
 /// - External URLs use HTTPS
@@ -27,7 +29,7 @@ pub(crate) fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
     if let Some(rest) = slip_url.strip_prefix("data:") {
         // Data URL — validate MIME type and size
         // Format: data:<mediatype>;base64,<data>
-        let (header, _data) = rest
+        let (header, data) = rest
             .split_once(',')
             .ok_or_else(|| AppError::Validation("invalid data URL format".to_string()))?;
 
@@ -42,11 +44,19 @@ pub(crate) fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
         let mime = header.split(';').next().unwrap_or("").trim();
 
         // Whitelist safe image types — reject SVG (XSS risk)
-        let allowed_mimes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
-        if !allowed_mimes.contains(&mime) {
+        if ImageKind::from_mime(mime).is_none() {
             return Err(AppError::Validation(format!(
                 "unsupported image type '{mime}' — allowed: JPEG, PNG, WebP"
             )));
+        }
+
+        // The label is the client's claim; the leading bytes are the file.
+        // A JPEG labelled PNG is still an accepted image and is stored by its
+        // real type (`maybe_upload_to_r2`), so only non-images are rejected.
+        if crate::storage::sniff_base64_image(data).is_none() {
+            return Err(AppError::Validation(
+                "the uploaded file is not a JPEG, PNG or WebP image".to_string(),
+            ));
         }
 
         // Check total data URL size (encoded)
@@ -155,6 +165,47 @@ pub async fn upload_thb_slip_handler(
 
     // Validate slip URL for safety (MIME type, size, no SVG/XSS)
     validate_slip_url(&body.slip_url)?;
+
+    // Fingerprint BEFORE the R2 upload: afterwards `slip_url` is a storage path
+    // and the image bytes are gone from this request. `None` for a non-upload
+    // (an external https:// slip) and means "not known", never "not a duplicate".
+    let fingerprint = super::slip_fingerprint::slip_fingerprint(&body.slip_url);
+    let duplicate_of = match (&fingerprint, d1) {
+        (Some(hash), Some(db)) => crate::db::thb_deposits::find_slip_hash_collision(
+            db,
+            &event.id,
+            hash,
+            &body.attendee_id,
+        )
+        .await
+        .map_err(AppError::Internal)?,
+        _ => None,
+    };
+
+    if let Some(other) = &duplicate_of {
+        // The identity of the other attendee is deliberately kept out of the
+        // response and reduced to a fingerprint in the log: "your slip matches
+        // someone else's" must not become a way to enumerate who paid.
+        tracing::warn!(
+            attendee_id = %body.attendee_id,
+            event_id = %event.id,
+            other_attendee_id = %state.log_fingerprint(&other.attendee_id),
+            mode = %state.thb_slip_duplicate_mode,
+            "THB slip is byte-identical to another attendee's slip"
+        );
+    }
+
+    if duplicate_of.is_some()
+        && super::slip_fingerprint::DuplicateMode::parse(Some(&state.thb_slip_duplicate_mode))
+            == super::slip_fingerprint::DuplicateMode::Reject
+    {
+        return Err(AppError::Validation(
+            "this payment slip has already been submitted for this event. If you believe this \
+             is a mistake, contact the organizer."
+                .to_string(),
+        )
+        .into());
+    }
 
     // Upload data URL to R2 if bucket is available (reduces KV storage by ~6x)
     let slip_url = super::maybe_upload_to_r2(
@@ -307,6 +358,11 @@ pub async fn upload_thb_slip_handler(
         bank_name: body.bank_name.clone(),
         account_name: body.account_name.clone(),
         refund_proof_url: None,
+        slip_blake3: fingerprint,
+        // Left unrecorded at upload time: nobody has decided anything about this
+        // money yet. `source()` falls back to the sentinels, which classify a
+        // real slip as Cash — exactly as before 0047.
+        deposit_source: None,
     };
 
     event_store::save_thb_deposit(kv, &thb_deposit, d1)

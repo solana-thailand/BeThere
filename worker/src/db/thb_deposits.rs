@@ -5,7 +5,9 @@
 use worker::D1Database;
 use worker::d1::D1Type;
 
-use event_checkin_domain::models::deposit::ThbDeposit;
+use super::d1_int::uint_bind;
+
+use event_checkin_domain::models::deposit::{DepositSource, ThbDeposit};
 
 // ---------------------------------------------------------------------------
 // Read
@@ -56,6 +58,59 @@ pub async fn get_thb_deposit(
     Ok(Some(row_to_thb_deposit(row)?))
 }
 
+/// Find another attendee's deposit in the same event whose slip is byte-identical.
+///
+/// The lookup behind the duplicate-slip check (`.issues/129`): anyone can
+/// upload any image to the deposit page, so the only thing distinguishing a
+/// real payer from someone forwarding a friend's slip was the organizer
+/// recognising them.
+///
+/// Three narrowings, each load-bearing:
+///
+/// * `event_id` — scoped to one event, which keeps this on
+///   `idx_thb_deposits_event` and matches what is actually being policed. The
+///   same person paying ฿500 to two events sends two different transfers.
+/// * `attendee_id <> ?` — an attendee re-uploading their own slip after a
+///   rejection is legitimate and must never be flagged.
+/// * `slip_blake3 <> ''` — THE dangerous one. This table stores the empty
+///   string rather than SQL NULL for absent text (see `insert_thb_deposit`),
+///   and `'' = ''` matches. Without this clause, every row with no hash would
+///   be a duplicate of every other row with no hash. The caller also refuses to
+///   run with an empty fingerprint; both guards are deliberate, because either
+///   one alone is a single edit away from matching everything.
+pub async fn find_slip_hash_collision(
+    db: &D1Database,
+    event_id: &str,
+    slip_blake3: &str,
+    excluding_attendee_id: &str,
+) -> Result<Option<ThbDeposit>, String> {
+    if slip_blake3.is_empty() {
+        return Ok(None);
+    }
+
+    let stmt = db
+        .prepare(
+            "SELECT * FROM thb_deposits \
+             WHERE event_id = ?1 AND slip_blake3 = ?2 AND slip_blake3 <> '' AND attendee_id <> ?3 \
+             ORDER BY uploaded_at ASC LIMIT 1",
+        )
+        .bind_refs(&[
+            D1Type::Text(event_id),
+            D1Type::Text(slip_blake3),
+            D1Type::Text(excluding_attendee_id),
+        ])
+        .map_err(|e| format!("D1 find_slip_hash_collision bind: {e:?}"))?;
+
+    let rows = super::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| format!("D1 find_slip_hash_collision: {e}"))?;
+
+    match rows.into_iter().next() {
+        None => Ok(None),
+        Some(row) => row_to_thb_deposit(row).map(Some),
+    }
+}
+
 /// List all THB deposits for an event (newest first).
 ///
 /// Uses `d1_safe::safe_all_rows` — the worker crate's `results()` panics on
@@ -75,6 +130,115 @@ pub async fn list_thb_deposits(db: &D1Database, event_id: &str) -> Result<Vec<Th
         .collect::<Result<Vec<_>, _>>()
 }
 
+/// How one attendee's THB deposit for an event was settled.
+///
+/// Deliberately narrow. The admin roster needs three facts to draw a badge and
+/// nothing else, and `thb_deposits.slip_url` can hold a multi-megabyte base64
+/// data URL — pulling whole rows for a 500-person roster to read three booleans
+/// is the kind of thing that only shows up as a slow page at the door.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ThbSettlement {
+    /// An organizer (or the system, for a comp) has accepted this deposit.
+    pub verified: bool,
+    /// The money has gone back.
+    pub refunded: bool,
+    /// Cash, rolling credit, or a comp. Reads the `deposit_source` column added
+    /// by migration 0047, falling back to the legacy sentinels for rows written
+    /// before it — the same order `ThbDeposit::source()` uses.
+    pub source: DepositSource,
+}
+
+/// Settlement state for every attendee with a THB deposit at one event.
+///
+/// **Why this exists.** The admin roster's deposit badge used to read
+/// `attendees.deposit_status` and the USDC amount columns — and nothing in the
+/// THB flow writes either. `save_deposit_status_to_d1` is dead code
+/// (`#[allow(dead_code)]`, zero callers), so a staff comp and a
+/// credit-covered registration both looked identical to an unpaid attendee:
+/// the roster said **"Deposit pending"** for people who owed nothing
+/// (`.issues/137`). This is the missing read.
+///
+/// One query per roster page, batched like the credit-ledger annotations
+/// beside it. Attendees with no THB deposit are simply absent from the map.
+pub async fn settlement_by_attendee(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<std::collections::HashMap<String, ThbSettlement>, String> {
+    // Named columns, not `SELECT *`: see the doc comment on ThbSettlement.
+    let stmt = db
+        .prepare(
+            "SELECT attendee_id, verified, refunded, amount_thb, slip_url, verified_by,              deposit_source              FROM thb_deposits WHERE event_id = ?1",
+        )
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 settlement_by_attendee bind: {e:?}"))?;
+
+    let rows = super::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| format!("D1 settlement_by_attendee: {e}"))?;
+
+    let truthy = |v: Option<&serde_json::Value>| match v {
+        Some(serde_json::Value::Bool(b)) => *b,
+        Some(serde_json::Value::Number(n)) => n.as_i64().unwrap_or(0) != 0,
+        Some(serde_json::Value::String(s)) => {
+            s == "1" || s.eq_ignore_ascii_case("true") || s.eq_ignore_ascii_case("yes")
+        }
+        _ => false,
+    };
+
+    let mut map = std::collections::HashMap::new();
+    for row in rows {
+        let Some(attendee_id) = row.get("attendee_id").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let source = classify_source(
+            row.get("deposit_source").and_then(|v| v.as_str()),
+            row.get("verified_by").and_then(|v| v.as_str()),
+            row.get("slip_url").and_then(|v| v.as_str()),
+            row.get("amount_thb").and_then(serde_json::Value::as_i64),
+        );
+        map.insert(
+            attendee_id.to_string(),
+            ThbSettlement {
+                verified: truthy(row.get("verified")),
+                refunded: truthy(row.get("refunded")),
+                source,
+            },
+        );
+    }
+    Ok(map)
+}
+
+/// Classify a deposit's source from the stored column, falling back to the
+/// legacy sentinels.
+///
+/// The arm ORDER is load-bearing and is a transcription of
+/// `ThbDeposit::source()` in `domain/src/models/deposit.rs`: a row that is both
+/// credit-applied AND ฿0 is Credit, not Comp. Migration 0047's backfill is a
+/// transcription of the same function in the same order, which is why the
+/// backfill and this agree on every production row.
+fn classify_source(
+    stored: Option<&str>,
+    verified_by: Option<&str>,
+    slip_url: Option<&str>,
+    amount_thb: Option<i64>,
+) -> DepositSource {
+    match stored {
+        Some("credit") => return DepositSource::Credit,
+        Some("comp") => return DepositSource::Comp,
+        Some("cash") => return DepositSource::Cash,
+        _ => {}
+    }
+    let vb = verified_by.unwrap_or("");
+    let slip = slip_url.unwrap_or("");
+    if vb == "SYSTEM_ROLLING_CREDIT" || slip == "ROLLING_CREDIT_AUTO_APPLIED" {
+        DepositSource::Credit
+    } else if vb == "SYSTEM_STAFF_WAIVE" || slip == "STAFF_COMP_WAIVED" || amount_thb == Some(0) {
+        DepositSource::Comp
+    } else {
+        DepositSource::Cash
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Write
 // ---------------------------------------------------------------------------
@@ -87,13 +251,13 @@ pub async fn list_thb_deposits(db: &D1Database, event_id: &str) -> Result<Vec<Th
 /// `raw_sql` convention does not apply here.
 pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
     let stmt = db.prepare(
-        "INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, account_name, refund_proof_url, held_as_credit, held_as_credit_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+        "INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, account_name, refund_proof_url, held_as_credit, held_as_credit_at, slip_blake3, deposit_source) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
     );
     stmt.bind_refs(&[
         D1Type::Text(&deposit.attendee_id),
         D1Type::Text(&deposit.event_id),
-        D1Type::Integer(deposit.amount_thb as i32),
+        uint_bind("thb_deposits.amount_thb", deposit.amount_thb)?,
         D1Type::Text(deposit.slip_url.as_deref().unwrap_or("")),
         D1Type::Integer(deposit.verified as i32),
         D1Type::Text(deposit.verified_by.as_deref().unwrap_or("")),
@@ -108,6 +272,8 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         D1Type::Text(deposit.refund_proof_url.as_deref().unwrap_or("")),
         D1Type::Integer(deposit.held_as_credit as i32),
         D1Type::Text(deposit.held_as_credit_at.as_deref().unwrap_or("")),
+        D1Type::Text(deposit.slip_blake3.as_deref().unwrap_or("")),
+        deposit_source_bind(deposit.deposit_source),
     ])
     .map_err(|e| format!("D1 insert_thb_deposit bind: {e:?}"))?
     .run()
@@ -136,11 +302,11 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
 /// serialises the whole struct, which is correct — there is no CAS there.
 pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
     let stmt = db.prepare(
-        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, attendee_name = ?6, bank_account = ?7, bank_name = ?8, account_name = ?9 \
-         WHERE event_id = ?10 AND attendee_id = ?11",
+        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, attendee_name = ?6, bank_account = ?7, bank_name = ?8, account_name = ?9, slip_blake3 = ?10, deposit_source = ?11 \
+         WHERE event_id = ?12 AND attendee_id = ?13",
     );
     stmt.bind_refs(&[
-        D1Type::Integer(deposit.amount_thb as i32),
+        uint_bind("thb_deposits.amount_thb", deposit.amount_thb)?,
         D1Type::Text(deposit.slip_url.as_deref().unwrap_or("")),
         D1Type::Integer(deposit.verified as i32),
         D1Type::Text(deposit.verified_by.as_deref().unwrap_or("")),
@@ -149,6 +315,15 @@ pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         D1Type::Text(deposit.bank_account.as_deref().unwrap_or("")),
         D1Type::Text(deposit.bank_name.as_deref().unwrap_or("")),
         D1Type::Text(deposit.account_name.as_deref().unwrap_or("")),
+        // Travels with slip_url: a new slip means a new hash, and updating one
+        // without the other would leave the previous image's fingerprint
+        // attached to the current image.
+        D1Type::Text(deposit.slip_blake3.as_deref().unwrap_or("")),
+        // The comp decision is a blanket-update column on purpose: it is set by
+        // the admin comp action through the same read-modify-write every other
+        // non-settlement column uses. The five settlement columns stay out of
+        // this SET list for the reason documented above.
+        deposit_source_bind(deposit.deposit_source),
         D1Type::Text(&deposit.event_id),
         D1Type::Text(&deposit.attendee_id),
     ])
@@ -436,5 +611,46 @@ fn row_to_thb_deposit(row: serde_json::Value) -> Result<ThbDeposit, String> {
         bank_name: get_opt_str("bank_name"),
         account_name: get_opt_str("account_name"),
         refund_proof_url: get_opt_str("refund_proof_url"),
+        // Absent on every row uploaded before migration 0046, and `get_opt_str`
+        // maps both SQL NULL and '' to None. That is the intended reading:
+        // "not known", never "not a duplicate".
+        slip_blake3: get_opt_str("slip_blake3"),
+        // NULL / '' means "never recorded", and `source()` then falls back to
+        // the legacy sentinels. An unrecognised string is treated the same way
+        // rather than panicking: the CHECK constraint already makes one
+        // impossible, and a read path is the wrong place to discover it.
+        deposit_source: get_opt_str("deposit_source").and_then(|s| match s.as_str() {
+            "cash" => Some(DepositSource::Cash),
+            "credit" => Some(DepositSource::Credit),
+            "comp" => Some(DepositSource::Comp),
+            _ => None,
+        }),
     })
+}
+
+/// The wire/DB spelling of a [`DepositSource`] — the same three strings the
+/// `deposit_source` CHECK constraint allows.
+/// Bind `deposit_source` for D1.
+///
+/// **Returns `D1Type::Null` for `None`, NOT an empty string**, and that is the
+/// whole point of this function existing (`.issues/138`).
+///
+/// Every other optional column in this module binds `""` for absent, because
+/// they are plain `TEXT` with no constraint. `deposit_source` is different:
+/// migration 0047 gave it
+/// `CHECK (deposit_source IS NULL OR deposit_source IN ('cash','credit','comp'))`,
+/// and `''` is neither NULL nor a member of that list. Binding the module's
+/// usual empty string therefore **fails the CHECK and aborts the whole
+/// statement** — which is exactly what happened in production on 2026-09-23:
+/// every attendee slip upload sets `deposit_source: None`
+/// (`slip_upload.rs`), so every upload returned
+/// `500 internal error` from the moment 0047 was applied.
+///
+/// `D1Type::Null` binds correctly on worker 0.8.1 — `db/audit.rs`,
+/// `db/credit_ledger.rs` and `db/attendees/writes.rs` all rely on it.
+fn deposit_source_bind(source: Option<DepositSource>) -> D1Type<'static> {
+    match source {
+        Some(s) => D1Type::Text(s.as_str()),
+        None => D1Type::Null,
+    }
 }

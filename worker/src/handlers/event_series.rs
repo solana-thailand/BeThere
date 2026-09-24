@@ -5,7 +5,8 @@
 //! "Part of {Series}" badge. This is a *read-only, public* view of data that
 //! the admin campaign UI already manages (issue #051).
 //!
-//! No auth: campaign structure is public (like event listings). A 404 when the
+//! No auth, so only public, active/completed events are listed, and a
+//! non-public requested event is a 404 (.issues/149). A 404 when the
 //! event has no campaign lets the frontend cache layer treat it as a clean miss
 //! and the `SeriesNav` component hide itself without a null-check dance.
 
@@ -50,6 +51,15 @@ pub async fn get_event_series(
     // ordered list. Extracted into `compute_series_neighbors` so the edge
     // cases (first/last/single/orphan) are unit-tested directly.
     let (current_index, previous, next) = campaigns::compute_series_neighbors(&events, &event_id);
+    // The list holds only public, live events. If the requested one is not
+    // among them it is private, draft, archived or dangling: answer as
+    // `get_public_event` would, without naming its campaign (.issues/149).
+    if current_index < 0 {
+        return Err(AppError::NotFound(format!(
+            "event '{event_id}' is not part of a public series"
+        ))
+        .into());
+    }
 
     let series_event = |e: &campaigns::EventSeriesEntry| {
         json!({

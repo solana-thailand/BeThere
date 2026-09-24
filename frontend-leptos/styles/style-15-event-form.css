@@ -499,6 +499,21 @@
 .admin-dep-slip-link-row {
     margin-top: 0.25rem;
 }
+/* Shown when this attendee's payment slip is byte-identical to another
+   attendee's slip in the same event (.issues/129). Approving a slip is the only
+   way an attendee gets their ticket QR, and is simultaneously the promise to
+   refund their deposit — so this warning sits above the Approve button, not
+   beside it. Deliberately loud: the organizer used to carry this in their head. */
+.admin-dep-duplicate-warning {
+    margin-top: 0.35rem;
+    padding: 0.4rem 0.55rem;
+    border-radius: 0.35rem;
+    border: 1px solid var(--warning-border);
+    background: var(--warning-bg);
+    color: var(--warning);
+    font-size: 0.8rem;
+    line-height: 1.35;
+}
 .admin-dep-bank-section {
     margin-top: 0.5rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);

@@ -420,6 +420,14 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/thb/verify",
             post(deposit::verify_thb_slip_handler),
         )
+        // Admit an attendee WITHOUT accepting their payment as cash: same ticket
+        // QR as an approval, deposit reclassified `comp`, no refund owed
+        // (`.issues/129` Gap 1). Before this, approving a slip was the only route
+        // to a ticket AND the promise to refund ฿500, so an organizer who knew
+        // somebody had not paid could only admit them and owe the money, or turn
+        // them away. In the authed router because it is an organizer decision
+        // about their own event's money.
+        .route("/deposit/thb/comp", post(deposit::comp_thb_deposit_handler))
         // Admin records a THB slip on behalf of an attendee who cannot upload
         // themselves (JWT expired, browser bug, slip sent via LINE/email).
         // Skips the VULN-012 email-match gate (admin-authed + audited instead).

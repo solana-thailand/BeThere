@@ -7,6 +7,8 @@ use std::str::FromStr;
 use worker::D1Database;
 use worker::d1::D1Type;
 
+use super::d1_int::uint_bind;
+
 use event_checkin_domain::models::deposit::{DepositMethod, DepositStatus};
 
 // ---------------------------------------------------------------------------
@@ -240,7 +242,7 @@ pub async fn insert_deposit_status(db: &D1Database, status: &DepositStatus) -> R
         D1Type::Text(&status.attendee_id),
         D1Type::Text(&status.event_id),
         D1Type::Text(&method_str),
-        D1Type::Integer(status.amount as i32),
+        uint_bind("deposit_statuses.amount", status.amount)?,
         D1Type::Text(&status.currency),
         D1Type::Text(status.tx_signature.as_deref().unwrap_or("")),
         D1Type::Integer(status.verified as i32),
@@ -269,7 +271,7 @@ pub async fn update_deposit_status(db: &D1Database, status: &DepositStatus) -> R
     );
     stmt.bind_refs(&[
         D1Type::Text(&method_str),
-        D1Type::Integer(status.amount as i32),
+        uint_bind("deposit_statuses.amount", status.amount)?,
         D1Type::Text(&status.currency),
         D1Type::Text(status.tx_signature.as_deref().unwrap_or("")),
         D1Type::Integer(status.verified as i32),

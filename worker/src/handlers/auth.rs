@@ -154,13 +154,19 @@ pub async fn auth_callback(
     };
 
     // Determine redirect: prefer explicit state param (event page redirect),
-    // fall back to role-based defaults.
-    let redirect_url = if let Some(ref state_url) = query.state {
+    // fall back to role-based defaults. `state` is whatever the sign-in link
+    // carried, so anyone can set it: only a same-origin path is honoured, or a
+    // crafted Google link would land the victim on any site after a real login.
+    let safe_state = query
+        .state
+        .as_deref()
+        .and_then(event_checkin_domain::validation::safe_redirect_path);
+    let redirect_url = if let Some(state_url) = safe_state {
         tracing::info!(
             "login successful with redirect: {} (role={role})",
             state_url,
         );
-        state_url.clone()
+        state_url.to_string()
     } else if is_staff_user {
         let dashboard = if matches!(role, "super_admin" | "organizer") {
             "/admin"
@@ -300,7 +306,16 @@ pub async fn wallet_nonce(
 
     let now = chrono::Utc::now().timestamp() as u64;
     let expires_at = now + 300; // 5 minutes
-    let nonce = format!("{:x}", now ^ 0xbe002026_u64);
+    // Random, not derived from the clock: a `now ^ const` nonce made the whole
+    // challenge predictable, so a victim phished into signing a future
+    // challenge could be impersonated when that second came (`.issues/143`).
+    // 128 bits from the runtime CSPRNG; fail closed if it is unavailable.
+    let nonce = crate::crypto::random_hex(16).map_err(|e| {
+        tracing::error!("SIWS nonce generation failed: {e}");
+        crate::error::WorkerError::from(event_checkin_domain::models::error::AppError::Internal(
+            "wallet sign-in unavailable".into(),
+        ))
+    })?;
     let message = format!(
         "BeThere Protocol Sign-In With Solana\nWallet: {}\nNonce: {}\nExpires: {}",
         req.wallet_address, nonce, expires_at

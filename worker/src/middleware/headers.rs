@@ -15,27 +15,28 @@
 
 use axum::{
     extract::Request,
-    http::{HeaderValue, header},
+    http::{HeaderName, HeaderValue},
     middleware::Next,
     response::Response,
 };
-use std::sync::LazyLock;
 
-static STRICT_TRANSPORT_SECURITY: LazyLock<HeaderValue> =
-    LazyLock::new(|| HeaderValue::from_static("max-age=63072000; includeSubDomains; preload"));
-
-static X_CONTENT_TYPE_OPTIONS: LazyLock<HeaderValue> =
-    LazyLock::new(|| HeaderValue::from_static("nosniff"));
-
-static X_FRAME_OPTIONS: LazyLock<HeaderValue> = LazyLock::new(|| HeaderValue::from_static("DENY"));
-
-static X_XSS_PROTECTION: LazyLock<HeaderValue> = LazyLock::new(|| HeaderValue::from_static("0"));
-
-static REFERRER_POLICY: LazyLock<HeaderValue> =
-    LazyLock::new(|| HeaderValue::from_static("strict-origin-when-cross-origin"));
-
-static CONTENT_SECURITY_POLICY: LazyLock<HeaderValue> = LazyLock::new(|| {
-    HeaderValue::from_static(
+/// The security headers, as `(lowercase name, value)` pairs.
+///
+/// The single source of truth: `frontend-leptos/_headers` mirrors this table
+/// under `/*` for the responses Cloudflare serves asset-first (every HTML
+/// navigation once `run_worker_first` became an array, `7ed1c07`), and
+/// `tests/security_headers_parity.rs` fails when the two drift.
+pub const SECURITY_HEADERS: [(&str, &str); 9] = [
+    (
+        "strict-transport-security",
+        "max-age=63072000; includeSubDomains; preload",
+    ),
+    ("x-content-type-options", "nosniff"),
+    ("x-frame-options", "DENY"),
+    ("x-xss-protection", "0"),
+    ("referrer-policy", "strict-origin-when-cross-origin"),
+    (
+        "content-security-policy",
         "default-src 'self'; \
          script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://telegram.org; \
          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
@@ -48,28 +49,22 @@ static CONTENT_SECURITY_POLICY: LazyLock<HeaderValue> = LazyLock::new(|| {
          frame-ancestors 'none'; \
          base-uri 'self'; \
          form-action 'self'",
-    )
-});
-
-static PERMISSIONS_POLICY: LazyLock<HeaderValue> = LazyLock::new(|| {
-    HeaderValue::from_static(
+    ),
+    (
+        "permissions-policy",
         "camera=(self), \
          microphone=(), \
          geolocation=(), \
          payment=()",
-    )
-});
-
-static CROSS_ORIGIN_OPENER_POLICY: LazyLock<HeaderValue> =
-    LazyLock::new(|| HeaderValue::from_static("same-origin"));
-
-static CROSS_ORIGIN_RESOURCE_POLICY: LazyLock<HeaderValue> =
-    LazyLock::new(|| HeaderValue::from_static("same-origin"));
+    ),
+    ("cross-origin-opener-policy", "same-origin"),
+    ("cross-origin-resource-policy", "same-origin"),
+];
 
 /// Axum middleware that adds security headers to every response.
 ///
-/// Applied as a layer around the entire router so all responses
-/// (API + static assets) include these headers.
+/// Applied as a layer around the entire router so every Worker-served
+/// response (API + the paths in `run_worker_first`) includes these headers.
 pub async fn security_headers_layer(req: Request, next: Next) -> Response {
     let response = next.run(req).await;
     add_security_headers(response)
@@ -77,29 +72,11 @@ pub async fn security_headers_layer(req: Request, next: Next) -> Response {
 
 pub fn add_security_headers(mut response: Response) -> Response {
     let headers = response.headers_mut();
-    headers.insert(
-        header::STRICT_TRANSPORT_SECURITY,
-        STRICT_TRANSPORT_SECURITY.clone(),
-    );
-    headers.insert(
-        header::X_CONTENT_TYPE_OPTIONS,
-        X_CONTENT_TYPE_OPTIONS.clone(),
-    );
-    headers.insert(header::X_FRAME_OPTIONS, X_FRAME_OPTIONS.clone());
-    headers.insert("x-xss-protection", X_XSS_PROTECTION.clone());
-    headers.insert(header::REFERRER_POLICY, REFERRER_POLICY.clone());
-    headers.insert(
-        header::CONTENT_SECURITY_POLICY,
-        CONTENT_SECURITY_POLICY.clone(),
-    );
-    headers.insert("permissions-policy", PERMISSIONS_POLICY.clone());
-    headers.insert(
-        "cross-origin-opener-policy",
-        CROSS_ORIGIN_OPENER_POLICY.clone(),
-    );
-    headers.insert(
-        "cross-origin-resource-policy",
-        CROSS_ORIGIN_RESOURCE_POLICY.clone(),
-    );
+    for (name, value) in SECURITY_HEADERS {
+        headers.insert(
+            HeaderName::from_static(name),
+            HeaderValue::from_static(value),
+        );
+    }
     response
 }

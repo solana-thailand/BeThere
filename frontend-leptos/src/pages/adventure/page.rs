@@ -188,17 +188,24 @@ pub fn Adventure() -> impl IntoView {
         }
     });
 
-    // Timer — increments every second while level is active
+    // Timer — increments every second while level is active. Cleared on
+    // unmount: an uncleared interval kept reading `game` after navigation,
+    // and `.get()` on a disposed signal panics (a wasm trap every second).
+    // `.with` also avoids cloning the whole GameState per tick.
     let game_for_timer = game;
-    set_interval(
+    if let Ok(timer) = set_interval_with_handle(
         move || {
-            let g = game_for_timer.get();
-            if !g.showing_intro && !g.level_completed {
+            let running = game_for_timer
+                .try_with(|g| !g.showing_intro && !g.level_completed)
+                .unwrap_or(false);
+            if running {
                 set_elapsed_seconds.update(|t| *t += 1);
             }
         },
         std::time::Duration::from_secs(1),
-    );
+    ) {
+        on_cleanup(move || timer.clear());
+    }
 
     // Reactive scroll — fires whenever player position changes
     let scroll_game = game;

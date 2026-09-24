@@ -2,6 +2,7 @@
 
 use axum::{
     extract::{Request, State},
+    http::HeaderMap,
     middleware::Next,
     response::Response,
 };
@@ -65,12 +66,22 @@ const RATE_LIMIT_WEBHOOK: RateLimitConfig = RateLimitConfig {
     window_secs: 60,
 };
 
+/// Public lookups that miss D1 and fall through to a full Google Sheets read
+/// (plan 028 W7). Charged per miss only, so D1 hits (the 10 s ticket poll from
+/// a whole venue behind one NAT) never touch it. Must match the binding in
+/// `wrangler.toml`.
+const RATE_LIMIT_SHEETS_FALLBACK: RateLimitConfig = RateLimitConfig {
+    group: "sheets_fallback",
+    max_requests: 10,
+    window_secs: 60,
+};
+
 /// Extract client IP from Cloudflare headers.
 ///
 /// Cloudflare sets `cf-connecting-ip` on every request.
 /// Do not trust caller-controlled forwarding headers when the edge header is absent.
-fn extract_client_ip(req: &Request) -> String {
-    req.headers()
+fn extract_client_ip(headers: &HeaderMap) -> String {
+    headers
         .get("cf-connecting-ip")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.parse::<std::net::IpAddr>().ok())
@@ -175,27 +186,15 @@ pub async fn rate_limit_layer(
     let path = req.uri().path().to_string();
 
     if let Some((config, kind)) = rate_limit_for_path(&path) {
-        let ip = extract_client_ip(&req);
+        let ip = extract_client_ip(req.headers());
         let limiter = match kind {
             LimiterKind::Auth => state.auth_rate_limiter.as_deref(),
             LimiterKind::Claim => state.claim_rate_limiter.as_deref(),
             LimiterKind::Deposit => state.deposit_rate_limiter.as_deref(),
             LimiterKind::Webhook => state.webhook_rate_limiter.as_deref(),
         };
-        let key = binding_key(config, &ip);
-        let allowed = if let Some(limiter) = limiter {
-            match limiter.limit(key).await {
-                Ok(outcome) => outcome.success,
-                Err(error) => {
-                    tracing::warn!(group = config.group, error = ?error, "native rate limiter unavailable; using isolate fallback");
-                    check_rate_limit(&ip, config)
-                }
-            }
-        } else {
-            check_rate_limit(&ip, config)
-        };
 
-        if !allowed {
+        if !allow(limiter, config, &ip).await {
             let body = format!(
                 r#"{{"error":"rate_limit_exceeded","retry_after_secs":{}}}"#,
                 config.window_secs
@@ -213,6 +212,32 @@ pub async fn rate_limit_layer(
     }
 
     next.run(req).await
+}
+
+/// Native per-location counter when bound, isolate-local counter otherwise.
+async fn allow(limiter: Option<&worker::RateLimiter>, config: &RateLimitConfig, ip: &str) -> bool {
+    let Some(limiter) = limiter else {
+        return check_rate_limit(ip, config);
+    };
+    match limiter.limit(binding_key(config, ip)).await {
+        Ok(outcome) => outcome.success,
+        Err(error) => {
+            tracing::warn!(group = config.group, error = ?error, "native rate limiter unavailable; using isolate fallback");
+            check_rate_limit(ip, config)
+        }
+    }
+}
+
+/// Whether this caller may spend a Google Sheets read on a public lookup that
+/// missed D1. `false` means answer 429 without touching Sheets.
+pub async fn allow_sheets_fallback(state: &crate::state::AppState, headers: &HeaderMap) -> bool {
+    let ip = extract_client_ip(headers);
+    allow(
+        state.sheets_fallback_rate_limiter.as_deref(),
+        &RATE_LIMIT_SHEETS_FALLBACK,
+        &ip,
+    )
+    .await
 }
 
 fn binding_key(config: &RateLimitConfig, ip: &str) -> String {
@@ -243,7 +268,7 @@ mod tests {
             req.headers_mut()
                 .insert("cookie", credential.parse().unwrap());
             let (config, _) = rate_limit_for_path(req.uri().path()).unwrap();
-            binding_key(config, &extract_client_ip(&req))
+            binding_key(config, &extract_client_ip(req.headers()))
         };
         assert_eq!(
             key("/api/deposit/usdc", "a"),
@@ -272,6 +297,49 @@ mod tests {
         let mut req = request("/api/auth/me", None);
         req.headers_mut()
             .insert("x-forwarded-for", "203.0.113.1".parse().unwrap());
-        assert_eq!(extract_client_ip(&req), "unknown");
+        assert_eq!(extract_client_ip(req.headers()), "unknown");
+    }
+
+    #[test]
+    fn sheets_fallback_budget_is_per_ip_and_its_own_bucket() {
+        let ip = "192.0.2.77";
+        for _ in 0..RATE_LIMIT_SHEETS_FALLBACK.max_requests {
+            assert!(check_rate_limit(ip, &RATE_LIMIT_SHEETS_FALLBACK));
+        }
+        assert!(!check_rate_limit(ip, &RATE_LIMIT_SHEETS_FALLBACK));
+        assert!(check_rate_limit("192.0.2.78", &RATE_LIMIT_SHEETS_FALLBACK));
+        // Its own bucket: spending the fallback budget leaves claims untouched.
+        assert!(check_rate_limit(ip, &RATE_LIMIT_CLAIM));
+    }
+
+    #[test]
+    fn sheets_fallback_budget_matches_both_wrangler_bindings() {
+        // The native binding and the isolate fallback must enforce one budget.
+        let toml = include_str!("../../wrangler.toml");
+        let blocks: Vec<&str> = toml
+            .split("name = \"SHEETS_FALLBACK_RATE_LIMITER\"")
+            .skip(1)
+            .collect();
+        assert_eq!(blocks.len(), 2, "expected a prod and a staging binding");
+        for block in blocks {
+            let field = |key: &str| -> i64 {
+                block
+                    .lines()
+                    .find_map(|l| l.trim().strip_prefix(key))
+                    .and_then(|v| v.trim().parse().ok())
+                    .unwrap_or_else(|| panic!("{key} missing"))
+            };
+            assert_eq!(
+                field("limit = "),
+                i64::from(RATE_LIMIT_SHEETS_FALLBACK.max_requests)
+            );
+            assert_eq!(field("period = "), RATE_LIMIT_SHEETS_FALLBACK.window_secs);
+        }
+    }
+
+    #[test]
+    fn public_ticket_path_is_not_limited_per_request() {
+        // The ticket page polls every 10 s; only D1 misses are charged.
+        assert!(rate_limit_for_path("/api/public/ticket/abc").is_none());
     }
 }

@@ -253,6 +253,11 @@ async fn sync_one_attendee(
         event_id,
         a.email.trim(),
         &a.name,
+        // .issues/136: this is the backfill. The sheet has always held the real
+        // ticket tier; D1 had nowhere to put it, so nothing read it. Running
+        // this sync for an event is what restores 'VIP'/'Speaker'/… on the
+        // admin list for rows that predate migration 0050.
+        &a.ticket_name,
         &approval_status,
         &participation_type,
         req_str(&a.contact_channel),

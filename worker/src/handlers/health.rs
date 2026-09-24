@@ -17,17 +17,10 @@ pub async fn health_check(State(state): State<AppState>) -> Json<Value> {
         !state.config.solana.crossmint_collection_id.is_empty(),
     );
 
-    // D1 connectivity check — runs a lightweight COUNT query.
-    // Wrapped in `worker::send` compatible future.
+    // D1 connectivity only. Row counts were public and cost a full scan of six
+    // tables per anonymous hit (issue 147); `SELECT 1` reads no rows.
     let d1_status = match state.d1 {
-        Some(db) => {
-            let db = Arc::clone(&db);
-            let result = check_d1_health(&db).await;
-            json!({
-                "connected": result.is_ok(),
-                "counts": result.unwrap_or_default(),
-            })
-        }
+        Some(db) => json!({ "connected": d1_reachable(&db).await }),
         None => json!({
             "connected": false,
             "error": "D1 binding not configured",
@@ -115,34 +108,11 @@ fn network_readiness(
     }
 }
 
-use std::sync::Arc;
-
-#[derive(serde::Serialize, serde::Deserialize, Default)]
-struct D1Counts {
-    attendees: i64,
-    contacts: i64,
-    events: i64,
-    staff: i64,
-    claim_locks: i64,
-    audit_log: i64,
-}
-
-async fn check_d1_health(db: &worker::D1Database) -> Result<D1Counts, String> {
-    let stmt = db.prepare(
-        "SELECT \
-         (SELECT COUNT(*) FROM attendees) as attendees, \
-         (SELECT COUNT(*) FROM contacts) as contacts, \
-         (SELECT COUNT(*) FROM events) as events, \
-         (SELECT COUNT(*) FROM staff) as staff, \
-         (SELECT COUNT(*) FROM claim_locks) as claim_locks, \
-         (SELECT COUNT(*) FROM audit_log) as audit_log",
-    );
-    let row = stmt
-        .first::<D1Counts>(None)
+async fn d1_reachable(db: &worker::D1Database) -> bool {
+    db.prepare("SELECT 1 AS ok")
+        .first::<serde_json::Value>(None)
         .await
-        .map_err(|e| format!("D1 health query: {e:?}"))?;
-
-    Ok(row.unwrap_or_default())
+        .is_ok_and(|row| row.is_some())
 }
 
 #[cfg(test)]

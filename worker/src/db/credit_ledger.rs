@@ -18,6 +18,7 @@
 //! the money, so one email's own sum can go negative while the person's is
 //! not — the person sum is the truth (plan 025).
 
+use super::d1_int::int_bind;
 use super::d1_safe::safe_all_rows;
 use super::person::person_emails_of;
 use std::collections::{HashMap, HashSet};
@@ -115,7 +116,7 @@ pub async fn record(
             D1Type::Text(&email_lc),
             D1Type::Text(organization_id),
             D1Type::Text(&currency_lc),
-            D1Type::Integer(delta as i32),
+            int_bind("credit_ledger.delta", delta)?,
             D1Type::Text(reason),
             event_id.map(D1Type::Text).unwrap_or(D1Type::Null),
             deposit_id.map(D1Type::Text).unwrap_or(D1Type::Null),
@@ -173,7 +174,7 @@ pub async fn try_spend(
             D1Type::Text(&email_lc),
             D1Type::Text(organization_id),
             D1Type::Text(&currency_lc),
-            D1Type::Integer(amount as i32),
+            int_bind("credit_ledger.amount", amount)?,
             D1Type::Text(event_id),
             D1Type::Text(deposit_id),
         ])

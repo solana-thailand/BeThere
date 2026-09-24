@@ -267,6 +267,14 @@ pub struct AttendeeListItem {
     /// Drives the "Credit ✓" badge (distinct from cash "Deposit ✓").
     #[serde(default)]
     pub used_credit: bool,
+    /// `"cash"` | `"credit"` | `"comp"` — how the THB deposit was settled.
+    /// `None` when there is no THB deposit row. See `.issues/137`.
+    #[serde(default)]
+    pub thb_source: Option<String>,
+    #[serde(default)]
+    pub thb_verified: bool,
+    #[serde(default)]
+    pub thb_refunded: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -389,6 +397,14 @@ pub struct AttendeeData {
     /// Event tagline / subtitle.
     #[serde(default)]
     pub event_tagline: String,
+    /// Organizer's announcement for this attendee's ticket page (migration
+    /// 0049). The Worker already picked the in-person or online variant to
+    /// match `is_in_person`, so there is only ever one here. Empty = no card.
+    ///
+    /// Plain text. Rendered with line breaks preserved and bare URLs turned
+    /// into links — never through `inner_html`.
+    #[serde(default)]
+    pub ticket_note: String,
     /// NFT badge image URL.
     #[serde(default)]
     pub nft_image_url: String,

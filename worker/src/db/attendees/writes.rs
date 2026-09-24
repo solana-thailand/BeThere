@@ -3,6 +3,8 @@
 use worker::D1Database;
 use worker::d1::D1Type;
 
+use crate::db::d1_int::int_bind;
+
 /// `consent_marketing` as a bind value: `NULL` when the submission did not ask.
 ///
 /// The column has three meaningful states and `Option<bool>` carries all
@@ -50,11 +52,21 @@ pub(crate) async fn upsert_attendee(
     claim_token: Option<&str>,
     notify_verified_email: bool,
 ) -> Result<(), String> {
+    // `ticket_name` is bound from the domain constant rather than written as a
+    // literal, so this writer and the Sheets append for the SAME flow
+    // (`sheets::write::append`, `sheets::bg_sync`) cannot drift apart —
+    // `worker/tests/ticket_name_guards.rs` asserts they agree. Before
+    // `.issues/136` D1 had no column at all and the read path substituted the
+    // attendee's name, which is how ordinary Thai names became VIP badges.
+    //
+    // On conflict it is NOT overwritten: if an organizer has since assigned a
+    // real tier to this row, a repeat registration must not demote them back to
+    // 'Self-Registered'.
     let stmt = db.prepare(
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
-         contact_channel, contact_handle, consent_marketing, consent_marketing_at, claim_token, created_at, updated_at) \
+         contact_channel, contact_handle, consent_marketing, consent_marketing_at, claim_token, ticket_name, created_at, updated_at) \
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, COALESCE(?9, 0), \
-         CASE WHEN ?9 IS NULL THEN NULL ELSE datetime('now') END, ?10, datetime('now'), datetime('now')) \
+         CASE WHEN ?9 IS NULL THEN NULL ELSE datetime('now') END, ?10, ?11, datetime('now'), datetime('now')) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, \
          approval_status = excluded.approval_status, \
@@ -78,6 +90,7 @@ pub(crate) async fn upsert_attendee(
             D1Type::Text(contact_handle),
             consent_bind(consent_marketing),
             D1Type::Text(claim_token.unwrap_or("")),
+            D1Type::Text(event_checkin_domain::models::attendee::TICKET_NAME_SELF_REGISTERED),
         ])
         .map_err(|e| format!("D1 upsert_attendee bind: {e:?}"))?;
     let mut statements = vec![attendee];
@@ -276,7 +289,7 @@ pub(crate) async fn verify_deposit(
     stmt.bind_refs(&[
         D1Type::Text(deposit_status),
         D1Type::Text(deposit_tx_hash),
-        D1Type::Integer(deposit_amount_usdc as i32),
+        int_bind("attendees.deposit_amount_usdc", deposit_amount_usdc)?,
         D1Type::Text(verified_at),
         D1Type::Text(verified_by),
         D1Type::Text(id),

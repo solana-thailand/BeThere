@@ -1,6 +1,7 @@
 //! Result types returned by the claim lookup and execute flows.
 
 use event_checkin_domain::models::api::{EventConfig as ApiEventConfig, QuizStatus};
+use event_checkin_domain::models::attendee::{Attendee, WalkinAttendee};
 
 /// Result of a successful claim lookup (GET).
 pub struct ClaimLookup {
@@ -47,4 +48,43 @@ pub struct ClaimResult {
     pub wallet_address: String,
     pub claimed_at: String,
     pub cluster: String,
+}
+
+/// What the one D1 read by claim token said about the attendee (plan 028 W6).
+pub(super) enum D1Claim {
+    /// A row with this token, inside its replay window.
+    Found(Box<Attendee>),
+    /// D1 answered: no row, or the token is outside its replay window.
+    Missing,
+    /// No D1 binding, or the read failed. Callers retry through the old
+    /// D1-first paths so a transient error never reads as "not found".
+    Unavailable,
+}
+
+/// Event context plus the D1 attendee for one claim token, read once and
+/// shared by the lookup (GET) and execute (POST) flows.
+pub(super) struct ClaimContext {
+    /// Caller-supplied event id if non-empty, otherwise the token row's.
+    pub(super) event_id: Option<String>,
+    pub(super) d1: D1Claim,
+}
+
+impl ClaimContext {
+    /// The walk-in attendee for `event_id`, when the D1 row is a walk-in.
+    pub(super) fn walkin(&self, event_id: &str) -> Option<WalkinAttendee> {
+        match &self.d1 {
+            D1Claim::Found(a) if a.participation_type == "walkin" => Some(WalkinAttendee {
+                event_id: event_id.to_string(),
+                email: a.email.clone(),
+                name: a.name.clone(),
+                phone: None,
+                claim_token: a.claim_token.clone().unwrap_or_default(),
+                checked_in_at: a.checked_in_at.clone().unwrap_or_default(),
+                checked_in_by: a.checked_in_by.clone().unwrap_or_default(),
+                wallet_address: None,
+                claimed_at: a.claimed_at.clone(),
+            }),
+            _ => None,
+        }
+    }
 }

@@ -28,11 +28,12 @@ pub use escrow::{
 };
 pub use thb::{
     admin_apply_credit_handler, admin_hold_deposit_handler, admin_upload_thb_slip_handler,
-    batch_thb_refund_handler, clear_credit_refund_request_handler, credit_balance_handler,
-    credit_liability_handler, credit_refund_request_status_handler, credit_refund_requests_handler,
-    credit_used_handler, held_list_handler, hold_deposit_handler, mark_manual_refund_handler,
-    mark_refund_handler, pending_thb_slips_handler, refund_queue_handler, refunded_list_handler,
-    request_credit_refund_handler, upload_thb_slip_handler, verify_thb_slip_handler,
+    batch_thb_refund_handler, clear_credit_refund_request_handler, comp_thb_deposit_handler,
+    credit_balance_handler, credit_liability_handler, credit_refund_request_status_handler,
+    credit_refund_requests_handler, credit_used_handler, held_list_handler, hold_deposit_handler,
+    mark_manual_refund_handler, mark_refund_handler, pending_thb_slips_handler,
+    refund_queue_handler, refunded_list_handler, request_credit_refund_handler,
+    upload_thb_slip_handler, verify_thb_slip_handler,
 };
 pub use usdc::{
     confirm_deposit_handler, deposit_usdc_handler, deposit_usdc_tx_handler,
@@ -43,25 +44,8 @@ pub use usdc::{
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-/// Derive a stable u64 event ID from a string event ID for on-chain PDA derivation.
-/// Uses FNV-1a hash for deterministic, collision-resistant mapping.
+/// Derive the u64 on-chain event id that seeds the escrow PDA.
+/// The hash lives in `event_checkin_domain::onchain` and must never change.
 pub(crate) fn derive_on_chain_event_id(event_id: &str) -> u64 {
-    // FNV-1a 64-bit hash → u64 PDA seed.
-    // Intentionally kept as FNV-1a because the on-chain program (bethere-escrow)
-    // uses `event_id: u64` as a PDA seed — changing the hash would re-derive all
-    // existing PDAs and orphan escrow accounts. FNV-1a is sufficient here because:
-    //   1. Input is a UUID (128 bits of entropy) → collision resistance is ~2^-64
-    //   2. PDA seeds are public on-chain — no irreversibility requirement
-    //   3. The organizer pubkey is also part of the seed, further reducing collision risk
-    // See VULN-007: JWT blacklist keys now use SHA-256; on-chain IDs remain FNV-1a.
-    let mut hash: u64 = 0xcbf29ce484222325; // FNV offset basis
-    for byte in event_id.bytes() {
-        hash ^= byte as u64;
-        hash = hash.wrapping_mul(0x100000001b3); // FNV prime
-    }
-    // Ensure non-zero
-    if hash == 0 {
-        hash = 1;
-    }
-    hash
+    event_checkin_domain::onchain::on_chain_event_id(event_id)
 }

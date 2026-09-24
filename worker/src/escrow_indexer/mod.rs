@@ -3,7 +3,7 @@
 //! Bridges the gap between on-chain CPI events emitted by the bethere-escrow
 //! program and the off-chain audit trail stored in KV.
 //!
-//! The escrow program emits 8 event types via `emit!()`. The program ID is
+//! The escrow program emits 9 event types via `emit!()`. The program ID is
 //! cluster-aware (see `escrow_program_id()`); the devnet default is
 //! `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T`.
 //!
@@ -17,6 +17,7 @@
 //! | 5             | EventClosed       | close_event      |
 //! | 6             | EventDeactivated  | deactivate_event |
 //! | 7             | DepositClosed     | close_deposit    |
+//! | 8             | DepositRolledOver | rollover_deposit |
 //!
 //! KV key schema (EVENTS namespace):
 //!
@@ -35,6 +36,9 @@ pub mod poller;
 pub mod store;
 pub mod webhook;
 
+use event_checkin_domain::onchain::{
+    CREATE_EVENT_DISCRIMINATOR, EventIx, ROLLOVER_DEPOSIT_DISCRIMINATOR,
+};
 use serde::{Deserialize, Serialize};
 use worker::KvStore;
 
@@ -69,19 +73,28 @@ pub enum EscrowInstruction {
     Unknown,
 }
 
+/// Decodes through `event_checkin_domain::onchain`, the same table the
+/// transaction builders encode with, so the indexer cannot drift from them.
 impl From<u8> for EscrowInstruction {
     fn from(disc: u8) -> Self {
         match disc {
-            0 => Self::CreateEvent,
-            1 => Self::Deposit,
-            2 => Self::MarkCheckedIn,
-            3 => Self::Refund,
-            4 => Self::ClaimForfeited,
-            5 => Self::CloseEvent,
-            6 => Self::DeactivateEvent,
-            7 => Self::CloseDeposit,
-            8 => Self::RolloverDeposit,
-            _ => Self::Unknown,
+            CREATE_EVENT_DISCRIMINATOR => Self::CreateEvent,
+            ROLLOVER_DEPOSIT_DISCRIMINATOR => Self::RolloverDeposit,
+            other => EventIx::from_discriminator(other).map_or(Self::Unknown, Self::from),
+        }
+    }
+}
+
+impl From<EventIx> for EscrowInstruction {
+    fn from(ix: EventIx) -> Self {
+        match ix {
+            EventIx::Deposit => Self::Deposit,
+            EventIx::MarkCheckedIn => Self::MarkCheckedIn,
+            EventIx::Refund => Self::Refund,
+            EventIx::ClaimForfeited => Self::ClaimForfeited,
+            EventIx::CloseEvent => Self::CloseEvent,
+            EventIx::DeactivateEvent => Self::DeactivateEvent,
+            EventIx::CloseDeposit => Self::CloseDeposit,
         }
     }
 }
@@ -290,6 +303,37 @@ pub use webhook::{HeliusEnhancedTransaction, parse_helius_transaction};
 mod tests {
     use super::*;
     use crate::escrow_indexer::webhook::HeliusInstruction;
+
+    /// The pinned instruction-data fixture (`domain/tests/fixtures`) names
+    /// every program instruction; the indexer must decode each case's first
+    /// byte to that same name (it is the stored KV value), and read
+    /// `create_event`'s deposit amount from the right offset.
+    #[test]
+    fn decodes_every_pinned_escrow_ix_data_case() {
+        const FIXTURE: &str = include_str!("../../../domain/tests/fixtures/golden_vectors.json");
+        let fixture: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture json");
+        let cases = fixture["escrow_ix_data"]["cases"]
+            .as_array()
+            .expect("escrow_ix_data.cases");
+        assert!(cases.len() >= 9, "fixture lost cases");
+        for case in cases {
+            let name = case["ix"].as_str().expect("ix");
+            let hex = case["hex"].as_str().expect("hex");
+            let bytes: Vec<u8> = (0..hex.len())
+                .step_by(2)
+                .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).expect("hex byte"))
+                .collect();
+            let instruction = EscrowInstruction::from(bytes[0]);
+            assert_eq!(instruction.to_string(), name, "case {hex}");
+            if instruction == EscrowInstruction::CreateEvent {
+                let (_, _, amount, _) = instruction.extract_fields(&[], &bytes);
+                assert_eq!(amount, case["args"][1].as_u64(), "deposit_amount in {hex}");
+            }
+        }
+        for disc in 9u8..=u8::MAX {
+            assert_eq!(EscrowInstruction::from(disc), EscrowInstruction::Unknown);
+        }
+    }
 
     #[test]
     fn test_escrow_instruction_from_discriminator() {

@@ -53,10 +53,18 @@ set -u
 if [ "${1:-}" = "--grep" ]; then
   LOG="${2:?usage: pii_log_probe.sh --grep <logfile>}"
   SENTINELS='0feed070|ZpiiWa11et|ZpiiSig|zpii\.|pii\.probe\.staff|66900000001|770001234|9990001234567|Zpiiattendeename|zpii_handle|zpii-gh-login|Zpiitg'
+  # A missing or empty log must not read as "(none)": grep's exit 2 on a bad
+  # path used to fall through the `|| echo` below as a clean result.
+  if [ ! -s "$LOG" ]; then
+    echo "❌ $LOG is missing or empty — nothing was probed" >&2
+    exit 2
+  fi
   echo "=== leaks in Worker tracing output (must be empty) ==="
-  grep -nE "$SENTINELS" "$LOG" | grep -vE '^[0-9]+:\[wrangler:' || echo "(none)"
+  leaks=$(grep -nE "$SENTINELS" "$LOG" | grep -vE '^[0-9]+:\[wrangler:' || true)
+  if [ -n "$leaks" ]; then printf '%s\n' "$leaks"; else echo "(none)"; fi
   echo "=== platform access-log residual (expected, not a Worker log) ==="
-  grep -cE '^\[wrangler:info\]' "$LOG"
+  grep -cE '^\[wrangler:info\]' "$LOG" || true
+  if [ -n "$leaks" ]; then exit 1; fi
   exit 0
 fi
 

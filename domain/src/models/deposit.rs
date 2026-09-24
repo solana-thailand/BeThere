@@ -155,6 +155,37 @@ pub struct ThbDeposit {
     /// R2 URL of the refund transfer receipt (uploaded by admin when marking refund).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub refund_proof_url: Option<String>,
+    /// BLAKE3 of the *decoded image bytes* of the uploaded slip, lowercase hex.
+    ///
+    /// Anyone can upload any image to the deposit page: nothing about a slip is
+    /// checked, so the organizer catches re-used slips by recognising the
+    /// person. This is the cheapest thing that makes the system remember
+    /// instead — two attendees who upload byte-identical images are now
+    /// detectable, and `.issues/129` can build the bank-reference check on top
+    /// rather than starting from nothing.
+    ///
+    /// `None` for every row uploaded before 2026-09-22 and for any slip stored
+    /// as an external URL rather than an upload. A missing hash means *not
+    /// known*, never *not a duplicate* — a comparison against `None` must never
+    /// be read as a clean result.
+    ///
+    /// Hashed from the decoded bytes, not the data URL text: base64 padding,
+    /// MIME-type casing and the `;base64` marker all vary between clients for
+    /// the same image, so hashing the string would miss the duplicate it exists
+    /// to catch.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub slip_blake3: Option<String>,
+    /// The recorded economic source of this deposit, when one has been decided
+    /// outright (migration 0047).
+    ///
+    /// `None` means *not recorded*, and [`ThbDeposit::source`] then falls back
+    /// to sniffing the legacy sentinels out of `verified_by` / `slip_url`. That
+    /// fallback is not deprecated scaffolding: those sentinels are still what
+    /// `register::signup::record_staff_comp` and the rolling-credit application
+    /// write, and they carry other meanings besides. One classifier, two
+    /// inputs — never two classifiers.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub deposit_source: Option<DepositSource>,
 }
 
 /// The economic source of a THB deposit — the single classification every
@@ -173,10 +204,40 @@ pub enum DepositSource {
     Comp,
 }
 
+impl DepositSource {
+    /// The stored/wire spelling — the same string the `deposit_source` column
+    /// holds, the same string `#[serde(rename_all = "snake_case")]` produces,
+    /// and the same string migration 0047's `CHECK` constraint allows.
+    ///
+    /// Three places already agreed on these spellings by coincidence; this makes
+    /// it one place. `as_str_matches_the_serde_representation` below is what
+    /// stops them drifting apart again.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cash => "cash",
+            Self::Credit => "credit",
+            Self::Comp => "comp",
+        }
+    }
+}
+
 impl ThbDeposit {
     /// Classify this deposit's economic source — the one place the
     /// credit/comp/cash decision is made.
+    ///
+    /// An explicitly recorded `deposit_source` wins. That is the whole point of
+    /// the column: before it existed, the only way to mark a real ฿500 slip as
+    /// non-refundable was to destroy the evidence — blank `slip_url` or zero
+    /// `amount_thb` — so an organizer who knew somebody had not paid could only
+    /// admit them and owe them ฿500, or refuse them entry (`.issues/129` Gap 1).
+    ///
+    /// Everything else falls through to the legacy sentinels, unchanged. The
+    /// backfill in migration 0047 is a transcription of the fallback below, in
+    /// this order, so no existing row changes classification on migration day.
     pub fn source(&self) -> DepositSource {
+        if let Some(recorded) = self.deposit_source {
+            return recorded;
+        }
         if matches!(self.verified_by.as_deref(), Some("SYSTEM_ROLLING_CREDIT"))
             || matches!(
                 self.slip_url.as_deref(),
@@ -319,6 +380,19 @@ pub struct VerifySlipRequest {
 pub struct PendingSlipResponse {
     #[serde(default)]
     pub slips: Vec<ThbDeposit>,
+    /// Slip fingerprints that appear on more than one attendee **in this
+    /// event** — i.e. the same image, submitted by two different people.
+    ///
+    /// Computed over every deposit for the event, not just the pending ones, so
+    /// a slip that collides with an already-approved deposit is still flagged.
+    /// The admin screen matches a row's `slip_blake3` against this list;
+    /// carrying the set once rather than a boolean per row keeps `ThbDeposit`
+    /// a record of what was stored rather than a view model.
+    ///
+    /// Empty is the normal case and also the honest answer when no slip has a
+    /// hash yet (everything uploaded before 2026-09-22) — absence of evidence.
+    #[serde(default)]
+    pub duplicate_slip_hashes: Vec<String>,
 }
 
 /// Response for GET /api/refund/queue — THB refunds pending.
@@ -507,5 +581,136 @@ mod tests {
         assert_eq!(err, "unknown DepositMethod: ''");
         let err = "Usdc".parse::<DepositMethod>().unwrap_err();
         assert_eq!(err, "unknown DepositMethod: 'Usdc'");
+    }
+
+    /// `as_str` is used for the D1 `deposit_source` column, the admin roster's
+    /// wire field and migration 0047's CHECK. If it ever disagreed with the
+    /// serde representation, a deposit would round-trip through JSON as one
+    /// source and through SQL as another.
+    #[test]
+    fn as_str_matches_the_serde_representation() {
+        for source in [
+            DepositSource::Cash,
+            DepositSource::Credit,
+            DepositSource::Comp,
+        ] {
+            let json = serde_json::to_string(&source).expect("serializes");
+            assert_eq!(
+                json.trim_matches('"'),
+                source.as_str(),
+                "as_str and serde disagree for {source:?}"
+            );
+        }
+    }
+
+    // ── DepositSource: the recorded column vs the legacy sentinels ──────────
+    //
+    // `.issues/129` Gap 1. Before migration 0047 the only way to mark a real
+    // ฿500 slip as non-refundable was to destroy the evidence — blank
+    // `slip_url` or zero `amount_thb` — so an organizer who knew somebody had
+    // not paid could only admit them and owe the money, or turn them away.
+
+    fn thb(amount: u64, slip: Option<&str>, verified_by: Option<&str>) -> ThbDeposit {
+        ThbDeposit {
+            attendee_id: "a".into(),
+            event_id: "e".into(),
+            amount_thb: amount,
+            slip_url: slip.map(str::to_string),
+            verified: false,
+            verified_by: verified_by.map(str::to_string),
+            verified_at: None,
+            uploaded_at: "2026-09-22T00:00:00Z".into(),
+            refunded: false,
+            refunded_at: None,
+            held_as_credit: false,
+            held_as_credit_at: None,
+            attendee_name: None,
+            bank_account: None,
+            bank_name: None,
+            account_name: None,
+            refund_proof_url: None,
+            slip_blake3: None,
+            deposit_source: None,
+        }
+    }
+
+    /// The fallback, unchanged. Migration 0047's backfill is a transcription of
+    /// exactly these arms, in this order, so no row changed classification on
+    /// migration day.
+    #[test]
+    fn the_legacy_sentinels_still_classify_every_row_that_has_no_recorded_source() {
+        assert_eq!(
+            thb(500, Some("/api/storage/slips/e/a"), Some("admin@x")).source(),
+            DepositSource::Cash
+        );
+        assert_eq!(
+            thb(500, Some("/s"), Some("SYSTEM_ROLLING_CREDIT")).source(),
+            DepositSource::Credit
+        );
+        assert_eq!(
+            thb(500, Some("ROLLING_CREDIT_AUTO_APPLIED"), Some("admin@x")).source(),
+            DepositSource::Credit
+        );
+        assert_eq!(
+            thb(0, Some("/s"), Some("SYSTEM_STAFF_WAIVE")).source(),
+            DepositSource::Comp
+        );
+        assert_eq!(
+            thb(500, Some("STAFF_COMP_WAIVED"), Some("admin@x")).source(),
+            DepositSource::Comp
+        );
+        assert_eq!(
+            thb(0, Some("/api/storage/slips/e/a"), Some("admin@x")).source(),
+            DepositSource::Comp
+        );
+    }
+
+    /// Order is load-bearing, and the SQL backfill has to reproduce it: a row
+    /// that is BOTH credit-applied and ฿0 is Credit, not Comp. Getting this
+    /// backwards would have moved rolling-credit deposits into the comp bucket,
+    /// which is money the attendee is still owed.
+    #[test]
+    fn credit_beats_comp_when_a_row_matches_both() {
+        let both = thb(
+            0,
+            Some("ROLLING_CREDIT_AUTO_APPLIED"),
+            Some("SYSTEM_ROLLING_CREDIT"),
+        );
+        assert_eq!(both.source(), DepositSource::Credit);
+        assert!(both.is_credit_covered());
+    }
+
+    /// The point of the column: a real ฿500 slip, with its evidence intact,
+    /// classified as a comp because an organizer said so.
+    #[test]
+    fn a_recorded_source_overrides_the_sentinels_without_destroying_evidence() {
+        let mut d = thb(500, Some("/api/storage/slips/e/a"), Some("admin@x"));
+        assert_eq!(d.source(), DepositSource::Cash);
+
+        d.deposit_source = Some(DepositSource::Comp);
+        assert_eq!(d.source(), DepositSource::Comp);
+        assert!(d.is_non_cash(), "a comp must never reach the refund queue");
+        assert!(!d.is_credit_covered(), "a comp is not rolling credit");
+        // The evidence of what was claimed survives the write-off. That is the
+        // whole reason the column exists.
+        assert_eq!(d.amount_thb, 500);
+        assert_eq!(d.slip_url.as_deref(), Some("/api/storage/slips/e/a"));
+    }
+
+    /// The override works in the other direction too — a ฿0 row an organizer
+    /// explicitly records as cash is cash. Guards against the column being
+    /// read only when it agrees with the sentinels, which would make it
+    /// decorative.
+    #[test]
+    fn the_recorded_source_wins_even_against_a_sentinel_that_disagrees() {
+        let mut zero = thb(0, Some("/api/storage/slips/e/a"), Some("admin@x"));
+        assert_eq!(zero.source(), DepositSource::Comp);
+        zero.deposit_source = Some(DepositSource::Cash);
+        assert_eq!(zero.source(), DepositSource::Cash);
+
+        let mut waived = thb(500, Some("STAFF_COMP_WAIVED"), Some("admin@x"));
+        assert_eq!(waived.source(), DepositSource::Comp);
+        waived.deposit_source = Some(DepositSource::Credit);
+        assert_eq!(waived.source(), DepositSource::Credit);
     }
 }

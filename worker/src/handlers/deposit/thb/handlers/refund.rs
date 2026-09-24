@@ -76,6 +76,17 @@ pub async fn mark_refund_handler(
     if body.refund_proof_url.trim().is_empty() {
         return Err(AppError::Validation("refund_proof_url is required".to_string()).into());
     }
+    // Attendees click this on their ticket page (`.issues/145`): accept an
+    // uploaded image (checked like a slip) or an https link, nothing else.
+    if body.refund_proof_url.starts_with("data:") {
+        super::slip_upload::validate_slip_url(&body.refund_proof_url)?;
+    } else if event_checkin_domain::validation::safe_document_link(&body.refund_proof_url).is_none()
+    {
+        return Err(AppError::Validation(
+            "refund proof must be an https link to the transfer receipt".to_string(),
+        )
+        .into());
+    }
 
     // Upload refund proof data URL to R2 if available
     let refund_proof_url = super::maybe_upload_to_r2(

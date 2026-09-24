@@ -30,6 +30,26 @@ fn get_subtle_crypto() -> Result<Object, String> {
         .ok_or_else(|| "crypto.subtle is not an object".to_string())
 }
 
+/// `bytes` bytes from the runtime CSPRNG (`crypto.getRandomValues`), hex-encoded.
+///
+/// For anything an attacker must not predict (challenge nonces). Not a UUIDv7:
+/// its timestamp and in-millisecond counter are guessable, leaving only part
+/// of it random.
+pub fn random_hex(bytes: usize) -> Result<String, String> {
+    let global = js_sys::global();
+    let crypto_val = Reflect::get(&global, &JsValue::from_str("crypto"))
+        .map_err(|e| format!("failed to get global crypto: {e:?}"))?;
+    let get_random_values = Reflect::get(&crypto_val, &JsValue::from_str("getRandomValues"))
+        .map_err(|e| format!("failed to get crypto.getRandomValues: {e:?}"))?;
+    let view = Uint8Array::new_with_length(bytes as u32);
+    js_sys::Function::from(get_random_values)
+        .call1(&crypto_val, &view)
+        .map_err(|e| format!("crypto.getRandomValues failed: {e:?}"))?;
+    let mut buf = vec![0u8; bytes];
+    view.copy_to(&mut buf);
+    Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
+}
+
 /// Convert a JS Uint8Array or ArrayBuffer into a Rust Vec<u8>.
 fn js_buffer_to_vec(val: &JsValue) -> Result<Vec<u8>, String> {
     if val.is_instance_of::<ArrayBuffer>() {
@@ -352,9 +372,30 @@ mod fingerprint_tests {
     }
 }
 
+/// Distinct HMAC secrets in use: the JWT secret plus the social-link keys.
+const HMAC_KEY_CACHE_CAP: usize = 4;
+
+thread_local! {
+    /// Imported HMAC `CryptoKey`s for this isolate (plan 028 W12), keyed by a
+    /// SHA-256 of the raw secret so the cache holds no second copy of it.
+    static HMAC_KEYS: std::cell::RefCell<crate::isolate_cache::BoundedCache<[u8; 32], JsValue>> =
+        const { std::cell::RefCell::new(crate::isolate_cache::BoundedCache::new(HMAC_KEY_CACHE_CAP)) };
+}
+
+/// Import `key_bytes` once per isolate; every JWT sign/verify reuses the key.
+async fn cached_hmac_key(key_bytes: &[u8]) -> Result<JsValue, String> {
+    let id: [u8; 32] = Sha256::digest(key_bytes).into();
+    if let Some(key) = HMAC_KEYS.with_borrow(|keys| keys.get(&id)) {
+        return Ok(key);
+    }
+    let key = import_hmac_key(key_bytes).await?;
+    HMAC_KEYS.with_borrow_mut(|keys| keys.insert(id, key.clone()));
+    Ok(key)
+}
+
 /// Compute HMAC-SHA256 of the given data using the provided key.
 pub(crate) async fn hmac_sha256(key_bytes: &[u8], data: &[u8]) -> Result<Vec<u8>, String> {
-    let key = import_hmac_key(key_bytes).await?;
+    let key = cached_hmac_key(key_bytes).await?;
 
     let data_arr = Uint8Array::new_with_length(data.len() as u32);
     data_arr.copy_from(data);
@@ -433,16 +474,39 @@ pub async fn create_verified_email_jwt(
     sign_session_claims(&claims, secret).await
 }
 
-async fn sign_session_claims(claims: &Claims, secret: &str) -> Result<String, String> {
+/// `header.payload`, the bytes HS256 signs. Pure, so the framing is pinned by
+/// the `jwt_hs256` golden vectors; the HMAC itself is WebCrypto's.
+fn session_signing_input(claims: &Claims) -> Result<String, String> {
     let payload_bytes =
         serde_json::to_vec(claims).map_err(|e| format!("failed to serialize JWT claims: {e}"))?;
     let payload_b64 = base64_url_encode(&payload_bytes);
+    Ok(format!("{JWT_HEADER_B64}.{payload_b64}"))
+}
 
-    let sign_input = format!("{JWT_HEADER_B64}.{payload_b64}");
+/// Decode a token's payload segment. Tokens issued before a field was added
+/// must still decode, or a deploy logs every session out.
+fn decode_session_payload(payload_b64: &str) -> Result<Claims, String> {
+    let payload_bytes = base64_url_decode(payload_b64)?;
+    serde_json::from_slice(&payload_bytes)
+        .map_err(|e| format!("failed to deserialize JWT claims: {e}"))
+}
+
+async fn sign_session_claims(claims: &Claims, secret: &str) -> Result<String, String> {
+    let sign_input = session_signing_input(claims)?;
     let signature = hmac_sha256(secret.as_bytes(), sign_input.as_bytes()).await?;
     let sig_b64 = base64_url_encode(&signature);
 
     Ok(format!("{sign_input}.{sig_b64}"))
+}
+
+/// Compare two secrets without an early exit on the first differing byte, so
+/// the time taken does not reveal how much of a guess was right. A length
+/// mismatch returns at once; lengths of these secrets are not secret.
+pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
 }
 
 /// Verify and decode a JWT session token, returning the claims.
@@ -464,23 +528,11 @@ pub async fn verify_jwt(token: &str, secret: &str) -> Result<Claims, String> {
     let expected_sig = hmac_sha256(secret.as_bytes(), sign_input.as_bytes()).await?;
     let actual_sig = base64_url_decode(parts[2])?;
 
-    // Constant-time comparison of signature bytes
-    if expected_sig.len() != actual_sig.len() {
+    if !constant_time_eq(&expected_sig, &actual_sig) {
         return Err("JWT signature verification failed".to_string());
     }
 
-    let mut diff = 0u8;
-    for (a, b) in expected_sig.iter().zip(actual_sig.iter()) {
-        diff |= a ^ b;
-    }
-    if diff != 0 {
-        return Err("JWT signature verification failed".to_string());
-    }
-
-    // Decode payload
-    let payload_bytes = base64_url_decode(parts[1])?;
-    let claims: Claims = serde_json::from_slice(&payload_bytes)
-        .map_err(|e| format!("failed to deserialize JWT claims: {e}"))?;
+    let claims = decode_session_payload(parts[1])?;
 
     // Check expiration
     let now = chrono::Utc::now().timestamp() as u64;
@@ -553,5 +605,36 @@ mod tests {
         let header: serde_json::Value = serde_json::from_slice(&header_bytes).unwrap();
         assert_eq!(header["alg"], "HS256");
         assert_eq!(header["typ"], "JWT");
+    }
+
+    /// Tokens signed with Python `hmac` (`jwt_hs256` in the domain fixture):
+    /// our framing must rebuild `header.payload` byte for byte, and the payload
+    /// must decode back to the same claims, including legacy tokens that
+    /// predate `email_verified`.
+    #[test]
+    fn session_jwt_framing_matches_pinned_tokens() {
+        const FIXTURE: &str = include_str!("../../domain/tests/fixtures/golden_vectors.json");
+        let fixture: serde_json::Value = serde_json::from_str(FIXTURE).expect("fixture json");
+        let cases = fixture["jwt_hs256"]["cases"]
+            .as_array()
+            .expect("jwt_hs256.cases");
+        assert!(cases.len() >= 2, "fixture lost cases");
+        for case in cases {
+            let token = case["token"].as_str().expect("token");
+            let claims: Claims =
+                serde_json::from_value(case["claims"].clone()).expect("fixture claims");
+            let (sign_input, sig_b64) = token.rsplit_once('.').expect("3-part token");
+            let (_, payload_b64) = sign_input.split_once('.').expect("3-part token");
+
+            assert_eq!(decode_session_payload(payload_b64), Ok(claims.clone()));
+            assert_eq!(base64_url_decode(sig_b64).map(|sig| sig.len()), Ok(32));
+            match case["reissue_identical"]
+                .as_bool()
+                .expect("reissue_identical")
+            {
+                true => assert_eq!(session_signing_input(&claims).as_deref(), Ok(sign_input)),
+                false => assert_ne!(session_signing_input(&claims).as_deref(), Ok(sign_input)),
+            }
+        }
     }
 }

@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use event_checkin_frontend::App;
 
 fn main() {

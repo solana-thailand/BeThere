@@ -1,3 +1,4 @@
+use event_checkin_domain::onchain::EscrowIxData;
 use worker::KvStore;
 
 use super::super::EscrowError;
@@ -48,10 +49,13 @@ pub async fn build_init_escrow_transaction(
     // Instruction 2: create_event (escrow program)
     // Accounts: organizer(S,W), event_escrow(W), usdc_mint(R), vault(W),
     //   rent_sysvar(R), token_program(R), system_program(R)
-    let mut escrow_ix_data = ctx.ix_data(0); // [0] + event_id
-    escrow_ix_data.extend_from_slice(&deposit_amount.to_le_bytes());
-    escrow_ix_data.extend_from_slice(&event_end.to_le_bytes());
-    escrow_ix_data.extend_from_slice(&refund_deadline.to_le_bytes());
+    let escrow_ix_data = EscrowIxData::CreateEvent {
+        event_id: ctx.event_id,
+        deposit_amount,
+        event_end,
+        refund_deadline,
+    }
+    .encode();
 
     let escrow_ix_accounts = vec![
         acct_sw(ctx.organizer),

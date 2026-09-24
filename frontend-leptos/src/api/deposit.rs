@@ -3,7 +3,7 @@
 // serde derives used via full path in attribute macros
 
 use super::types::ApiError;
-use super::{api_get_json, api_post_json};
+use super::{api_get_json, api_get_json_if_signed_in, api_post_json};
 
 // ===== Deposit/Refund Types =====
 
@@ -118,6 +118,22 @@ pub struct VerifySlipRequest {
     pub approved: bool,
 }
 
+/// Request body for `POST /api/deposit/thb/comp` (admin).
+///
+/// Admits the attendee — same ticket QR an approval issues — and records the
+/// deposit as a comp, so no refund is owed. The third option next to
+/// Approve/Reject: before it existed, approving was the only route to a ticket
+/// AND the promise to refund ฿500 (`.issues/129` Gap 1).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CompDepositRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    /// Organizer's note. Stored only in the audit entry; never shown to the
+    /// attendee, who is told nothing beyond receiving their ticket.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
 /// Request body for `POST /api/deposit/thb/admin-upload`.
 ///
 /// Mirrors `ThbSlipUploadRequest` plus an `auto_verify` flag (default `true` —
@@ -183,12 +199,23 @@ pub struct ThbDepositInfo {
     pub account_name: Option<String>,
     #[serde(default)]
     pub refund_proof_url: Option<String>,
+    /// BLAKE3 of the uploaded slip image's bytes. `None` for every deposit
+    /// recorded before 2026-09-22 and for slips stored as an external URL.
+    /// Matched against `PendingSlipResponse::duplicate_slip_hashes` to mark a
+    /// row whose image another attendee also submitted.
+    #[serde(default)]
+    pub slip_blake3: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct PendingSlipResponse {
     #[serde(default)]
     pub slips: Vec<ThbDepositInfo>,
+    /// Slip fingerprints carried by more than one attendee in this event.
+    /// Computed server-side over every deposit, including already-approved
+    /// ones, so a new slip matching an approved deposit is still flagged.
+    #[serde(default)]
+    pub duplicate_slip_hashes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
@@ -379,6 +406,15 @@ pub async fn admin_upload_thb_slip(
 /// POST /api/deposit/thb/verify (admin)
 pub async fn verify_thb_slip(body: &VerifySlipRequest) -> Result<serde_json::Value, ApiError> {
     api_post_json("/deposit/thb/verify", body).await
+}
+
+/// POST /api/deposit/thb/comp (admin)
+///
+/// Admit without owing a refund. Refused server-side for a deposit that is
+/// already refunded, already held as rolling credit, or covered by credit
+/// rather than cash — each of those would make an existing money fact untrue.
+pub async fn comp_thb_deposit(body: &CompDepositRequest) -> Result<serde_json::Value, ApiError> {
+    api_post_json("/deposit/thb/comp", body).await
 }
 
 /// GET /api/deposit/thb/pending?event_id=xxx
@@ -582,9 +618,13 @@ pub struct CreditRefundRequestStatus {
     pub requested: bool,
 }
 
-/// GET /api/deposit/credit-refund-request — read the attendee's own flag state.
-pub async fn get_credit_refund_request_status() -> Result<CreditRefundRequestStatus, ApiError> {
-    api_get_json("/deposit/credit-refund-request").await
+/// GET /api/deposit/credit-refund-request — the attendee's own flag state, or
+/// `None` when signed out or the read fails.
+///
+/// Never redirects to /login: the card that reads this mounts on the public
+/// ticket page (`.issues/142`, the sibling of the credit chip).
+pub async fn get_credit_refund_request_status() -> Option<CreditRefundRequestStatus> {
+    api_get_json_if_signed_in("/deposit/credit-refund-request").await
 }
 
 /// One row in the admin "credit refund requested" listing (Issue #061 Phase 3).
@@ -781,7 +821,11 @@ pub async fn hold_deposit(body: &HoldDepositRequest) -> Result<HoldDepositRespon
     api_post_json("/deposit/hold", body).await
 }
 
-/// GET /api/deposit/credit-balance — fetch the authenticated attendee's rolling credit balance.
-pub async fn get_credit_balance() -> Result<CreditBalanceResponse, ApiError> {
-    api_get_json("/deposit/credit-balance").await
+/// GET /api/deposit/credit-balance — the signed-in attendee's rolling credit
+/// balance, or `None` when signed out or the read fails.
+///
+/// Never redirects to /login: the chip built on this mounts on the public ticket
+/// page, where a signed-out attendee is the normal case (`.issues/142`).
+pub async fn get_credit_balance() -> Option<CreditBalanceResponse> {
+    api_get_json_if_signed_in("/deposit/credit-balance").await
 }

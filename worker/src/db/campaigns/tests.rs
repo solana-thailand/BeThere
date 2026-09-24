@@ -1,4 +1,6 @@
-use super::series::{EventSeriesEntry, compute_series_neighbors};
+use super::series::{
+    EventSeriesEntry, SERIES_SUMMARIES_SQL, compute_series_neighbors, series_live_filter,
+};
 use super::stats::totals_sql;
 
 /// Guards the fix for the stats 500. Asserting on the SQL string is the
@@ -15,6 +17,27 @@ fn totals_sql_coalesces_the_sum() {
     assert!(sql.contains("COUNT(*) AS total_enrolled"));
     assert!(sql.contains("FROM developer_campaign_progress"));
     assert!(sql.contains("WHERE campaign_id = ?"));
+}
+
+/// .issues/149: the public series must list only what `get_public_event`
+/// would serve to a stranger. A string check is the only native guard, but it
+/// catches the realistic regression: the filter or the inner join dropped.
+#[test]
+fn series_sql_lists_only_public_live_events() {
+    let sql = SERIES_SUMMARIES_SQL;
+    assert!(
+        sql.contains("INNER JOIN events e ON e.id = ce.event_id"),
+        "{sql}"
+    );
+    let flat = sql.split_whitespace().collect::<Vec<_>>().join(" ");
+    assert!(
+        flat.contains("WHERE ce.campaign_id = ? AND e.visibility = ? AND e.status IN (?, ?)"),
+        "{sql}"
+    );
+    assert!(!sql.contains("LEFT JOIN"), "{sql}");
+    assert_eq!(series_live_filter(), ["public", "active", "completed"]);
+    // campaign_id plus one placeholder per filter value, bound in that order.
+    assert_eq!(sql.matches('?').count(), 1 + series_live_filter().len());
 }
 
 fn entry(id: &str, seq: i64) -> EventSeriesEntry {

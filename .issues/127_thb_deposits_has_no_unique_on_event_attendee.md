@@ -91,6 +91,47 @@ wants its own change, its own staging soak and a quiet week.
 Until then the archive is correct regardless of what `thb_deposits` allows,
 which is the property that actually protects the money.
 
+## 2026-09-22 — the migration is written, verified, and deliberately unapplied
+
+Step 1 above now exists as `worker/migrations-pending/0048_thb_deposits_unique.sql`.
+
+It lives **outside** `migrations_dir` deliberately. `wrangler d1 migrations
+apply` applies every `.sql` in `worker/migrations` and never reads the file, so
+a `-- DO NOT APPLY` header there enforces nothing — 0048 sat in `migrations/`
+for about twenty minutes and wrangler applied it, which is a small re-enactment
+of this very issue: a rule written where nothing enforces it. The directory is
+the enforcement now, guarded by
+`deferred_migrations_are_not_in_the_applied_directory`. To apply it, `git mv` it
+back — see `worker/migrations-pending/README.md`.
+
+**Production, re-measured read-only that day:** 54 rows, 54 distinct
+`(event_id, attendee_id)` pairs, 3 events. **Nothing to dedupe** — the
+migration applies cleanly as written. `scripts/verify/thb_duplicate_report.sh`
+(new, read-only, works on prod or `--staging`) is the tool; re-run it
+immediately before applying, because RTM #6 will add ~24 rows and that count is
+a fact about a Tuesday, not a property of the table. The report was validated in
+**both** directions before being believed — a seeded local DB makes it print two
+colliding pairs, so a clean result means clean rather than broken.
+
+**The rebuild is verified on a local D1** carrying the 0046/0047 columns: all
+rows and their `deposit_source` values survive, all four indexes come back, a
+second row for the same `(event, attendee)` is rejected with
+`SQLITE_CONSTRAINT_UNIQUE`, and a *different* attendee in the same event is
+still accepted — so the constraint is not simply blocking everything.
+
+Two things this does **not** do, and they are the reason it stays open:
+
+- **Step 2 is untouched.** `save_thb_deposit` still does get-then-insert. After
+  0048 the race fails loudly (a 500 instead of a silent second row) rather than
+  being fixed. That is strictly better, but the upsert is still owed.
+- A rebuild takes an exclusive lock. Small at 54 rows; check the count again
+  before running it on a bigger table.
+
+Also relevant now: the table grew two columns this week (0046 `slip_blake3`,
+0047 `deposit_source`). 0048 names every column in its `INSERT … SELECT` rather
+than using `*`, so the next column addition breaks it loudly instead of
+shifting every value one position left.
+
 ## Related
 
 - `.issues/126` — the purge and the archive this came out of.

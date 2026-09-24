@@ -5,16 +5,15 @@ use worker::KvStore;
 
 use event_checkin_domain::models::adventure::AdventureStatus;
 use event_checkin_domain::models::api::QuizStatus;
-use event_checkin_domain::models::attendee::WalkinAttendee;
 use event_checkin_domain::models::error::AppError;
 
 use crate::handlers::ext::{resolve_event, resolve_kv};
 use crate::solana::MintRequest;
 use crate::state::AppState;
 
-use super::helpers::{coalesce_event_id, crossmint_image_url, orb_nft_url};
+use super::helpers::{crossmint_image_url, d1_claim_fallback, orb_nft_url, resolve_claim_context};
 use super::quest::verify_online_quest_completion;
-use super::types::ClaimResult;
+use super::types::{ClaimResult, D1Claim};
 use super::walkin::execute_walkin_claim;
 use crate::claim::lock::{
     FinalizeClaimLockParams, acquire_claim_lock, finalize_claim_lock, mask_wallet,
@@ -33,74 +32,56 @@ pub async fn execute_claim(
     // 1. Resolve event context. Same coalesce as lookup_claim: the public POST
     //    `/claim/{token}` carries no event_id, so recover the attendee's real
     //    event from D1 before minting — otherwise we could mint against the
-    //    wrong event's collection/sheet.
-    let resolved_event_id = coalesce_event_id(state, token, event_id).await;
-    let event = resolve_event(state, resolved_event_id.as_deref()).await?;
+    //    wrong event's collection/sheet. The same D1 read also answers the
+    //    walk-in check and the pre-registered lookup below (plan 028 W6).
+    let ctx = resolve_claim_context(state, token, event_id).await;
+    let event = resolve_event(state, ctx.event_id.as_deref()).await?;
     let kv = resolve_kv(state);
 
     // 2. Check walk-in path: D1-only
-    let mut walkin: Option<WalkinAttendee> = None;
-    if let Some(ref d1) = state.d1
-        && let Ok(Some(a)) =
-            crate::db::attendees::get_attendee_by_claim_token(d1, token, state.claim_token_policy())
-                .await
-        && a.participation_type == "walkin"
-    {
-        walkin = Some(WalkinAttendee {
-            event_id: event.id.clone(),
-            email: a.email.clone(),
-            name: a.name.clone(),
-            phone: None,
-            claim_token: a.claim_token.clone().unwrap_or_default(),
-            checked_in_at: a.checked_in_at.clone().unwrap_or_default(),
-            checked_in_by: a.checked_in_by.clone().unwrap_or_default(),
-            wallet_address: None,
-            claimed_at: a.claimed_at.clone(),
-        });
-    }
-    if let Some(walkin) = walkin {
+    if let Some(walkin) = ctx.walkin(&event.id) {
         return execute_walkin_claim(state, &event, token, requested_wallet, walkin).await;
     }
 
-    // 3. Pre-registered path: look up attendee by claim token from Google Sheet, D1 fallback
-    let mut attendee = match crate::sheets::get_attendee_by_claim_token(
-        token,
-        state,
-        &event.sheet_id,
-        &event.sheet_name,
-        kv,
-    )
-    .await
-    {
+    // 3. Pre-registered path: D1 row first, then Google Sheet, then the D1
+    //    fallback. A D1 hit is the same row the D1-first Sheets helper would
+    //    read again, so it is used as is. After a Sheets miss a `Missing` row
+    //    stays missing; only an unavailable first read goes back to D1.
+    let fallback_claim = match ctx.d1 {
+        D1Claim::Unavailable => D1Claim::Unavailable,
+        D1Claim::Found(_) | D1Claim::Missing => D1Claim::Missing,
+    };
+    let sheets_result = match ctx.d1 {
+        D1Claim::Found(a) => {
+            tracing::debug!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "D1 hit: attendee by claim_token");
+            Ok(Some(*a))
+        }
+        D1Claim::Missing => {
+            crate::sheets::get_attendee_by_claim_token_from_sheets(
+                token,
+                state,
+                &event.sheet_id,
+                &event.sheet_name,
+                kv,
+            )
+            .await
+        }
+        D1Claim::Unavailable => {
+            crate::sheets::get_attendee_by_claim_token(
+                token,
+                state,
+                &event.sheet_id,
+                &event.sheet_name,
+                kv,
+            )
+            .await
+        }
+    };
+    let mut attendee = match sheets_result {
         Ok(Some(a)) => a,
         Ok(None) => {
-            // Sheets returned nothing — try D1 fallback
             tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: Sheets miss, trying D1 fallback");
-            if let Some(ref d1) = state.d1 {
-                match crate::db::attendees::get_attendee_by_claim_token(
-                    d1,
-                    token,
-                    state.claim_token_policy(),
-                )
-                .await
-                {
-                    Ok(Some(a)) => {
-                        tracing::info!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: found in D1 fallback");
-                        a
-                    }
-                    Ok(None) => {
-                        tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: not found in Sheets or D1");
-                        return Err(AppError::NotFound("claim token not found".into()));
-                    }
-                    Err(e) => {
-                        tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "claim mint D1 fallback failed");
-                        return Err(AppError::NotFound("claim token not found".into()));
-                    }
-                }
-            } else {
-                tracing::warn!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), "claim mint: no attendee found (no D1)");
-                return Err(AppError::NotFound("claim token not found".into()));
-            }
+            d1_claim_fallback(state, token, fallback_claim, "execute").await?
         }
         Err(ref e) => {
             tracing::error!(claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token), error = %e, "claim mint lookup failed");

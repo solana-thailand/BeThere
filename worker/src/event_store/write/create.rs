@@ -5,6 +5,7 @@ use worker::KvStore;
 use event_checkin_domain::models::event::{
     CreateEventRequest, DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus,
     EventConfig, EventIndex, EventStatus, normalize_map_url, normalize_sheet_name,
+    normalize_ticket_note,
 };
 
 use crate::event_store::read::get_event_index;
@@ -49,9 +50,11 @@ pub async fn create_event(
     }
 
     let location_map_url = normalize_map_url(&req.location_map_url)?;
+    let ticket_note_in_person = normalize_ticket_note(&req.ticket_note_in_person)?;
+    let ticket_note_online = normalize_ticket_note(&req.ticket_note_online)?;
 
-    // SEC-003: Max deposit cap ($1,000 USDC = 1_000_000_000 smallest units, 6 decimals)
-    const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
+    // SEC-003: Max deposit cap ($1,000 USDC, shared with the form's check)
+    const MAX_DEPOSIT_USDC: u64 = event_checkin_domain::money::USDC_MAX_DEPOSIT_ATOMIC;
     if req.deposit_amount_usdc > MAX_DEPOSIT_USDC {
         return Err(format!(
             "deposit_amount_usdc exceeds maximum cap ({MAX_DEPOSIT_USDC} = $1,000 USDC)"
@@ -102,6 +105,8 @@ pub async fn create_event(
         slug: slug.clone(),
         tagline: req.tagline.trim().to_string(),
         link: req.link.trim().to_string(),
+        ticket_note_in_person,
+        ticket_note_online,
         status: EventStatus::Draft,
         event_start_ms: req.event_start_ms,
         event_end_ms: req.event_end_ms,
@@ -150,6 +155,7 @@ pub async fn create_event(
         description: req.description.trim().to_string(),
         location: req.location.trim().to_string(),
         location_map_url,
+        comp_emails: Vec::new(),
         video_url: req.video_url.trim().to_string(),
         event_format: req.event_format.clone(),
         require_contact_info: req.require_contact_info,

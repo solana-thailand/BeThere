@@ -1,0 +1,13 @@
+# Triaged false positives (2026-09-23) — see .gitleaks.toml header.
+7136dbf6cdd6998b2e7f12b5d4339ff2e96f8128:domain/tests/error_public_message.rs:generic-api-key:67
+52792da2814fc68807223e1af0893942e6b09c95:scripts/verify/pii_log_probe.sh:curl-auth-header:149
+52792da2814fc68807223e1af0893942e6b09c95:scripts/verify/pii_log_probe.sh:curl-auth-header:152
+5f3ed04060ea989d4f25ba9da80db29ce5bddf65:worker/tests/do_claim_lock.rs:generic-api-key:217
+23a84ce9a29a03c488f3bebef33556825443d307:.issues/019_walkin_sync_export.md:generic-api-key:64
+68087b1d916ef5a72d1e0c01bdd9d8bbe9ec14be:scripts/e2e/test_full_e2e.sh:generic-api-key:82
+a3cf555f17c6c42a73b9424bed09891acb41e477:worker/src/crypto.rs:private-key:399
+639e1ddaa5f469534b55eb1c67cb7f8baf0f3fba:.handovers/004_cookie_auth_fix_and_frontend.md:generic-api-key:21
+# 2026-09-24: plan 030 JWT golden vectors, signed with the fixture secret
+# "golden-vector-secret-not-a-real-key" over example.com claims — never a real session.
+0348be3a9dafb79272cbd4ce20d701a86b1756e6:domain/tests/fixtures/golden_vectors.json:jwt:96
+0348be3a9dafb79272cbd4ce20d701a86b1756e6:domain/tests/fixtures/golden_vectors.json:jwt:97

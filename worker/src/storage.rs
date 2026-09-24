@@ -18,6 +18,7 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
 };
+use event_checkin_domain::image_kind::{ImageKind, SNIFF_LEN};
 use worker::{Bucket, Result};
 
 // `JsString` for building JS string args when calling the raw R2 binding directly.
@@ -241,6 +242,23 @@ pub async fn delete(bucket: &Bucket, key: &str) -> Result<()> {
 pub async fn exists(bucket: &Bucket, key: &str) -> Result<bool> {
     let object = bucket.head(key).await?;
     Ok(object.is_some())
+}
+
+/// Identify the image in a base64 payload (the part of a data URL after the
+/// comma) from its leading bytes.
+///
+/// Decodes only the base64 quanta that cover [`SNIFF_LEN`] bytes, so a
+/// multi-megabyte slip costs 16 characters of decoding. `None` means the
+/// payload is not valid base64 at its start, or not a JPEG, PNG or WebP.
+pub fn sniff_base64_image(payload: &str) -> Option<ImageKind> {
+    use base64::Engine;
+    let prefix_len = SNIFF_LEN.div_ceil(3) * 4;
+    let bytes = payload.trim_start().as_bytes();
+    let prefix = &bytes[..bytes.len().min(prefix_len)];
+    let head = base64::engine::general_purpose::STANDARD
+        .decode(prefix)
+        .ok()?;
+    ImageKind::sniff(&head)
 }
 
 /// Extract file extension from a filename for content-type mapping.

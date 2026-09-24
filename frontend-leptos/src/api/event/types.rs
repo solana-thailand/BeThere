@@ -144,6 +144,9 @@ pub struct EventDetail {
     pub location: String,
     #[serde(default)]
     pub location_map_url: String,
+    /// Emails admitted without paying a deposit (`EventConfig::comp_emails`).
+    #[serde(default)]
+    pub comp_emails: Vec<String>,
     #[serde(default)]
     pub video_url: String,
     #[serde(default)]
@@ -163,6 +166,12 @@ pub struct EventDetail {
     pub deposit_deadline_hours: Option<u32>,
     #[serde(default)]
     pub visibility: EventVisibility,
+    /// Ticket-page announcement for in-person attendees (migration 0049).
+    #[serde(default)]
+    pub ticket_note_in_person: String,
+    /// Ticket-page announcement for online attendees (migration 0049).
+    #[serde(default)]
+    pub ticket_note_online: String,
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<crate::api::types::CommunityLink>,
@@ -288,6 +297,9 @@ pub struct CreateEventBody {
     pub location: Option<String>,
     #[serde(default)]
     pub location_map_url: String,
+    /// Emails admitted without paying a deposit. See `EventConfig::comp_emails`.
+    #[serde(default)]
+    pub comp_emails: Vec<String>,
     #[serde(default)]
     pub video_url: String,
     // Capacity settings
@@ -303,6 +315,12 @@ pub struct CreateEventBody {
     pub deposit_deadline_hours: Option<u32>,
     #[serde(default)]
     pub visibility: EventVisibility,
+    /// Ticket-page announcement for in-person attendees (migration 0049).
+    #[serde(default)]
+    pub ticket_note_in_person: String,
+    /// Ticket-page announcement for online attendees (migration 0049).
+    #[serde(default)]
+    pub ticket_note_online: String,
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<crate::api::types::CommunityLink>,
@@ -398,6 +416,9 @@ pub struct UpdateEventBody {
     pub location: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location_map_url: Option<String>,
+    /// `None` leaves the waived-email list untouched; `Some(vec![])` clears it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comp_emails: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub video_url: Option<String>,
     // Capacity settings
@@ -413,6 +434,13 @@ pub struct UpdateEventBody {
     pub deposit_deadline_hours: Option<Option<u32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility: Option<EventVisibility>,
+    /// Ticket-page announcement for in-person attendees. `None` leaves it
+    /// untouched; `Some("")` clears it and hides the card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ticket_note_in_person: Option<String>,
+    /// Ticket-page announcement for online attendees.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ticket_note_online: Option<String>,
     /// Community/social links for the event. Replaces all existing links.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community_links: Option<Vec<crate::api::types::CommunityLink>>,

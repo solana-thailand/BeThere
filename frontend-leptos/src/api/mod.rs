@@ -401,6 +401,32 @@ async fn api_json_with_body<T: serde::de::DeserializeOwned + Default>(
     })
 }
 
+/// Authenticated GET for surfaces where being signed out is a normal state.
+///
+/// Unlike [`api_get_json`] this never calls `redirect_to_login_expired()`: no
+/// live token, a 401, a non-2xx or an unparsable body all come back as `None`.
+/// A component mounted on a public page (the ticket page is "no auth required")
+/// that reached `api_get_json` sent signed-out attendees to /login the moment it
+/// mounted (`.issues/099`, `.issues/142`).
+pub(crate) async fn api_get_json_if_signed_in<T: serde::de::DeserializeOwned + Default>(
+    path: &str,
+) -> Option<T> {
+    if !crate::auth::is_authenticated() {
+        return None;
+    }
+    let auth_val = format!("Bearer {}", get_token()?);
+    let url = format!("{}{path}", api_base());
+    let response = http_get(&url, &[("Authorization", &auth_val)]).await.ok()?;
+    if !response.ok() {
+        return None;
+    }
+    let body: ApiResponse<T> = response_json(&response).await.ok()?;
+    match body.success {
+        true => body.data,
+        false => None,
+    }
+}
+
 /// Authenticated GET that unwraps the `ApiResponse<T>` envelope — collapses the
 /// ok()/parse/`ok_or_else` boilerplate every `get_*` handler used to repeat. 401
 /// and 403 are handled inside `api_get` (redirect / access-denied).

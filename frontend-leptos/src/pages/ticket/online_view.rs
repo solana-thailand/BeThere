@@ -51,6 +51,7 @@ pub fn OnlineView(
         quiz_enabled,
         community_links,
         calendar_subscribe_url,
+        ticket_note,
         event_start_ms: _,
         event_name: _,
         event_id,
@@ -311,6 +312,7 @@ pub fn OnlineView(
         }}
 
         // Community links
+        {super::announcement::announcement_section(ticket_note.clone())}
         {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::Ticket)}
 
         // 5b. Event series navigation (Plan 013) — "Part of {Series}" + prev/next.

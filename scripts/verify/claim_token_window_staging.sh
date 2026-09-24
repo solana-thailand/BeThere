@@ -79,7 +79,14 @@ restore() {
     d1 "UPDATE attendees SET checked_in_at = '$ORIGINAL_CHECKED_IN' WHERE id = '$ATTENDEE_ID';" \
         > /dev/null || echo "WARNING: restore failed — fix $ATTENDEE_ID by hand"
 }
-trap restore EXIT INT TERM
+trap restore EXIT
+# A trapped signal whose handler does not exit RESUMES the script: bash runs the
+# handler and carries on with the next check. Ctrl-C used to restore the fixture
+# mid-run, let the remaining checks run against the restored row, and end in
+# exit 0 (plan 030 gate audit, reproduced on /bin/bash 3.2). Exiting here still
+# runs restore once, through the EXIT trap.
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 echo "Issue 071 claim-token window — staging validation"
 echo "base: $BASE_URL"

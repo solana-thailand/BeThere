@@ -6,19 +6,18 @@
 #   0. Prerequisites check
 #   1. Setup: generate wallets, airdrop SOL, fund USDC
 #   2. Create event in KV with escrow fields
-#   3. Create Vault ATA (organizer signs)
-#   4. Create Event On-Chain (organizer signs)
-#   5. Deposit USDC (attendee signs)
-#   6. Verify deposit on-chain
-#   7. Mark Checked-In (organizer signs)
-#   8. Refund (attendee signs)
-#   9. Verify refund on-chain
+#   3. Initialize escrow on-chain: vault ATA + create_event (organizer signs)
+#   4. Deposit USDC (attendee signs)
+#   5. Verify deposit on-chain
+#   6. Mark Checked-In (organizer signs)
+#   7. Refund (attendee signs)
+#   8. Verify refund on-chain
 #
 # Prerequisites:
 #   - solana CLI 3.x+ (configured for devnet)
 #   - curl, jq, python3
 #   - pip3 install solders
-#   - Staging deployment live at WORKER_URL
+#   - Staging deployment live at WORKER_URL (default: staging; prod refused)
 #   - DEV_MODE=1 deployed on worker
 #
 # Usage:
@@ -32,12 +31,22 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-WORKER_URL="${WORKER_URL:-https://bethere.solana-thailand.workers.dev}"
+# Defaults to STAGING, like flow-harness/src/context.rs. Step 2 writes an event
+# into the target's KV, so production needs an explicit E2E_ALLOW_PROD=1.
+WORKER_URL="${WORKER_URL:-https://bethere-staging.solana-thailand.workers.dev}"
+PROD_URL="https://bethere.solana-thailand.workers.dev"
+if [ "${WORKER_URL%/}" = "$PROD_URL" ] && [ "${E2E_ALLOW_PROD:-0}" != "1" ]; then
+  echo "Refusing to run against production ($PROD_URL); set E2E_ALLOW_PROD=1 to override." >&2
+  exit 2
+fi
 PUBLIC_RPC="https://api.devnet.solana.com"
 ESCROW_PROGRAM="C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T"
 USDC_MINT="4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 TIMESTAMP=$(date +%s)
 EVENT_SLUG="e2e-escrow-${TIMESTAMP}"
+# 2 min out: far enough to initialize and deposit (both reject a past
+# event_end), near enough that step 7 can wait it out for the refund.
+EVENT_END_S=$((TIMESTAMP + 120))
 DEPOSIT_AMOUNT=1000000  # 1 USDC (6 decimals)
 AUTH_TOKEN="dev-token"
 NON_INTERACTIVE=false
@@ -257,6 +266,40 @@ deposit_field() {
   printf '%s\n' "$fields" | sed -n "s/^${key}=//p"
 }
 
+# Poll the AttendeeDeposit account until `key` decodes to `want`, then print the
+# decoded fields. Returns 1 if it never does. An undecodable account is retried,
+# never read as "not yet" — public RPC lags behind the confirmation status.
+poll_deposit_field() {
+  local deposit_pda="$1" key="$2" want="$3"
+  local attempt data_b64 fields
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    data_b64=$(rpc_call "getAccountInfo" "[\"$deposit_pda\",{\"encoding\":\"base64\"}]" \
+      | jq -r '.result.value.data[0] // empty')
+    if [ -n "$data_b64" ] && fields=$(decode_deposit "$data_b64" 2>/dev/null) \
+      && [ "$(deposit_field "$fields" "$key")" = "$want" ]; then
+      printf '%s\n' "$fields"
+      return 0
+    fi
+    log "  Retry $attempt/10 — waiting for $key=$want on $deposit_pda..." >&2
+    sleep 3
+  done
+  return 1
+}
+
+# Raw (base-unit) USDC held by an owner across all its token accounts for the
+# mint. Base units, not the CLI's decimal string, so deltas compare exactly.
+usdc_raw_balance() {
+  rpc_call "getTokenAccountsByOwner" \
+    "[\"$1\",{\"mint\":\"$USDC_MINT\"},{\"encoding\":\"jsonParsed\",\"commitment\":\"confirmed\"}]" \
+    | jq -r '[.result.value[].account.data.parsed.info.tokenAmount.amount | tonumber] | add // 0'
+}
+
+# Raw balance of one token account (the vault ATA).
+token_account_raw_balance() {
+  rpc_call "getTokenAccountBalance" "[\"$1\",{\"commitment\":\"confirmed\"}]" \
+    | jq -r '.result.value.amount // empty'
+}
+
 # ---------------------------------------------------------------------------
 # Cleanup
 # ---------------------------------------------------------------------------
@@ -406,7 +449,7 @@ step_create_event_kv() {
   # (worker/src/handlers/deposit/usdc/handlers/status.rs:114). 168h = 7 days,
   # matching the Worker's own default (worker/src/db/events.rs:242).
   local event_end_ms refund_deadline_hours
-  event_end_ms=$(( (TIMESTAMP + 120) * 1000 ))  # 2 min from now (deposits accepted)
+  event_end_ms=$(( EVENT_END_S * 1000 ))
   refund_deadline_hours=168
 
   local event_body
@@ -456,106 +499,69 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
-# Step 3: Create Vault ATA (organizer signs)
+# Step 3: Initialize the escrow on-chain (organizer signs)
 # ---------------------------------------------------------------------------
-step_create_vault_ata() {
-  log "=== Step 3: Create Vault ATA ==="
+# One transaction: create_associated_token_account_idempotent for the vault,
+# then create_event. POST /api/escrow/init builds it; POST /api/escrow/confirm-init
+# re-derives the PDA, checks it exists on-chain and only then writes
+# escrow_address / on_chain_event_id / escrow_status back to the event. This is
+# the same two calls the Manage Events escrow panel makes.
+step_init_escrow() {
+  log "=== Step 3: Initialize escrow on-chain ==="
 
-  local resp tx_b64 vault_address
-  resp=$(api_post "/api/escrow/create-vault-ata" "{\"event_id\":\"$EVENT_SLUG\"}")
-  log "API response: $(echo "$resp" | jq . 2>/dev/null || echo "$resp")"
-
-  tx_b64=$(echo "$resp" | jq -r '.data.transaction // empty')
-  vault_address=$(echo "$resp" | jq -r '.data.vault_address // empty')
-
-  if [ -z "$tx_b64" ]; then
-    fail "No transaction returned from create-vault-ata: $resp"
-  fi
-
-  log "Vault address: $vault_address"
-  echo "$tx_b64" > "$TEST_DIR/vault_ata_tx.b64"
-
-  # Sign with organizer
-  log "Signing vault ATA TX..."
-  local signed_tx
-  signed_tx=$(sign_tx "$TEST_DIR/vault_ata_tx.b64" "$ORG_KEYPAIR" 2>&1) || fail "Sign failed: $signed_tx"
-
-  # Send
-  log "Sending vault ATA TX..."
-  local send_result
-  send_result=$(send_tx "$signed_tx" 2>&1)
-  log "Send result: $send_result"
-
-  if echo "$send_result" | grep -qE "^[1-9A-HJ-NP-Za-km-z]+"; then
-    wait_for_confirmation "$send_result"
-    ok "Vault ATA created: $vault_address"
-    echo "$vault_address" > "$TEST_DIR/vault_address.txt"
-  else
-    # Check if already exists (idempotent)
-    if echo "$send_result" | grep -qi "already\|exists\|0x1\|custom program error: 0x0"; then
-      warn "Vault ATA already exists (ok for idempotent)"
-      echo "$vault_address" > "$TEST_DIR/vault_address.txt"
-    else
-      fail "Failed to create vault ATA: $send_result"
-    fi
-  fi
-}
-
-# ---------------------------------------------------------------------------
-# Step 4: Create Event On-Chain (organizer signs)
-# ---------------------------------------------------------------------------
-step_create_event_onchain() {
-  log "=== Step 4: Create Event On-Chain ==="
-
-  local resp tx_b64 escrow_address on_chain_id
-  resp=$(api_post "/api/escrow/create-event" "{\"event_id\":\"$EVENT_SLUG\"}")
+  local resp tx_b64 escrow_address vault_address on_chain_id
+  resp=$(api_post "/api/escrow/init" "{\"event_id\":\"$EVENT_SLUG\"}")
   log "API response: $(echo "$resp" | jq . 2>/dev/null || echo "$resp")"
 
   tx_b64=$(echo "$resp" | jq -r '.data.transaction // empty')
   escrow_address=$(echo "$resp" | jq -r '.data.escrow_address // empty')
+  vault_address=$(echo "$resp" | jq -r '.data.vault_address // empty')
   on_chain_id=$(echo "$resp" | jq -r '.data.on_chain_event_id // empty')
 
   if [ -z "$tx_b64" ]; then
-    fail "No transaction returned from create-event: $resp"
+    fail "No transaction returned from escrow/init: $resp"
   fi
 
-  log "Escrow PDA: $escrow_address"
+  log "Escrow PDA:        $escrow_address"
+  log "Vault ATA:         $vault_address"
   log "On-chain event ID: $on_chain_id"
-  echo "$tx_b64" > "$TEST_DIR/create_event_tx.b64"
+  echo "$tx_b64" > "$TEST_DIR/init_escrow_tx.b64"
 
-  # Sign with organizer
-  log "Signing create_event TX..."
+  log "Signing init escrow TX..."
   local signed_tx
-  signed_tx=$(sign_tx "$TEST_DIR/create_event_tx.b64" "$ORG_KEYPAIR" 2>&1) || fail "Sign failed: $signed_tx"
+  signed_tx=$(sign_tx "$TEST_DIR/init_escrow_tx.b64" "$ORG_KEYPAIR" 2>&1) || fail "Sign failed: $signed_tx"
 
-  # Send
   local send_result
   send_result=$(send_tx "$signed_tx" 2>&1)
+  log "Send result: $send_result"
 
-  if echo "$send_result" | grep -qE "^[1-9A-HJ-NP-Za-km-z]+"; then
-    wait_for_confirmation "$send_result"
-    ok "Event created on-chain: $escrow_address"
-    # The file is the channel between steps, not a shell variable: steps 5, 7
-    # and the summary each re-read escrow_address.txt, so a single step can be
-    # re-run in a fresh shell.
-    echo "$escrow_address" > "$TEST_DIR/escrow_address.txt"
-
-    # Update event in KV with escrow info so subsequent API calls work
-    local update_resp
-    update_resp=$(api_put "/api/events/$EVENT_SLUG" "{\"escrow_address\":\"$escrow_address\",\"on_chain_event_id\":$on_chain_id}")
-    log "Event KV update: $(echo "$update_resp" | jq -r '.success // empty')"
-  else
-    fail "Failed to create event on-chain: $send_result"
+  if ! echo "$send_result" | grep -qE "^[1-9A-HJ-NP-Za-km-z]+"; then
+    fail "Failed to initialize escrow on-chain: $send_result"
   fi
+  wait_for_confirmation "$send_result"
+
+  # The file is the channel between steps, not a shell variable: steps 5, 6, 8
+  # and the summary each re-read escrow_address.txt, so a single step can be
+  # re-run in a fresh shell.
+  echo "$escrow_address" > "$TEST_DIR/escrow_address.txt"
+  echo "$vault_address" > "$TEST_DIR/vault_address.txt"
+
+  local confirm_resp confirmed_address
+  confirm_resp=$(api_post "/api/escrow/confirm-init" "{\"event_id\":\"$EVENT_SLUG\"}")
+  confirmed_address=$(echo "$confirm_resp" | jq -r '.data.escrow_address // empty')
+  if [ "$confirmed_address" != "$escrow_address" ]; then
+    fail "escrow/confirm-init did not confirm $escrow_address: $confirm_resp"
+  fi
+  ok "Escrow initialized and confirmed: $escrow_address ($(echo "$confirm_resp" | jq -r '.data.escrow_status'))"
 }
 
 # ---------------------------------------------------------------------------
-# Step 5: Deposit USDC (attendee signs)
+# Step 4: Deposit USDC (attendee signs)
 # ---------------------------------------------------------------------------
 step_deposit() {
-  log "=== Step 5: Deposit USDC ==="
+  log "=== Step 4: Deposit USDC ==="
 
-  # Step 5a: Initiate deposit (saves pending deposit status in KV)
+  # Step 4a: Initiate deposit (saves pending deposit status in KV)
   # Note: If event has ended, this will fail — we handle that gracefully
   local init_resp
   init_resp=$(api_post "/api/deposit/usdc" "{\"event_id\":\"$EVENT_SLUG\",\"attendee_id\":\"e2e-test-attendee\",\"wallet_address\":\"$ATTENDEE_ADDR\"}")
@@ -567,7 +573,7 @@ step_deposit() {
     warn "Deposit init skipped: $(echo "$init_resp" | jq -r '.error // empty')"
   fi
 
-  # Step 5b: Get the deposit TX from the Solana Pay callback
+  # Step 4b: Get the deposit TX from the Solana Pay callback
   local resp tx_b64
   resp=$(curl -s "$WORKER_URL/api/deposit/usdc/tx?event_id=$EVENT_SLUG&attendee_id=e2e-test-attendee&wallet=$ATTENDEE_ADDR")
   log "Deposit TX response: $(echo "$resp" | jq . 2>/dev/null || echo "$resp")"
@@ -594,29 +600,32 @@ step_deposit() {
     ok "Deposit TX confirmed!"
     echo "$send_result" > "$TEST_DIR/deposit_sig.txt"
 
-    # Step 5c: Submit TX signature to webhook (verifies on-chain and marks verified in KV)
-    # If deposit init failed (event ended), create the deposit record first via a direct webhook call
-    local confirm_resp
-    confirm_resp=$(api_post "/api/deposit/usdc/webhook" "{\"event_id\":\"$EVENT_SLUG\",\"attendee_id\":\"e2e-test-attendee\",\"tx_signature\":\"$send_result\"}")
-    local confirmed
-    confirmed=$(echo "$confirm_resp" | jq -r '.data.confirmed // empty')
-    if [ "$confirmed" = "true" ]; then
-      ok "Deposit verified via webhook"
-    else
-      warn "Webhook response: $(echo "$confirm_resp" | jq -r '.error // .data // empty')"
-      # If webhook failed because no deposit record, try creating one manually
-      # The deposit is on-chain so we can still proceed with test
-    fi
+    # Step 4c: Submit the TX signature to the webhook. Verification is detached
+    # (H8, usdc/handlers/webhook.rs): the first reply is always confirmed=false,
+    # and re-sending the same signature is an idempotent no-op that answers
+    # confirmed=true once the background check has marked the deposit verified.
+    # So poll it — a record that never verifies is a failure, not a warning.
+    local webhook_body confirm_resp confirmed="" attempt
+    webhook_body="{\"event_id\":\"$EVENT_SLUG\",\"attendee_id\":\"e2e-test-attendee\",\"tx_signature\":\"$send_result\"}"
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+      confirm_resp=$(api_post "/api/deposit/usdc/webhook" "$webhook_body")
+      confirmed=$(echo "$confirm_resp" | jq -r '.data.confirmed // empty')
+      [ "$confirmed" = "true" ] && break
+      log "  Retry $attempt/10 — deposit not verified yet: $(echo "$confirm_resp" | jq -c '.error // .data' 2>/dev/null)"
+      sleep 3
+    done
+    [ "$confirmed" = "true" ] || fail "Deposit never verified via webhook: $confirm_resp"
+    ok "Deposit verified via webhook"
   else
     fail "Deposit failed: $send_result"
   fi
 }
 
 # ---------------------------------------------------------------------------
-# Step 6: Verify deposit on-chain
+# Step 5: Verify deposit on-chain
 # ---------------------------------------------------------------------------
 step_verify_deposit() {
-  log "=== Step 6: Verify deposit on-chain ==="
+  log "=== Step 5: Verify deposit on-chain ==="
 
   local escrow_address
   escrow_address=$(cat "$TEST_DIR/escrow_address.txt")
@@ -673,10 +682,10 @@ step_verify_deposit() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 7: Mark Checked-In (organizer signs)
+# Step 6: Mark Checked-In (organizer signs)
 # ---------------------------------------------------------------------------
 step_mark_checked_in() {
-  log "=== Step 7: Mark Checked-In ==="
+  log "=== Step 6: Mark Checked-In ==="
 
   local resp tx_b64
   local retry=0
@@ -724,17 +733,34 @@ step_mark_checked_in() {
   else
     fail "Mark checked-in failed: $send_result"
   fi
+
+  # Assert the flag here: step 7's refund also closes the AttendeeDeposit
+  # account, so this is the last point at which checked_in can be read.
+  local deposit_pda
+  deposit_pda=$(derive_deposit_pda "$(cat "$TEST_DIR/escrow_address.txt")" "$ATTENDEE_ADDR" 2>&1) \
+    || fail "PDA derivation failed: $deposit_pda"
+  poll_deposit_field "$deposit_pda" checked_in true >/dev/null \
+    || fail "AttendeeDeposit $deposit_pda never showed checked_in=true"
+  ok "checked_in=true on-chain"
 }
 
 # ---------------------------------------------------------------------------
-# Step 8: Refund (attendee signs)
+# Step 7: Refund (attendee signs)
 # ---------------------------------------------------------------------------
 step_refund() {
-  log "=== Step 8: Refund ==="
+  log "=== Step 7: Refund ==="
 
-  # Wait for event_end to pass (on-chain refund requires clock > event_end)
-  log "Waiting 130s for on-chain event_end to pass..."
-  sleep 130
+  # refund requires clock >= event_end (bethere-escrow refund.rs:74). Wait
+  # for that instant plus a margin for validator clock drift, not a fixed time.
+  local wait_s=$(( EVENT_END_S + 15 - $(date +%s) ))
+  if [ "$wait_s" -gt 0 ]; then
+    log "Waiting ${wait_s}s for on-chain event_end to pass..."
+    sleep "$wait_s"
+  fi
+
+  # Step 8 asserts the balance delta against this snapshot.
+  usdc_raw_balance "$ATTENDEE_ADDR" > "$TEST_DIR/attendee_usdc_before_refund.txt"
+  log "Attendee USDC before refund: $(cat "$TEST_DIR/attendee_usdc_before_refund.txt") (raw)"
 
   local resp tx_b64
   resp=$(curl -s -X POST "$WORKER_URL/api/escrow/refund" \
@@ -767,63 +793,42 @@ step_refund() {
 }
 
 # ---------------------------------------------------------------------------
-# Step 9: Verify refund on-chain
+# Step 8: Verify refund on-chain
 # ---------------------------------------------------------------------------
 step_verify_refund() {
-  log "=== Step 9: Verify refund on-chain ==="
+  log "=== Step 8: Verify refund on-chain ==="
 
-  local escrow_address
+  # /api/escrow/refund builds refund + close_deposit in one transaction, so a
+  # successful refund leaves no AttendeeDeposit to decode: the account is
+  # closed and its rent returned. What proves the refund is therefore the
+  # account being gone, the attendee's USDC rising by exactly the deposit, and
+  # the vault (one depositor) back to zero. checked_in was asserted in step 6.
+  local escrow_address vault_address deposit_pda
   escrow_address=$(cat "$TEST_DIR/escrow_address.txt")
-
-  # Derive AttendeeDeposit PDA
-  local deposit_pda
+  vault_address=$(cat "$TEST_DIR/vault_address.txt")
   deposit_pda=$(derive_deposit_pda "$escrow_address" "$ATTENDEE_ADDR" 2>&1) \
     || fail "PDA derivation failed: $deposit_pda"
 
-  # Fetch account data with retry until refunded=true (RPC can be stale)
-  sleep 5
-  local account_info data_b64 fields
-  local retry=0
-  local refunded=false
-  data_b64=""
-  fields=""
-  while [ $retry -lt 10 ]; do
-    account_info=$(rpc_call "getAccountInfo" "[\"$deposit_pda\",{\"encoding\":\"base64\"}]")
-    data_b64=$(echo "$account_info" | jq -r '.result.value.data[0] // empty')
-    if [ -n "$data_b64" ]; then
-      # Poll the refunded flag. A decode failure here means the account is
-      # short or carries the wrong discriminator — keep retrying rather than
-      # treating an unreadable account as "not refunded yet".
-      if fields=$(decode_deposit "$data_b64" 2>/dev/null); then
-        refunded=$(deposit_field "$fields" refunded)
-        if [ "$refunded" = "true" ]; then
-          break
-        fi
-      else
-        fields=""
-      fi
-    fi
-    retry=$((retry + 1))
-    log "  Retry $retry/10 — refunded not visible yet (refunded=$refunded), waiting 3s..."
+  local attempt value="" before after vault
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    value=$(rpc_call "getAccountInfo" "[\"$deposit_pda\",{\"encoding\":\"base64\",\"commitment\":\"confirmed\"}]" \
+      | jq -c '.result.value')
+    [ "$value" = "null" ] && break
+    log "  Retry $attempt/10 — AttendeeDeposit $deposit_pda still open, waiting 3s..."
     sleep 3
   done
+  [ "$value" = "null" ] || fail "AttendeeDeposit $deposit_pda was not closed by the refund: $value"
+  ok "AttendeeDeposit closed"
 
-  if [ -z "$data_b64" ]; then
-    fail "AttendeeDeposit account not found after 10 retries"
-  fi
-  [ -n "$fields" ] || fail "AttendeeDeposit at $deposit_pda did not decode: $(decode_deposit "$data_b64" 2>&1 >/dev/null)"
+  before=$(cat "$TEST_DIR/attendee_usdc_before_refund.txt")
+  after=$(usdc_raw_balance "$ATTENDEE_ADDR")
+  log "  Attendee USDC: $before -> $after (raw)"
+  [ $(( after - before )) -eq "$DEPOSIT_AMOUNT" ] \
+    || fail "Attendee USDC rose by $(( after - before )), expected $DEPOSIT_AMOUNT"
 
-  local amount checked_in
-  amount=$(deposit_field "$fields" amount)
-  checked_in=$(deposit_field "$fields" checked_in)
-  refunded=$(deposit_field "$fields" refunded)
-
-  log "  Amount:     $amount ($((amount / 1000000)).$(printf '%06d' $((amount % 1000000))) USDC)"
-  log "  Checked in: $checked_in"
-  log "  Refunded:   $refunded"
-
-  [ "$checked_in" = "true" ] || fail "Should be checked in, got checked_in=$checked_in"
-  [ "$refunded" = "true" ] || fail "Should be refunded, got refunded=$refunded"
+  vault=$(token_account_raw_balance "$vault_address")
+  log "  Vault USDC:    $vault (raw)"
+  [ "$vault" = "0" ] || fail "Vault $vault_address still holds $vault after the only refund"
 
   ok "Full escrow cycle verified!"
 }
@@ -902,8 +907,7 @@ main() {
   fi
 
   step_create_event_kv
-  step_create_vault_ata
-  step_create_event_onchain
+  step_init_escrow
   step_deposit
   step_verify_deposit
   step_mark_checked_in

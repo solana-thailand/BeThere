@@ -41,6 +41,7 @@ pub fn InPersonView(
     let TicketViewData {
         qr_image: _,
         has_qr: _,
+        ticket_note,
         name,
         ticket_name,
         participation,
@@ -183,6 +184,7 @@ pub fn InPersonView(
             // ── Access & Logistics (in-person only) ──
             // Building access / ID exchange / transportation guides.
             // Empty (hidden) unless the organizer configured guide links.
+            {super::announcement::announcement_section(ticket_note.clone())}
             {access_logistics_section(guide_links.clone())}
 
             // ── Attendee info ──

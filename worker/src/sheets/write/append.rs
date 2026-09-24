@@ -1,7 +1,9 @@
 //! Row append, delete, participation type update, and cell clear operations.
 
 use crate::sheets::a1;
-use event_checkin_domain::models::attendee::ColumnMapping;
+use event_checkin_domain::models::attendee::{
+    ColumnMapping, TICKET_NAME_SELF_REGISTERED, TICKET_NAME_WALK_IN,
+};
 use worker::KvStore;
 
 use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
@@ -62,7 +64,11 @@ pub async fn append_attendee_row(
     set(&mut row, CK::FirstName, first_name.to_string());
     set(&mut row, CK::LastName, last_name.to_string());
     set(&mut row, CK::Email, email.to_string());
-    set(&mut row, CK::TicketName, "Self-Registered".to_string());
+    set(
+        &mut row,
+        CK::TicketName,
+        TICKET_NAME_SELF_REGISTERED.to_string(),
+    );
     set(
         &mut row,
         CK::RegistrationDate,
@@ -178,7 +184,7 @@ pub async fn append_walkin_row(
     set(&mut row, CK::ApiId, api_id.to_string());
     set(&mut row, CK::Name, name.to_string());
     set(&mut row, CK::Email, email.to_string());
-    set(&mut row, CK::TicketName, "Walk-in".to_string());
+    set(&mut row, CK::TicketName, TICKET_NAME_WALK_IN.to_string());
     set(&mut row, CK::ApprovalStatus, "CheckedIn".to_string());
     set(&mut row, CK::ParticipationType, "In-Person".to_string());
     set(&mut row, CK::ClaimToken, claim_token.to_string());

@@ -231,8 +231,8 @@ fn extract_amount_from_transfers(
     // Look for token transfers involving USDC
     for transfer in &tx.token_transfers {
         if transfer.token_amount > 0.0 {
-            // Convert from UI amount to raw (6 decimals for USDC)
-            return Some((transfer.token_amount * 1_000_000.0) as u64);
+            // UI amount → atomic units, rounded (a cast truncates; issue 146).
+            return event_checkin_domain::money::usdc_ui_to_atomic(transfer.token_amount);
         }
     }
 

@@ -7,6 +7,8 @@ use wasm_bindgen::JsCast;
 use worker::D1Database;
 use worker::d1::D1Type;
 
+use super::d1_int::{int_bind, uint_bind};
+
 use crate::escrow_indexer::{EscrowInstruction, OnChainEvent};
 
 /// Fetch on-chain events for an event, newest first.
@@ -129,14 +131,14 @@ pub async fn insert_onchain_event_to_d1(
     let bind_result = stmt.bind_refs(&[
         D1Type::Text(event_id),
         D1Type::Text(&event.signature),
-        D1Type::Integer(event.slot as i32),
-        D1Type::Integer(event.block_time as i32),
+        uint_bind("onchain_events.slot", event.slot)?,
+        int_bind("onchain_events.block_time", event.block_time)?,
         D1Type::Text(&instruction_json),
         D1Type::Text(&event.escrow_address),
         D1Type::Text(event.target_escrow_address.as_deref().unwrap_or("")),
         D1Type::Text(event.organizer.as_deref().unwrap_or("")),
         D1Type::Text(event.attendee.as_deref().unwrap_or("")),
-        D1Type::Integer(event.amount.map(|a| a as i32).unwrap_or(0)),
+        uint_bind("onchain_events.amount", event.amount.unwrap_or(0))?,
         D1Type::Text(event.indexed_at.as_str()),
     ]);
 

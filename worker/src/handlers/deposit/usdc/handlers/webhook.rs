@@ -30,7 +30,7 @@ pub async fn deposit_webhook_handler(
 
     let is_webhook_authed = if !state.webhook_secret.is_empty() {
         let expected = format!("Bearer {}", state.webhook_secret);
-        auth_header == expected
+        crate::crypto::constant_time_eq(auth_header.as_bytes(), expected.as_bytes())
     } else {
         false
     };

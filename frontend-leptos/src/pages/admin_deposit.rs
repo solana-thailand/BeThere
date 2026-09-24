@@ -13,8 +13,8 @@ use std::collections::HashMap;
 use leptos::prelude::*;
 
 use crate::api::{
-    self, AdminHoldRequest, ClearCreditRefundRequest, CreditLiability, CreditRefundRequest,
-    MarkRefundRequest, ThbDepositInfo, VerifySlipRequest,
+    self, AdminHoldRequest, ClearCreditRefundRequest, CompDepositRequest, CreditLiability,
+    CreditRefundRequest, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest,
 };
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
@@ -53,6 +53,10 @@ pub fn AdminDeposits(
 
     // Data state
     let (slips, set_slips) = signal(Vec::<ThbDepositInfo>::new());
+    // Slip fingerprints that more than one attendee in this event submitted —
+    // the same payment image, sent by two different people. The organizer used
+    // to catch these by recognising the person at refund time (`.issues/129`).
+    let (duplicate_slip_hashes, set_duplicate_slip_hashes) = signal(Vec::<String>::new());
     let (refunds, set_refunds) = signal(Vec::<ThbDepositInfo>::new());
     let (refunded_list, set_refunded_list) = signal(Vec::<ThbDepositInfo>::new());
     let (held_list, set_held_list) = signal(Vec::<ThbDepositInfo>::new());
@@ -85,6 +89,9 @@ pub fn AdminDeposits(
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (action_pending, set_action_pending) = signal(None::<String>);
     let (confirm_reject_id, set_confirm_reject_id) = signal(None::<String>);
+    // Mirrors confirm_reject_id: the comp button also needs a deliberate
+    // second click, because it writes off money and cannot be undone here.
+    let (confirm_comp_id, set_confirm_comp_id) = signal(None::<String>);
     // 2-step confirm for the irreversible "Hold as Credit" money action.
     let (confirm_hold_id, set_confirm_hold_id) = signal(None::<String>);
     // Refund proof: 2-step flow — first click shows input, second click confirms.
@@ -109,6 +116,7 @@ pub fn AdminDeposits(
         set_loading.set(true);
 
         let set_slips = set_slips;
+        let set_duplicate_slip_hashes = set_duplicate_slip_hashes;
         let set_refunds = set_refunds;
         let set_held_list = set_held_list;
         let set_liability = set_liability;
@@ -128,7 +136,10 @@ pub fn AdminDeposits(
             let refund_requests_result = api::get_credit_refund_requests().await;
 
             match slips_result {
-                Ok(data) => set_slips.set(data.slips),
+                Ok(data) => {
+                    set_slips.set(data.slips);
+                    set_duplicate_slip_hashes.set(data.duplicate_slip_hashes);
+                }
                 Err(e) => {
                     log::warn!("[admin-deposit] failed to load pending slips: {e}");
                     components::show_toast(
@@ -266,6 +277,55 @@ pub fn AdminDeposits(
                     components::show_toast(
                         &set_toast,
                         &format!("Failed to approve slip: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+            set_action_pending.set(None);
+        });
+    };
+
+    // Admit the attendee without owing them a refund (.issues/129 Gap 1).
+    //
+    // Two-step confirmation, same as reject: this writes off real money the
+    // attendee says they sent, and it is not undoable from this screen.
+    let handle_comp = move |slip: ThbDepositInfo| {
+        let attendee_id = slip.attendee_id.clone();
+
+        if confirm_comp_id.get().as_deref() != Some(&attendee_id) {
+            set_confirm_comp_id.set(Some(attendee_id.clone()));
+            let set_confirm = set_confirm_comp_id;
+            gloo_timers::callback::Timeout::new(3000, move || {
+                set_confirm.set(None);
+            })
+            .forget();
+            return;
+        }
+
+        let event_id = slip.event_id.clone();
+        let key = format!("comp-{attendee_id}");
+        set_confirm_comp_id.set(None);
+        set_action_pending.set(Some(key));
+
+        leptos::task::spawn_local(async move {
+            let body = CompDepositRequest {
+                event_id,
+                attendee_id: attendee_id.clone(),
+                reason: None,
+            };
+            match api::comp_thb_deposit(&body).await {
+                Ok(_) => {
+                    components::show_toast(
+                        &set_toast,
+                        "Attendee admitted — no refund owed",
+                        ToastType::Success,
+                    );
+                    refresh_data();
+                }
+                Err(e) => {
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Failed to admit without deposit: {e}"),
                         ToastType::Error,
                     );
                 }
@@ -616,7 +676,17 @@ pub fn AdminDeposits(
 
                     {move || {
                         let current_action = action_pending.get();
+                        let duplicates = duplicate_slip_hashes.get();
                         slips.get().iter().map(|slip| {
+                            // A row is flagged only when its OWN fingerprint is
+                            // in the set. A slip with no fingerprint (anything
+                            // uploaded before 2026-09-22) is never flagged:
+                            // unknown is not the same as clean, and saying
+                            // otherwise would make the badge worthless.
+                            let is_duplicate = slip
+                                .slip_blake3
+                                .as_deref()
+                                .is_some_and(|h| !h.is_empty() && duplicates.iter().any(|d| d == h));
                             let slip_id = slip.attendee_id.clone();
                             let approve_key = format!("approve-{slip_id}");
                             let reject_key = format!("reject-{slip_id}");
@@ -639,7 +709,12 @@ pub fn AdminDeposits(
 
                             let slip_for_approve = slip.clone();
                             let slip_for_reject = slip.clone();
+                            let slip_for_comp = slip.clone();
                             let is_confirming = confirm_reject_id.get().as_deref() == Some(&slip_id);
+                            let is_confirming_comp = confirm_comp_id.get().as_deref() == Some(&slip_id);
+                            let comp_key = format!("comp-{slip_id}");
+                            let comp_disabled = current_action.as_ref().is_some_and(|k| k == &approve_key || k == &reject_key || k == &comp_key);
+                            let comp_loading = current_action.as_ref() == Some(&comp_key);
 
                             view! {
                                 <div class="card">
@@ -651,6 +726,11 @@ pub fn AdminDeposits(
                                             <div class="admin-amount-line">
                                                 {amount}
                                             </div>
+                                            <Show when=move || is_duplicate fallback=|| view! { <span></span> }>
+                                                <div class="admin-dep-duplicate-warning">
+                                                    "⚠ Same image as another attendee's slip in this event — check before approving. Approving is what promises the refund."
+                                                </div>
+                                            </Show>
                                             <div class="panel-hint">
                                                 {"Uploaded: "}
                                                 <span title={uploaded_formatted.clone()}>{uploaded_ago.clone()}</span>
@@ -682,6 +762,20 @@ pub fn AdminDeposits(
                                                 on:click=move |_| handle_reject(slip_for_reject.clone())
                                             >
                                                 {if reject_loading { "Rejecting..." } else if is_confirming { "⚠ Confirm Reject?" } else { "✗ Reject" }}
+                                            </button>
+                                            // Admit without owing a refund. Sits
+                                            // between Approve and Reject because
+                                            // that is where it belongs: the
+                                            // organizer wants to let them in AND
+                                            // not pay them back, and until now
+                                            // they had to pick one.
+                                            <button
+                                                class=if is_confirming_comp { "btn btn-confirm-danger btn-sm" } else { "btn btn-outline btn-sm" }
+                                                disabled=comp_disabled
+                                                title="Give this attendee their ticket, but record the deposit as a comp — no refund will be owed. Use when you know the payment did not arrive."
+                                                on:click=move |_| handle_comp(slip_for_comp.clone())
+                                            >
+                                                {if comp_loading { "Admitting..." } else if is_confirming_comp { "⚠ Confirm: no refund owed?" } else { "Admit, no refund owed" }}
                                             </button>
                                         </div>
                                     </div>
@@ -909,7 +1003,12 @@ pub fn AdminDeposits(
                             let display_bank_account = item.bank_account.clone();
                             let display_bank_name = item.bank_name.clone();
                             let display_account_name = item.account_name.clone();
-                            let refund_proof_url = item.refund_proof_url.clone();
+                            // Rows stored before .issues/145 may hold any scheme.
+                            let refund_proof_url = item
+                                .refund_proof_url
+                                .as_deref()
+                                .and_then(event_checkin_domain::validation::safe_document_link)
+                                .map(str::to_string);
                             let has_refund_proof = refund_proof_url.is_some();
 
                             (amount, verified_by, refunded_at, display_name, slip_url, has_slip_url, has_bank_info, display_bank_account, display_bank_name, display_account_name, refund_proof_url, has_refund_proof)

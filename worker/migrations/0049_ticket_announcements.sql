@@ -1,0 +1,21 @@
+-- 0049_ticket_announcements.sql
+-- Per-event announcement text shown on the attendee's ticket page, split by how
+-- that person is taking part.
+--
+-- Two columns rather than one, because the two audiences need opposite things
+-- on the day: an in-person attendee needs travel, parking and door details; an
+-- online attendee needs the livestream link and when it goes up. Sending both
+-- to everyone is how a ticket page stops being read.
+--
+-- Deliberately NOT reusing `community_links` (0009): that is a list of labelled
+-- URLs and renders as rows of links. This is prose the organizer writes on the
+-- morning of the event, and it has no fixed shape.
+--
+-- Empty string = no announcement card is rendered at all, which is the state
+-- every existing event starts in. Nothing about today's ticket page changes
+-- until an organizer types something.
+--
+-- NOTE: NOT idempotent — ALTER TABLE ADD COLUMN fails if the column already
+-- exists. Relies on the d1_migrations tracker to prevent re-execution.
+ALTER TABLE events ADD COLUMN ticket_note_in_person TEXT NOT NULL DEFAULT '';
+ALTER TABLE events ADD COLUMN ticket_note_online TEXT NOT NULL DEFAULT '';
