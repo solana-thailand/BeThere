@@ -1,7 +1,7 @@
 # 147: Public `/api/health` returns D1 row counts and runs six COUNT(*) scans per hit
 
-**Status:** fixed on develop 2026-09-24. Not deployed. After the deploy,
-re-run the curl below on prod and confirm `d1` is `{"connected":true}`.
+**Status:** deployed 2026-09-24 (prod version `36eae0db`, git `897aa07`). Still owed: re-run the curl below on prod
+and confirm `d1` is `{"connected":true}` (the deploy check saw `/api/health` → 200 JSON).
 **Found by:** the gist-rs study sub-agent (session `event-checkin-2f`) noticed
 it on staging. The prod read and the D1 cost estimate are from this session.
 **Severity:** low-medium. Business-volume disclosure (ISO 27001 A.8.12), plus

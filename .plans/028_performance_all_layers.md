@@ -79,3 +79,7 @@ Two audit recommendations were **rejected after measurement** — see §4.
 ## 5. Not doing before RTM#6
 
 W3, W4, W5 (schema/semantics changes on paths RTM#6 exercises) — after 2026-09-27, each with a staging rehearsal.
+
+## Deploy record
+
+- **2026-09-24, prod:** `main` @ `897aa07` (merge of PR #150), version `36eae0db-0e07-4efa-a2b6-2d6de632369a`, shipping W2, W6, W7, W9, W10, W11 and W12. Staging was `d5720afe` (write smoke green). D1 backup `backup-prod-20260924-0845.sql` (not in git). Rollback target `70989bdb-3250-487d-840d-d163996f289c`. `deploy.sh --force`: the preflight gate is unsatisfiable (`.issues/084`, `.issues/141`). The deploy's Content-Type check caught the JS glue as `text/html` (edge lag); the owner re-checked and got `text/javascript`. The prod write smoke returned 401 on every authed call because `SMOKE_TOKEN` was unset (prod has `DEV_MODE=0`), so no prod write path was exercised by it. `thb_deposits` on deploy day at 12:50 UTC: 0, against a 1–4/day baseline; re-check owed. `.issues/150` (slug uniqueness) is on `develop` only.

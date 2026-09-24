@@ -1,6 +1,6 @@
 # 145: Refund-proof URL accepts any scheme and is rendered as an attendee link
 
-**Status:** fixed on develop 2026-09-24 (server + frontend). Not deployed. The staging browser repro and the
+**Status:** deployed 2026-09-24 (prod version `36eae0db`, git `897aa07`); server + frontend. The staging browser repro and the
 prod row count (§Fix 3) have not been run; the prod read was refused in the agent session, so the owner runs it.
 **Found by:** session `event-checkin-df`, reading every writer that shares `maybe_upload_to_r2`.
 **Severity:** medium-low. Planting a link needs a staff account, but it then runs

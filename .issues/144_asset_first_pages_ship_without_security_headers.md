@@ -1,6 +1,6 @@
 # 144: Asset-first pages ship without security headers (CSP, HSTS, X-Frame-Options)
 
-**Status:** fixed on `develop` 2026-09-23 and verified on staging. Not deployed to prod.
+**Status:** deployed 2026-09-24 (prod version `36eae0db`, git `897aa07`). Fixed on `develop` 2026-09-23 and verified on staging.
 **Found by:** the `.issues/142`/`143` staging verification (session 5, 2026-09-23).
 **Severity:** high if it had shipped. Every HTML page would lose its CSP and
 `X-Frame-Options: DENY`, so clickjacking protection and XSS containment would

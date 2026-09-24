@@ -1,6 +1,6 @@
 # 146: USDC decimal → atomic conversions truncate, so "2.01" becomes 2,009,999
 
-**Status:** fixed on develop 2026-09-24. Not deployed. The organizer form was not
+**Status:** deployed 2026-09-24 (prod version `36eae0db`, git `897aa07`). The organizer form was not
 driven in a browser; the conversion is covered by `domain/tests/golden_vectors.rs`
 (every cent from 0 to 1,000 USDC through both paths). The prod count below is owed.
 **Found by:** session `event-checkin-2f`, while scoping the rounding golden
