@@ -7,3 +7,7 @@
 68087b1d916ef5a72d1e0c01bdd9d8bbe9ec14be:scripts/e2e/test_full_e2e.sh:generic-api-key:82
 a3cf555f17c6c42a73b9424bed09891acb41e477:worker/src/crypto.rs:private-key:399
 639e1ddaa5f469534b55eb1c67cb7f8baf0f3fba:.handovers/004_cookie_auth_fix_and_frontend.md:generic-api-key:21
+# 2026-09-24: plan 030 JWT golden vectors, signed with the fixture secret
+# "golden-vector-secret-not-a-real-key" over example.com claims — never a real session.
+0348be3a9dafb79272cbd4ce20d701a86b1756e6:domain/tests/fixtures/golden_vectors.json:jwt:96
+0348be3a9dafb79272cbd4ce20d701a86b1756e6:domain/tests/fixtures/golden_vectors.json:jwt:97

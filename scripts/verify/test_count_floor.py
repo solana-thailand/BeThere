@@ -48,6 +48,9 @@ RESULT_RE = re.compile(
     r".*?(?P<filtered>\d+) filtered out"
 )
 HASH_SUFFIX_RE = re.compile(r"-[0-9a-f]{16}$")
+# CI sets CARGO_TERM_COLOR=always, so `Running` / `Doc-tests` arrive wrapped in
+# SGR escapes and would never match the patterns above.
+ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 class ParseError(Exception):
@@ -65,7 +68,8 @@ def parse_log(text: str) -> tuple[dict[str, int], list[str]]:
     counts: dict[str, int] = {}
     problems: list[str] = []
     current: str | None = None
-    for line in text.splitlines():
+    for raw in text.splitlines():
+        line = ANSI_RE.sub("", raw)
         if m := RUNNING_RE.match(line):
             current = binary_key(m["src"], m["path"])
             continue
@@ -184,9 +188,13 @@ def self_test() -> int:
     floors = {"dom src/lib.rs": 5, "dom src/main.rs": 0, "pod tests/pod.rs": 3, "doc-tests dom": 0}
     failed_log = healthy.replace("3 passed; 0 failed", "2 passed; 1 failed").replace("ok. 2", "FAILED. 2")
     filtered_log = healthy.replace("0 filtered out", "4 filtered out", 1)
+    # What cargo writes under CARGO_TERM_COLOR=always (CI).
+    coloured = (healthy.replace("     Running", "\x1b[1m\x1b[92m     Running\x1b[0m")
+                .replace("   Doc-tests", "\x1b[1m\x1b[92m   Doc-tests\x1b[0m"))
 
     cases: list[tuple[str, str, dict[str, int], int]] = [
         ("healthy log passes", healthy, floors, 0),
+        ("a colour-coded (CI) log passes", coloured, floors, 0),
         ("more tests than the floor passes", healthy.replace("5 passed", "9 passed"), floors, 0),
         ("a binary dropping to 0 fails", healthy.replace("5 passed", "0 passed"), floors, 1),
         ("a binary below its floor fails", healthy.replace("3 passed", "2 passed"), floors, 1),
