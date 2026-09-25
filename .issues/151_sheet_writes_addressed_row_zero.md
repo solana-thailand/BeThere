@@ -109,9 +109,12 @@ investigating it.
   read-only). Now `domain::models::attendee::roster_page` pages by offset
   over `(row_index, api_id)` (tests `domain/tests/roster_page.rs`), and the
   admin page walks every page (`api::get_all_attendees`).
-- **Hardcoded PDPA columns.** `clear_sheet_pii` hardcodes column letters
-  (`B`, `C`, …) instead of the header mapping. It is correct for the current
-  header only.
+- ~~**Hardcoded PDPA columns.**~~ Fixed on develop 2026-09-26, not deployed.
+  `clear_sheet_pii` now takes its letters from the sheet's header row
+  (`ColumnMapping::pii_column_letters`, key list `PII_COLUMNS`). A recognised
+  header row is trusted, so a missing PII header blanks nothing in its old
+  place. An unrecognised header row falls back to the standard layout, which
+  gives the same 15 letters as before (tests `domain/tests/pii_columns.rs`).
 - **Existing shifted rows.** The fix repairs new appends only. RTM#6 row 57
   has to be moved back by hand (cut `B57:AI57`, paste at `A52`, delete the
   blank rows 53–57).

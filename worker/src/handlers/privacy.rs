@@ -447,15 +447,17 @@ async fn clear_sheet_pii(state: &AppState, event_id: &str, row: SheetRow) {
         }
     };
 
-    // PII columns to clear (column letter + row):
-    // B=name, C=first_name, D=last_name, E=email, J=phone,
-    // K=contact_channel, L=contact_handle, S=checked_in_by,
-    // T=solana_address, U=qr_code_url, V=claim_token,
-    // Y=bank_account, Z=bank_name, AA=account_name, AC=refund_link
-    let pii_columns = [
-        "B", "C", "D", "E", "J", "K", "L", "S", "T", "U", "V", "Y", "Z", "AA", "AC",
-    ];
-    let ranges: Vec<String> = pii_columns
+    // Columns come from the sheet's header row, so a sheet whose columns
+    // were moved still loses the right cells (`.issues/151` D).
+    let mapping = crate::sheets::column_mapping_or_hardcoded(
+        state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+    )
+    .await;
+    let ranges: Vec<String> = mapping
+        .pii_column_letters()
         .iter()
         .map(|col| format!("{col}{row_index}"))
         .collect();

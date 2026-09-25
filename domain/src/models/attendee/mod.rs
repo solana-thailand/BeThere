@@ -13,7 +13,7 @@ mod walkin;
 #[cfg(test)]
 mod tests;
 
-pub use columns::{ColumnKey, ColumnMapping};
+pub use columns::{ColumnKey, ColumnMapping, PII_COLUMNS};
 pub use core::{Attendee, CheckInError};
 pub use recent::{RECENT_CHECK_INS_PER_TYPE, recent_check_ins};
 pub use roster_page::{ROSTER_PAGE_MAX, RosterPage, roster_page};
