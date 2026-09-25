@@ -1,6 +1,6 @@
 # 148: D1 binds of amounts, slots and block times wrap at 2^31
 
-**Status:** fixed on develop 2026-09-24. Not deployed. No prod value is known
+**Status:** deployed 2026-09-24 (prod version `36eae0db`, git `897aa07`). No prod value is known
 to have wrapped. The prod query below would confirm that, and it is still owed.
 **Found by:** session `event-checkin-64`, from the "noted, not filed" list
 (`onchain_events.rs:139`).

@@ -85,11 +85,12 @@ pub fn slugify(input: &str) -> String {
 
 /// Resolve slug collisions by appending an incrementing suffix.
 ///
-/// If `base_slug` is not in `existing_ids`, returns it unchanged.
-/// Otherwise tries `base_slug-1`, `base_slug-2`, ... until a free ID is found.
-/// Both `id` and `slug` are returned (they are always equal).
-pub fn deduplicate_slug(base_slug: &str, existing_ids: &[&str]) -> (String, String) {
-    let existing_set: std::collections::HashSet<&str> = existing_ids.iter().copied().collect();
+/// `taken` holds every existing event's id and slug. If `base_slug` is not in
+/// it, returns it unchanged. Otherwise tries `base_slug-1`, `base_slug-2`, ...
+/// until a free one is found. Both `id` and `slug` are returned (they are
+/// always equal).
+pub fn deduplicate_slug(base_slug: &str, taken: &[&str]) -> (String, String) {
+    let existing_set: std::collections::HashSet<&str> = taken.iter().copied().collect();
 
     if !existing_set.contains(base_slug) {
         return (base_slug.to_string(), base_slug.to_string());

@@ -5,6 +5,7 @@ use worker::KvStore;
 use event_checkin_domain::models::event::{
     DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus, EventConfig,
     UpdateEventRequest, normalize_map_url, normalize_sheet_name, normalize_ticket_note,
+    slug_taken_by_other,
 };
 
 use crate::event_store::read::get_event_index;
@@ -43,7 +44,7 @@ pub async fn update_event(
     // `PUT /events/{id}` handler drives directly. Sharing it is what keeps the
     // two entry points from diverging — they already had, on
     // `dev_profile_enabled`, which only `apply_update` applied.
-    apply_update(&mut config, req)?;
+    apply_update_checked(kv, d1, &mut config, req).await?;
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
     config.updated_by = updated_by.to_string();
@@ -73,6 +74,63 @@ pub async fn update_event(
     tracing::info!(event_id = %id, "event updated");
 
     Ok(config)
+}
+
+/// `apply_update`, plus the checks that need the store: a slug change must not
+/// take a locator another event already holds (plan 028 W11 known limit).
+///
+/// Both update entry points — `update_event` above and the `PUT /events/{id}`
+/// handler — call this, not `apply_update`, so neither can skip the check.
+pub async fn apply_update_checked(
+    kv: Option<&KvStore>,
+    d1: Option<&worker::D1Database>,
+    config: &mut EventConfig,
+    req: &UpdateEventRequest,
+) -> Result<(), String> {
+    let old_slug = config.slug.clone();
+    apply_update(config, req)?;
+    if config.slug == old_slug {
+        return Ok(());
+    }
+    if config.slug.is_empty() {
+        return Err("slug must contain letters or digits".to_string());
+    }
+    ensure_slug_free(kv, d1, &config.slug, &config.id).await
+}
+
+/// Reject `slug` if an event other than `own_id` holds it as a slug or an id.
+///
+/// Fails closed: a rename is rare, and a store error must not let two events
+/// share one public locator. D1 is the primary store; the KV index is checked
+/// too because it can hold an event D1 missed (`sync_event_to_d1` is non-fatal).
+async fn ensure_slug_free(
+    kv: Option<&KvStore>,
+    d1: Option<&worker::D1Database>,
+    slug: &str,
+    own_id: &str,
+) -> Result<(), String> {
+    let in_d1 = match d1 {
+        Some(db) => crate::db::event_slugs::slug_taken_by_other(db, slug, own_id).await?,
+        None => false,
+    };
+    let in_kv = match kv {
+        Some(kv_ref) => {
+            let index = get_event_index(kv_ref).await?;
+            slug_taken_by_other(
+                slug,
+                own_id,
+                index
+                    .events
+                    .iter()
+                    .map(|e| (e.id.as_str(), e.slug.as_str())),
+            )
+        }
+        None => false,
+    };
+    match in_d1 || in_kv {
+        true => Err(format!("slug '{slug}' is already used by another event")),
+        false => Ok(()),
+    }
 }
 
 /// Apply partial update from `UpdateEventRequest` to an existing `EventConfig`.

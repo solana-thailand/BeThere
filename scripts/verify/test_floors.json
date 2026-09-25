@@ -51,6 +51,8 @@
     "event_checkin_domain src/lib.rs": 157,
     "event_checkin_worker src/lib.rs": 327,
     "event_enum_column_fallbacks tests/event_enum_column_fallbacks.rs": 13,
+    "event_slug_ownership tests/event_slug_ownership.rs": 5,
+    "event_slug_uniqueness_guard tests/event_slug_uniqueness_guard.rs": 3,
     "golden_vectors tests/golden_vectors.rs": 9,
     "golden_vectors_escrow tests/golden_vectors_escrow.rs": 2,
     "image_kind tests/image_kind.rs": 5,

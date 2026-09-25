@@ -1,7 +1,7 @@
 # 149: The public event-series endpoint lists private and draft events
 
-**Status:** fixed on develop 2026-09-24 (session `event-checkin-aa`), not
-deployed. Found from code; the live repro query below has not been run, so
+**Status:** deployed 2026-09-24 (prod version `36eae0db`, git `897aa07`); fixed in session `event-checkin-aa`.
+Found from code; the live repro query below has not been run, so
 whether anything leaked in prod is still unknown.
 **Found by:** session `event-checkin-9f`, while fixing `.plans/028` W4 (the
 private-event `Cache-Control` bug).

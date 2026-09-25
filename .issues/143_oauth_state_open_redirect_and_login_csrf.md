@@ -1,7 +1,7 @@
 # 143: OAuth `state` is an open redirect and is not bound to the browser (login CSRF)
 
 **Status:**
-- **Part A: fixed on `develop` 2026-09-23. Not deployed.**
+- **Part A: deployed 2026-09-24 (prod version `36eae0db`, git `897aa07`).**
 - **Part B: open.**
 
 **Found by:** the ISO 27001 gap assessment (`docs/iso27001_gap_assessment.md`).
