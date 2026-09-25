@@ -1,7 +1,7 @@
 # 122 — Rolling credit is invisible when the attendee registers with a different email
 
 **Status:** fix built locally 2026-09-18 (option C, phase 1) on
-`feature/linked-emails`; **not deployed**, so this attendee is still stuck.
+`feature/linked-emails`; deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there). Re-check whether this attendee is still stuck. Since 2026-09-25 a super admin can link their emails from the Held as Credit tab (plan 025 §7.4), with no Google sign-in needed.
 Design and remaining tasks: [plan 025](../.plans/025_linked_emails_one_person.md).
 **Found:** 2026-09-17, when the owner reported that Apply Credit could not be
 selected for one attendee on the RTM #6 in-person admin roster

@@ -20,6 +20,7 @@
   "workspace": {
     "a1_range_guard tests/a1_range_guard.rs": 2,
     "ab_timing tests/ab_timing.rs": 10,
+    "admin_person_emails_guard tests/admin_person_emails_guard.rs": 4,
     "alloc_count tests/alloc_count.rs": 0,
     "alloc_count_checkin tests/alloc_count_checkin.rs": 0,
     "auth_hardening_guard tests/auth_hardening_guard.rs": 3,
@@ -32,6 +33,7 @@
     "claim_token_window_guard tests/claim_token_window_guard.rs": 2,
     "cleanup_guards tests/cleanup_guards.rs": 7,
     "comp_emails_guards tests/comp_emails_guards.rs": 5,
+    "comp_reason_guard tests/comp_reason_guard.rs": 3,
     "credit_ledger_guards tests/credit_ledger_guards.rs": 16,
     "credit_release_and_staff_comp tests/credit_release_and_staff_comp.rs": 6,
     "d1_int_bind_exactness tests/d1_int_bind_exactness.rs": 4,

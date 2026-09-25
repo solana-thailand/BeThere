@@ -1,6 +1,6 @@
 # 106 — Signing in with a wallet dead-ended the survey
 
-**Status:** fixed 2026-09-14, **verified 2026-09-19**, still **not deployed**
+**Status:** fixed 2026-09-14, **verified 2026-09-19**, deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there)
 **Raised by:** DevRel, reviewing the sign-in flow the survey link leads into
 **Severity:** medium — it sits directly on the path 206 people are about to walk
 

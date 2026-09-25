@@ -1,6 +1,6 @@
 # 120 — The "return my credit" path is hard to reach for most credit holders
 
-**Status:** §1–§3 built 2026-09-19 (not deployed) · §4 still open
+**Status:** §1–§3 built 2026-09-19, deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there) · §4 still open
 **Found:** 2026-09-17, owner question ("anyone with credit who wants to withdraw it instead of using it next time needs a way")
 **Severity:** Medium (attendee money; a way out exists but most holders can't find it)
 

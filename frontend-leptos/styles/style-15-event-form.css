@@ -557,6 +557,13 @@
     background: rgba(245, 158, 11, 0.06);
     border: 1px solid rgba(245, 158, 11, 0.25);
 }
+/* Held as Credit: super-admin "Link one person's emails" panel (plan 025 §7.4). */
+.admin-linked-emails {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
 .admin-dep-credit-refund-requests .admin-dep-flow-hint {
     display: flex;
     align-items: center;

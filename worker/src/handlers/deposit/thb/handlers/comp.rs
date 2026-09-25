@@ -117,6 +117,22 @@ pub async fn comp_thb_deposit_handler(
         DepositSource::Cash => {}
     }
 
+    // An approved deposit is ฿ the organizer has promised back, and it sits in
+    // the refund queue. Writing that off is a decision about real money after
+    // the fact, so it must say why (the audit entry carries the reason). A
+    // pending slip's comp is the admit-at-the-door case and stays optional.
+    let reason = body
+        .reason
+        .as_deref()
+        .map(str::trim)
+        .filter(|r| !r.is_empty());
+    if deposit.verified && reason.is_none() {
+        return Err(AppError::Validation(
+            "a reason is required to write off an approved deposit".to_string(),
+        )
+        .into());
+    }
+
     // ── Write ───────────────────────────────────────────────────────────────
     let now = Utc::now().to_rfc3339();
     deposit.deposit_source = Some(DepositSource::Comp);
@@ -189,12 +205,7 @@ pub async fn comp_thb_deposit_handler(
             &format!(
                 "admitted without a refundable deposit ({} THB written off){}",
                 deposit.amount_thb,
-                match body
-                    .reason
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|r| !r.is_empty())
-                {
+                match reason {
                     Some(reason) => format!(": {reason}"),
                     None => String::new(),
                 }

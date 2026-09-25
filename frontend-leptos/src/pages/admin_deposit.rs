@@ -19,7 +19,9 @@ use crate::api::{
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
 use crate::pages::admin_deposit_bank_info::refund_bank_info;
+use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
+use crate::pages::admin_linked_emails::AdminLinkedEmails;
 use crate::utils;
 
 // ---------------------------------------------------------------------------
@@ -843,6 +845,8 @@ pub fn AdminDeposits(
 
                             let item_for_refund = item.clone();
                             let item_for_hold = item.clone();
+                            let comp_event_id = item.event_id.clone();
+                            let comp_attendee_id = item.attendee_id.clone();
                             let item_id_for_click = item_id.clone();
                             let item_id_for_style = item_id.clone();
                             // Dedicated clones for the input's reactive closures.
@@ -944,6 +948,12 @@ pub fn AdminDeposits(
                                                     {if hold_loading { "Holding..." } else if is_confirming_hold { "Confirm hold?" } else { "↻ Hold as Credit" }}
                                                 </button>
                                             </div>
+                                            <QueueCompAction
+                                                event_id=comp_event_id
+                                                attendee_id=comp_attendee_id
+                                                set_toast=set_toast
+                                                set_refresh_counter=set_refresh_counter
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -1069,6 +1079,10 @@ pub fn AdminDeposits(
                             "These attendees' deposits are kept as rolling credit for their next event registration. They are excluded from the refund queue. Use the " <strong>"Hold as Credit"</strong> " action in the Refund Queue when an attendee confirms hold verbally."
                         </p>
                     </div>
+
+                    // Super admins link a returner's emails so they share credit
+                    // (plan 025 §7.4, `.issues/122`). Renders nothing for others.
+                    <AdminLinkedEmails set_toast=set_toast/>
 
                     // Phase 3 exit path — "Credit Refund Requested" sub-list
                     // (Issue #061 §D3). Cross-event: contacts who clicked

@@ -28,7 +28,7 @@ use serde_json::json;
 
 use event_checkin_domain::models::auth::Claims;
 
-use crate::db::person::{self, LinkOutcome};
+use crate::db::person::{self, LinkOutcome, LinkProof};
 use crate::error::ApiOk;
 use crate::handlers::social_link::{GITHUB_STATE_TTL_SECS, sign_link_state, verify_link_state};
 use crate::state::AppState;
@@ -107,7 +107,7 @@ pub async fn finish(
     let Some(db) = state.d1.as_deref() else {
         return to_profile("error");
     };
-    let outcome = match person::link_google(db, &state_email, google_email).await {
+    let outcome = match person::link(db, &state_email, google_email, LinkProof::Google).await {
         Ok(outcome) => outcome,
         Err(e) => {
             tracing::error!(error = %e, "email link write failed");

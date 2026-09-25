@@ -150,9 +150,8 @@ otherwise.
       the email that was used; credit, dedup and claims resolve over the linked set.
       Phase 3 (canonical session) stays out of scope.
 
-- [ ] 6.1 **Admin link:** allow super-admin manual linking with a mandatory reason
-      and audit? (Recommended: yes. It's needed for non-Google emails.)
-      **Blocked on owner decision.** Gates 7.4.
+- [x] 6.1 **Admin link:** allow super-admin manual linking with a mandatory reason
+      and audit? **Yes (owner, 2026-09-25).** Built as 7.4.
 - [ ] 6.2 **One badge per wallet per event** (§5.3)? (Recommended: yes.)
       **Blocked on owner decision.** Gates 7.8.
       **Correction (2026-09-24):** §5.3's index names
@@ -199,7 +198,32 @@ Phase 1 (target: deployed before 2026-09-27)
       is needed in the Google console. Profile page lists the linked emails and
       has "Add another email". The callback requires both the signed state and
       the matching session cookie — see §3.1.
-- [ ] 7.4 Admin link/unlink endpoint (gated on 6.1) + audit_log.
+- [x] 7.4 Admin link/unlink endpoint + audit_log (2026-09-25, session
+      `event-checkin-19`).
+      - `GET /api/admin/person-emails?email=`, `POST …/link`, `POST …/unlink`
+        (`handlers/admin_person_emails.rs`). Super admin only, a reason is
+        required, and each change writes a global audit entry
+        (`person_emails_linked_by_admin` / `person_email_unlinked_by_admin`).
+      - `db::person::link` takes a `LinkProof`, so an admin link stores
+        `proof = 'admin'`; the 0043 CHECK already allowed it, so no migration.
+      - `db::person::unlink` is one conditional `DELETE`. It is refused while,
+        per organization and currency, the email's own ledger sum or its
+        siblings' sum is negative, i.e. one side has spent or locked credit the
+        other holds. A person left with one email is removed, and a removed
+        primary is replaced by the earliest-linked remaining email.
+      - UI: "Link one person's emails" panel on the Held as Credit tab,
+        rendered only for super admins.
+      - Tests:
+        - `test_person_emails.py::AdminLinkTests` (8), run against SQLite;
+        - `worker/tests/admin_person_emails_guard.rs` (4).
+        Three mutants were each caught: no super-admin check, Google proof,
+        no negative-balance refusal.
+      - Local `wrangler dev` probe: missing reason 400; bad email 400; no auth
+        401; non-staff 403; link from the panel wrote two `admin` rows and the
+        audit entry; unlink after a spend was refused; after the return it
+        succeeded and the balances were unchanged.
+      - The linked-by column the plan once proposed was not added: the audit
+        entry carries who and why.
 - [ ] 7.5 Staging verification: two Google accounts, hold on A, register with B,
       Apply Credit shows on B's roster row and spends once. **Needs the owner** —
       it requires signing in to two real Google accounts in a browser, which no

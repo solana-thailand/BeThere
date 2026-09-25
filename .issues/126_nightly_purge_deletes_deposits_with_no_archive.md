@@ -1,6 +1,6 @@
 # 126 — The nightly purge deleted the deposits without keeping the amounts
 
-**Status:** archive built 2026-09-19 (not deployed) · R2 orphans open (owner) ·
+**Status:** archive built 2026-09-19, deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there) · R2 orphans open (owner) ·
 RTM#3 not restored, deliberately
 **Raised by:** the DevRel agent next door, which read prod D1 and changed
 nothing. Verified here against the code, prod D1, prod KV, prod R2 and the

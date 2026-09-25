@@ -1,6 +1,6 @@
 # 137 — The door roster says "Deposit pending" for people who owe nothing
 
-**Status:** fixed and verified end to end 2026-09-23. **Not deployed** — see §6.
+**Status:** fixed and verified end to end 2026-09-23. Deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there); §6 has the plan.
 **Found:** 2026-09-23, owner reported that staff on the admin In-Person menu
 still showed "deposit pending".
 **Severity:** high for the event itself. No data is wrong; the *screen the

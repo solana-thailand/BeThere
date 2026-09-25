@@ -111,6 +111,12 @@ pub enum AuditAction {
     /// to have sent, so "who decided this, and when" must be answerable without
     /// inferring it from a deposit's current state.
     DepositCompedByAdmin,
+    /// A super-admin linked two emails as one person (plan 025 §6.1), so they
+    /// share rolling credit. The description carries both emails and the
+    /// reason; `target` is the first email.
+    PersonEmailsLinkedByAdmin,
+    /// A super-admin took an email back out of its person (plan 025 §7.4).
+    PersonEmailUnlinkedByAdmin,
 
     // Privacy (PDPA)
     DataDeletionRequested,
