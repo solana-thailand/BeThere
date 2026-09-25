@@ -19,6 +19,7 @@ use crate::claim::lock::{
     FinalizeClaimLockParams, acquire_claim_lock, finalize_claim_lock, mask_wallet,
     release_claim_lock,
 };
+use event_checkin_domain::models::attendee::SheetRow;
 
 pub async fn execute_claim(
     state: &AppState,
@@ -462,7 +463,7 @@ pub async fn execute_claim(
     if let Some(ctx) = &state.worker_ctx {
         ctx.wait_until(crate::sheets::bg_sync::mark_claimed(
             state.clone(),
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             wallet_address.to_string(),
             claimed_at.clone(),
             nft_proof_url.clone(),
@@ -472,7 +473,7 @@ pub async fn execute_claim(
             kv.cloned(),
         ));
     } else if let Err(e) = crate::sheets::write::mark_claimed(
-        attendee.row_index,
+        SheetRow::of(attendee.api_id.clone()),
         wallet_address,
         &claimed_at,
         &nft_proof_url,

@@ -17,6 +17,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::json;
 
+use event_checkin_domain::models::attendee::SheetRow;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
@@ -194,14 +195,14 @@ pub async fn delete_request(
             }
 
             // Google Sheets: Clear PII columns (background — don't block response)
-            if let Some(ctx) = &state.worker_ctx
-                && a.row_index > 0
-            {
+            // The row is found by api_id at clear time: D1's row number is empty
+            // for D1-created attendees, and this guard used to skip them all.
+            if let Some(ctx) = &state.worker_ctx {
                 let sheet_event_id = event_id.clone();
                 let state_clone = state.clone();
-                let row_index = a.row_index;
+                let row = SheetRow::of(a.api_id.clone());
                 ctx.wait_until(async move {
-                    clear_sheet_pii(&state_clone, &sheet_event_id, row_index).await;
+                    clear_sheet_pii(&state_clone, &sheet_event_id, row).await;
                 });
             }
 
@@ -409,7 +410,7 @@ impl DeletionSummary {
 }
 
 /// Clear PII columns in the Google Sheet for a specific row.
-async fn clear_sheet_pii(state: &AppState, event_id: &str, row_index: usize) {
+async fn clear_sheet_pii(state: &AppState, event_id: &str, row: SheetRow) {
     // Resolve the event to get sheet_id/sheet_name
     let kv = match state.events_kv.as_ref() {
         Some(kv) => kv,
@@ -426,6 +427,25 @@ async fn clear_sheet_pii(state: &AppState, event_id: &str, row_index: usize) {
     if event.sheet_id.is_empty() {
         return;
     }
+
+    let row_index = match crate::sheets::get_cached_access_token(state, Some(kv)).await {
+        Ok(token) => {
+            let sheet_ref = crate::sheets::a1::sheet_ref(&event.sheet_name);
+            match crate::sheets::locate::resolve_row(&row, &event.sheet_id, &sheet_ref, &token)
+                .await
+            {
+                Ok(n) => n,
+                Err(e) => {
+                    tracing::warn!(event_id = %event_id, error = %e, "sheet PII clear skipped: row lookup failed");
+                    return;
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!(event_id = %event_id, error = %e, "sheet PII clear skipped: no access token");
+            return;
+        }
+    };
 
     // PII columns to clear (column letter + row):
     // B=name, C=first_name, D=last_name, E=email, J=phone,

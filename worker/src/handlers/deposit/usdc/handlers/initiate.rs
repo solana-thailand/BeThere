@@ -10,6 +10,7 @@ use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
 use crate::handlers::deposit::usdc::check_in_person_capacity;
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::SheetRow;
 
 /// Initiate a USDC deposit by building a Solana Pay Transaction Request.
 ///
@@ -97,7 +98,7 @@ pub async fn deposit_usdc_handler(
                     if let Some(ctx) = &state.worker_ctx {
                         ctx.wait_until(crate::sheets::bg_sync::update_participation_type(
                             state.clone(),
-                            attendee.row_index,
+                            SheetRow::of(attendee.api_id.clone()),
                             "In-Person".to_string(),
                             mapping,
                             event.sheet_id.clone(),
@@ -110,7 +111,7 @@ pub async fn deposit_usdc_handler(
                         );
                     } else {
                         match crate::sheets::write::update_participation_type(
-                            attendee.row_index,
+                            SheetRow::of(attendee.api_id.clone()),
                             "In-Person",
                             &mapping,
                             &state,

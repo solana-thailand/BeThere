@@ -41,6 +41,7 @@ use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
 use crate::handlers::ext::resolve_event_with_access;
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::SheetRow;
 
 // ---------------------------------------------------------------------------
 // POST /api/deposit/thb/admin-upload
@@ -201,7 +202,7 @@ pub async fn admin_upload_thb_slip_handler(
                     if let Some(ctx) = &state.worker_ctx {
                         ctx.wait_until(crate::sheets::bg_sync::update_participation_type(
                             state.clone(),
-                            attendee.row_index,
+                            SheetRow::of(attendee.api_id.clone()),
                             "In-Person".to_string(),
                             mapping,
                             event.sheet_id.clone(),
@@ -214,7 +215,7 @@ pub async fn admin_upload_thb_slip_handler(
                         );
                     } else {
                         match crate::sheets::write::update_participation_type(
-                            attendee.row_index,
+                            SheetRow::of(attendee.api_id.clone()),
                             "In-Person",
                             &mapping,
                             &state,
@@ -333,7 +334,7 @@ pub async fn admin_upload_thb_slip_handler(
         if let Some(ctx) = &state.worker_ctx {
             ctx.wait_until(crate::sheets::bg_sync::write_bank_info(
                 state.clone(),
-                attendee.row_index,
+                SheetRow::of(attendee.api_id.clone()),
                 body.bank_account.clone(),
                 body.bank_name.clone(),
                 mapping,
@@ -342,7 +343,7 @@ pub async fn admin_upload_thb_slip_handler(
                 Some(kv.clone()),
             ));
         } else if let Err(e) = crate::sheets::write::write_bank_info(
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             body.bank_account.as_deref(),
             body.bank_name.as_deref(),
             body.account_name.as_deref(),
@@ -405,7 +406,7 @@ pub async fn admin_upload_thb_slip_handler(
         if let Some(wctx) = &state.worker_ctx {
             wctx.wait_until(crate::sheets::bg_sync::write_deposit_verification(
                 state.clone(),
-                attendee.row_index,
+                SheetRow::of(attendee.api_id.clone()),
                 "THB".to_string(),
                 deposit_amount_thb.clone(),
                 verified,
@@ -434,7 +435,7 @@ pub async fn admin_upload_thb_slip_handler(
 
                 wctx.wait_until(crate::sheets::bg_sync::update_qr_urls(
                     state.clone(),
-                    vec![(attendee.row_index, qr_url)],
+                    vec![(SheetRow::of(attendee.api_id.clone()), qr_url)],
                     mapping,
                     event.sheet_id.clone(),
                     event.sheet_name.clone(),
@@ -452,7 +453,7 @@ pub async fn admin_upload_thb_slip_handler(
             };
 
             if let Err(e) = crate::sheets::write::write_deposit_verification(
-                attendee.row_index,
+                SheetRow::of(attendee.api_id.clone()),
                 "THB",
                 &deposit_amount_thb,
                 verified,
@@ -483,7 +484,7 @@ pub async fn admin_upload_thb_slip_handler(
                 }
 
                 if let Err(e) = crate::sheets::write::update_qr_urls(
-                    &[(attendee.row_index, qr_url)],
+                    &[(SheetRow::of(attendee.api_id.clone()), qr_url)],
                     &mapping,
                     &state,
                     &event.sheet_id,

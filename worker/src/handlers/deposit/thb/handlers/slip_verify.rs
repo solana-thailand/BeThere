@@ -7,6 +7,7 @@ use event_checkin_domain::models::error::AppError;
 use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::SheetRow;
 
 // ---------------------------------------------------------------------------
 // POST /api/deposit/thb/verify (admin)
@@ -120,7 +121,7 @@ pub async fn verify_thb_slip_handler(
             // Detach deposit verification write (fires for approve AND reject)
             wctx.wait_until(crate::sheets::bg_sync::write_deposit_verification(
                 state.clone(),
-                attendee.row_index,
+                SheetRow::of(attendee.api_id.clone()),
                 "THB".to_string(),
                 deposit_amount_thb.clone(),
                 body.approved,
@@ -140,7 +141,7 @@ pub async fn verify_thb_slip_handler(
             };
 
             if let Err(e) = crate::sheets::write::write_deposit_verification(
-                attendee.row_index,
+                SheetRow::of(attendee.api_id.clone()),
                 "THB",
                 &deposit_amount_thb,
                 body.approved,

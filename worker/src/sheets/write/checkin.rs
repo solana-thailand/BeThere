@@ -8,7 +8,9 @@ use worker::KvStore;
 use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
 use crate::state::AppState;
 
+use crate::sheets::locate::{resolve_row, resolve_rows};
 use crate::sheets::{get_cached_access_token, invalidate_column_map_cache};
+use event_checkin_domain::models::attendee::SheetRow;
 
 /// Mark an attendee as checked in by updating:
 /// - Column I: checked_in_at timestamp (ISO 8601)
@@ -18,7 +20,7 @@ use crate::sheets::{get_cached_access_token, invalidate_column_map_cache};
 /// Uses batch update to write all columns in a single API call.
 #[allow(clippy::too_many_arguments)]
 pub async fn mark_checked_in(
-    row_index: usize,
+    row: SheetRow,
     staff_email: &str,
     claim_token: &str,
     mapping: &ColumnMapping,
@@ -29,6 +31,7 @@ pub async fn mark_checked_in(
 ) -> Result<String, String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
     let timestamp = Utc::now().to_rfc3339();
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
@@ -77,7 +80,7 @@ pub async fn mark_checked_in(
 /// Writes checked_in_at (column R) and checked_in_by="virtual" (column S).
 /// Does NOT overwrite claim_token (column V) — already set during registration.
 pub async fn mark_virtual_checked_in(
-    row_index: usize,
+    row: SheetRow,
     mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
@@ -86,6 +89,7 @@ pub async fn mark_virtual_checked_in(
 ) -> Result<String, String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
     let timestamp = Utc::now().to_rfc3339();
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
@@ -131,7 +135,7 @@ pub async fn mark_virtual_checked_in(
 ///
 /// Reverses the effect of `mark_checked_in` so the attendee can be re-checked-in.
 pub async fn clear_checked_in(
-    row_index: usize,
+    row: SheetRow,
     staff_email: &str,
     mapping: &ColumnMapping,
     state: &AppState,
@@ -141,6 +145,7 @@ pub async fn clear_checked_in(
 ) -> Result<(), String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
@@ -192,7 +197,7 @@ pub async fn clear_checked_in(
 /// Called after a successful cNFT mint to persist the claim on the Google Sheet.
 #[allow(clippy::too_many_arguments)]
 pub async fn mark_claimed(
-    row_index: usize,
+    row: SheetRow,
     wallet_address: &str,
     claimed_at: &str,
     nft_proof_url: &str,
@@ -204,6 +209,7 @@ pub async fn mark_claimed(
 ) -> Result<String, String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
@@ -249,7 +255,7 @@ pub async fn mark_claimed(
 /// Bulk update QR code URLs for approved attendees.
 /// Updates column Q (qr_code_url) for each attendee.
 pub async fn update_qr_urls(
-    updates: &[(usize, String)],
+    updates: &[(SheetRow, String)],
     mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
@@ -262,6 +268,7 @@ pub async fn update_qr_urls(
     }
 
     let access_token = get_cached_access_token(state, kv).await?;
+    let updates = resolve_rows(updates.to_vec(), sheet_id, &sheet_ref, &access_token).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
     let col_qr = mapping.column_letter(CK::QrCodeUrl);

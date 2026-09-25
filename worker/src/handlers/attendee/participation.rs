@@ -4,6 +4,7 @@ use axum::{
     Extension,
     extract::{Path, Query, State},
 };
+use event_checkin_domain::models::attendee::SheetRow;
 use serde_json::json;
 
 use crate::error::ApiOk;
@@ -93,8 +94,8 @@ pub async fn update_participation_type(
             .map_err(|e| AppError::Internal(format!("failed to look up attendee: {e}")))?;
         map.get(&id).cloned()
     };
-    let row_index = match attendee.as_ref().map(|a| a.row_index) {
-        Some(idx) => Some(idx),
+    let row_index = match attendee.as_ref().map(|a| SheetRow::of(a.api_id.clone())) {
+        Some(row) => Some(row),
         None => {
             // No sheet row — likely a walk-in or D1-only record. Not an error:
             // we still update D1 below.
@@ -108,7 +109,7 @@ pub async fn update_participation_type(
     };
 
     // 1. Update the Google Sheet cell (detached via wait_until when possible).
-    if let Some(row_index) = row_index {
+    if let Some(row_index) = row_index.clone() {
         let mapping = sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
             .await
             .unwrap_or_else(|_| event_checkin_domain::models::attendee::ColumnMapping::hardcoded());

@@ -19,6 +19,7 @@ use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::EventConfig;
 
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::SheetRow;
 
 /// Gate, then record a virtual check-in in D1 and mirror it to Sheets.
 ///
@@ -90,7 +91,7 @@ pub async fn commit_virtual_check_in(
     match &state.worker_ctx {
         Some(ctx) => ctx.wait_until(crate::sheets::bg_sync::mark_virtual_checked_in(
             state.clone(),
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             mapping.clone(),
             event.sheet_id.clone(),
             event.sheet_name.clone(),
@@ -100,7 +101,7 @@ pub async fn commit_virtual_check_in(
         // No wait_until available (tests) — write through synchronously.
         None => {
             if let Err(e) = crate::sheets::write::mark_virtual_checked_in(
-                attendee.row_index,
+                SheetRow::of(attendee.api_id.clone()),
                 mapping,
                 state,
                 &event.sheet_id,

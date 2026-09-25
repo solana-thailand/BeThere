@@ -28,14 +28,15 @@ pub fn build_checkin_url(api_id: &str, server_url: &str) -> String {
 }
 
 /// Generate QR code URLs for all approved attendees that don't have one yet.
-/// Returns a list of (row_index, qr_code_url) tuples ready for batch update.
+/// Returns `(api_id, qr_code_url)` pairs. Keyed by `api_id`, not row number:
+/// an attendee read from D1 has no reliable sheet row (`.issues/151`).
 ///
 /// If `force` is true, regenerates URLs even for attendees that already have one.
 pub fn generate_qr_urls(
     attendees: &[Attendee],
     server_url: &str,
     force: bool,
-) -> Vec<(usize, String)> {
+) -> Vec<(String, String)> {
     attendees
         .iter()
         .filter(|a| a.is_approved())
@@ -48,7 +49,7 @@ pub fn generate_qr_urls(
         })
         .map(|a: &Attendee| {
             let url = build_checkin_url(&a.api_id, server_url);
-            (a.row_index, url)
+            (a.api_id.clone(), url)
         })
         .collect()
 }
@@ -131,7 +132,7 @@ mod tests {
 
         let urls = generate_qr_urls(&attendees, "https://example.com", false);
         assert_eq!(urls.len(), 1);
-        assert_eq!(urls[0].0, 2);
+        assert_eq!(urls[0].0, "id-1");
     }
 
     #[test]
