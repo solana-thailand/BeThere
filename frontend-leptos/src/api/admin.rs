@@ -789,3 +789,55 @@ pub async fn get_admin_feedback(
     let path = format!("/admin/feedback{query}");
     super::api_get_json(&path).await
 }
+
+// ===== Linked emails (plan 025 §7.4, super-admin) =====
+
+/// A person's linked emails, as the admin person-emails endpoints return them.
+/// `status` is set by link/unlink (`linked`, `already`, `unlinked`,
+/// `not_linked`); empty for a lookup.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct PersonEmails {
+    #[serde(default)]
+    pub emails: Vec<String>,
+    #[serde(default)]
+    pub status: String,
+}
+
+/// Request body for `POST /api/admin/person-emails/link`.
+#[derive(Debug, Clone, Serialize)]
+pub struct AdminLinkEmailsRequest {
+    pub email: String,
+    pub other_email: String,
+    /// Required; stored in the global audit log.
+    pub reason: String,
+}
+
+/// Request body for `POST /api/admin/person-emails/unlink`.
+#[derive(Debug, Clone, Serialize)]
+pub struct AdminUnlinkEmailRequest {
+    pub email: String,
+    /// Required; stored in the global audit log.
+    pub reason: String,
+}
+
+/// GET /api/admin/person-emails?email= — every email of that person (just the
+/// email itself when it is not linked). Super admin only.
+pub async fn get_person_emails(email: &str) -> Result<PersonEmails, ApiError> {
+    super::api_get_json(&format!(
+        "/admin/person-emails?email={}",
+        urlencoding::encode(email)
+    ))
+    .await
+}
+
+/// POST /api/admin/person-emails/link — link two emails as one person, so they
+/// share rolling credit. Super admin only.
+pub async fn admin_link_emails(body: &AdminLinkEmailsRequest) -> Result<PersonEmails, ApiError> {
+    api_post_json("/admin/person-emails/link", body).await
+}
+
+/// POST /api/admin/person-emails/unlink — take one email back out of its
+/// person. Refused while either side has spent credit the other holds.
+pub async fn admin_unlink_email(body: &AdminUnlinkEmailRequest) -> Result<PersonEmails, ApiError> {
+    api_post_json("/admin/person-emails/unlink", body).await
+}

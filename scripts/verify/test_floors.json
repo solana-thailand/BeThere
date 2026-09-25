@@ -20,6 +20,7 @@
   "workspace": {
     "a1_range_guard tests/a1_range_guard.rs": 2,
     "ab_timing tests/ab_timing.rs": 10,
+    "admin_person_emails_guard tests/admin_person_emails_guard.rs": 4,
     "alloc_count tests/alloc_count.rs": 0,
     "alloc_count_checkin tests/alloc_count_checkin.rs": 0,
     "auth_hardening_guard tests/auth_hardening_guard.rs": 3,

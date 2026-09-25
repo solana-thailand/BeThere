@@ -105,7 +105,7 @@ def plain_after(path, anchor):
 
 def const_sql(name):
     source = (SRC / "db/person.rs").read_text()
-    rest = source[source.index(f"const {name}: &str = ") :]
+    rest = source[source.index(f"const {name}: &str =") :]
     return unescape(re.search(LITERAL, rest).group(1))
 
 
@@ -115,6 +115,10 @@ LINK_SQL = [
     const_sql("LINK_SECOND_JOINS_FIRST_SQL"),
 ]
 LINK_STATE_SQL = const_sql("LINK_STATE_SQL")
+UNLINK_MEMBER_SQL = const_sql("UNLINK_MEMBER_SQL")
+UNLINK_SQL = concat_after("db/person.rs", "const UNLINK_SQL: &str = ")
+UNLINK_DROP_SINGLETON_SQL = const_sql("UNLINK_DROP_SINGLETON_SQL")
+UNLINK_PROMOTE_SQL = const_sql("UNLINK_PROMOTE_SQL")
 BALANCE_SQL = concat_after("db/credit_ledger.rs", "pub async fn balance(")
 POSITIVE_SQL = concat_after("db/credit_ledger.rs", "pub async fn positive_balances(")
 TRY_SPEND_SQL = concat_after("db/credit_ledger.rs", "pub async fn try_spend(")
@@ -159,15 +163,45 @@ class CreditFixture(unittest.TestCase):
 
     # -- helpers ---------------------------------------------------------
 
-    def link(self, session_email, added_email):
-        """Mirror `person::link_google`'s batch; returns (written, same_person)."""
-        binds = (session_email, next(self.person_ids), added_email)
+    def link(self, session_email, added_email, proof="google"):
+        """Mirror `person::link`'s batch; returns (written, same_person)."""
+        binds = (session_email, next(self.person_ids), added_email, proof)
         written = 0
         with self.db:
             for sql in LINK_SQL:
                 written += self.db.execute(sql, binds).rowcount
-            same = self.db.execute(LINK_STATE_SQL, binds).fetchone()["same_person"]
+            same = self.db.execute(LINK_STATE_SQL, binds[:3]).fetchone()["same_person"]
         return written, same
+
+    def unlink(self, email):
+        """Mirror `person::unlink`: None when not linked, else rows deleted."""
+        member = self.db.execute(UNLINK_MEMBER_SQL, (email,)).fetchone()
+        if member is None:
+            return None
+        binds = (email, member["person_id"])
+        with self.db:
+            deleted = self.db.execute(UNLINK_SQL, binds[:1]).rowcount
+            self.db.execute(UNLINK_DROP_SINGLETON_SQL, binds)
+            self.db.execute(UNLINK_PROMOTE_SQL, binds)
+        return deleted
+
+    def spend(self, email, event_id, attendee_id):
+        cur = self.db.execute(
+            APPLY_SPEND_SQL,
+            (
+                email, "", "thb", 500, event_id,
+                f"apply:{event_id}:{email}", attendee_id, "credit_thb",
+            ),
+        )
+        return cur.rowcount
+
+    def members(self):
+        return [
+            tuple(r)
+            for r in self.db.execute(
+                "SELECT email, is_primary, proof FROM person_emails ORDER BY email"
+            )
+        ]
 
     def ledger(self, email, delta, reason, event_id=None, deposit_id=None):
         self.db.execute(
@@ -267,15 +301,6 @@ class PersonEmailsTests(CreditFixture):
 
     # -- spending --------------------------------------------------------
 
-    def spend(self, email, event_id, attendee_id):
-        cur = self.db.execute(
-            APPLY_SPEND_SQL,
-            (
-                email, "", "thb", 500, event_id,
-                f"apply:{event_id}:{email}", attendee_id, "credit_thb",
-            ),
-        )
-        return cur.rowcount
 
     def test_linked_email_spends_the_person_credit_exactly_once(self):
         self.ledger(GMAIL, 500, "hold", deposit_id="e1:a")
@@ -442,6 +467,78 @@ class PersonEmailsTests(CreditFixture):
             "SELECT COUNT(*) AS n FROM contacts WHERE credit_refund_requested=1"
         ).fetchone()["n"]
         self.assertEqual(still_flagged, 0)
+
+
+class AdminLinkTests(CreditFixture):
+    """Plan 025 §6.1: a super-admin links and unlinks emails (`proof = admin`)."""
+
+    THIRD = "person@third.example"
+
+    def test_an_admin_link_records_admin_proof(self):
+        self.assertEqual(self.link(GMAIL, WORK, proof="admin"), (2, 1))
+        self.assertEqual(self.members(), [(GMAIL, 1, "admin"), (WORK, 0, "admin")])
+
+    def test_an_admin_link_shares_credit_like_a_google_link(self):
+        self.ledger(GMAIL, 500, "hold", deposit_id="e1:a")
+        self.link(GMAIL, WORK, proof="admin")
+        self.assertEqual(self.balance(WORK), 500)
+
+    def test_unlinking_an_unlinked_email_changes_nothing(self):
+        self.assertIsNone(self.unlink(GMAIL))
+
+    def test_unlinking_a_pair_leaves_two_unlinked_emails(self):
+        self.ledger(GMAIL, 500, "hold", deposit_id="e1:a")
+        self.link(GMAIL, WORK, proof="admin")
+        self.assertEqual(self.unlink(WORK), 1)
+        # The lone row is dropped: an unlinked email is implicitly its own person.
+        self.assertEqual(self.members(), [])
+        self.assertEqual(self.balance(GMAIL), 500)
+        self.assertEqual(self.balance(WORK), 0)
+
+    def test_unlinking_the_primary_promotes_the_earliest_remaining_email(self):
+        self.link(GMAIL, WORK, proof="admin")
+        self.link(GMAIL, self.THIRD, proof="admin")
+        self.db.execute(
+            "UPDATE person_emails SET linked_at = '2026-01-02' WHERE email = ?",
+            (self.THIRD,),
+        )
+        self.db.execute(
+            "UPDATE person_emails SET linked_at = '2026-01-01' WHERE email = ?",
+            (WORK,),
+        )
+        self.assertEqual(self.unlink(GMAIL), 1)
+        primaries = [m[0] for m in self.members() if m[1] == 1]
+        self.assertEqual(primaries, [WORK])
+        self.assertEqual(len(self.members()), 2)
+
+    def test_unlinking_an_email_that_spent_the_person_credit_is_refused(self):
+        self.ledger(GMAIL, 500, "hold", deposit_id="e1:a")
+        self.link(GMAIL, WORK, proof="admin")
+        self.spend(WORK, "e2", "att-work")  # WORK's own sum is now -500
+        self.assertEqual(self.unlink(WORK), 0)
+        self.assertEqual(len(self.members()), 2)
+        # Refused from the other side too: GMAIL's siblings sum negative.
+        self.assertEqual(self.unlink(GMAIL), 0)
+        self.assertEqual(len(self.members()), 2)
+
+    def test_once_the_spend_is_returned_the_unlink_is_allowed(self):
+        self.ledger(GMAIL, 500, "hold", deposit_id="e1:a")
+        self.link(GMAIL, WORK, proof="admin")
+        self.spend(WORK, "e2", "att-work")
+        self.ledger(WORK, 500, "return", event_id="e2", deposit_id="return:e2:w")
+        self.assertEqual(self.unlink(WORK), 1)
+        self.assertEqual(self.members(), [])
+
+    def test_a_negative_usdc_side_is_checked_separately_from_thb(self):
+        self.ledger(GMAIL, 500, "hold", deposit_id="e1:a")
+        self.link(GMAIL, WORK, proof="admin")
+        self.db.execute(
+            """INSERT INTO credit_ledger
+                   (email, organization_id, currency, delta, reason, event_id, deposit_id)
+               VALUES (?, '', 'usdc', -5, 'apply', 'e3', 'apply:e3:w')""",
+            (WORK,),
+        )
+        self.assertEqual(self.unlink(WORK), 0)
 
 
 if __name__ == "__main__":

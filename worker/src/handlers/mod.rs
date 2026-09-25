@@ -1,3 +1,4 @@
+pub mod admin_person_emails;
 pub mod adventure;
 pub mod attendee;
 pub mod auth;
@@ -305,6 +306,12 @@ pub fn routes(state: AppState) -> Router<()> {
     let protected_no_store = Router::new()
         .route("/dashboard/live", get(dashboard::live_dashboard))
         .route("/events/{id}/notifications", get(notifications::list))
+        // A person's linked emails (plan 025 §7.4) — super-admin only, and
+        // personal data, so never cached.
+        .route(
+            "/admin/person-emails",
+            get(admin_person_emails::list_person_emails),
+        )
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Protected routes — require staff auth
@@ -428,6 +435,17 @@ pub fn routes(state: AppState) -> Router<()> {
         // them away. In the authed router because it is an organizer decision
         // about their own event's money.
         .route("/deposit/thb/comp", post(deposit::comp_thb_deposit_handler))
+        // Super-admin email linking for one person (plan 025 §6.1 / §7.4,
+        // `.issues/122`). Shares rolling credit across the emails, so each
+        // change needs a reason and lands in the global audit log.
+        .route(
+            "/admin/person-emails/link",
+            post(admin_person_emails::link_person_emails),
+        )
+        .route(
+            "/admin/person-emails/unlink",
+            post(admin_person_emails::unlink_person_email),
+        )
         // Admin records a THB slip on behalf of an attendee who cannot upload
         // themselves (JWT expired, browser bug, slip sent via LINE/email).
         // Skips the VULN-012 email-match gate (admin-authed + audited instead).
