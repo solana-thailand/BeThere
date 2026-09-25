@@ -20,7 +20,7 @@ pub struct EventIdQuery {
 #[derive(Debug, Clone, Deserialize)]
 pub struct AttendeesQuery {
     pub event_id: Option<String>,
-    /// Cursor: row_index of the last attendee in the previous page.
+    /// Offset into the roster order, as returned in `next_cursor`.
     /// None means start from the beginning.
     #[serde(default)]
     pub cursor: Option<usize>,

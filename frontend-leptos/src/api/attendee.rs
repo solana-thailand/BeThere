@@ -119,6 +119,32 @@ pub async fn get_attendees(
     })
 }
 
+/// Every roster page for an event, walked through `next_cursor`.
+///
+/// The roster used to stop at the first page (200), so a larger event lost
+/// everyone after it (`.issues/151` C). Stats are computed server-side over
+/// the whole event, so the first page's copy is the one kept.
+pub async fn get_all_attendees(event_id: Option<&str>) -> Result<AttendeesData, ApiError> {
+    let mut all = get_attendees(event_id, None, None).await?;
+    let mut cursor = all.next_cursor;
+    let mut last = None;
+    while let Some(next) = cursor {
+        if last.is_some_and(|prev| next <= prev) {
+            return Err(ApiError {
+                message: "Attendees API returned a cursor that did not advance".into(),
+                status: 0,
+            });
+        }
+        let page = get_attendees(event_id, Some(next), None).await?;
+        all.attendees.extend(page.attendees);
+        last = Some(next);
+        cursor = page.next_cursor;
+    }
+    all.next_cursor = None;
+    all.has_more = false;
+    Ok(all)
+}
+
 /// Invalidate the client-side attendee cache.
 /// Call this after any mutation that changes attendee data
 /// (check-in, QR generation, bulk operations).

@@ -8,7 +8,9 @@ use serde_json::json;
 
 use crate::error::ApiOk;
 use event_checkin_domain::models::api::{AttendeeListItem, StatsResponse};
-use event_checkin_domain::models::attendee::{RECENT_CHECK_INS_PER_TYPE, recent_check_ins};
+use event_checkin_domain::models::attendee::{
+    RECENT_CHECK_INS_PER_TYPE, ROSTER_PAGE_MAX, recent_check_ins, roster_page,
+};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
@@ -22,8 +24,8 @@ use crate::state::AppState;
 /// List attendees with cursor-based pagination and statistics.
 ///
 /// Stats are computed over ALL attendees regardless of pagination.
-/// Attendees are sorted by `row_index` ascending for deterministic pagination.
-/// Use `cursor` (row_index of last item) and `limit` (page size) for pagination.
+/// Approved attendees are ordered by `(row_index, api_id)`. `cursor` is the
+/// offset returned as `next_cursor`; `limit` is the page size (max 200).
 #[worker::send]
 pub async fn list_attendees(
     State(state): State<AppState>,
@@ -113,31 +115,18 @@ pub async fn list_attendees(
         recent_check_ins,
     };
 
-    // Cursor-based pagination: sort approved attendees by row_index,
-    // filter by cursor, then take up to `page_limit`.
-    let page_limit = query.limit.unwrap_or(200).min(200);
-
-    let mut approved: Vec<_> = attendees.iter().filter(|a| a.is_approved()).collect();
-    approved.sort_by_key(|a| a.row_index);
-
-    let filtered: Vec<_> = match query.cursor {
-        Some(cursor) => approved
-            .into_iter()
-            .filter(|a| a.row_index > cursor)
-            .collect(),
-        None => approved,
-    };
-
-    let has_more = filtered.len() > page_limit;
-    let page: Vec<_> = filtered.into_iter().take(page_limit).collect();
-
-    let next_cursor = if has_more {
-        page.last().map(|a| a.row_index)
-    } else {
-        None
-    };
+    // Offset cursor over a total order; `row_index` alone is 0 for every
+    // D1-created attendee, so it cannot be the key (`.issues/151` C).
+    let page = roster_page(
+        &attendees,
+        query.cursor,
+        query.limit.unwrap_or(ROSTER_PAGE_MAX),
+    );
+    let has_more = page.next_cursor.is_some();
+    let next_cursor = page.next_cursor;
 
     let mut attendee_responses: Vec<AttendeeListItem> = page
+        .items
         .iter()
         .map(|a| AttendeeListItem::from_attendee(a))
         .collect();

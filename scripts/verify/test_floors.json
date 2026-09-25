@@ -78,6 +78,7 @@
     "refund_proof_link_guard tests/refund_proof_link_guard.rs": 2,
     "registration_field_bounds_guard tests/registration_field_bounds_guard.rs": 3,
     "registration_history_guard tests/registration_history_guard.rs": 3,
+    "roster_page tests/roster_page.rs": 6,
     "roster_recent_bounded tests/roster_recent_bounded.rs": 2,
     "rundown_import tests/rundown_import.rs": 26,
     "safe_document_link tests/safe_document_link.rs": 2,

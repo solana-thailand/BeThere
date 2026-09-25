@@ -101,9 +101,14 @@ investigating it.
   in D1. A D1 → sheet backfill is a separate change.
 - **`sync-sheet` still reads D1-first**, so it cannot refresh anything. It
   matters less now that nothing addresses rows by a stored number.
-- **Attendee list paging.** `handlers/attendee/list.rs` pages by `row_index`,
-  which is 0 for every D1-read attendee, so paging past the first page is
-  unreliable. Not touched here.
+- ~~**Attendee list paging.**~~ Fixed on develop 2026-09-26, not deployed.
+  `handlers/attendee/list.rs` paged by `row_index`, which is 0 for every
+  D1-read attendee: page 2 came back empty. The admin roster also never asked
+  for page 2, so an event with more than 200 approved attendees lost everyone
+  after the 200th. Latent in prod: the largest roster is 55 (checked
+  read-only). Now `domain::models::attendee::roster_page` pages by offset
+  over `(row_index, api_id)` (tests `domain/tests/roster_page.rs`), and the
+  admin page walks every page (`api::get_all_attendees`).
 - **Hardcoded PDPA columns.** `clear_sheet_pii` hardcodes column letters
   (`B`, `C`, …) instead of the header mapping. It is correct for the current
   header only.

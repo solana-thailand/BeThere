@@ -306,7 +306,7 @@ pub struct AttendeesData {
     pub attendees: Vec<AttendeeListItem>,
     #[serde(default)]
     pub stats: StatsResponse,
-    /// Cursor for the next page (row_index of last item in current page).
+    /// Offset of the next page, to pass back as `cursor`.
     #[serde(default)]
     pub next_cursor: Option<usize>,
     /// Whether more pages exist beyond this response.

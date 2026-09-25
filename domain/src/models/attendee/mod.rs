@@ -3,6 +3,7 @@
 mod columns;
 mod core;
 mod recent;
+mod roster_page;
 mod row;
 mod sheet_row;
 mod status;
@@ -15,6 +16,7 @@ mod tests;
 pub use columns::{ColumnKey, ColumnMapping};
 pub use core::{Attendee, CheckInError};
 pub use recent::{RECENT_CHECK_INS_PER_TYPE, recent_check_ins};
+pub use roster_page::{ROSTER_PAGE_MAX, RosterPage, roster_page};
 pub use row::AttendeeRow;
 pub use sheet_row::{RowMatch, SheetRow, column_index, column_letter, find_row, range_start};
 pub use status::{CheckInStatus, ParticipationType};

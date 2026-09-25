@@ -581,7 +581,7 @@ pub fn Admin() -> impl IntoView {
         set_is_loading.set(true);
 
         leptos::task::spawn_local(async move {
-            match api::get_attendees(eid.as_deref(), None, None).await {
+            match api::get_all_attendees(eid.as_deref()).await {
                 Ok(data) => {
                     set_attendees.set(data.attendees);
                     set_stats.set(Some(data.stats));
