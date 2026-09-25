@@ -18,6 +18,7 @@ use crate::api::{
 };
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
+use crate::pages::admin_deposit_bank_info::refund_bank_info;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
 use crate::utils;
 
@@ -833,10 +834,12 @@ pub fn AdminDeposits(
                             let has_slip_url = slip_url
                                 .as_deref()
                                 .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
-                            let has_bank_info = item.bank_account.is_some() && item.bank_name.is_some() && item.account_name.is_some();
-                            let display_bank_account = item.bank_account.clone();
-                            let display_bank_name = item.bank_name.clone();
-                            let display_account_name = item.account_name.clone();
+                            let bank_info = refund_bank_info(
+                                item.bank_account.clone(),
+                                item.bank_name.clone(),
+                                item.account_name.clone(),
+                                "⚠ No bank info — ask attendee",
+                            );
 
                             let item_for_refund = item.clone();
                             let item_for_hold = item.clone();
@@ -879,26 +882,7 @@ pub fn AdminDeposits(
                                                 </div>
                                             </Show>
 
-                                            // Bank info section
-                                            <div class="admin-dep-bank-section">
-                                                <div class="panel-hint admin-dep-bank-label">"Refund Bank Info"</div>
-                                                <Show when=move || has_bank_info fallback=|| view! { <span></span> }>
-                                                    <div class="panel-hint">
-                                                        {format!("Account: {}", display_bank_account.as_deref().unwrap_or("-"))}
-                                                    </div>
-                                                    <div class="panel-hint">
-                                                        {format!("Bank: {}", display_bank_name.as_deref().unwrap_or("-"))}
-                                                    </div>
-                                                    <div class="panel-hint">
-                                                        {format!("Name: {}", display_account_name.as_deref().unwrap_or("-"))}
-                                                    </div>
-                                                </Show>
-                                                <Show when=move || !has_bank_info fallback=|| view! { <span></span> }>
-                                                    <div class="badge badge-warning admin-dep-badge-row">
-                                                        "⚠ No bank info — ask attendee"
-                                                    </div>
-                                                </Show>
-                                            </div>
+                                            {bank_info}
                                         </div>
                                         <div>
                                             <button
@@ -999,10 +983,12 @@ pub fn AdminDeposits(
                             let has_slip_url = slip_url
                                 .as_deref()
                                 .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
-                            let has_bank_info = item.bank_account.is_some() && item.bank_name.is_some() && item.account_name.is_some();
-                            let display_bank_account = item.bank_account.clone();
-                            let display_bank_name = item.bank_name.clone();
-                            let display_account_name = item.account_name.clone();
+                            let bank_info = refund_bank_info(
+                                item.bank_account.clone(),
+                                item.bank_name.clone(),
+                                item.account_name.clone(),
+                                "⚠ No bank info was provided",
+                            );
                             // Rows stored before .issues/145 may hold any scheme.
                             let refund_proof_url = item
                                 .refund_proof_url
@@ -1011,10 +997,10 @@ pub fn AdminDeposits(
                                 .map(str::to_string);
                             let has_refund_proof = refund_proof_url.is_some();
 
-                            (amount, verified_by, refunded_at, display_name, slip_url, has_slip_url, has_bank_info, display_bank_account, display_bank_name, display_account_name, refund_proof_url, has_refund_proof)
+                            (amount, verified_by, refunded_at, display_name, slip_url, has_slip_url, bank_info, refund_proof_url, has_refund_proof)
                         }).collect();
 
-                        items.into_iter().map(|(amount, verified_by, refunded_at, display_name, slip_url, has_slip_url, has_bank_info, display_bank_account, display_bank_name, display_account_name, refund_proof_url, has_refund_proof)| {
+                        items.into_iter().map(|(amount, verified_by, refunded_at, display_name, slip_url, has_slip_url, bank_info, refund_proof_url, has_refund_proof)| {
                             view! {
                                 <div class="card">
                                     <div class="flex-row-wrap">
@@ -1046,26 +1032,7 @@ pub fn AdminDeposits(
                                                 </div>
                                             </Show>
 
-                                            // Bank info section
-                                            <div class="admin-dep-bank-section">
-                                                <div class="panel-hint admin-dep-bank-label">"Refund Bank Info"</div>
-                                                <Show when=move || has_bank_info fallback=|| view! { <span></span> }>
-                                                    <div class="panel-hint">
-                                                        {format!("Account: {}", display_bank_account.as_deref().unwrap_or("-"))}
-                                                    </div>
-                                                    <div class="panel-hint">
-                                                        {format!("Bank: {}", display_bank_name.as_deref().unwrap_or("-"))}
-                                                    </div>
-                                                    <div class="panel-hint">
-                                                        {format!("Name: {}", display_account_name.as_deref().unwrap_or("-"))}
-                                                    </div>
-                                                </Show>
-                                                <Show when=move || !has_bank_info fallback=|| view! { <span></span> }>
-                                                    <div class="badge badge-warning admin-dep-badge-row">
-                                                        "⚠ No bank info was provided"
-                                                    </div>
-                                                </Show>
-                                            </div>
+                                            {bank_info}
 
                                             // Refund proof link
                                             <Show when=move || has_refund_proof fallback=|| view! { <span></span> }>
@@ -1243,11 +1210,19 @@ pub fn AdminDeposits(
                             let has_slip_url = slip_url
                                 .as_deref()
                                 .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
+                            // Held credit can still be paid out later (a contact's
+                            // "Request Return"), so the payout details belong here too.
+                            let bank_info = refund_bank_info(
+                                item.bank_account.clone(),
+                                item.bank_name.clone(),
+                                item.account_name.clone(),
+                                "⚠ No bank info — ask attendee before any payout",
+                            );
 
-                            (amount, verified_by, held_at, display_name, slip_url, has_slip_url)
+                            (amount, verified_by, held_at, display_name, slip_url, has_slip_url, bank_info)
                         }).collect();
 
-                        items.into_iter().map(|(amount, verified_by, held_at, display_name, slip_url, has_slip_url)| {
+                        items.into_iter().map(|(amount, verified_by, held_at, display_name, slip_url, has_slip_url, bank_info)| {
                             view! {
                                 <div class="card">
                                     <div class="flex-row-wrap">
@@ -1278,6 +1253,8 @@ pub fn AdminDeposits(
                                                     </a>
                                                 </div>
                                             </Show>
+
+                                            {bank_info}
                                         </div>
                                         <div>
                                             <span class="badge badge-success">"✓ Held as Credit"</span>
