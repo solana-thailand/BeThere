@@ -19,6 +19,7 @@ use crate::api::{
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
 use crate::pages::admin_deposit_bank_info::refund_bank_info;
+use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
 use crate::utils;
 
@@ -843,6 +844,8 @@ pub fn AdminDeposits(
 
                             let item_for_refund = item.clone();
                             let item_for_hold = item.clone();
+                            let comp_event_id = item.event_id.clone();
+                            let comp_attendee_id = item.attendee_id.clone();
                             let item_id_for_click = item_id.clone();
                             let item_id_for_style = item_id.clone();
                             // Dedicated clones for the input's reactive closures.
@@ -944,6 +947,12 @@ pub fn AdminDeposits(
                                                     {if hold_loading { "Holding..." } else if is_confirming_hold { "Confirm hold?" } else { "↻ Hold as Credit" }}
                                                 </button>
                                             </div>
+                                            <QueueCompAction
+                                                event_id=comp_event_id
+                                                attendee_id=comp_attendee_id
+                                                set_toast=set_toast
+                                                set_refresh_counter=set_refresh_counter
+                                            />
                                         </div>
                                     </div>
                                 </div>
