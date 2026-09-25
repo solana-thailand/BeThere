@@ -1,10 +1,12 @@
 # 151: Sheet status writes addressed row 0, and an append landed one column right
 
 **Status:** deployed 2026-09-25 (prod `59dc88cc`, git `7e7a394`, PR #153).
-Fixed in session `event-checkin-19`. Not yet seen working against the live
-sheet: the next RTM#6 approval or check-in, read back read-only, is the check.
-The RTM#6 sheet's row 57 has to be moved back by hand; the fix only covers new
-appends.
+Fixed in session `event-checkin-19`. **Verified live 2026-09-26:** the two
+RTM#6 slips approved after the deploy wrote `deposit_method`, `deposit_amount`,
+`deposit_verified = Yes` and `qr_code_url` into their own rows, read back with
+a read-only token. One is row 31, mid-sheet below the hand-edited rows; the
+other is row 53, a new registration appended at column A. The owner moved the
+shifted row back by hand (it is row 52 now).
 **Found by:** the owner, who saw the RTM#6 sheet and the admin Deposits tab
 go wrong after rows were inserted by hand. The row-0 failure turned up while
 investigating it.
