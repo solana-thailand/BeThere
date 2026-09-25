@@ -17,6 +17,7 @@ use event_checkin_domain::models::attendee::{Attendee, ColumnMapping};
 use event_checkin_domain::models::event::EventConfig;
 
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::SheetRow;
 
 /// Give an attendee their ticket QR, unless they already have one.
 ///
@@ -58,7 +59,7 @@ pub(super) async fn issue_ticket_qr_if_absent(
     match &state.worker_ctx {
         Some(wctx) => wctx.wait_until(crate::sheets::bg_sync::update_qr_urls(
             state.clone(),
-            vec![(attendee.row_index, qr_url)],
+            vec![(SheetRow::of(attendee.api_id.clone()), qr_url)],
             mapping.clone(),
             event.sheet_id.clone(),
             event.sheet_name.clone(),
@@ -67,7 +68,7 @@ pub(super) async fn issue_ticket_qr_if_absent(
         // No fetch context (tests, scheduled handlers): write through.
         None => {
             if let Err(e) = crate::sheets::write::update_qr_urls(
-                &[(attendee.row_index, qr_url)],
+                &[(SheetRow::of(attendee.api_id.clone()), qr_url)],
                 mapping,
                 state,
                 &event.sheet_id,

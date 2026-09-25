@@ -8,15 +8,17 @@ use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
 use crate::state::AppState;
 
 use super::SheetContext;
+use crate::sheets::locate::resolve_row;
 use crate::sheets::{
     get_attendees, get_cached_access_token, get_column_mapping, invalidate_column_map_cache,
 };
+use event_checkin_domain::models::attendee::SheetRow;
 
 /// Write bank account info (bank_account, bank_name, account_name) to the sheet.
 /// Used when THB deposit slip is uploaded so the organizer has refund details.
 #[allow(clippy::too_many_arguments)]
 pub async fn write_bank_info(
-    row_index: usize,
+    row: SheetRow,
     bank_account: Option<&str>,
     bank_name: Option<&str>,
     account_name: Option<&str>,
@@ -33,6 +35,7 @@ pub async fn write_bank_info(
     }
 
     let access_token = get_cached_access_token(state, kv).await?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
@@ -91,13 +94,20 @@ pub async fn write_bank_info(
 /// Write deposit verification columns to the Google Sheet.
 /// Called when a deposit is verified (THB slip approved or USDC on-chain confirmed).
 pub async fn write_deposit_verification(
-    row_index: usize,
+    row: SheetRow,
     deposit_method: &str,
     deposit_amount: &str,
     verified: bool,
     ctx: &SheetContext<'_>,
 ) -> Result<(), String> {
     let access_token = get_cached_access_token(ctx.state, ctx.kv).await?;
+    let row_index = resolve_row(
+        &row,
+        ctx.sheet_id,
+        &a1::sheet_ref(ctx.sheet_name),
+        &access_token,
+    )
+    .await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 

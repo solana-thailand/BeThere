@@ -25,6 +25,7 @@ use event_checkin_domain::models::error::AppError;
 use super::ext::{resolve_event_with_access, resolve_kv};
 use crate::sheets;
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::SheetRow;
 
 /// Query parameters for check-in.
 #[derive(Debug, serde::Deserialize)]
@@ -183,7 +184,7 @@ pub async fn check_in(
             kv.cloned(),
         );
         let (row_index, staff, token, ts) = (
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             claims.email.clone(),
             claim_token.clone(),
             timestamp.clone(),
@@ -203,7 +204,7 @@ pub async fn check_in(
             sheets::column_mapping_or_hardcoded(&state, &event.sheet_id, &event.sheet_name, kv)
                 .await;
         if let Err(e) = sheets::write::mark_checked_in(
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             &claims.email,
             &claim_token,
             &mapping,
@@ -379,7 +380,7 @@ pub async fn undo_check_in(
             event.sheet_name.clone(),
             kv.cloned(),
         );
-        let (row_index, staff) = (attendee.row_index, claims.email.clone());
+        let (row_index, staff) = (SheetRow::of(attendee.api_id.clone()), claims.email.clone());
         ctx.wait_until(async move {
             let mapping =
                 sheets::column_mapping_or_hardcoded(&state, &sheet_id, &sheet_name, kv.as_ref())
@@ -395,7 +396,7 @@ pub async fn undo_check_in(
             sheets::column_mapping_or_hardcoded(&state, &event.sheet_id, &event.sheet_name, kv)
                 .await;
         if let Err(e) = sheets::clear_checked_in(
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             &claims.email,
             &mapping,
             &state,

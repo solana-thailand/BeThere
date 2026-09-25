@@ -9,6 +9,7 @@ use crate::state::AppState;
 
 use super::discovery::{DISCOVERY_COOLDOWN_SECS, binding_conflict, discover_deposit_tx_on_chain};
 use super::rpc::verify_tx_with_signer;
+use event_checkin_domain::models::attendee::SheetRow;
 
 /// Self-heal a deposit record from the on-chain state.
 ///
@@ -336,7 +337,7 @@ pub(crate) async fn recover_and_verify_deposit(
         if let Some(ctx) = &state.worker_ctx {
             ctx.wait_until(crate::sheets::bg_sync::write_deposit_verification(
                 state.clone(),
-                attendee.row_index,
+                SheetRow::of(attendee.api_id.clone()),
                 "USDC".to_string(),
                 deposit_amount_str.clone(),
                 true,
@@ -363,7 +364,7 @@ pub(crate) async fn recover_and_verify_deposit(
 
                 ctx.wait_until(crate::sheets::bg_sync::update_qr_urls(
                     state.clone(),
-                    vec![(attendee.row_index, qr_url)],
+                    vec![(SheetRow::of(attendee.api_id.clone()), qr_url)],
                     mapping,
                     event.sheet_id.clone(),
                     event.sheet_name.clone(),
@@ -381,7 +382,7 @@ pub(crate) async fn recover_and_verify_deposit(
             };
 
             if let Err(e) = crate::sheets::write::write_deposit_verification(
-                attendee.row_index,
+                SheetRow::of(attendee.api_id.clone()),
                 "USDC",
                 &deposit_amount_str,
                 true,
@@ -408,7 +409,7 @@ pub(crate) async fn recover_and_verify_deposit(
                 }
 
                 if let Err(e) = crate::sheets::write::update_qr_urls(
-                    &[(attendee.row_index, qr_url)],
+                    &[(SheetRow::of(attendee.api_id.clone()), qr_url)],
                     &mapping,
                     state,
                     &event.sheet_id,

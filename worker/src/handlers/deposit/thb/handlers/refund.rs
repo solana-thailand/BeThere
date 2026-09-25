@@ -10,6 +10,7 @@ use event_checkin_domain::models::error::AppError;
 use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::SheetRow;
 
 // ---------------------------------------------------------------------------
 // POST /api/refund/mark/{attendee_id} (admin)
@@ -167,7 +168,7 @@ pub async fn mark_refund_handler(
             event.sheet_id.clone(),
             event.sheet_name.clone(),
             Some(kv.clone()),
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             "refunded".to_string(),
             mapping.clone(),
         ));
@@ -176,7 +177,7 @@ pub async fn mark_refund_handler(
             event.sheet_id.clone(),
             event.sheet_name.clone(),
             Some(kv.clone()),
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             refund_proof_url.clone(),
             mapping.clone(),
         ));
@@ -480,7 +481,7 @@ pub async fn mark_manual_refund_handler(
             event.sheet_id.clone(),
             event.sheet_name.clone(),
             Some(kv.clone()),
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             body.refund_status.clone(),
             mapping.clone(),
         ));
@@ -499,7 +500,7 @@ pub async fn mark_manual_refund_handler(
                 event.sheet_id.clone(),
                 event.sheet_name.clone(),
                 Some(kv.clone()),
-                attendee.row_index,
+                SheetRow::of(attendee.api_id.clone()),
                 link.clone(),
                 mapping.clone(),
             ));

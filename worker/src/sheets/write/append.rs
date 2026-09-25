@@ -9,7 +9,9 @@ use worker::KvStore;
 use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
 use crate::state::AppState;
 
+use crate::sheets::locate::resolve_row;
 use crate::sheets::{get_cached_access_token, invalidate_column_map_cache};
+use event_checkin_domain::models::attendee::SheetRow;
 
 // ---------------------------------------------------------------------------
 // Self-registration append
@@ -100,35 +102,8 @@ pub async fn append_attendee_row(
         set(&mut row, CK::ConsentMarketing, "Yes".to_string());
     }
 
-    // Determine the last non-empty column to build the range
-    let last_col_idx = row.iter().rposition(|v| !v.is_empty()).unwrap_or(0);
-    let last_col_letter = {
-        let mut result = String::new();
-        let mut n = last_col_idx;
-        loop {
-            result.insert(0, (b'A' + (n % 26) as u8) as char);
-            if n < 26 {
-                break;
-            }
-            n = (n / 26) - 1;
-        }
-        result
-    };
-
-    // Truncate trailing empty columns
-    row.truncate(last_col_idx + 1);
-
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:{last_col_letter}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
-        urlencoding::encode(&sheet_ref)
-    );
-
-    let body = crate::http::ValueRange {
-        range: format!("{sheet_ref}!A:{last_col_letter}"),
-        values: vec![row],
-    };
-
-    crate::http::post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await?;
+    // Pinned to column A: a hand-edited sheet can make `:append` land offset.
+    crate::sheets::locate::append_row(sheet_id, &sheet_ref, row, &access_token).await?;
 
     tracing::info!(
         %api_id,
@@ -201,34 +176,8 @@ pub async fn append_walkin_row(
         set(&mut row, CK::ClaimedAt, claimed.to_string());
     }
 
-    // Determine the last non-empty column to build the range
-    let last_col_idx = row.iter().rposition(|v| !v.is_empty()).unwrap_or(0);
-    let last_col_letter = {
-        let mut result = String::new();
-        let mut n = last_col_idx;
-        loop {
-            result.insert(0, (b'A' + (n % 26) as u8) as char);
-            if n < 26 {
-                break;
-            }
-            n = (n / 26) - 1;
-        }
-        result
-    };
-
-    row.truncate(last_col_idx + 1);
-
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:{last_col_letter}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
-        urlencoding::encode(&sheet_ref)
-    );
-
-    let body = crate::http::ValueRange {
-        range: format!("{sheet_ref}!A:{last_col_letter}"),
-        values: vec![row],
-    };
-
-    crate::http::post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await?;
+    // Pinned to column A: a hand-edited sheet can make `:append` land offset.
+    crate::sheets::locate::append_row(sheet_id, &sheet_ref, row, &access_token).await?;
 
     tracing::info!(
         %api_id,
@@ -342,7 +291,7 @@ pub async fn delete_sheet_row(
 /// when an attendee misses the deposit deadline.
 #[allow(clippy::too_many_arguments)]
 pub async fn update_participation_type(
-    row_index: usize,
+    row: SheetRow,
     new_value: &str,
     mapping: &ColumnMapping,
     state: &AppState,
@@ -352,6 +301,7 @@ pub async fn update_participation_type(
 ) -> Result<(), String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
     let col = mapping.column_letter(CK::ParticipationType);

@@ -15,6 +15,7 @@ use crate::error::ApiOk;
 use event_checkin_domain::models::api::{
     GenerateQrResponse, QrGenerationDetail, QrGenerationStatus,
 };
+use event_checkin_domain::models::attendee::SheetRow;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::qr;
@@ -182,10 +183,10 @@ pub async fn generate_qrs(
     // Build details for attendees that will be generated
     let generated_details: Vec<QrGenerationDetail> = updates
         .iter()
-        .filter_map(|(row_idx, url)| {
+        .filter_map(|(api_id, url)| {
             attendees
                 .iter()
-                .find(|a| a.row_index == *row_idx)
+                .find(|a| a.api_id == *api_id)
                 .map(|a| QrGenerationDetail {
                     api_id: a.api_id.clone(),
                     name: a.display_name().to_string(),
@@ -207,8 +208,12 @@ pub async fn generate_qrs(
     };
 
     // Batch update the Google Sheet
+    let sheet_updates: Vec<(SheetRow, String)> = updates
+        .iter()
+        .map(|(api_id, url)| (SheetRow::of(api_id.clone()), url.clone()))
+        .collect();
     let updated = sheets::update_qr_urls(
-        &updates,
+        &sheet_updates,
         &mapping,
         &state,
         &event.sheet_id,
@@ -225,16 +230,7 @@ pub async fn generate_qrs(
     // (which reads D1-first) can render them without a manual sheet→D1 sync.
     // Non-fatal: Sheet is already updated, so a future sync would catch up.
     if let Some(ref d1) = state.d1 {
-        let d1_entries: Vec<(String, String)> = updates
-            .iter()
-            .filter_map(|(row_idx, qr_url)| {
-                attendees
-                    .iter()
-                    .find(|a| a.row_index == *row_idx)
-                    .map(|a| (a.api_id.clone(), qr_url.clone()))
-            })
-            .collect();
-        match crate::db::attendees::set_qr_urls_batch(d1, &d1_entries).await {
+        match crate::db::attendees::set_qr_urls_batch(d1, &updates).await {
             Ok(n) => tracing::info!(d1_updated = n, "D1 qr_url batch write complete"),
             Err(e) => tracing::warn!(
                 error = %e,
@@ -249,12 +245,12 @@ pub async fn generate_qrs(
         "QR generation complete"
     );
 
-    let updated_rows: Vec<usize> = updates.iter().map(|(row, _)| *row).collect();
+    let updated_ids: Vec<&str> = updates.iter().map(|(api_id, _)| api_id.as_str()).collect();
 
     // Build skipped details for approved attendees not in the update set
     let skipped_details: Vec<QrGenerationDetail> = attendees
         .iter()
-        .filter(|a| a.is_approved() && !updated_rows.contains(&a.row_index))
+        .filter(|a| a.is_approved() && !updated_ids.contains(&a.api_id.as_str()))
         .map(|a| QrGenerationDetail {
             api_id: a.api_id.clone(),
             name: a.display_name().to_string(),

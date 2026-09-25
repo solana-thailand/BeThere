@@ -199,7 +199,7 @@ Phase 1 (target: deployed before 2026-09-27)
       has "Add another email". The callback requires both the signed state and
       the matching session cookie — see §3.1.
 - [x] 7.4 Admin link/unlink endpoint + audit_log (2026-09-25, session
-      `event-checkin-19`).
+      `event-checkin-19`). **Deployed** 2026-09-25: prod `8148da6d`, git `b7e7a46`, PR #152.
       - `GET /api/admin/person-emails?email=`, `POST …/link`, `POST …/unlink`
         (`handlers/admin_person_emails.rs`). Super admin only, a reason is
         required, and each change writes a global audit entry

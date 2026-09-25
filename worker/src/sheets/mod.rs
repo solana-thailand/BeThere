@@ -8,6 +8,7 @@ pub mod a1;
 pub mod bg_sync;
 pub mod contacts;
 pub mod events_tab;
+pub mod locate;
 pub mod write;
 
 use base64::Engine;

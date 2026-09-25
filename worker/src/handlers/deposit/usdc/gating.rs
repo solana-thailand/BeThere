@@ -4,6 +4,7 @@ use chrono::Utc;
 use event_checkin_domain::models::event::EventConfig;
 
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::SheetRow;
 
 /// Check if the deposit deadline has passed and auto-switch participation_type.
 /// Returns `true` if the deadline expired and the switch was performed.
@@ -66,7 +67,7 @@ pub(crate) async fn check_and_switch_deadline(
     if let Some(ctx) = &state.worker_ctx {
         ctx.wait_until(crate::sheets::bg_sync::update_participation_type(
             state.clone(),
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             "Online".to_string(),
             mapping,
             event.sheet_id.clone(),
@@ -79,7 +80,7 @@ pub(crate) async fn check_and_switch_deadline(
         );
     } else {
         match crate::sheets::write::update_participation_type(
-            attendee.row_index,
+            SheetRow::of(attendee.api_id.clone()),
             "Online",
             &mapping,
             state,

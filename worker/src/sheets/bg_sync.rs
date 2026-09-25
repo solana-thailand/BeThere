@@ -14,7 +14,9 @@ use worker::KvStore;
 use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
 use crate::state::AppState;
 
+use super::locate::{resolve_row, resolve_rows};
 use super::{get_cached_access_token, invalidate_column_map_cache};
+use event_checkin_domain::models::attendee::SheetRow;
 
 // ---------------------------------------------------------------------------
 // Check-in
@@ -25,7 +27,7 @@ use super::{get_cached_access_token, invalidate_column_map_cache};
 #[allow(clippy::too_many_arguments)]
 pub async fn mark_checked_in(
     state: AppState,
-    row_index: usize,
+    row: SheetRow,
     staff_email: String,
     claim_token: String,
     mapping: ColumnMapping,
@@ -39,6 +41,13 @@ pub async fn mark_checked_in(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync mark_checked_in: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync mark_checked_in: row lookup failed, write skipped");
             return;
         }
     };
@@ -98,7 +107,7 @@ pub async fn mark_checked_in(
 /// Write virtual check-in columns to Sheet.
 pub async fn mark_virtual_checked_in(
     state: AppState,
-    row_index: usize,
+    row: SheetRow,
     mapping: ColumnMapping,
     sheet_id: String,
     sheet_name: String,
@@ -110,6 +119,13 @@ pub async fn mark_virtual_checked_in(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync mark_virtual_checked_in: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync mark_virtual_checked_in: row lookup failed, write skipped");
             return;
         }
     };
@@ -162,7 +178,7 @@ pub async fn mark_virtual_checked_in(
 /// Clear check-in columns (checked_in_at, checked_in_by, claim_token, claimed_at).
 pub async fn clear_checked_in(
     state: AppState,
-    row_index: usize,
+    row: SheetRow,
     staff_email: String,
     mapping: ColumnMapping,
     sheet_id: String,
@@ -174,6 +190,13 @@ pub async fn clear_checked_in(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync clear_checked_in: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync clear_checked_in: row lookup failed, write skipped");
             return;
         }
     };
@@ -238,7 +261,7 @@ pub async fn clear_checked_in(
 #[allow(clippy::too_many_arguments)]
 pub async fn mark_claimed(
     state: AppState,
-    row_index: usize,
+    row: SheetRow,
     wallet_address: String,
     claimed_at: String,
     nft_proof_url: String,
@@ -252,6 +275,13 @@ pub async fn mark_claimed(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync mark_claimed: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync mark_claimed: row lookup failed, write skipped");
             return;
         }
     };
@@ -383,34 +413,9 @@ pub async fn append_attendee_row(
         set(&mut row, CK::ConsentMarketing, "Yes".to_string());
     }
 
-    let last_col_idx = row.iter().rposition(|v| !v.is_empty()).unwrap_or(0);
-    let last_col_letter = {
-        let mut result = String::new();
-        let mut n = last_col_idx;
-        loop {
-            result.insert(0, (b'A' + (n % 26) as u8) as char);
-            if n < 26 {
-                break;
-            }
-            n = (n / 26) - 1;
-        }
-        result
-    };
-
-    row.truncate(last_col_idx + 1);
-
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:{last_col_letter}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
-        urlencoding::encode(&sheet_ref)
-    );
-
-    let body = crate::http::ValueRange {
-        range: format!("{sheet_ref}!A:{last_col_letter}"),
-        values: vec![row],
-    };
-
+    // Pinned to column A: a hand-edited sheet can make `:append` land offset.
     if let Err(e) =
-        crate::http::post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await
+        crate::sheets::locate::append_row(&sheet_id, &sheet_ref, row, &access_token).await
     {
         tracing::error!(
             %api_id,
@@ -441,7 +446,7 @@ pub async fn update_deposit_method(
     sheet_id: String,
     sheet_name: String,
     kv: Option<KvStore>,
-    row_index: usize,
+    row: SheetRow,
     method: String,
     mapping: ColumnMapping,
 ) {
@@ -450,6 +455,13 @@ pub async fn update_deposit_method(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync update_deposit_method: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync update_deposit_method: row lookup failed, write skipped");
             return;
         }
     };
@@ -481,7 +493,7 @@ pub async fn update_deposit_method(
 /// Update participation_type column.
 pub async fn update_participation_type(
     state: AppState,
-    row_index: usize,
+    row: SheetRow,
     participation_type: String,
     mapping: ColumnMapping,
     sheet_id: String,
@@ -493,6 +505,13 @@ pub async fn update_participation_type(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync update_participation_type: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync update_participation_type: row lookup failed, write skipped");
             return;
         }
     };
@@ -525,7 +544,7 @@ pub async fn update_participation_type(
 #[allow(clippy::too_many_arguments)]
 pub async fn write_bank_info(
     state: AppState,
-    row_index: usize,
+    row: SheetRow,
     bank_account: Option<String>,
     bank_name: Option<String>,
     mapping: ColumnMapping,
@@ -538,6 +557,13 @@ pub async fn write_bank_info(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync write_bank_info: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync write_bank_info: row lookup failed, write skipped");
             return;
         }
     };
@@ -584,7 +610,7 @@ pub async fn write_bank_info(
 #[allow(clippy::too_many_arguments)]
 pub async fn write_deposit_verification(
     state: AppState,
-    row_index: usize,
+    row: SheetRow,
     deposit_method: String,
     deposit_amount: String,
     verified: bool,
@@ -598,6 +624,13 @@ pub async fn write_deposit_verification(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync write_deposit_verification: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync write_deposit_verification: row lookup failed, write skipped");
             return;
         }
     };
@@ -645,7 +678,7 @@ pub async fn write_deposit_verification(
 /// Update QR code URLs for attendee rows.
 pub async fn update_qr_urls(
     state: AppState,
-    updates: Vec<(usize, String)>,
+    updates: Vec<(SheetRow, String)>,
     mapping: ColumnMapping,
     sheet_id: String,
     sheet_name: String,
@@ -660,6 +693,13 @@ pub async fn update_qr_urls(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync update_qr_urls: failed to get access token");
+            return;
+        }
+    };
+    let updates = match resolve_rows(updates, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(found) => found,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync update_qr_urls: row lookup failed, writes skipped");
             return;
         }
     };
@@ -697,7 +737,7 @@ pub async fn write_refund_status(
     sheet_id: String,
     sheet_name: String,
     kv: Option<KvStore>,
-    row_index: usize,
+    row: SheetRow,
     refund_status: String,
     mapping: ColumnMapping,
 ) {
@@ -706,6 +746,13 @@ pub async fn write_refund_status(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync write_refund_status: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync write_refund_status: row lookup failed, write skipped");
             return;
         }
     };
@@ -740,7 +787,7 @@ pub async fn write_refund_link(
     sheet_id: String,
     sheet_name: String,
     kv: Option<KvStore>,
-    row_index: usize,
+    row: SheetRow,
     refund_link: String,
     mapping: ColumnMapping,
 ) {
@@ -749,6 +796,13 @@ pub async fn write_refund_link(
         Ok(t) => t,
         Err(e) => {
             tracing::error!(error = %e, "bg_sync write_refund_link: failed to get access token");
+            return;
+        }
+    };
+    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync write_refund_link: row lookup failed, write skipped");
             return;
         }
     };
