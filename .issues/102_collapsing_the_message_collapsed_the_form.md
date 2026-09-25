@@ -1,6 +1,6 @@
 # 102 — Collapsing the message collapsed the form with it
 
-**Status:** fixed 2026-09-14, **not deployed**
+**Status:** fixed 2026-09-14, deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there)
 **Found:** 2026-09-14, by the organizer noticing his own page
 **Severity:** high — a regression I shipped four hours earlier, on the page the
 whole campaign runs through

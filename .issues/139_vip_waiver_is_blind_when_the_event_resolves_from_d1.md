@@ -1,6 +1,6 @@
 # 139 — The VIP waiver is blind when the event resolves from D1
 
-**Status:** **fixed on `develop`, not deployed** (§6). The feature itself is
+**Status:** **fixed**, deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there) (§6). The feature itself is
 verified working (§2). Filed 2026-09-23 while verifying `f041baf`.
 **Severity:** low today, but it fails in the expensive direction — a guest the
 organizer promised would not pay is asked for ฿500.

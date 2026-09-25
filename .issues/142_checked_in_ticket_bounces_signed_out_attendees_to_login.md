@@ -1,7 +1,7 @@
 # 142 — A checked-in ticket sends signed-out attendees to /login
 
-**Status:** fixed on `develop` 2026-09-23 (session 4), **not deployed**: prod
-still has the bug until the next owner-approved deploy. Reproduced on staging
+**Status:** fixed on `develop` 2026-09-23 (session 4), deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there).
+The prod bug is gone with that deploy. Reproduced on staging
 2026-09-23; it was found during `.plans/028` (performance).
 **Severity:** high for RTM#6 (2026-09-27). The ticket page is documented as "No
 auth required", and every in-person attendee opens it at the door.

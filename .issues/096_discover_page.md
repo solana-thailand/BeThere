@@ -1,6 +1,6 @@
 # 096 — A returning attendee lands on a pitch they have already read
 
-**Status:** built 2026-09-13, **not deployed**; not yet the default after login
+**Status:** built 2026-09-13, deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there); not yet the default after login
 **Found:** 2026-09-13, UX review continued from `.issues/094`
 **Severity:** medium — it is the first screen every one of the 55 people in the
 feedback campaign will see

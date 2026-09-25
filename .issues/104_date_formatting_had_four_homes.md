@@ -1,6 +1,6 @@
 # 104 — The same date bug, written four times
 
-**Status:** fixed 2026-09-14, **not deployed**
+**Status:** fixed 2026-09-14, deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there)
 **Found:** 2026-09-14, from the organizer's screenshot of "Your Events"
 **Severity:** low individually — the point is the pattern
 

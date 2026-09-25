@@ -1,6 +1,6 @@
 # 100 — `/discover` rendered with no way back and no way in
 
-**Status:** fixed 2026-09-14, **not deployed**
+**Status:** fixed 2026-09-14, deployed (in prod tag `deploy/production/20260925T032335Z`; `issue_ledger.py` 2026-09-25 found every linked commit there)
 **Found:** 2026-09-14, looking at the deployed page rather than its status code
 **Severity:** medium — it blocks the page becoming the post-login default,
 which is the reason it was built
