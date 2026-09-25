@@ -1,8 +1,10 @@
 # 151: Sheet status writes addressed row 0, and an append landed one column right
 
-**Status:** fixed on develop 2026-09-25 (session `event-checkin-19`), not
-deployed. The RTM#6 sheet's row 57 still has to be moved back by hand; the fix
-only covers new appends.
+**Status:** deployed 2026-09-25 (prod `59dc88cc`, git `7e7a394`, PR #153).
+Fixed in session `event-checkin-19`. Not yet seen working against the live
+sheet: the next RTM#6 approval or check-in, read back read-only, is the check.
+The RTM#6 sheet's row 57 has to be moved back by hand; the fix only covers new
+appends.
 **Found by:** the owner, who saw the RTM#6 sheet and the admin Deposits tab
 go wrong after rows were inserted by hand. The row-0 failure turned up while
 investigating it.
