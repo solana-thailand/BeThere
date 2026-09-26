@@ -121,23 +121,17 @@ impl D1AttendeeRow {
     }
 }
 
-/// Fetch a single attendee by `api_id` from D1.
-/// Returns `Ok(None)` if not found.
+/// Fetch a single attendee of `event_id` by `api_id` from D1.
+/// Returns `Ok(None)` if not found, or if the id belongs to another event
+/// (`attendees.id` is global; Issue 153).
 pub(crate) async fn get_attendee_by_id(
     db: &D1Database,
+    event_id: &str,
     api_id: &str,
 ) -> Result<Option<Attendee>, String> {
-    let stmt = db.prepare(
-        "SELECT id, event_id, email, name, ticket_name, approval_status, participation_type, \
-         checked_in_at, checked_in_by, claim_token, claimed_at, claim_asset_id, \
-         claim_signature, qr_url, contact_channel, contact_handle, \
-         deposit_status, deposit_amount_usdc, deposit_tx_hash, \
-         refund_tx_hash, refund_link, bank_name, bank_account_number, \
-         bank_account_name, sheet_row_index \
-         FROM attendees WHERE id = ?1",
-    );
+    let stmt = db.prepare(include_str!("../sql/attendee_by_id.sql"));
     let bound = stmt
-        .bind_refs(&[D1Type::Text(api_id)])
+        .bind_refs(&[D1Type::Text(api_id), D1Type::Text(event_id)])
         .map_err(|e| format!("D1 get_attendee_by_id bind: {e:?}"))?;
 
     // Bypass worker crate's .first::<T>() which uses serde_wasm_bindgen::from_value()

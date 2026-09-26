@@ -141,10 +141,19 @@ fn the_read_path_reads_the_column_and_not_the_name() {
         .collect();
     assert_eq!(
         found.len(),
-        4,
-        "expected 4 attendee-projecting SELECTs in reads.rs, found {}. If that \
+        3,
+        "expected 3 attendee-projecting SELECTs in reads.rs, found {}. If that \
          count changed, the new one needs ticket_name too",
         found.len()
+    );
+    // The fourth, the by-id lookup, lives in a .sql file (Issue 153).
+    assert!(
+        code.contains("include_str!(\"../sql/attendee_by_id.sql\")"),
+        "reads.rs no longer loads attendee_by_id.sql; move this check with it"
+    );
+    assert!(
+        repo_file("src/db/sql/attendee_by_id.sql").contains("ticket_name"),
+        "attendee_by_id.sql does not project ticket_name"
     );
     for (i, sel) in found.iter().enumerate() {
         assert!(

@@ -144,16 +144,10 @@ pub async fn admin_upload_thb_slip_handler(
     // 4. Verify attendee exists (NO email-match check — admin path).
     //    The attendee lookup also gives us row_index, registration_date, and
     //    qr_code_url — all needed downstream.
-    let attendee = crate::sheets::get_attendee_by_id(
-        &body.attendee_id,
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        Some(kv),
-    )
-    .await
-    .map_err(AppError::Internal)?
-    .ok_or_else(|| AppError::NotFound(format!("attendee '{}' not found", body.attendee_id)))?;
+    let attendee = crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &event, Some(kv))
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("attendee '{}' not found", body.attendee_id)))?;
 
     // 5. Reject duplicates (same as attendee endpoint — no admin override).
     let existing = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)

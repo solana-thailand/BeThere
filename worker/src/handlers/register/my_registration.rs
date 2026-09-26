@@ -66,7 +66,7 @@ pub async fn my_registration(
             ))
         })?;
 
-    let claim_token = resolve_claim_token_from_d1(&state, attendee)
+    let claim_token = resolve_claim_token_from_d1(&state, &config.id, attendee)
         .await
         .unwrap_or_default();
     let is_checked_in = attendee
@@ -215,7 +215,7 @@ pub async fn my_registrations(
                         .iter()
                         .find(|a| a.email.eq_ignore_ascii_case(&email))?;
 
-                    let claim_token = resolve_claim_token_from_d1(&state, attendee)
+                    let claim_token = resolve_claim_token_from_d1(&state, &config.id, attendee)
                         .await
                         .unwrap_or_default();
                     let is_checked_in = attendee

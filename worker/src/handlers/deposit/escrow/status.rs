@@ -527,16 +527,10 @@ pub async fn rollover_deposit_tx_handler(
             row_index: 0,
         }
     } else {
-        crate::sheets::get_attendee_by_id(
-            &body.attendee_id,
-            &state,
-            &source_event.sheet_id,
-            &source_event.sheet_name,
-            Some(kv),
-        )
-        .await
-        .map_err(AppError::Internal)?
-        .ok_or_else(|| AppError::NotFound("attendee not found on source event".to_string()))?
+        crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &source_event, Some(kv))
+            .await
+            .map_err(AppError::Internal)?
+            .ok_or_else(|| AppError::NotFound("attendee not found on source event".to_string()))?
     };
 
     if !source_attendee.email.eq_ignore_ascii_case(&claims.email) {

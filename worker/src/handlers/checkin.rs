@@ -63,8 +63,7 @@ pub async fn check_in(
     let attendee: Attendee = sheets::get_attendee_by_id(
         &id,
         &state,
-        &event.sheet_id,
-        &event.sheet_name,
+        &event,
         kv,
     )
     .await
@@ -337,8 +336,7 @@ pub async fn undo_check_in(
     let attendee: Attendee = sheets::get_attendee_by_id(
         &id,
         &state,
-        &event.sheet_id,
-        &event.sheet_name,
+        &event,
         kv,
     )
     .await

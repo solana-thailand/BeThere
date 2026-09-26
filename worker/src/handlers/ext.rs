@@ -91,7 +91,9 @@ pub async fn get_attendee_for_public(
     event: &EventConfig,
     kv: Option<&worker::KvStore>,
 ) -> Result<Option<event_checkin_domain::models::attendee::Attendee>, AppError> {
-    if let Some(attendee) = crate::sheets::get_attendee_by_id_from_d1(attendee_id, state).await {
+    if let Some(attendee) =
+        crate::sheets::get_attendee_by_id_from_d1(attendee_id, &event.id, state).await
+    {
         return Ok(Some(attendee));
     }
     if !crate::middleware::rate_limit::allow_sheets_fallback(state, headers).await {

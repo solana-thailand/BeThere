@@ -70,14 +70,8 @@ pub async fn deposit_usdc_handler(
     // If deadline expired but in-person capacity is still available,
     // switch the attendee back to In-Person and allow the deposit (reclaim flow).
     if let Some(deadline_hours) = event.deposit_deadline_hours
-        && let Ok(Some(attendee)) = crate::sheets::get_attendee_by_id(
-            &body.attendee_id,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            kv,
-        )
-        .await
+        && let Ok(Some(attendee)) =
+            crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &event, kv).await
         && let Some(reg_str) = &attendee.registration_date
         && let Ok(reg_time) = chrono::DateTime::parse_from_rfc3339(reg_str)
     {

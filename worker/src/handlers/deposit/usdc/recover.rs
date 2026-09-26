@@ -325,13 +325,7 @@ pub(crate) async fn recover_and_verify_deposit(
     let deposit_amount_str = status.amount.to_string();
     let (mapping_result, attendee_result) = futures_util::join!(
         crate::sheets::get_column_mapping(state, &event.sheet_id, &event.sheet_name, kv,),
-        crate::sheets::get_attendee_by_id(
-            &attendee_id,
-            state,
-            &event.sheet_id,
-            &event.sheet_name,
-            kv,
-        )
+        crate::sheets::get_attendee_by_id(&attendee_id, state, event, kv)
     );
     if let (Ok(mapping), Ok(Some(attendee))) = (mapping_result, attendee_result) {
         if let Some(ctx) = &state.worker_ctx {

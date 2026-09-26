@@ -143,16 +143,10 @@ pub async fn mark_refund_handler(
     );
 
     // Resolve attendee row_index & column mapping for Sheets write
-    let attendee_row = crate::sheets::get_attendee_by_id(
-        &attendee_id,
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        Some(kv),
-    )
-    .await
-    .ok()
-    .flatten();
+    let attendee_row = crate::sheets::get_attendee_by_id(&attendee_id, &state, &event, Some(kv))
+        .await
+        .ok()
+        .flatten();
 
     let mapping =
         crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
@@ -457,16 +451,10 @@ pub async fn mark_manual_refund_handler(
             .await?;
 
     // Verify attendee exists in sheet
-    let attendee = crate::sheets::get_attendee_by_id(
-        &attendee_id,
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        Some(kv),
-    )
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to find attendee: {e}")))?
-    .ok_or_else(|| AppError::NotFound(format!("attendee '{attendee_id}' not found")))?;
+    let attendee = crate::sheets::get_attendee_by_id(&attendee_id, &state, &event, Some(kv))
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to find attendee: {e}")))?
+        .ok_or_else(|| AppError::NotFound(format!("attendee '{attendee_id}' not found")))?;
 
     // Resolve column mapping for Sheets write
     let mapping =

@@ -16,6 +16,7 @@ use std::collections::HashMap;
 
 use event_checkin_domain::models::attendee::{Attendee, AttendeeRow, ColumnMapping};
 use event_checkin_domain::models::auth::ServiceAccountClaim;
+use event_checkin_domain::models::event::EventConfig;
 
 use worker::KvStore;
 
@@ -586,28 +587,33 @@ pub async fn get_attendees_map(
         .collect())
 }
 
-/// Get a single attendee by their api_id.
+/// Get a single attendee of `event` by their api_id.
 ///
 /// Phase 2b: tries D1 first (O(1) by primary key), falls back to Sheets on miss.
+/// Both halves are scoped to `event`: `attendees.id` is global, and callers
+/// authorize the event, not the id (Issue 153).
 pub async fn get_attendee_by_id(
     api_id: &str,
     state: &AppState,
-    sheet_id: &str,
-    sheet_name: &str,
+    event: &EventConfig,
     kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
-    if let Some(attendee) = get_attendee_by_id_from_d1(api_id, state).await {
+    if let Some(attendee) = get_attendee_by_id_from_d1(api_id, &event.id, state).await {
         return Ok(Some(attendee));
     }
-    get_attendee_by_id_from_sheets(api_id, state, sheet_id, sheet_name, kv).await
+    get_attendee_by_id_from_sheets(api_id, state, &event.sheet_id, &event.sheet_name, kv).await
 }
 
-/// The D1 half of [`get_attendee_by_id`]: `None` on a miss, a D1 error or no
-/// D1 binding. Public callers use the halves separately so they can gate the
-/// Sheets read (plan 028 W7).
-pub async fn get_attendee_by_id_from_d1(api_id: &str, state: &AppState) -> Option<Attendee> {
+/// The D1 half of [`get_attendee_by_id`]: `None` on a miss (including an
+/// attendee of another event), a D1 error or no D1 binding. Public callers use
+/// the halves separately so they can gate the Sheets read (plan 028 W7).
+pub async fn get_attendee_by_id_from_d1(
+    api_id: &str,
+    event_id: &str,
+    state: &AppState,
+) -> Option<Attendee> {
     let d1 = state.d1.as_ref()?;
-    match crate::db::attendees::get_attendee_by_id(d1, api_id).await {
+    match crate::db::attendees::get_attendee_by_id(d1, event_id, api_id).await {
         Ok(Some(attendee)) => {
             tracing::debug!(attendee_id = %api_id, "D1 hit: attendee by id");
             Some(attendee)

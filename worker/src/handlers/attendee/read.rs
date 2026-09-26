@@ -41,7 +41,7 @@ pub async fn get_attendee(
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     let kv = resolve_kv(&state);
-    let attendee = sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv)
+    let attendee = sheets::get_attendee_by_id(&id, &state, &event, kv)
         .await
         .map_err(|e| {
             tracing::error!("failed to fetch attendee {id}: {e}");
