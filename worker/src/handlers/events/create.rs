@@ -43,22 +43,20 @@ pub async fn create_event(
     }
 
     // Build the event config, optionally writing to KV index
-    let config = crate::event_store::create_event(kv, d1, &body, &claims.email)
-        .await
-        .map_err(|e| {
-            let err_msg = e.to_string();
-            // Duplicate slug is a validation error (409), not internal (500)
-            if err_msg.contains("already exists") {
-                tracing::warn!(error = %err_msg, "create event rejected: duplicate slug");
-                AppError::Validation(err_msg)
-            } else {
-                tracing::error!(error = %err_msg, "failed to create event");
-                AppError::Internal(err_msg)
-            }
-        })?;
-
-    // D1 is primary — always write (sync_event_to_d1 is non-fatal)
-    let d1_sync = crate::event_store::sync_event_to_d1(d1, &config).await;
+    let crate::event_store::SavedEvent { config, d1_sync } =
+        crate::event_store::create_event(kv, d1, &body, &claims.email)
+            .await
+            .map_err(|e| {
+                let err_msg = e.to_string();
+                // Duplicate slug is a validation error (409), not internal (500)
+                if err_msg.contains("already exists") {
+                    tracing::warn!(error = %err_msg, "create event rejected: duplicate slug");
+                    AppError::Validation(err_msg)
+                } else {
+                    tracing::error!(error = %err_msg, "failed to create event");
+                    AppError::Internal(err_msg)
+                }
+            })?;
 
     tracing::info!(
         event_id = %config.id,

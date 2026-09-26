@@ -87,5 +87,8 @@ holders. Nothing removes them automatically when the date is fixed later
   `D1Sync`, and the create, update, archive, restore and seed handlers put
   `"warnings"` in their response when the D1 write fails. The event form and
   events page show them as a warning toast. Guard: `worker/tests/d1_sync_warning.rs`.
-  On develop 2026-09-26, not deployed. The store-level path used by the poster
-  and escrow-status handlers still only logs.
+  On develop 2026-09-26, not deployed. Follow-up, same day: the store-level
+  `create_event`/`update_event` return a `SavedEvent` (config + `D1Sync`)
+  instead of discarding it, so the poster upload/remove, escrow confirm-init
+  and duplicate responses carry the warning too, and the create handler no
+  longer writes D1 twice. Not deployed.

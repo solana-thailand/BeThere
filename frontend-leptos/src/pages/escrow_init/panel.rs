@@ -464,10 +464,10 @@ pub fn EscrowInitPanel(
                                                 on_chain_event_id: resp.on_chain_event_id,
                                                 signature: String::new(),
                                             });
-                                            components::show_toast(
+                                            components::show_mutation_toast(
                                                 &set_t,
                                                 "Escrow state synced from on-chain!",
-                                                components::ToastType::Success,
+                                                &resp.warnings,
                                             );
                                         }
                                         Err(e) => {

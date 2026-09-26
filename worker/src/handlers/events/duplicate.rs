@@ -221,7 +221,10 @@ pub async fn duplicate_event(
     };
 
     // ── 4. Delegate to create_event (slug dedup, KV+D1 write, validation) ───
-    let new_config = crate::event_store::create_event(kv, state.d1.as_deref(), &req, &claims.email)
+    let crate::event_store::SavedEvent {
+        config: new_config,
+        d1_sync,
+    } = crate::event_store::create_event(kv, state.d1.as_deref(), &req, &claims.email)
         .await
         .map_err(|e| {
             let err_msg = e.to_string();
@@ -236,6 +239,8 @@ pub async fn duplicate_event(
                 AppError::Internal(err_msg)
             }
         })?;
+
+    warnings.extend(d1_sync.warning().map(String::from));
 
     // ── 5. Audit log — reuse EventCreated with metadata noting source ───────
     let audit_desc = format!(

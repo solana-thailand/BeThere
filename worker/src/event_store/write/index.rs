@@ -66,6 +66,15 @@ impl D1Sync {
     }
 }
 
+/// An event the store saved, with the outcome of its D1 dual-write, so the
+/// handler that owns the admin response can report it (`D1Sync::warnings`).
+#[must_use]
+#[derive(Debug, Clone)]
+pub struct SavedEvent {
+    pub config: EventConfig,
+    pub d1_sync: D1Sync,
+}
+
 /// Dual-write: persist event config to D1 alongside KV.
 /// Non-blocking — errors are logged and returned as [`D1Sync::Failed`], not
 /// propagated, so the KV write still happens.

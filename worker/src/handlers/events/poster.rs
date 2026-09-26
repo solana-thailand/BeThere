@@ -116,7 +116,10 @@ pub async fn upload_poster(
         poster_url: Some(served_url.clone()),
         ..Default::default()
     };
-    let updated = crate::event_store::update_event(
+    let crate::event_store::SavedEvent {
+        config: updated,
+        d1_sync,
+    } = crate::event_store::update_event(
         kv,
         state.d1.as_deref(),
         &event_id,
@@ -138,6 +141,7 @@ pub async fn upload_poster(
         "id": updated.id,
         "poster_url": served_url,
         "updated_at": updated.updated_at,
+        "warnings": d1_sync.warnings(),
     })))
 }
 
@@ -183,7 +187,10 @@ pub async fn delete_poster(
         poster_url: Some(String::new()),
         ..Default::default()
     };
-    let updated = crate::event_store::update_event(
+    let crate::event_store::SavedEvent {
+        config: updated,
+        d1_sync,
+    } = crate::event_store::update_event(
         kv,
         state.d1.as_deref(),
         &event_id,
@@ -203,6 +210,7 @@ pub async fn delete_poster(
         "id": updated.id,
         "poster_url": updated.poster_url,
         "updated_at": updated.updated_at,
+        "warnings": d1_sync.warnings(),
     })))
 }
 

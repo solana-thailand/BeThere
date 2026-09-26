@@ -74,7 +74,8 @@ can't come are moved to online and refunded later.
   them to online and lists them for a refund).
 - [x] A failed D1 dual-write on event save (`sync_event_to_d1`) should reach
   the admin who saved, not only a log line (`.issues/152`, "Not done").
-  Done on develop 2026-09-26 as a response `warnings` entry and warning toast;
+  Done on develop 2026-09-26 as a response `warnings` entry and warning toast,
+  then extended to the poster, escrow confirm-init and duplicate paths;
   not deployed.
 - [x] "Batch THB refund" (cancel page) refunded every verified deposit with no
   proof and skipped D1 `attendees.mark_refund`. Guarded on develop 2026-09-26:

@@ -1442,7 +1442,7 @@ pub fn EventFormComponent(
                                                     Ok(res) => {
                                                         let url = res.poster_url.clone();
                                                         set_form.update(|f| f.poster_url = url.clone());
-                                                        components::show_toast(&set_toast, "Poster uploaded", components::ToastType::Success);
+                                                        components::show_mutation_toast(&set_toast, "Poster uploaded", &res.warnings);
                                                     }
                                                     Err(e) => {
                                                         log::error!("[event-form] poster upload failed: {e}");
@@ -1490,9 +1490,9 @@ pub fn EventFormComponent(
                                             set_poster_busy.set(true);
                                             leptos::task::spawn_local(async move {
                                                 match api::delete_poster(&eid).await {
-                                                    Ok(_) => {
+                                                    Ok(res) => {
                                                         set_form.update(|f| f.poster_url = String::new());
-                                                        components::show_toast(&set_toast, "Poster removed", components::ToastType::Success);
+                                                        components::show_mutation_toast(&set_toast, "Poster removed", &res.warnings);
                                                     }
                                                     Err(e) => {
                                                         log::error!("[event-form] poster delete failed: {e}");

@@ -12,19 +12,20 @@ use crate::event_store::read::get_event_index;
 use crate::event_store::schema::{deduplicate_slug, slugify};
 
 use super::escrow::save_escrow_index;
-use super::index::{save_event_config, save_event_index, sync_event_to_d1};
+use super::index::{SavedEvent, save_event_config, save_event_index, sync_event_to_d1};
 
 /// Create a new event.
 ///
 /// Generates a unique ID from the slug, validates required fields,
 /// saves the full config to D1 (primary) and KV (write-through cache if available),
-/// and updates the KV event index.
+/// and updates the KV event index. Returns the config and the outcome of its
+/// D1 write.
 pub async fn create_event(
     kv: Option<&KvStore>,
     d1: Option<&worker::D1Database>,
     req: &CreateEventRequest,
     updated_by: &str,
-) -> Result<EventConfig, String> {
+) -> Result<SavedEvent, String> {
     // Validate required fields
     if req.name.trim().is_empty() {
         return Err("event name is required".to_string());
@@ -181,10 +182,9 @@ pub async fn create_event(
         calendar_subscribe_url: req.calendar_subscribe_url.clone(),
     };
 
-    // D1 write (primary — always if available)
-    // Logged inside; the handler that owns the admin response re-syncs and
-    // reports the outcome (`D1Sync::warnings`).
-    let _ = sync_event_to_d1(d1, &config).await;
+    // D1 write (primary — always if available). Logged inside; the caller
+    // reports the outcome to the admin (`D1Sync::warnings`).
+    let d1_sync = sync_event_to_d1(d1, &config).await;
 
     // KV write-through cache (if available, non-fatal)
     if let Some(kv_ref) = kv {
@@ -212,5 +212,5 @@ pub async fn create_event(
         "event created"
     );
 
-    Ok(config)
+    Ok(SavedEvent { config, d1_sync })
 }

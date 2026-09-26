@@ -124,6 +124,9 @@ pub struct PosterMutationData {
     pub poster_url: String,
     #[serde(default)]
     pub updated_at: String,
+    /// Non-fatal warnings, e.g. a failed D1 dual-write (`.issues/152`).
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 /// POST /api/events/{id}/poster — upload marketing poster (raw image bytes).
@@ -217,6 +220,9 @@ pub struct ConfirmEscrowInitResponse {
     pub escrow_address: String,
     pub on_chain_event_id: u64,
     pub escrow_status: EscrowStatus,
+    /// Non-fatal warnings, e.g. a failed D1 dual-write (`.issues/152`).
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 /// POST /api/escrow/confirm-init — verify escrow exists on-chain & persist state.

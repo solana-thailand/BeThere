@@ -507,10 +507,10 @@ pub fn AdminEscrow(
                     set_esl.set(true);
                     set_s1.set(false);
                     set_ca.update(|v| v.retain(|a| *a == EscrowAction::InitEscrow));
-                    components::show_toast(
+                    components::show_mutation_toast(
                         &set_t,
                         "Existing escrow synchronized.",
-                        ToastType::Success,
+                        &confirmed.warnings,
                     );
                     set_init.set(false);
                     return;
@@ -606,10 +606,10 @@ pub fn AdminEscrow(
                             // Reset lifecycle steps — fresh start at Step 1 (Deactivate).
                             set_s1.set(false);
                             set_ca.update(|v| v.retain(|a| *a == EscrowAction::InitEscrow));
-                            components::show_toast(
+                            components::show_mutation_toast(
                                 &set_t,
                                 "Escrow initialized!",
-                                ToastType::Success,
+                                &confirmed.warnings,
                             );
                         }
                         Err(e) => {
