@@ -299,3 +299,15 @@ and red), no page errors. Probe rows removed afterwards.
 - **Still owed for W3 submission:** a screen *video* of an interactive run for
   the submission package (W5). That is the owner's recording; the headless
   transcript proves the flow works.
+
+### W1 log, 27 Sep (later): privacy line + admin proposals on staging
+
+Staging version `b18fbb4a` = git `367cfe4c`; no migrations. Smoke: reads and writes ok.
+- Deposit status on staging returns `slip_vision_enabled: false`, because vision
+  is not switched on there.
+- The THB form was opened in headless Chrome at 390 px with the status response
+  intercepted. With `false` there is no privacy line; with `true` the line renders
+  under the upload hint. No page errors in either case.
+- The admin "Record Slip for Attendee" modal opens with no page errors.
+  **Not exercised:** an admin submit end to end (browser QR decode, then
+  proposal row). Staging has no THB fixture event.

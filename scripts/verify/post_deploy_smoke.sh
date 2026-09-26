@@ -100,14 +100,25 @@ cleanup() {
   step "Cleanup"
   # Hard delete refuses unless the event is archived first.
   api PUT "/api/events/$FIXTURE_ID" '{"status":"archived"}' >/dev/null 2>&1 || true
-  api DELETE "/api/events/$FIXTURE_ID/delete" >/dev/null 2>&1 || true
+  # The delete reads the event from KV first, and the run's earlier reads can
+  # leave the pre-archive status cached at this edge for up to ~60 s. That
+  # stale read is a 400 "must be archived", so retry only that answer.
+  local body="" tries=0
+  while :; do
+    body=$(api DELETE "/api/events/$FIXTURE_ID/delete" 2>/dev/null || true)
+    tries=$((tries + 1))
+    case "$(last_status):$body" in
+      400:*"must be archived"*) [ "$tries" -lt 9 ] && { sleep 8; continue; } ;;
+    esac
+    break
+  done
   if [ "$(last_status)" = "200" ]; then
-    pass "fixture event $FIXTURE_ID deleted"
+    pass "fixture event $FIXTURE_ID deleted (attempt $tries)"
   else
     # Loud, not silent: a fixture left behind shows up on the organizer's
     # screen, and the next run's "already exists" failure would be confusing.
-    printf '  \033[1;33m⚠️  WARN\033[0m fixture %s may remain (HTTP %s) — delete it by hand\n' \
-      "$FIXTURE_ID" "$(last_status)"
+    printf '  \033[1;33m⚠️  WARN\033[0m fixture %s may remain (HTTP %s: %s) — delete it by hand\n' \
+      "$FIXTURE_ID" "$(last_status)" "$body"
   fi
 }
 trap cleanup EXIT
