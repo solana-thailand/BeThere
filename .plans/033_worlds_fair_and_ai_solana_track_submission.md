@@ -40,6 +40,33 @@ integration". Today we can show neither as built in the window. Everything else
 | Track: Distribution thinking | Measured acquisition per channel (GTM doc), credit roll-over as a retention lever | Exists (W5 packages it) |
 | Track: Founder potential (speed) | 15 days → shipped slip agent + MCP + live event; commit history is the proof | All |
 
+### 1a. Amendment 27 Sep: the slip agent is AI, not Solana
+
+Asked by the owner: "how does the slip agent relate to Solana?" It doesn't.
+It reads a THB PromptPay slip; nothing touches a chain. On its own it scores
+on "Meaningful AI" and zero on "Meaningful Solana". W1 + W2 as planned are
+two separate stories stapled together, and a judge will see the seam.
+
+The one place where AI and Solana are the **same** act is W3: an AI agent
+finds an event, registers, and pays the deposit into the escrow **from its
+own wallet**. The worker already serves that transaction:
+`GET /api/deposit/usdc/tx` (`worker/src/handlers/deposit/usdc/handlers/tx.rs`)
+is a public Solana Pay Transaction Request that builds the unsigned `deposit`
+instruction. So W3 is a thin MCP wrapper over existing code, not new chain work.
+
+**Changes:**
+- W3 goes from "should ship, cut first" to **must ship**, scheduled
+  Mon 29 Sep – Tue 30 Sep (before RTM #6, devnet only, no prod deploy needed).
+- New cut order: W1 vision fallback + backtest first (vision is gated on §4 Q3
+  anyway), then deck polish. W1 QR path live, W2, W3 and W5 are not cuttable.
+- One story instead of two: **BeThere is an attendance-commitment layer.
+  Humans commit in THB (the AI checks their slip), agents commit in USDC on
+  Solana (the escrow decides), and everyone who shows up gets a mainnet badge.**
+  The slip agent is the on-ramp for the 100% of today's users who don't hold
+  crypto; the chain is where the commitment and the proof live.
+- Rejected: writing slip verdicts or hashes on chain. That is Solana as
+  decoration, which §1 says loses.
+
 **What would lose** (from plan 026 §5, still true): AI as decoration;
 a demo that needs narration to excuse a manual step; claiming the escrow holds
 real money when it does not; spending the window on UI polish.
@@ -100,7 +127,8 @@ new slip gets a proposal, and nothing changes money.
 - Acceptance: a recorded session where Claude finds a staging event, registers a
   test person, pays the devnet deposit from an agent wallet, and the ticket shows
   it. The human never opens the web UI.
-- Cut first if W1/W2 slip.
+- ~~Cut first if W1/W2 slip.~~ Must ship since §1a (27 Sep): it is the only
+  place where AI and Solana are one act.
 
 ### W4. RTM #6 on 4 Oct: the live proof (must ship)
 
@@ -142,8 +170,9 @@ new slip gets a proposal, and nothing changes money.
 | Sat 11 Oct | Full dry-run of both forms; fix gaps | Read everything once |
 | **Sun 12 Oct** | **Submit Colosseum, then Earn, by 18:00** | Press submit (it's your account) |
 
-Cut order if behind: W3 first, then the W1 backtest (keep live shadow numbers),
-then the deck polish. W1 live, W2 and W5 are not cuttable.
+Cut order if behind (changed 27 Sep, §1a): the W1 vision fallback and backtest
+first (keep live QR-path shadow numbers), then the deck polish. W1 QR path,
+W2, W3 and W5 are not cuttable. W3 moves up to Mon 29 – Tue 30 Sep.
 
 ## 4. Decisions only the owner can make
 
