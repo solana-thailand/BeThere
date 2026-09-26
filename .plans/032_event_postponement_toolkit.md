@@ -76,8 +76,11 @@ can't come are moved to online and refunded later.
   the admin who saved, not only a log line (`.issues/152`, "Not done").
   Done on develop 2026-09-26 as a response `warnings` entry and warning toast;
   not deployed.
-- [ ] "Batch THB refund" (cancel page) refunds every verified deposit with no
-  proof and skips D1 `attendees.mark_refund`. Guard it or retire it.
+- [x] "Batch THB refund" (cancel page) refunded every verified deposit with no
+  proof and skipped D1 `attendees.mark_refund`. Guarded on develop 2026-09-26:
+  the worker requires a receipt (same validator as the single refund) and
+  writes D1 attendees per refund; the page needs the receipt link and a
+  confirm. Guard: `worker/tests/refund_proof_link_guard.rs`. Not deployed.
 
 - [x] Participation switch (`PATCH /attendee/{id}/participation-type`) returned
   500 when the event's Sheet could not be read. Fixed in `.issues/153`

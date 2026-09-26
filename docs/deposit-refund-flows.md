@@ -284,8 +284,11 @@ deposit.
   `refunded 0→1` only when `verified=1 AND refunded=0 AND held_as_credit=0`.
 - Writes refund status + link to the sheet (detached), dual-writes D1, audits
   `RefundMarked`.
-- Batch: `POST /api/refund/batch-thb` (`refund.rs:249`) — per-deposit CAS, skips
-  already-refunded / held / unverified.
+- Batch: `POST /api/refund/batch-thb` (`refund.rs:280`) — requires one
+  `refund_proof_url` (the bulk-transfer receipt, validated like the single
+  refund) and stores it on every deposit it settles. Per-deposit CAS, skips
+  already-refunded / held / non-cash / unverified, and dual-writes D1
+  `attendees.mark_refund` per refund. Sheets gets the status only, not the link.
 - Manual: `POST /api/refund/manual/{attendee_id}` (`refund.rs:412`) — sets a
   refund status on the sheet for someone with no deposit record (e.g. a VIP).
 

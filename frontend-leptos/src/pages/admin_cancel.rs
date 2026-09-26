@@ -29,6 +29,11 @@ pub fn AdminCancel(
     let (loading, set_loading) = signal(false);
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (batching_thb, set_batching_thb) = signal(false);
+    // Bulk-transfer receipt link; the batch refund is refused without one.
+    let (batch_proof, set_batch_proof) = signal(String::new());
+    let batch_proof_ok = move || {
+        event_checkin_domain::validation::safe_document_link(batch_proof.get().trim()).is_some()
+    };
     let (confirm_cancel, set_confirm_cancel) = signal(false);
 
     // Load cancel status when event changes or on refresh
@@ -78,7 +83,21 @@ pub fn AdminCancel(
             return;
         }
         let eid = active_event_id.get().unwrap_or_default();
-        if eid.is_empty() {
+        if eid.is_empty() || !batch_proof_ok() {
+            return;
+        }
+        let proof = batch_proof.get().trim().to_string();
+        let pending = cancel_status
+            .get()
+            .map(|s| s.thb_pending_refund)
+            .unwrap_or_default();
+        let confirm_msg = format!(
+            "Mark {pending} verified THB deposit(s) as refunded, all with this receipt?\n{proof}"
+        );
+        if !web_sys::window()
+            .and_then(|w| w.confirm_with_message(&confirm_msg).ok())
+            .unwrap_or(false)
+        {
             return;
         }
 
@@ -88,8 +107,9 @@ pub fn AdminCancel(
         let set_busy = set_batching_thb;
 
         leptos::task::spawn_local(async move {
-            match api::batch_thb_refund(&eid).await {
+            match api::batch_thb_refund(&eid, &proof).await {
                 Ok(result) => {
+                    set_batch_proof.set(String::new());
                     components::show_toast(
                         &set_t,
                         &format!(
@@ -304,7 +324,7 @@ pub fn AdminCancel(
                                 </div>
                                 <button
                                     class="btn btn-outline btn-sm"
-                                    disabled=move || batching_thb.get()
+                                    disabled=move || batching_thb.get() || !batch_proof_ok()
                                     on:click=handle_batch_thb
                                 >
                                     {move || {
@@ -316,8 +336,16 @@ pub fn AdminCancel(
                                     }}
                                 </button>
                             </div>
+                            <div class="form-group">
+                                <label class="form-label">"Transfer receipt link (required)"</label>
+                                <input class="form-input" type="url"
+                                    placeholder="https link to the bulk transfer receipt"
+                                    prop:value=move || batch_proof.get()
+                                    on:input=move |ev| set_batch_proof.set(event_target_value(&ev))
+                                />
+                            </div>
                             <p class="admin-cancel-hint">
-                                "Marks all verified THB deposits as refunded. No on-chain transaction required — this is a pure database operation."
+                                "Marks all verified THB deposits as refunded and stores this receipt as each one's refund proof. Transfer the money first. No on-chain transaction required."
                             </p>
                         </div>
                     </Show>

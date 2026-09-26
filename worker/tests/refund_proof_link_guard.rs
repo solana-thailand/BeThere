@@ -3,21 +3,56 @@
 //! from here, so pin the calls.
 
 #[test]
-fn mark_refund_validates_the_proof_before_storing_it() {
+fn refund_proof_validator_checks_links_and_images() {
     let src = include_str!("../src/handlers/deposit/thb/handlers/refund.rs");
-    let check = src
-        .find("safe_document_link(&body.refund_proof_url)")
-        .expect("mark_refund_handler must check the proof link");
-    let data_check = src
-        .find("validate_slip_url(&body.refund_proof_url)")
-        .expect("an uploaded proof image must be checked like a slip");
-    let store = src
-        .find("maybe_upload_to_r2(")
-        .expect("the proof is stored via maybe_upload_to_r2");
+    let body = &src[src
+        .find("fn validate_refund_proof(")
+        .expect("refund.rs must define validate_refund_proof")..];
+    let body = &body[..body.find("\n}\n").expect("end of validate_refund_proof")];
     assert!(
-        check < store && data_check < store,
-        "validate before storing"
+        body.contains("safe_document_link(proof)"),
+        "a proof link must be checked with safe_document_link"
     );
+    assert!(
+        body.contains("validate_slip_url(proof)"),
+        "an uploaded proof image must be checked like a slip"
+    );
+}
+
+/// Both cash-refund handlers validate the proof before storing it. The batch
+/// used to refund every verified deposit with no proof at all.
+#[test]
+fn every_cash_refund_validates_the_proof_before_storing_it() {
+    let src = include_str!("../src/handlers/deposit/thb/handlers/refund.rs");
+    for handler in ["mark_refund_handler", "batch_thb_refund_handler"] {
+        let start = src
+            .find(&format!("pub async fn {handler}("))
+            .unwrap_or_else(|| panic!("{handler} missing"));
+        let rest = &src[start..];
+        let body = &rest[..rest.find("\n}\n").expect("end of handler")];
+        let check = body
+            .find("validate_refund_proof(&body.refund_proof_url)?")
+            .unwrap_or_else(|| panic!("{handler} must validate the refund proof"));
+        let store = body
+            .find("maybe_upload_to_r2(")
+            .unwrap_or_else(|| panic!("{handler} stores the proof via maybe_upload_to_r2"));
+        let settle = body
+            .find("try_settle_refund(")
+            .unwrap_or_else(|| panic!("{handler} settles via the CAS"));
+        assert!(
+            check < store && store < settle,
+            "{handler}: validate, store, then settle"
+        );
+    }
+}
+
+/// The batch refund writes D1 `attendees` like the single refund does.
+#[test]
+fn batch_refund_marks_the_attendee_in_d1() {
+    let src = include_str!("../src/handlers/deposit/thb/handlers/refund.rs");
+    let rest = &src[src.find("pub async fn batch_thb_refund_handler(").unwrap()..];
+    let body = &rest[..rest.find("\n}\n").unwrap()];
+    assert!(body.contains("crate::db::attendees::mark_refund("));
 }
 
 #[test]
