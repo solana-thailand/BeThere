@@ -329,21 +329,34 @@ pub(crate) async fn set_qr_url(db: &D1Database, id: &str, qr_url: &str) -> Resul
 /// NOTE: the deposit-deadline auto-switch (`check_and_switch_deadline`)
 /// only writes the Sheet, not D1. This helper keeps D1 in sync for the
 /// manual path so the public ticket page and admin list agree.
+///
+/// Scoped to `event_id`: `attendees.id` is global, so an id-only `WHERE`
+/// let staff of one event rewrite another event's attendee (Issue 153).
+/// Returns whether a row changed; `false` means no such attendee on the event.
 pub(crate) async fn set_participation_type(
     db: &D1Database,
+    event_id: &str,
     id: &str,
     participation_type: &str,
-) -> Result<(), String> {
-    let stmt = db.prepare(
-        "UPDATE attendees \n         SET participation_type = ?1, updated_at = datetime('now') \n         WHERE id = ?2",
-    );
-    stmt.bind_refs(&[D1Type::Text(participation_type), D1Type::Text(id)])
+) -> Result<bool, String> {
+    let result = db
+        .prepare(include_str!("../sql/attendee_participation_set.sql"))
+        .bind_refs(&[
+            D1Type::Text(event_id),
+            D1Type::Text(id),
+            D1Type::Text(participation_type),
+        ])
         .map_err(|e| format!("D1 set_participation_type bind: {e:?}"))?
         .run()
         .await
         .map_err(|e| format!("D1 set_participation_type run: {e:?}"))?;
-
-    Ok(())
+    let changes = result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0);
+    Ok(changes > 0)
 }
 
 /// Write QR URLs to D1 for multiple attendees in one statement.
