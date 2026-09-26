@@ -50,6 +50,7 @@ CARGO_TREE = [
 FORBIDDEN = frozenset({
     # Our own app crates: domain sits below all of them.
     "event-checkin-worker", "event-checkin-frontend", "flow-harness", "bethere-escrow",
+    "bethere-mcp",
     # Platform crates the app layers own.
     "worker", "worker-macros", "worker-sys", "web-sys", "reqwest", "tokio", "axum",
 })

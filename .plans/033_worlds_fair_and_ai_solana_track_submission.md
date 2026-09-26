@@ -250,3 +250,27 @@ and red), no page errors. Probe rows removed afterwards.
   separately in headless Chrome on a synthetic slip image);
 - measure worker CPU with vision on (`.issues/134` method);
 - the agreement numbers (proposal vs organizer decision).
+
+### W3 log, 27 Sep: MCP server built, agent paid a devnet deposit on staging
+
+- New standalone crate `bethere-mcp/` (stdio MCP, hand-rolled JSON-RPC, no
+  SDK dependency). It has seven tools: `find_events`, `event_details`,
+  `agent_wallet`, `register`, `ticket_status`, `deposit_tx` (unsigned preview)
+  and `pay_deposit`. It wraps existing worker routes only; there is no new
+  endpoint and no worker deploy.
+- Signing and submission reuse `flow-harness` (`chain::submit_signed_by`,
+  `context::load_keypair_file`, `validate_live_target`). Nothing is copied.
+- Rails: staging + devnet only; an operator spend cap
+  (`BETHERE_MAX_DEPOSIT_USDC`, default 10 USDC); `pay_deposit` is idempotent;
+  `register` requires `consent_given`.
+- Live run: see `bethere-mcp/README.md` §"Verified run". Tx `5uBPpdQc…`
+  finalized; the worker verified it (`verified: true`, bound to the PDA by the
+  F1 guard); the ticket page renders "Deposit verified".
+- **Acceptance still owed:** the *recorded* session with Claude as the MCP
+  client (`claude mcp add bethere …`, README). The run above drove the same
+  binary over stdio from a script.
+- Fixture caveat: until an event has at least one D1 attendee, registration
+  reads Sheets for its duplicate check and 500s when `sheet_id` is
+  unreachable. Real events have a real sheet; the fixture needed a seeded
+  attendee row.
+

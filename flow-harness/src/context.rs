@@ -376,7 +376,8 @@ impl StagingContext {
 
 /// Fail closed before loading or submitting any live transaction against a
 /// production-looking Worker or a non-devnet RPC endpoint.
-fn validate_live_target(worker_url: &Url, rpc_url: &Url) -> HarnessResult<()> {
+/// Refuse anything but a staging/loopback worker and a devnet/loopback RPC.
+pub fn validate_live_target(worker_url: &Url, rpc_url: &Url) -> HarnessResult<()> {
     let worker_host = worker_url.host_str().unwrap_or_default();
     if !worker_host.contains("staging") && !is_loopback_host(worker_host) {
         return Err(HarnessError::Config(format!(
@@ -483,26 +484,27 @@ fn load_payer_keypair() -> HarnessResult<Keypair> {
             )
         })?
         .into();
+    load_keypair_file("FLOW_HARNESS_PAYER_KEYPAIR", &path)
+}
 
-    let bytes = std::fs::read_to_string(&path).map_err(|e| {
-        HarnessError::Config(format!(
-            "FLOW_HARNESS_PAYER_KEYPAIR {}: {e}",
-            path.display()
-        ))
-    })?;
+/// Load a Solana keypair JSON file. `label` names the source (an env var) in
+/// error messages; the secret bytes are never included.
+pub fn load_keypair_file(label: &str, path: &std::path::Path) -> HarnessResult<Keypair> {
+    let bytes = std::fs::read_to_string(path)
+        .map_err(|e| HarnessError::Config(format!("{label} {}: {e}", path.display())))?;
 
     // Solana keypair files are a JSON array of 64 numbers (32-byte seed +
     // 32-byte pubkey). Deserialise into Vec<u8> then copy into a fixed array;
     // avoids pulling a `serde_bytes` feature the worker build doesn't enable.
     let arr: Vec<u8> = serde_json::from_str(&bytes).map_err(|e| {
         HarnessError::Config(format!(
-            "FLOW_HARNESS_PAYER_KEYPAIR {}: not a JSON byte array ({e})",
+            "{label} {}: not a JSON byte array ({e})",
             path.display()
         ))
     })?;
     if arr.len() != 64 {
         return Err(HarnessError::Config(format!(
-            "FLOW_HARNESS_PAYER_KEYPAIR {}: expected 64 bytes, got {}",
+            "{label} {}: expected 64 bytes, got {}",
             path.display(),
             arr.len()
         )));
@@ -511,10 +513,7 @@ fn load_payer_keypair() -> HarnessResult<Keypair> {
     seed.copy_from_slice(&arr);
 
     Keypair::try_from(seed.as_slice()).map_err(|e| {
-        HarnessError::Config(format!(
-            "FLOW_HARNESS_PAYER_KEYPAIR {}: invalid keypair ({e})",
-            path.display()
-        ))
+        HarnessError::Config(format!("{label} {}: invalid keypair ({e})", path.display()))
     })
 }
 

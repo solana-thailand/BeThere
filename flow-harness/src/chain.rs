@@ -209,11 +209,22 @@ pub fn decode_attendee_deposit(data: &[u8]) -> HarnessResult<AttendeeDepositView
 /// program revert surfaces as `HarnessError::Worker` with the parsed
 /// [`EscrowCode`]; RPC/transport problems surface as [`HarnessError::Solana`].
 pub async fn submit_tx(ctx: &StagingContext, tx_b64: &str) -> HarnessResult<Signature> {
-    let (signed_b64, sig) = sign_worker_tx(tx_b64, &ctx.payer)?;
+    submit_signed_by(ctx.rpc_url.as_str(), &ctx.payer, tx_b64).await
+}
+
+/// [`submit_tx`] without a fixture context: sign with `payer`, send to
+/// `rpc_url`, and wait for confirmation. Used by callers that are not the
+/// harness (the `bethere-mcp` agent wallet) so the signing path stays single.
+pub async fn submit_signed_by(
+    rpc_url: &str,
+    payer: &Keypair,
+    tx_b64: &str,
+) -> HarnessResult<Signature> {
+    let (signed_b64, sig) = sign_worker_tx(tx_b64, payer)?;
     let http = rpc_client()?;
     let resp = rpc_call(
         &http,
-        ctx.rpc_url.as_str(),
+        rpc_url,
         "sendTransaction",
         json!([
             signed_b64,
@@ -224,8 +235,26 @@ pub async fn submit_tx(ctx: &StagingContext, tx_b64: &str) -> HarnessResult<Sign
     if let Some(err) = resp.get("error") {
         return Err(parse_rpc_error(err));
     }
-    confirm_signature(&http, ctx.rpc_url.as_str(), &sig).await?;
+    confirm_signature(&http, rpc_url, &sig).await?;
     Ok(sig)
+}
+
+/// `getBalance` in lamports for `pubkey` at `confirmed` commitment.
+pub async fn sol_balance_lamports(rpc_url: &str, pubkey: &Pubkey) -> HarnessResult<u64> {
+    let http = rpc_client()?;
+    let resp = rpc_call(
+        &http,
+        rpc_url,
+        "getBalance",
+        json!([pubkey.to_string(), { "commitment": "confirmed" }]),
+    )
+    .await?;
+    if let Some(err) = resp.get("error") {
+        return Err(parse_rpc_error(err));
+    }
+    resp["result"]["value"]
+        .as_u64()
+        .ok_or_else(|| HarnessError::Solana("getBalance: missing result.value".to_string()))
 }
 
 /// Read an on-chain account. `Ok(None)` if it does not exist (or was closed).
