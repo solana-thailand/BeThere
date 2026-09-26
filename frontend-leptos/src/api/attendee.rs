@@ -369,6 +369,28 @@ pub async fn update_participation_type(
     super::api_patch_json(&path, &body).await
 }
 
+/// Body for `PUT /api/attendee/{id}/attendance-answer`; `None` clears.
+#[derive(serde::Serialize)]
+struct AttendanceAnswerBody {
+    answer: Option<event_checkin_domain::models::attendee::AttendanceAnswer>,
+}
+
+/// PUT /api/attendee/{id}/attendance-answer — record (or clear) what a
+/// registrant said when asked whether they can still come.
+pub async fn set_attendance_answer(
+    attendee_id: &str,
+    event_id: Option<&str>,
+    answer: Option<event_checkin_domain::models::attendee::AttendanceAnswer>,
+) -> Result<serde_json::Value, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => {
+            format!("/attendee/{attendee_id}/attendance-answer?event_id={eid}")
+        }
+        _ => format!("/attendee/{attendee_id}/attendance-answer"),
+    };
+    super::api_put_json(&path, &AttendanceAnswerBody { answer }).await
+}
+
 // ===== Walk-in API functions =====
 
 /// POST /api/walkin/register

@@ -20,6 +20,7 @@ use crate::api::{self, AttendeeListItem, EventFormat, GenerateQrData, StatsRespo
 use crate::auth;
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
+use crate::pages::admin_attendance_answer::{AnswerFilter, AnswerFilterBar, AnswerPicker};
 use crate::utils;
 
 // ===== Tab Type =====
@@ -167,7 +168,7 @@ fn deposit_badge_for(
 /// Generate CSV content from a filtered attendee list.
 fn generate_csv(attendees: &[AttendeeListItem]) -> String {
     let mut csv = String::from(
-        "Name,Email,Ticket,Participation,Status,Checked In At,Checked In By,API ID,Deposit Status,Deposit Amount,Deposit TX,NFT,Refund Status\n",
+        "Name,Email,Ticket,Participation,Status,Checked In At,Checked In By,API ID,Deposit Status,Deposit Amount,Deposit TX,NFT,Refund Status,Attendance Answer\n",
     );
     for a in attendees {
         let status = if a.checked_in_at.is_some() {
@@ -182,6 +183,7 @@ fn generate_csv(attendees: &[AttendeeListItem]) -> String {
         let deposit_tx = a.deposit_tx_signature.as_deref().unwrap_or("");
         let nft = if a.nft_proof_url.is_some() { "Yes" } else { "" };
         let refund_status = a.refund_status.as_deref().unwrap_or("");
+        let answer = a.attendance_answer.map_or("", |x| x.label());
         // Escape CSV fields containing commas or quotes
         let escape = |s: &str| -> String {
             if s.contains(',') || s.contains('"') || s.contains('\n') {
@@ -191,7 +193,7 @@ fn generate_csv(attendees: &[AttendeeListItem]) -> String {
             }
         };
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
             escape(&a.name),
             escape(&a.email),
             escape(&a.ticket_name),
@@ -205,6 +207,7 @@ fn generate_csv(attendees: &[AttendeeListItem]) -> String {
             escape(deposit_tx),
             nft,
             refund_status,
+            escape(answer),
         ));
     }
     csv
@@ -333,6 +336,7 @@ pub fn Admin() -> impl IntoView {
 
     // Active filter pill — All by default
     let (filter_pill, set_filter_pill) = signal(FilterPill::All);
+    let (answer_filter, set_answer_filter) = signal(AnswerFilter::All);
 
     // B6: Pagination state — show PAGE_SIZE attendees at a time
     const PAGE_SIZE: usize = 50;
@@ -461,6 +465,7 @@ pub fn Admin() -> impl IntoView {
         let query = search_query.get().to_lowercase();
         let tab = active_tab.get();
         let pill = filter_pill.get();
+        let answer = answer_filter.get();
         let list = attendees.get();
 
         let mut filtered: Vec<AttendeeListItem> = list
@@ -480,6 +485,7 @@ pub fn Admin() -> impl IntoView {
                     || ticket.contains(&query)
             })
             .filter(|a| pill.matches(a))
+            .filter(|a| answer.matches(a))
             .cloned()
             .collect();
 
@@ -502,6 +508,7 @@ pub fn Admin() -> impl IntoView {
         let _ = active_tab.get();
         let _ = search_query.get();
         let _ = filter_pill.get();
+        let _ = answer_filter.get();
         set_visible_count.set(PAGE_SIZE);
     });
 
@@ -1512,6 +1519,22 @@ pub fn Admin() -> impl IntoView {
                         </button>
                     </div>
 
+                    // "Can you still come?" answers (migration 0052), counted
+                    // over the current tab before the answer filter applies.
+                    <AnswerFilterBar
+                        rows=Signal::derive(move || {
+                            let tab = active_tab.get();
+                            attendees.with(|list| {
+                                list.iter()
+                                    .filter(|a| tab.matches(&a.participation_type))
+                                    .cloned()
+                                    .collect::<Vec<_>>()
+                            })
+                        })
+                        filter=answer_filter
+                        set_filter=set_answer_filter
+                    />
+
                     // Attendee count
                     <div class="admin-count-row">
                         <span class="admin-count-text">
@@ -1612,6 +1635,8 @@ pub fn Admin() -> impl IntoView {
                                     // closure (Fn) — avoids moving api_id out of the
                                     // environment, which would break other closures.
                                     let switch_display_id = api_id.clone();
+                                    // Owned id for the attendance-answer picker (migration 0052).
+                                    let answer_id = api_id.clone();
                                     let switch_click_id = api_id.clone();
                                     // Clone for the deep-link "Record slip" button — fires
                                     // the cross-section modal trigger. Same Fn-closure
@@ -1877,6 +1902,13 @@ pub fn Admin() -> impl IntoView {
                                                             "Apply Credit"
                                                         </button>
                                                     </Show>
+                                                    <AnswerPicker
+                                                        attendee_id=answer_id.clone()
+                                                        event_id=event_id_for_delete.get_untracked()
+                                                        current=attendee.attendance_answer
+                                                        set_toast=set_toast
+                                                        set_refresh_counter=set_refresh_counter
+                                                    />
                                                     // Participation-type toggle — flip In-Person ⇄ Online.
                                                     // Use case: attendee chose deposit/in-person but confirmed
                                                     // out-of-band they'll attend online (or vice-versa).

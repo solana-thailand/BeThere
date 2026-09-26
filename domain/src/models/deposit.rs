@@ -400,6 +400,22 @@ pub struct PendingSlipResponse {
 pub struct RefundQueueResponse {
     #[serde(default)]
     pub pending: Vec<ThbDeposit>,
+    /// Who each pending row belongs to, keyed by attendee id, so the queue
+    /// can be narrowed to the people actually owed money back after a
+    /// postponement (moved online, or answered "can't come"). Best-effort:
+    /// empty when D1 is unavailable, and a row missing here is shown under
+    /// every filter except the narrowing ones.
+    #[serde(default)]
+    pub context: std::collections::HashMap<String, RefundQueueContext>,
+}
+
+/// One refund-queue attendee's participation, check-in and answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct RefundQueueContext {
+    pub participation_type: crate::models::attendee::ParticipationType,
+    pub checked_in: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attendance_answer: Option<crate::models::attendee::AttendanceAnswer>,
 }
 
 /// Request body for POST /api/refund/mark/{attendee_id} — mark THB refund as done.

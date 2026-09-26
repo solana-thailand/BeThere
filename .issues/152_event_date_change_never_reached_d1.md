@@ -1,8 +1,11 @@
 # 152: Changing an event's start date never reached D1
 
-**Status:** fixed on develop 2026-09-26 (migration 0051, not applied to prod).
-Prod mitigation for RTM#6 is owner-gated, see "Prod now". Found in session
-`event-checkin-b9`.
+**Status:** in progress. Migration 0051 was applied to prod on 2026-09-26 at
+07:17 UTC, with owner go in session `event-checkin-b9`. There is no code
+change. Before applying it: a staging rehearsal, a D1 backup
+(`worker/backup-prod-20260926-1417.sql`, gitignored), and the trigger read back
+from `sqlite_master`. Still open: RTM#6's D1 row has the old date until the
+owner saves the event once more (see "Prod now").
 **Found by:** the owner postponing RTM#6 (27 Sep → 4 Oct 2026, flooding). A
 read-only check afterwards showed the public page on 4 Oct and D1 still on
 27 Sep.

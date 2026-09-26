@@ -325,6 +325,10 @@ pub fn routes(state: AppState) -> Router<()> {
             "/attendee/{id}/participation-type",
             patch(attendee::update_participation_type),
         )
+        .route(
+            "/attendee/{id}/attendance-answer",
+            put(attendee::set_attendance_answer),
+        )
         .route("/checkin/{id}", post(checkin::check_in))
         .route("/attendee/{id}/undo-checkin", post(checkin::undo_check_in))
         .route("/generate-qrs", post(qr::generate_qrs))

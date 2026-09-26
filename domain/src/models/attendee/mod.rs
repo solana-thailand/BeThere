@@ -1,5 +1,6 @@
 //! Attendee records, sheet column mapping and walk-in registration types.
 
+mod attendance_answer;
 mod columns;
 mod core;
 mod recent;
@@ -13,6 +14,7 @@ mod walkin;
 #[cfg(test)]
 mod tests;
 
+pub use attendance_answer::AttendanceAnswer;
 pub use columns::{ColumnKey, ColumnMapping, PII_COLUMNS};
 pub use core::{Attendee, CheckInError};
 pub use recent::{RECENT_CHECK_INS_PER_TYPE, recent_check_ins};

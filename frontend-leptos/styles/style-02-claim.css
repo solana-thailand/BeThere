@@ -91,6 +91,12 @@
     cursor: progress;
 }
 
+.admin-answer-picker {
+    margin-left: 0;
+    padding: 2px 6px;
+    font-size: 0.75rem;
+}
+
 /* .attendee-status removed — replaced by .attendee-actions in card layout */
 
 /* ===== Badges ===== */

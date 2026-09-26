@@ -221,6 +221,12 @@ pub struct PendingSlipResponse {
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct RefundQueueResponse {
     pub pending: Vec<ThbDepositInfo>,
+    /// Participation / check-in / answer per queued attendee (migration 0052).
+    #[serde(default)]
+    pub context: std::collections::HashMap<
+        String,
+        event_checkin_domain::models::deposit::RefundQueueContext,
+    >,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

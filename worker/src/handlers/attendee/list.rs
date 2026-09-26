@@ -131,7 +131,7 @@ pub async fn list_attendees(
         .map(|a| AttendeeListItem::from_attendee(a))
         .collect();
 
-    // Annotate each row from three independent batch queries, run
+    // Annotate each row from four independent batch queries, run
     // concurrently (plan 028 W9). All three are best-effort: a failure
     // degrades a badge, never the roster. An organizer at the door needs the
     // list of names far more than the badges on it.
@@ -145,16 +145,20 @@ pub async fn list_attendees(
     //    code). A staff comp and a credit-covered registration both looked
     //    like an unpaid attendee and the door screen said "Deposit
     //    pending". See `.issues/137`.
+    //  - attendance_answer: what the registrant said when asked whether they
+    //    can still come (migration 0052); `attendance_answers` is read by
+    //    nobody else, so it joins the batch without ordering concerns.
     //
     // Running them together is safe: `thb_balances_by_email` first writes
     // `return` rows for ended events, and neither sibling reads those rows
     // (`emails_applied_credit` reads `apply` rows, `settlement_by_attendee`
     // reads `thb_deposits`).
     if let Some(db) = state.d1.as_deref() {
-        let (balances, applied, settlements) = futures_util::join!(
+        let (balances, applied, settlements, answers) = futures_util::join!(
             crate::db::credit_ledger::thb_balances_by_email(db, &event.organization_id),
             crate::db::credit_ledger::emails_applied_credit(db, &event.id),
             crate::db::thb_deposits::settlement_by_attendee(db, &event.id),
+            crate::db::attendance_answers::by_event(db, &event.id),
         );
         if let Ok(balances) = balances {
             for item in attendee_responses.iter_mut() {
@@ -177,6 +181,11 @@ pub async fn list_attendees(
                     item.thb_verified = s.verified;
                     item.thb_refunded = s.refunded;
                 }
+            }
+        }
+        if let Ok(answers) = answers {
+            for item in attendee_responses.iter_mut() {
+                item.attendance_answer = answers.get(&item.api_id).copied();
             }
         }
     }

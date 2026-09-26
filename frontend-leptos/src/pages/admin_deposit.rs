@@ -22,6 +22,7 @@ use crate::pages::admin_deposit_bank_info::refund_bank_info;
 use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
 use crate::pages::admin_linked_emails::AdminLinkedEmails;
+use crate::pages::admin_refund_queue_filter::{RefundQueueFilter, RefundQueueFilterBar};
 use crate::utils;
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,11 @@ pub fn AdminDeposits(
     // to catch these by recognising the person at refund time (`.issues/129`).
     let (duplicate_slip_hashes, set_duplicate_slip_hashes) = signal(Vec::<String>::new());
     let (refunds, set_refunds) = signal(Vec::<ThbDepositInfo>::new());
+    let (refund_context, set_refund_context) = signal(HashMap::<
+        String,
+        event_checkin_domain::models::deposit::RefundQueueContext,
+    >::new());
+    let (refund_filter, set_refund_filter) = signal(RefundQueueFilter::All);
     let (refunded_list, set_refunded_list) = signal(Vec::<ThbDepositInfo>::new());
     let (held_list, set_held_list) = signal(Vec::<ThbDepositInfo>::new());
     // Cross-event credit liability — organizer's total cash held as rolling
@@ -154,7 +160,10 @@ pub fn AdminDeposits(
             }
 
             match refunds_result {
-                Ok(data) => set_refunds.set(data.pending),
+                Ok(data) => {
+                    set_refunds.set(data.pending);
+                    set_refund_context.set(data.context);
+                }
                 Err(e) => {
                     log::warn!("[admin-deposit] failed to load refund queue: {e}");
                     components::show_toast(
@@ -813,9 +822,18 @@ pub fn AdminDeposits(
                         </div>
                     </Show>
 
+                    <RefundQueueFilterBar
+                        refunds=refunds
+                        context=refund_context
+                        filter=refund_filter
+                        set_filter=set_refund_filter
+                    />
+
                     {move || {
                         let current_action = action_pending.get();
-                        refunds.get().iter().map(|item| {
+                        let filter = refund_filter.get();
+                        let context = refund_context.get();
+                        refunds.get().iter().filter(|item| filter.matches(context.get(&item.attendee_id))).map(|item| {
                             let item_id = item.attendee_id.clone();
                             let refund_key = format!("refund-{item_id}");
                             let refund_disabled = current_action.as_ref() == Some(&refund_key);

@@ -273,6 +273,10 @@ pub struct AttendeeListItem {
     pub thb_source: Option<String>,
     #[serde(default)]
     pub thb_verified: bool,
+    /// What the registrant answered when asked whether they can still come
+    /// (migration 0052). `None` = not asked or no answer yet.
+    #[serde(default)]
+    pub attendance_answer: Option<event_checkin_domain::models::attendee::AttendanceAnswer>,
     #[serde(default)]
     pub thb_refunded: bool,
 }
