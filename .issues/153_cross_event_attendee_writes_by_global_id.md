@@ -1,6 +1,7 @@
 # 153: Staff of one event can write another event's attendee by id
 
-**Status:** fixed on develop (both parts, session `event-checkin-fa`). Not in
+**Status:** fixed on develop (parts 1–2 session `event-checkin-fa`, part 3
+session `event-checkin-90`). Not in
 prod yet: it ships with the next worker release and needs no migration.
 **Found by:** staging verification of plan 032 (session `event-checkin-2e`).
 `PATCH /attendee/{id}/participation-type` returned 500 for an event whose
@@ -108,11 +109,29 @@ an `events.id` would now miss D1 and fall back to the Sheet.
   absence cannot be proven. With a readable Sheet (prod) the same case is a
   404. Not verified on prod.
 
+## Part 3: the writes themselves (fixed on develop, session `event-checkin-90`)
+
+Parts 1 and 2 left the D1 writers id-only, safe only because the scoped
+lookup ran first. They are now scoped themselves, with `AND event_id = ?`:
+`check_in_attendee`, `undo_check_in`, `verify_deposit`, `mark_refund`,
+`set_qr_url` / `set_qr_urls_batch` (`db/attendees/writes.rs`),
+`delete_attendee_by_id` (`management.rs`), and the two unused helpers in
+`deposit.rs`. Every caller already had `event` resolved, so each passes
+`&event.id`. No route or response changes.
+
+Deliberately still id-only (listed with reasons in the guard's allowlist):
+`clear_attendee_pii` (PDPA erasure is cross-event by design), the claim-token
+repair (ids read from the same table in the same call), and the Durable
+Object's own per-event SQLite.
+
+**Guard:** `worker/tests/attendee_event_scope_guard.rs` lexes every string
+literal and `.sql` file under `worker/src` and fails on an `UPDATE attendees`
+/ `DELETE FROM attendees` with a bare `id = ?` and no `event_id = ?`. A stale
+allowlist entry also fails. Proven both ways: against the Part 2 tree it
+flags exactly the 7 writes above; with the fix it passes. Workspace: 88
+binaries, 976 tests, 0 failures; clippy `-D warnings` clean.
+
 ## Not done
 
-- The other id-only `UPDATE attendees … WHERE id = ?` writers (`writes.rs`,
-  `deposit.rs`) are safe now that the lookup before them is scoped, but they
-  are not scoped themselves. A new caller that skips the lookup would reopen
-  this. Scope them if one of them is touched.
-- `delete_attendee_by_id` (empty-email fallback in `delete.rs`) is also
-  id-only. It is only reached after the scoped lookup.
+- Nothing in code. Prod verification (cross-event case is 404 with a
+  readable Sheet) waits for the next owner-approved prod deploy.
