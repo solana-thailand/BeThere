@@ -98,3 +98,25 @@ Turn `/tmp/ux_audit/probe.mjs` into `scripts/verify/ux_probe.mjs`:
   are attached to this plan's log.
 - Part B: every journey is walked end to end on seeded staging with no dead
   end, and B5 is green in CI.
+
+## Log
+
+### 27 Sep: Part A (A1–A4) on staging, not prod
+
+Staging `0a71a857` = git `052cdf3c`. Opened in headless Chrome
+(`/tmp/ux_verify/v.mjs`), no page errors:
+- **A1 landing (390 px):** no "forfeit" and no "recorded on Solana";
+  "off-chain" and "Back When You Attend" are present. A/B: the same probe on
+  prod (old code) finds "forfeit", so the probe can fail.
+- **A2 scanner (390 px):** the event bar is at y=69, and
+  `elementFromPoint` at its centre hits the `<select>`, not the `<video>`.
+- **A3 deposit (USDC-only fixture):** "Pay with USDC →" is a button; clicking
+  it opens the Choose → Connect → Pay steps.
+- **A4 ticket (390 and 1440 px):** the heading is the event name; "In-Person"
+  is shown, not `in_person`.
+
+The smoke test's fixture cleanup returned 400 once; a manual archive + delete
+right after returned 200. Not yet explained.
+
+Not on prod. A1 is the one that matters before judges read the site; it
+ships with the Fri 3 Oct deploy (owner go).
