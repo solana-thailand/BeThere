@@ -73,3 +73,42 @@ fn frontend_renders_only_safe_proof_links() {
         );
     }
 }
+
+/// The batch refund mirrors the same two Sheet columns as the single refund:
+/// it used to write refund_status only, leaving refund_link blank.
+#[test]
+fn batch_refund_writes_the_refund_link_to_the_sheet() {
+    let writer = include_str!("../src/sheets/write/deposit.rs");
+    let body = &writer[writer
+        .find("pub fn refund_batch_ranges(")
+        .expect("deposit.rs must define refund_batch_ranges")..];
+    let body = &body[..body.find("\n}\n").expect("end of refund_batch_ranges")];
+    for column in ["CK::RefundStatus", "CK::RefundLink"] {
+        assert!(
+            body.contains(column),
+            "batch Sheet write must cover {column}"
+        );
+    }
+
+    let bg = include_str!("../src/sheets/bg_sync.rs");
+    assert!(
+        bg.contains("super::write::refund_batch_ranges("),
+        "bg_sync must build its batch through the shared refund_batch_ranges"
+    );
+
+    let src = include_str!("../src/handlers/deposit/thb/handlers/refund.rs");
+    let batch = &src[src
+        .find("pub async fn batch_thb_refund_handler(")
+        .expect("batch_thb_refund_handler missing")..];
+    for call in ["bg_sync::write_refund_batch(", "write::write_refund_batch("] {
+        let at = batch
+            .find(call)
+            .unwrap_or_else(|| panic!("batch handler must call {call}"));
+        // Both calls end their argument list with `Some(kv…)`.
+        let args = &batch[at..at + batch[at..].find("Some(kv").expect("call args")];
+        assert!(
+            args.contains("refund_proof_url"),
+            "{call} must receive the uploaded refund proof"
+        );
+    }
+}

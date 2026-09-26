@@ -288,7 +288,8 @@ deposit.
   `refund_proof_url` (the bulk-transfer receipt, validated like the single
   refund) and stores it on every deposit it settles. Per-deposit CAS, skips
   already-refunded / held / non-cash / unverified, and dual-writes D1
-  `attendees.mark_refund` per refund. Sheets gets the status only, not the link.
+  `attendees.mark_refund` per refund. Sheets gets refund_status and refund_link
+  in one batch update, the same two columns as the single refund.
 - Manual: `POST /api/refund/manual/{attendee_id}` (`refund.rs:412`) — sets a
   refund status on the sheet for someone with no deposit record (e.g. a VIP).
 

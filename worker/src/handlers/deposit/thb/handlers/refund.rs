@@ -393,8 +393,9 @@ pub async fn batch_thb_refund_handler(
         "Batch THB refund completed"
     );
 
-    // Mirror D1 state into Google Sheet — write refund_status (AB) for all
-    // batch-refunded attendees in a single batch update. Non-fatal.
+    // Mirror D1 state into Google Sheet — refund_status and refund_link for
+    // all batch-refunded attendees in a single batch update, the same two
+    // columns the single refund writes. Non-fatal.
     if !refunded_attendee_ids.is_empty() {
         let mapping =
             crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
@@ -408,22 +409,18 @@ pub async fn batch_thb_refund_handler(
                 .await
                 .unwrap_or_default();
 
-        let updates: Vec<(usize, String)> = attendees
+        let rows: Vec<usize> = attendees
             .iter()
-            .filter_map(|a| {
-                if refunded_attendee_ids.contains(&a.api_id) {
-                    Some((a.row_index, "refunded".to_string()))
-                } else {
-                    None
-                }
-            })
+            .filter(|a| refunded_attendee_ids.contains(&a.api_id))
+            .map(|a| a.row_index)
             .collect();
 
-        if !updates.is_empty() {
+        if !rows.is_empty() {
             if let Some(ctx) = &state.worker_ctx {
-                ctx.wait_until(crate::sheets::bg_sync::write_refund_status_batch(
+                ctx.wait_until(crate::sheets::bg_sync::write_refund_batch(
                     state.clone(),
-                    updates,
+                    rows,
+                    refund_proof_url.clone(),
                     mapping,
                     event.sheet_id.clone(),
                     event.sheet_name.clone(),
@@ -431,8 +428,10 @@ pub async fn batch_thb_refund_handler(
                 ));
             } else {
                 // Fallback: blocking batch write when worker_ctx unavailable (tests)
-                if let Err(e) = crate::sheets::write::write_refund_status_batch(
-                    &updates,
+                if let Err(e) = crate::sheets::write::write_refund_batch(
+                    &rows,
+                    "refunded",
+                    &refund_proof_url,
                     &mapping,
                     &state,
                     &event.sheet_id,
@@ -443,7 +442,7 @@ pub async fn batch_thb_refund_handler(
                 {
                     tracing::warn!(
                         error = %e,
-                        "failed to write batch refund_status to sheet (non-blocking)"
+                        "failed to write batch refund to sheet (non-blocking)"
                     );
                 }
             }
