@@ -120,6 +120,7 @@ pub async fn archive_event(
 
     Ok(ApiOk::new(json!({
         "id": id,
+        "name": config.name,
         "status": "archived",
         "warnings": d1_sync.warnings(),
     })))
@@ -235,6 +236,7 @@ pub async fn restore_event(
 
     Ok(ApiOk::new(json!({
         "id": id,
+        "name": config.name,
         "status": "draft",
         "warnings": d1_sync.warnings(),
     })))
