@@ -230,7 +230,7 @@ pub async fn generate_qrs(
     // (which reads D1-first) can render them without a manual sheet→D1 sync.
     // Non-fatal: Sheet is already updated, so a future sync would catch up.
     if let Some(ref d1) = state.d1 {
-        match crate::db::attendees::set_qr_urls_batch(d1, &updates).await {
+        match crate::db::attendees::set_qr_urls_batch(d1, &event.id, &updates).await {
             Ok(n) => tracing::info!(d1_updated = n, "D1 qr_url batch write complete"),
             Err(e) => tracing::warn!(
                 error = %e,

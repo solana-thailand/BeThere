@@ -283,6 +283,7 @@ pub(crate) async fn recover_and_verify_deposit(
     if let Some(db) = d1
         && let Err(e) = crate::db::attendees::verify_deposit(
             db,
+            &event.id,
             &attendee_id,
             "verified",
             sig,
@@ -347,7 +348,8 @@ pub(crate) async fn recover_and_verify_deposit(
 
                 if let Some(ref d1) = state.d1
                     && let Err(e) =
-                        crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url).await
+                        crate::db::attendees::set_qr_url(d1, &event.id, &attendee.api_id, &qr_url)
+                            .await
                 {
                     tracing::warn!(
                         attendee_id = %attendee.api_id,
@@ -393,7 +395,8 @@ pub(crate) async fn recover_and_verify_deposit(
 
                 if let Some(ref d1) = state.d1
                     && let Err(e) =
-                        crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url).await
+                        crate::db::attendees::set_qr_url(d1, &event.id, &attendee.api_id, &qr_url)
+                            .await
                 {
                     tracing::warn!(
                         attendee_id = %attendee.api_id,

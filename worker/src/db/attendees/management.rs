@@ -26,12 +26,17 @@ pub(crate) async fn delete_attendee(
     Ok(())
 }
 
-/// Delete an attendee from D1 by primary key `id`.
+/// Delete an attendee from D1 by primary key `id`, scoped to `event_id`
+/// (`attendees.id` is global — Issue 153).
 /// Avoids the serde_wasm_bindgen deserialization issue in `get_attendee_by_id`.
-pub(crate) async fn delete_attendee_by_id(db: &D1Database, id: &str) -> Result<(), String> {
-    let stmt = db.prepare("DELETE FROM attendees WHERE id = ?1");
+pub(crate) async fn delete_attendee_by_id(
+    db: &D1Database,
+    event_id: &str,
+    id: &str,
+) -> Result<(), String> {
+    let stmt = db.prepare("DELETE FROM attendees WHERE id = ?1 AND event_id = ?2");
     let bound = stmt
-        .bind_refs(&[D1Type::Text(id)])
+        .bind_refs(&[D1Type::Text(id), D1Type::Text(event_id)])
         .map_err(|e| format!("D1 delete_attendee_by_id bind: {e:?}"))?;
     bound
         .run()

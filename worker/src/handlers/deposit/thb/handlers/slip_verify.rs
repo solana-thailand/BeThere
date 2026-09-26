@@ -169,6 +169,7 @@ pub async fn verify_thb_slip_handler(
         && let Some(ref d1) = state.d1
         && let Err(e) = crate::db::attendees::verify_deposit(
             d1,
+            &event.id,
             &body.attendee_id,
             "verified",
             "THB",

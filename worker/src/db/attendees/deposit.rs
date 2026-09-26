@@ -15,14 +15,15 @@ use crate::db::d1_int::int_bind;
 #[allow(dead_code)]
 pub(crate) async fn get_deposit_status_from_d1(
     db: &D1Database,
+    event_id: &str,
     attendee_id: &str,
 ) -> Result<Option<DepositStatusRow>, String> {
     let stmt = db.prepare(
         "SELECT id, event_id, deposit_status, deposit_tx_hash, deposit_amount_usdc \
-         FROM attendees WHERE id = ?1",
+         FROM attendees WHERE id = ?1 AND event_id = ?2",
     );
     let bound = stmt
-        .bind_refs(&[D1Type::Text(attendee_id)])
+        .bind_refs(&[D1Type::Text(attendee_id), D1Type::Text(event_id)])
         .map_err(|e| format!("D1 get_deposit_status bind: {e:?}"))?;
 
     // Bypass worker crate's .first::<T>() which uses serde_wasm_bindgen::from_value()
@@ -80,6 +81,7 @@ pub(crate) struct DepositStatusRow {
 #[allow(dead_code)]
 pub(crate) async fn save_deposit_status_to_d1(
     db: &D1Database,
+    event_id: &str,
     attendee_id: &str,
     deposit_status: &str,
     deposit_tx_hash: Option<&str>,
@@ -90,13 +92,14 @@ pub(crate) async fn save_deposit_status_to_d1(
         "UPDATE attendees \
          SET deposit_status = ?1, deposit_tx_hash = ?2, deposit_amount_usdc = ?3, \
          updated_at = datetime('now') \
-         WHERE id = ?4",
+         WHERE id = ?4 AND event_id = ?5",
     );
     stmt.bind_refs(&[
         D1Type::Text(deposit_status),
         D1Type::Text(tx_hash),
         int_bind("attendees.deposit_amount_usdc", deposit_amount_usdc)?,
         D1Type::Text(attendee_id),
+        D1Type::Text(event_id),
     ])
     .map_err(|e| format!("D1 save_deposit_status bind: {e:?}"))?
     .run()

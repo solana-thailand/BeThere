@@ -204,7 +204,8 @@ pub async fn get_public_ticket(
         );
         if let Some(ref d1) = state.d1
             && let Err(e) =
-                crate::db::attendees::set_qr_url(d1, &attendee.api_id, &expected_qr_url).await
+                crate::db::attendees::set_qr_url(d1, &event.id, &attendee.api_id, &expected_qr_url)
+                    .await
         {
             tracing::warn!(
                 attendee_id = %attendee.api_id,

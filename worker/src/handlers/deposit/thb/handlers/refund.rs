@@ -216,6 +216,7 @@ pub async fn mark_refund_handler(
     if let Some(ref d1) = state.d1
         && let Err(e) = crate::db::attendees::mark_refund(
             d1,
+            &event.id,
             &attendee_id,
             "refunded",
             &refund_proof_url,
@@ -543,6 +544,7 @@ pub async fn mark_manual_refund_handler(
     if let Some(ref d1) = state.d1
         && let Err(e) = crate::db::attendees::mark_refund(
             d1,
+            &event.id,
             &attendee_id,
             &body.refund_status,
             body.refund_link.as_deref().unwrap_or(""),

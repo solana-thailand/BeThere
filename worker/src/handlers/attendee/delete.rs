@@ -251,7 +251,7 @@ pub async fn delete_attendee(
                 );
             }
         } else if let Some(db) = state.d1.as_deref()
-            && let Err(e) = crate::db::attendees::delete_attendee_by_id(db, &id).await
+            && let Err(e) = crate::db::attendees::delete_attendee_by_id(db, &event.id, &id).await
         {
             tracing::warn!(
                 event_id = %event.id,
