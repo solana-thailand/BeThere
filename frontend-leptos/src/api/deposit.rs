@@ -83,6 +83,11 @@ pub struct DepositStatusResponse {
     /// `true` only when escrow_status is `Initialized`.
     #[serde(default)]
     pub usdc_deposits_accepted: bool,
+    /// Whether a slip without a readable QR is sent to the Claude API
+    /// (the worker's `SLIP_AGENT_VISION` switch). Drives the privacy line on
+    /// the upload form.
+    #[serde(default)]
+    pub slip_vision_enabled: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

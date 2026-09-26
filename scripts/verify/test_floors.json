@@ -97,7 +97,7 @@
     "sheet_row_lookup tests/sheet_row_lookup.rs": 7,
     "sheet_row_resolution_guard tests/sheet_row_resolution_guard.rs": 4,
     "size_budget_guards tests/size_budget_guards.rs": 10,
-    "slip_duplicate_guards tests/slip_duplicate_guards.rs": 13,
+    "slip_duplicate_guards tests/slip_duplicate_guards.rs": 14,
     "slip_magic_bytes tests/slip_magic_bytes.rs": 6,
     "slip_proposal tests/slip_proposal.rs": 9,
     "slug_cache_guard tests/slug_cache_guard.rs": 2,

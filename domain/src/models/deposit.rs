@@ -362,6 +362,12 @@ pub struct DepositStatusResponse {
     /// Frontend uses this to hide the USDC payment option when escrow is closed/deactivated.
     #[serde(default)]
     pub usdc_deposits_accepted: bool,
+    /// Whether the slip agent's vision fallback is switched on
+    /// (`SLIP_AGENT_VISION=on` with a key; `.plans/033` §4 Q3). When true, a
+    /// slip without a readable QR is sent to the Claude API, and the upload
+    /// page must say so before the attendee submits.
+    #[serde(default)]
+    pub slip_vision_enabled: bool,
 }
 
 /// Request body for POST /api/deposit/thb/verify — admin verifies/rejects a slip.

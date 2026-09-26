@@ -126,5 +126,6 @@ pub async fn get_deposit_status_handler(
         registration_date,
         in_person_available,
         usdc_deposits_accepted,
+        slip_vision_enabled: state.slip_vision_key.is_some(),
     }))
 }

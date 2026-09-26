@@ -337,3 +337,25 @@ mod vision {
         );
     }
 }
+
+/// The upload page's vision privacy line follows the same switch that sends
+/// slips out (`.plans/033` §4 Q3). If the status response stops deriving the
+/// flag from `slip_vision_key`, or the form stops gating the line on it, the
+/// page silently either hides a disclosure it owes or claims one that isn't true.
+#[test]
+fn vision_privacy_line_follows_the_vision_switch() {
+    let status = strip_comments(&src("src/handlers/deposit/usdc/handlers/status.rs"));
+    assert!(
+        status.contains("slip_vision_enabled: state.slip_vision_key.is_some()"),
+        "deposit status must derive slip_vision_enabled from the vision switch"
+    );
+    let form = strip_comments(&src("../frontend-leptos/src/pages/deposit/thb_payment.rs"));
+    assert!(
+        form.contains("slip_vision_enabled.then(") && form.contains("{SLIP_VISION_PRIVACY_LINE}"),
+        "the THB upload form must render the privacy line only when vision is on"
+    );
+    assert!(
+        form.contains("Anthropic's Claude API"),
+        "the privacy line must name where the slip image goes"
+    );
+}
