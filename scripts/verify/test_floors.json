@@ -4,6 +4,7 @@
     "alloc_count_checkin tests/alloc_count_checkin.rs": 5
   },
   "frontend": {
+    "admin_slip_request tests/admin_slip_request.rs": 2,
     "cluster_networks tests/cluster_networks.rs": 5,
     "css_class_audit tests/css_class_audit.rs": 5,
     "date_formatting_has_one_home tests/date_formatting_has_one_home.rs": 1,

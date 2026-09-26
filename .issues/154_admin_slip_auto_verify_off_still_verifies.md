@@ -1,6 +1,6 @@
 # 154: Unchecking "Auto-verify" on the admin record-slip form still verifies
 
-**Status:** open. Found by code reading on 2026-09-27 (session `event-checkin-c6`) and not yet reproduced against a live worker. Repro below.
+**Status:** fixed on develop, not deployed. Found by code reading on 2026-09-27 (session `event-checkin-c6`); fixed the same day (session `event-checkin-ef`). The live repro below has not been run on staging.
 
 ## What happens
 
@@ -50,4 +50,4 @@ Add a frontend test that serializes `auto_verify: false` and asserts the JSON
 contains `"auto_verify":false`. Keep the worker default of `true` for callers
 that omit the field; `default_auto_verify_is_true` pins it.
 
-Not fixed in the session that found it (fix unrelated bugs only on request).
+Applied: `skip_serializing_if` removed; `frontend-leptos/tests/admin_slip_request.rs` pins `"auto_verify":false` on the wire and fails when the skip is restored (mutation-checked).

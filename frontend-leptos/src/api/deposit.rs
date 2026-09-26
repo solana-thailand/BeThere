@@ -160,7 +160,7 @@ pub struct AdminSlipUploadRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_name: Option<String>,
     /// When true (default), also marks the deposit as verified in the same call.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    /// Always serialized: the worker reads a missing field as `true` (.issues/154).
     pub auto_verify: bool,
     /// The slip's mini-QR text, decoded in the browser (`.plans/033` W1).
     #[serde(skip_serializing_if = "Option::is_none")]
