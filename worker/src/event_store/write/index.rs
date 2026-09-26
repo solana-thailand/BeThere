@@ -75,6 +75,47 @@ pub struct SavedEvent {
     pub d1_sync: D1Sync,
 }
 
+/// Why an event create was refused. Invalid input is the admin's to fix and
+/// must reach them as a 400 with its message; a storage failure is a 500.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EventWriteError {
+    Invalid(String),
+    Storage(String),
+}
+
+impl std::fmt::Display for EventWriteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            EventWriteError::Invalid(msg) | EventWriteError::Storage(msg) => f.write_str(msg),
+        }
+    }
+}
+
+impl EventWriteError {
+    /// Log at the level the kind deserves (refused input is a warning, a
+    /// storage failure an error) and convert for the response.
+    pub fn logged(self, action: &'static str) -> event_checkin_domain::models::error::AppError {
+        match &self {
+            EventWriteError::Invalid(msg) => {
+                tracing::warn!(error = %msg, action, "event write refused")
+            }
+            EventWriteError::Storage(msg) => {
+                tracing::error!(error = %msg, action, "event write failed")
+            }
+        }
+        self.into()
+    }
+}
+
+impl From<EventWriteError> for event_checkin_domain::models::error::AppError {
+    fn from(e: EventWriteError) -> Self {
+        match e {
+            EventWriteError::Invalid(msg) => Self::Validation(msg),
+            EventWriteError::Storage(msg) => Self::Internal(msg),
+        }
+    }
+}
+
 /// Dual-write: persist event config to D1 alongside KV.
 /// Non-blocking — errors are logged and returned as [`D1Sync::Failed`], not
 /// propagated, so the KV write still happens.

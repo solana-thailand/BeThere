@@ -55,6 +55,7 @@
     "escrow_transition_contract tests/escrow_transition_contract.rs": 14,
     "event_checkin_domain src/lib.rs": 157,
     "event_checkin_worker src/lib.rs": 327,
+    "event_create_errors tests/event_create_errors.rs": 4,
     "event_enum_column_fallbacks tests/event_enum_column_fallbacks.rs": 13,
     "event_lifecycle_response tests/event_lifecycle_response.rs": 1,
     "event_slug_ownership tests/event_slug_ownership.rs": 5,

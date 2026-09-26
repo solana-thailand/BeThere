@@ -12,7 +12,9 @@ use crate::event_store::read::get_event_index;
 use crate::event_store::schema::{deduplicate_slug, slugify};
 
 use super::escrow::save_escrow_index;
-use super::index::{SavedEvent, save_event_config, save_event_index, sync_event_to_d1};
+use super::index::{
+    EventWriteError, SavedEvent, save_event_config, save_event_index, sync_event_to_d1,
+};
 
 /// Create a new event.
 ///
@@ -25,49 +27,57 @@ pub async fn create_event(
     d1: Option<&worker::D1Database>,
     req: &CreateEventRequest,
     updated_by: &str,
-) -> Result<SavedEvent, String> {
+) -> Result<SavedEvent, EventWriteError> {
+    let invalid = |msg: &str| Err(EventWriteError::Invalid(msg.to_string()));
+
     // Validate required fields
     if req.name.trim().is_empty() {
-        return Err("event name is required".to_string());
+        return invalid("event name is required");
     }
     if req.sheet_id.trim().is_empty() {
-        return Err("google sheet_id is required".to_string());
+        return invalid("google sheet_id is required");
     }
     if req.time_tba {
         // TBA mode: ensure at least date-level timestamps
         if req.event_start_ms <= 0 {
-            return Err("event_start_ms date is required even for TBA events".to_string());
+            return invalid("event_start_ms date is required even for TBA events");
         }
         if req.event_end_ms <= 0 {
             // Default end = start + 24h if not provided
         }
     } else {
         if req.event_start_ms <= 0 {
-            return Err("event_start_ms must be a positive Unix epoch millisecond".to_string());
+            return invalid("event_start_ms must be a positive Unix epoch millisecond");
         }
         if req.event_end_ms <= req.event_start_ms {
-            return Err("event_end_ms must be after event_start_ms".to_string());
+            return invalid("event_end_ms must be after event_start_ms");
         }
     }
 
-    let location_map_url = normalize_map_url(&req.location_map_url)?;
-    let ticket_note_in_person = normalize_ticket_note(&req.ticket_note_in_person)?;
-    let ticket_note_online = normalize_ticket_note(&req.ticket_note_online)?;
-    let postponed_note = normalize_postponed_note(&req.postponed_note)?;
+    let location_map_url =
+        normalize_map_url(&req.location_map_url).map_err(EventWriteError::Invalid)?;
+    let ticket_note_in_person =
+        normalize_ticket_note(&req.ticket_note_in_person).map_err(EventWriteError::Invalid)?;
+    let ticket_note_online =
+        normalize_ticket_note(&req.ticket_note_online).map_err(EventWriteError::Invalid)?;
+    let postponed_note =
+        normalize_postponed_note(&req.postponed_note).map_err(EventWriteError::Invalid)?;
 
     // SEC-003: Max deposit cap ($1,000 USDC, shared with the form's check)
     const MAX_DEPOSIT_USDC: u64 = event_checkin_domain::money::USDC_MAX_DEPOSIT_ATOMIC;
     if req.deposit_amount_usdc > MAX_DEPOSIT_USDC {
-        return Err(format!(
+        return Err(EventWriteError::Invalid(format!(
             "deposit_amount_usdc exceeds maximum cap ({MAX_DEPOSIT_USDC} = $1,000 USDC)"
-        ));
+        )));
     }
 
     // Tab names are organiser free text and reach a Google Sheets A1 range on
     // every read and write; reject here rather than at the API, which fails
     // silently because the Sheets calls are detached best-effort work.
-    let sheet_name = normalize_sheet_name(&req.sheet_name, DEFAULT_ATTENDEE_SHEET_NAME)?;
-    let staff_sheet_name = normalize_sheet_name(&req.staff_sheet_name, DEFAULT_STAFF_SHEET_NAME)?;
+    let sheet_name = normalize_sheet_name(&req.sheet_name, DEFAULT_ATTENDEE_SHEET_NAME)
+        .map_err(EventWriteError::Invalid)?;
+    let staff_sheet_name = normalize_sheet_name(&req.staff_sheet_name, DEFAULT_STAFF_SHEET_NAME)
+        .map_err(EventWriteError::Invalid)?;
 
     // Generate slug from name if not provided
     let slug = if req.slug.trim().is_empty() {
@@ -82,7 +92,9 @@ pub async fn create_event(
     // new event uses one string for both, so it must match neither: after a
     // rename (`PUT /events/{id}`) an event's slug is no longer its id.
     let kv_index = if let Some(kv_ref) = kv {
-        get_event_index(kv_ref).await?
+        get_event_index(kv_ref)
+            .await
+            .map_err(EventWriteError::Storage)?
     } else {
         EventIndex::default()
     };

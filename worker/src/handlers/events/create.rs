@@ -46,17 +46,9 @@ pub async fn create_event(
     let crate::event_store::SavedEvent { config, d1_sync } =
         crate::event_store::create_event(kv, d1, &body, &claims.email)
             .await
-            .map_err(|e| {
-                let err_msg = e.to_string();
-                // Duplicate slug is a validation error (409), not internal (500)
-                if err_msg.contains("already exists") {
-                    tracing::warn!(error = %err_msg, "create event rejected: duplicate slug");
-                    AppError::Validation(err_msg)
-                } else {
-                    tracing::error!(error = %err_msg, "failed to create event");
-                    AppError::Internal(err_msg)
-                }
-            })?;
+            // Invalid input is a 400 with its message, only a storage
+            // failure a 500. A slug collision cannot fail: it is deduplicated.
+            .map_err(|e| e.logged("create event"))?;
 
     tracing::info!(
         event_id = %config.id,

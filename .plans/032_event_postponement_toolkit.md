@@ -98,7 +98,9 @@ can't come are moved to online and refunded later.
   - Found: duplicating an event with no Sheet ID returns 500 "internal error".
     `create_event` rejects it ("google sheet_id is required"), and the
     duplicate and create handlers map every error except "already exists" to
-    Internal. Predates this work.
+    Internal. Predates this work. Fixed on develop 2026-09-27: `create_event`
+    returns `EventWriteError` (Invalid → 400 with the reason, Storage → 500);
+    test `worker/tests/event_create_errors.rs`. Not deployed.
 
 - [x] Participation switch (`PATCH /attendee/{id}/participation-type`) returned
   500 when the event's Sheet could not be read. Fixed in `.issues/153`
