@@ -41,7 +41,7 @@ pub async fn get_attendee(
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     let kv = resolve_kv(&state);
-    let attendee = sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv)
+    let attendee = sheets::get_attendee_by_id(&id, &state, &event, kv)
         .await
         .map_err(|e| {
             tracing::error!("failed to fetch attendee {id}: {e}");
@@ -204,7 +204,8 @@ pub async fn get_public_ticket(
         );
         if let Some(ref d1) = state.d1
             && let Err(e) =
-                crate::db::attendees::set_qr_url(d1, &attendee.api_id, &expected_qr_url).await
+                crate::db::attendees::set_qr_url(d1, &event.id, &attendee.api_id, &expected_qr_url)
+                    .await
         {
             tracing::warn!(
                 attendee_id = %attendee.api_id,
@@ -384,6 +385,9 @@ pub async fn get_public_ticket(
             true => &event.ticket_note_in_person,
             false => &event.ticket_note_online,
         },
+        // Unlike the ticket note this goes to every audience: a new date
+        // concerns in-person and online attendees alike. Empty = not postponed.
+        "postponed_note": event.postponed_note,
         "calendar_subscribe_url": event.calendar_subscribe_url,
     });
     Ok(ApiOk::new(data))

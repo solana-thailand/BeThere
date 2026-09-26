@@ -221,7 +221,23 @@ pub async fn refund_queue_handler(
         })
         .collect();
 
-    Ok(ApiOk::new(RefundQueueResponse { pending: enriched }))
+    // Best-effort: the queue is still usable unfiltered if this read fails.
+    let mut context: std::collections::HashMap<_, _> = match d1 {
+        Some(db) => crate::db::attendance_answers::refund_context_by_attendee(db, &event.id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(event_id = %event.id, error = %e, "refund queue context unavailable");
+                Default::default()
+            }),
+        None => Default::default(),
+    };
+    // Only the rows on the queue, not the whole roster.
+    context.retain(|id, _| enriched.iter().any(|d| &d.attendee_id == id));
+
+    Ok(ApiOk::new(RefundQueueResponse {
+        pending: enriched,
+        context,
+    }))
 }
 
 // ---------------------------------------------------------------------------

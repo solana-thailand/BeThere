@@ -253,3 +253,35 @@
   .attendee-inbox-item { align-items: stretch; flex-direction: column; }
   .attendee-inbox-actions { justify-content: flex-end; }
 }
+
+/* Postponed notice (migration 0053) — one banner shared by the public event
+   page and both ticket views (`components::postponed_banner`). Warning tokens,
+   the same family as `.badge-warning` on the event cards. `pre-wrap` is the
+   whole line-break contract: the component emits a text node, never <br>. */
+.postponed-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin: 0 0 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--warning-border);
+    border-left: 3px solid var(--warning);
+    border-radius: 0.75rem;
+    background: var(--warning-bg);
+}
+.postponed-banner-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--warning);
+}
+.postponed-banner-body {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}

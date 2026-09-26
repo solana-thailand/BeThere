@@ -63,8 +63,7 @@ pub async fn check_in(
     let attendee: Attendee = sheets::get_attendee_by_id(
         &id,
         &state,
-        &event.sheet_id,
-        &event.sheet_name,
+        &event,
         kv,
     )
     .await
@@ -137,6 +136,7 @@ pub async fn check_in(
     if let Some(ref d1) = state.d1
         && let Err(e) = crate::db::attendees::check_in_attendee(
             d1,
+            &event.id,
             &attendee.api_id,
             &timestamp,
             &claims.email,
@@ -337,8 +337,7 @@ pub async fn undo_check_in(
     let attendee: Attendee = sheets::get_attendee_by_id(
         &id,
         &state,
-        &event.sheet_id,
-        &event.sheet_name,
+        &event,
         kv,
     )
     .await
@@ -362,7 +361,7 @@ pub async fn undo_check_in(
 
     // Clear check-in columns in D1 first (source of truth)
     if let Some(ref d1) = state.d1
-        && let Err(e) = crate::db::attendees::undo_check_in(d1, &attendee.api_id).await
+        && let Err(e) = crate::db::attendees::undo_check_in(d1, &event.id, &attendee.api_id).await
     {
         tracing::warn!(
             attendee_id = %attendee.api_id,

@@ -58,16 +58,10 @@ pub async fn hold_deposit_handler(
     }
 
     // VULN-012: Verify the authenticated user owns this attendee record
-    let attendee = crate::sheets::get_attendee_by_id(
-        &body.attendee_id,
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        Some(kv),
-    )
-    .await
-    .map_err(AppError::Internal)?
-    .ok_or_else(|| AppError::NotFound("attendee not found".to_string()))?;
+    let attendee = crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &event, Some(kv))
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound("attendee not found".to_string()))?;
 
     if !attendee.email.eq_ignore_ascii_case(&claims.email) {
         tracing::warn!(

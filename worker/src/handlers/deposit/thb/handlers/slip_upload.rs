@@ -140,16 +140,11 @@ pub async fn upload_thb_slip_handler(
     }
 
     // VULN-012: Verify the authenticated user owns this attendee record
-    let upload_attendee = crate::sheets::get_attendee_by_id(
-        &body.attendee_id,
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        Some(kv),
-    )
-    .await
-    .map_err(AppError::Internal)?
-    .ok_or_else(|| AppError::NotFound("attendee not found".to_string()))?;
+    let upload_attendee =
+        crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &event, Some(kv))
+            .await
+            .map_err(AppError::Internal)?
+            .ok_or_else(|| AppError::NotFound("attendee not found".to_string()))?;
 
     if !upload_attendee.email.eq_ignore_ascii_case(&claims.email) {
         tracing::warn!(
@@ -250,14 +245,8 @@ pub async fn upload_thb_slip_handler(
     // If deadline expired but in-person capacity is still available,
     // switch the attendee back to In-Person and allow the deposit (reclaim flow).
     if let Some(deadline_hours) = event.deposit_deadline_hours
-        && let Ok(Some(attendee)) = crate::sheets::get_attendee_by_id(
-            &body.attendee_id,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            Some(kv),
-        )
-        .await
+        && let Ok(Some(attendee)) =
+            crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &event, Some(kv)).await
         && let Some(reg_str) = &attendee.registration_date
         && let Ok(reg_time) = chrono::DateTime::parse_from_rfc3339(reg_str)
     {
@@ -375,14 +364,8 @@ pub async fn upload_thb_slip_handler(
         && let Ok(mapping) =
             crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
                 .await
-        && let Ok(Some(attendee)) = crate::sheets::get_attendee_by_id(
-            &body.attendee_id,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            Some(kv),
-        )
-        .await
+        && let Ok(Some(attendee)) =
+            crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &event, Some(kv)).await
     {
         if let Some(ctx) = &state.worker_ctx {
             ctx.wait_until(crate::sheets::bg_sync::write_bank_info(
@@ -455,14 +438,7 @@ pub async fn upload_thb_slip_handler(
     if let (Ok(mapping), Ok(Some(attendee))) = (
         crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
             .await,
-        crate::sheets::get_attendee_by_id(
-            &body.attendee_id,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            Some(kv),
-        )
-        .await,
+        crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &event, Some(kv)).await,
     ) {
         if let Some(wctx) = &state.worker_ctx {
             wctx.wait_until(crate::sheets::bg_sync::write_deposit_verification(

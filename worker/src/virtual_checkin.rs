@@ -70,6 +70,7 @@ pub async fn commit_virtual_check_in(
     if let Some(ref d1) = state.d1 {
         match crate::db::attendees::check_in_attendee(
             d1,
+            &event.id,
             &attendee.api_id,
             &timestamp,
             "virtual",

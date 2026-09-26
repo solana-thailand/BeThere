@@ -92,6 +92,10 @@ pub struct EventMeta {
     /// Event visibility — public (shown on landing) or private (auth required).
     #[serde(default)]
     pub visibility: EventVisibility,
+    /// Mirror of [`EventConfig::postponed_note`] so the KV fallback of the
+    /// public listing can badge a postponed event without loading its config.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub postponed_note: String,
 }
 
 /// Top-level index of all events, stored under KV key "events".
@@ -310,6 +314,22 @@ pub struct EventConfig {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ticket_note_online: String,
 
+    // ── Postponed notice ────────────────────────────────────────────
+    /// Organizer's explanation that the event has been postponed
+    /// (migration 0053), e.g. the old date, the new date and why.
+    /// Empty = not postponed; non-empty = show a "Postponed" banner on the
+    /// public event page and the ticket, and a badge on event cards.
+    ///
+    /// A note rather than an `EventStatus` variant on purpose: signup and the
+    /// public upcoming list both key on `status == Active`, and a postponed
+    /// event must keep taking registrations, check-ins and credit. The event
+    /// stays `Active`; this string is only what the attendee is told.
+    ///
+    /// Same rendering contract as [`Self::ticket_note_in_person`]: plain
+    /// text, never HTML.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub postponed_note: String,
+
     // ── Community links ─────────────────────────────────────────────
     /// Community/social links shown on ticket + public event pages.
     /// Organizer-configurable. Empty = no community section shown.
@@ -401,6 +421,7 @@ impl EventConfig {
             in_person_capacity: self.in_person_capacity,
             online_capacity: self.online_capacity,
             visibility: self.visibility.clone(),
+            postponed_note: self.postponed_note.clone(),
         }
     }
 
@@ -598,6 +619,7 @@ impl EventConfig {
             dev_profile_enabled: false,
             ticket_note_in_person: String::new(),
             ticket_note_online: String::new(),
+            postponed_note: String::new(),
             community_links: vec![],
             calendar_subscribe_url: String::new(),
         }

@@ -26,6 +26,7 @@ use event_checkin_domain::models::attendee::Attendee;
 /// This helper reads D1 to recover the real token.
 pub async fn resolve_claim_token_from_d1(
     state: &crate::state::AppState,
+    event_id: &str,
     attendee: &Attendee,
 ) -> Option<String> {
     // Only query D1 if the Sheets attendee doesn't have a valid claim_token
@@ -34,7 +35,7 @@ pub async fn resolve_claim_token_from_d1(
     }
 
     let d1 = state.d1.as_deref()?;
-    let d1_attendee = crate::db::attendees::get_attendee_by_id(d1, &attendee.api_id)
+    let d1_attendee = crate::db::attendees::get_attendee_by_id(d1, event_id, &attendee.api_id)
         .await
         .ok()??;
 
@@ -328,7 +329,7 @@ pub async fn quest_complete_checkin(
     // Already checked in — idempotent success, not an error: the frontend polls
     // this endpoint and a repeat completion must still hand back the claim token.
     if attendee.is_checked_in() {
-        let final_ct = resolve_claim_token_from_d1(&state, attendee).await;
+        let final_ct = resolve_claim_token_from_d1(&state, &event.id, attendee).await;
         return Ok(ApiOk::new(json!({
             "status": "already_checked_in",
             "claim_token": final_ct,
@@ -361,7 +362,7 @@ pub async fn quest_complete_checkin(
     // overwriting a valid D1 claim_token with an empty string when Sheets hasn't
     // synced yet. Adventure progress is keyed by claim token, so this is also the
     // key the completion gate below reads.
-    let resolved_claim_token = resolve_claim_token_from_d1(&state, attendee).await;
+    let resolved_claim_token = resolve_claim_token_from_d1(&state, &event.id, attendee).await;
 
     // Quest-completion gate. The claim flow re-verifies completion before minting,
     // so skipping this cannot hand out a badge — but `checked_in_at` is also the

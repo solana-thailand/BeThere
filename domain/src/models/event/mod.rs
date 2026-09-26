@@ -33,4 +33,7 @@ pub use sheet_name::{
     normalize_sheet_name,
 };
 pub use slug::slug_taken_by_other;
-pub use ticket_note::{MAX_TICKET_NOTE_CHARS, normalize_ticket_note};
+pub use ticket_note::{
+    MAX_POSTPONED_NOTE_CHARS, MAX_TICKET_NOTE_CHARS, normalize_postponed_note,
+    normalize_ticket_note,
+};

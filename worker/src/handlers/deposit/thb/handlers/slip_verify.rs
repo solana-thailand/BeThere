@@ -108,14 +108,7 @@ pub async fn verify_thb_slip_handler(
     if let (Ok(mapping), Ok(Some(attendee))) = (
         crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
             .await,
-        crate::sheets::get_attendee_by_id(
-            &body.attendee_id,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            Some(kv),
-        )
-        .await,
+        crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &event, Some(kv)).await,
     ) {
         if let Some(wctx) = &state.worker_ctx {
             // Detach deposit verification write (fires for approve AND reject)
@@ -176,6 +169,7 @@ pub async fn verify_thb_slip_handler(
         && let Some(ref d1) = state.d1
         && let Err(e) = crate::db::attendees::verify_deposit(
             d1,
+            &event.id,
             &body.attendee_id,
             "verified",
             "THB",

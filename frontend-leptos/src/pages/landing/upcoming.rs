@@ -29,6 +29,9 @@ struct PublicEventItem {
     /// landing page was unrecognisable (`.issues/094`).
     #[serde(default)]
     poster_url: String,
+    /// Non-empty = postponed (migration 0053); the card shows a badge only.
+    #[serde(default)]
+    postponed_note: String,
 }
 
 #[derive(Clone, Deserialize, Default)]
@@ -199,6 +202,7 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                                             class="card event-card landing-event-card"
                                         >
                                             {badge_img}
+                                            {crate::components::postponed_badge(&evt.postponed_note)}
                                             <h3 class="landing-event-name">
                                                 {evt.name}
                                             </h3>

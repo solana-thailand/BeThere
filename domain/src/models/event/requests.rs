@@ -152,6 +152,9 @@ pub struct CreateEventRequest {
     /// Ticket-page announcement for online attendees (migration 0049).
     #[serde(default)]
     pub ticket_note_online: String,
+    /// Postponed notice (migration 0053). Empty = not postponed.
+    #[serde(default)]
+    pub postponed_note: String,
     /// Community/social links.
     #[serde(default)]
     pub community_links: Vec<CommunityLink>,
@@ -345,6 +348,10 @@ pub struct UpdateEventRequest {
     /// `Some("")` distinction as [`Self::ticket_note_in_person`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ticket_note_online: Option<String>,
+    /// Postponed notice (migration 0053). `None` leaves it alone;
+    /// `Some("")` clears it, which un-postpones the event.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub postponed_note: Option<String>,
     /// Community/social links. Replaces all existing links.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community_links: Option<Vec<CommunityLink>>,

@@ -200,6 +200,10 @@ pub struct AttendeeListItem {
     /// also never set on the THB path.
     #[serde(default)]
     pub thb_refunded: bool,
+    /// What the registrant answered when staff asked whether they can still
+    /// come (migration 0052). Absent = not asked or no answer yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attendance_answer: Option<crate::models::attendee::AttendanceAnswer>,
 }
 
 impl AttendeeListItem {
@@ -237,6 +241,8 @@ impl AttendeeListItem {
             thb_source: None,
             thb_verified: false,
             thb_refunded: false,
+            // Annotated by the list handler from `attendance_answers`.
+            attendance_answer: None,
         }
     }
 }

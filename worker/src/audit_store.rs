@@ -97,6 +97,10 @@ pub enum AuditAction {
     /// (e.g. deposit-pending attendee confirmed via out-of-band contact
     /// that they will attend online instead).
     ParticipationTypeChanged,
+    /// Staff recorded (or cleared) what a registrant answered when asked
+    /// whether they can still come (migration 0052). Information only: it
+    /// changes neither check-in eligibility nor participation type.
+    AttendanceAnswerRecorded,
     /// Admin recorded a THB payment slip on behalf of an attendee who could
     /// not upload themselves (e.g. JWT expired and they sent the slip via
     /// LINE/email). Skips the VULN-012 email-match gate (admin-authed +

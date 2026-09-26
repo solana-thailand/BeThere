@@ -273,6 +273,10 @@ pub struct AttendeeListItem {
     pub thb_source: Option<String>,
     #[serde(default)]
     pub thb_verified: bool,
+    /// What the registrant answered when asked whether they can still come
+    /// (migration 0052). `None` = not asked or no answer yet.
+    #[serde(default)]
+    pub attendance_answer: Option<event_checkin_domain::models::attendee::AttendanceAnswer>,
     #[serde(default)]
     pub thb_refunded: bool,
 }
@@ -306,7 +310,7 @@ pub struct AttendeesData {
     pub attendees: Vec<AttendeeListItem>,
     #[serde(default)]
     pub stats: StatsResponse,
-    /// Cursor for the next page (row_index of last item in current page).
+    /// Offset of the next page, to pass back as `cursor`.
     #[serde(default)]
     pub next_cursor: Option<usize>,
     /// Whether more pages exist beyond this response.
@@ -405,6 +409,11 @@ pub struct AttendeeData {
     /// into links — never through `inner_html`.
     #[serde(default)]
     pub ticket_note: String,
+    /// Organizer's postponed notice (migration 0053), sent to every audience.
+    /// Empty = not postponed. Plain text, rendered by
+    /// `components::postponed_banner` and never through `inner_html`.
+    #[serde(default)]
+    pub postponed_note: String,
     /// NFT badge image URL.
     #[serde(default)]
     pub nft_image_url: String,

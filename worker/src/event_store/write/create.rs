@@ -4,8 +4,8 @@ use worker::KvStore;
 
 use event_checkin_domain::models::event::{
     CreateEventRequest, DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus,
-    EventConfig, EventIndex, EventStatus, normalize_map_url, normalize_sheet_name,
-    normalize_ticket_note,
+    EventConfig, EventIndex, EventStatus, normalize_map_url, normalize_postponed_note,
+    normalize_sheet_name, normalize_ticket_note,
 };
 
 use crate::event_store::read::get_event_index;
@@ -52,6 +52,7 @@ pub async fn create_event(
     let location_map_url = normalize_map_url(&req.location_map_url)?;
     let ticket_note_in_person = normalize_ticket_note(&req.ticket_note_in_person)?;
     let ticket_note_online = normalize_ticket_note(&req.ticket_note_online)?;
+    let postponed_note = normalize_postponed_note(&req.postponed_note)?;
 
     // SEC-003: Max deposit cap ($1,000 USDC, shared with the form's check)
     const MAX_DEPOSIT_USDC: u64 = event_checkin_domain::money::USDC_MAX_DEPOSIT_ATOMIC;
@@ -112,6 +113,7 @@ pub async fn create_event(
         link: req.link.trim().to_string(),
         ticket_note_in_person,
         ticket_note_online,
+        postponed_note,
         status: EventStatus::Draft,
         event_start_ms: req.event_start_ms,
         event_end_ms: req.event_end_ms,

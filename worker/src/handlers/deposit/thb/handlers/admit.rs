@@ -47,7 +47,8 @@ pub(super) async fn issue_ticket_qr_if_absent(
     );
 
     if let Some(d1) = state.d1.as_deref()
-        && let Err(e) = crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url).await
+        && let Err(e) =
+            crate::db::attendees::set_qr_url(d1, &event.id, &attendee.api_id, &qr_url).await
     {
         tracing::warn!(
             attendee_id = %attendee.api_id,

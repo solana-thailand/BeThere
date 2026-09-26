@@ -1,8 +1,12 @@
 # 151: Sheet status writes addressed row 0, and an append landed one column right
 
-**Status:** fixed on develop 2026-09-25 (session `event-checkin-19`), not
-deployed. The RTM#6 sheet's row 57 still has to be moved back by hand; the fix
-only covers new appends.
+**Status:** deployed 2026-09-25 (prod `59dc88cc`, git `7e7a394`, PR #153).
+Fixed in session `event-checkin-19`. **Verified live 2026-09-26:** the two
+RTM#6 slips approved after the deploy wrote `deposit_method`, `deposit_amount`,
+`deposit_verified = Yes` and `qr_code_url` into their own rows, read back with
+a read-only token. One is row 31, mid-sheet below the hand-edited rows; the
+other is row 53, a new registration appended at column A. The owner moved the
+shifted row back by hand (it is row 52 now).
 **Found by:** the owner, who saw the RTM#6 sheet and the admin Deposits tab
 go wrong after rows were inserted by hand. The row-0 failure turned up while
 investigating it.
@@ -97,12 +101,20 @@ investigating it.
   in D1. A D1 → sheet backfill is a separate change.
 - **`sync-sheet` still reads D1-first**, so it cannot refresh anything. It
   matters less now that nothing addresses rows by a stored number.
-- **Attendee list paging.** `handlers/attendee/list.rs` pages by `row_index`,
-  which is 0 for every D1-read attendee, so paging past the first page is
-  unreliable. Not touched here.
-- **Hardcoded PDPA columns.** `clear_sheet_pii` hardcodes column letters
-  (`B`, `C`, …) instead of the header mapping. It is correct for the current
-  header only.
+- ~~**Attendee list paging.**~~ Fixed on develop 2026-09-26, not deployed.
+  `handlers/attendee/list.rs` paged by `row_index`, which is 0 for every
+  D1-read attendee: page 2 came back empty. The admin roster also never asked
+  for page 2, so an event with more than 200 approved attendees lost everyone
+  after the 200th. Latent in prod: the largest roster is 55 (checked
+  read-only). Now `domain::models::attendee::roster_page` pages by offset
+  over `(row_index, api_id)` (tests `domain/tests/roster_page.rs`), and the
+  admin page walks every page (`api::get_all_attendees`).
+- ~~**Hardcoded PDPA columns.**~~ Fixed on develop 2026-09-26, not deployed.
+  `clear_sheet_pii` now takes its letters from the sheet's header row
+  (`ColumnMapping::pii_column_letters`, key list `PII_COLUMNS`). A recognised
+  header row is trusted, so a missing PII header blanks nothing in its old
+  place. An unrecognised header row falls back to the standard layout, which
+  gives the same 15 letters as before (tests `domain/tests/pii_columns.rs`).
 - **Existing shifted rows.** The fix repairs new appends only. RTM#6 row 57
   has to be moved back by hand (cut `B57:AI57`, paste at `A52`, delete the
   blank rows 53–57).

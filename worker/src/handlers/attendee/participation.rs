@@ -60,10 +60,13 @@ pub(crate) struct UpdateParticipationTypeBody {
 /// out-of-band (phone/Telegram/email) that they will attend online, the admin
 /// can flip them here instead of editing the Google Sheet cell by hand.
 ///
-/// Writes **both** the Google Sheet (column I, via detached `wait_until`)
-/// **and** D1 — unlike the auto-switch, which only writes the Sheet. Deposit
-/// records and slips are intentionally left intact; this is purely a
-/// participation-mode change, not a payment-state change.
+/// Writes **both** D1 (scoped to the event) **and** the Google Sheet
+/// (column I, via detached `wait_until`) — unlike the auto-switch, which only
+/// writes the Sheet. Deposit records and slips are intentionally left intact;
+/// this is purely a participation-mode change, not a payment-state change.
+///
+/// 404 when the id is in neither this event's Sheet nor this event's D1 rows.
+/// An unreadable Sheet degrades to a D1-only update instead of a 500.
 #[worker::send]
 pub async fn update_participation_type(
     State(state): State<AppState>,
@@ -88,27 +91,55 @@ pub async fn update_participation_type(
     let kv = resolve_kv(&state);
 
     // Look up the attendee to get the correct Sheet row_index (mirrors delete_attendee).
-    let attendee = {
-        let map = sheets::get_attendees_map(&state, &event.sheet_id, &event.sheet_name, kv)
-            .await
-            .map_err(|e| AppError::Internal(format!("failed to look up attendee: {e}")))?;
-        map.get(&id).cloned()
-    };
-    let row_index = match attendee.as_ref().map(|a| SheetRow::of(a.api_id.clone())) {
-        Some(row) => Some(row),
-        None => {
-            // No sheet row — likely a walk-in or D1-only record. Not an error:
-            // we still update D1 below.
+    // An unreadable Sheet is not fatal: D1 alone can carry the change (Issue 153).
+    let sheet_lookup = sheets::get_attendees_map(&state, &event.sheet_id, &event.sheet_name, kv)
+        .await
+        .map(|map| map.get(&id).cloned());
+    let (attendee, sheet_error) = match sheet_lookup {
+        Ok(attendee) => (attendee, None),
+        Err(e) => {
             tracing::warn!(
                 attendee_id = %id,
                 event_id = %event.id,
-                "participation_type override: attendee not found in sheet (will update D1 only if present)"
+                error = %e,
+                "participation_type override: sheet unreadable, trying D1 only"
             );
-            None
+            (None, Some(e))
         }
     };
+    let row_index = attendee.as_ref().map(|a| SheetRow::of(a.api_id.clone()));
 
-    // 1. Update the Google Sheet cell (detached via wait_until when possible).
+    // 1. Update D1, scoped to this event (primary store for walk-ins; keeps
+    //    ticket page + admin list in sync with the Sheet for regular attendees).
+    let d1_outcome = match state.d1.as_deref() {
+        Some(db) => {
+            Some(crate::db::attendees::set_participation_type(db, &event.id, &id, &new_value).await)
+        }
+        None => None,
+    };
+    let d1_updated = matches!(d1_outcome, Some(Ok(true)));
+
+    // Without a Sheet row, the scoped D1 write is the only proof the attendee
+    // belongs to this event.
+    if row_index.is_none() && !d1_updated {
+        return Err(match (d1_outcome, sheet_error) {
+            (Some(Err(e)), _) => {
+                AppError::Internal(format!("failed to update participation_type: {e}"))
+            }
+            (_, Some(e)) => AppError::Internal(format!("failed to look up attendee: {e}")),
+            _ => AppError::NotFound(format!("attendee {id} not found on this event")),
+        }
+        .into());
+    }
+    if let Some(Err(e)) = &d1_outcome {
+        tracing::warn!(
+            attendee_id = %id,
+            error = %e,
+            "participation_type override: D1 update failed (sheet is still updated)"
+        );
+    }
+
+    // 2. Update the Google Sheet cell (detached via wait_until when possible).
     if let Some(row_index) = row_index.clone() {
         let mapping = sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
             .await
@@ -141,24 +172,6 @@ pub async fn update_participation_type(
             })?;
         }
     }
-
-    // 2. Update D1 (primary store for walk-ins; keeps ticket page + admin list
-    //    in sync with the Sheet for regular attendees too).
-    let d1_updated = if let Some(db) = state.d1.as_deref() {
-        match crate::db::attendees::set_participation_type(db, &id, &new_value).await {
-            Ok(()) => true,
-            Err(e) => {
-                tracing::warn!(
-                    attendee_id = %id,
-                    error = %e,
-                    "participation_type override: D1 update failed (sheet was still updated)"
-                );
-                false
-            }
-        }
-    } else {
-        false
-    };
 
     // 3. Audit log.
     if let Some(kv) = &state.events_kv {

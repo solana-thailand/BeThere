@@ -169,14 +169,7 @@ pub async fn comp_thb_deposit_handler(
     if let (Ok(mapping), Ok(Some(attendee))) = (
         crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
             .await,
-        crate::sheets::get_attendee_by_id(
-            &body.attendee_id,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            Some(kv),
-        )
-        .await,
+        crate::sheets::get_attendee_by_id(&body.attendee_id, &state, &event, Some(kv)).await,
     ) {
         super::admit::issue_ticket_qr_if_absent(&state, kv, &event, &attendee, &mapping).await;
     } else {

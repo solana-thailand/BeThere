@@ -194,8 +194,12 @@ pub(crate) async fn upsert_post_event_attendee(
 }
 
 /// Write check-in data to D1 (dual-write alongside Sheets).
+///
+/// Every by-id write in this module is scoped to `event_id`: `attendees.id`
+/// is global, so an id-only `WHERE` can reach another event's row (Issue 153).
 pub(crate) async fn check_in_attendee(
     db: &D1Database,
+    event_id: &str,
     id: &str,
     checked_in_at: &str,
     checked_in_by: &str,
@@ -214,13 +218,14 @@ pub(crate) async fn check_in_attendee(
              WHEN ?3 = '' THEN claim_token \
              ELSE ?3 END, \
          updated_at = datetime('now') \
-         WHERE id = ?4",
+         WHERE id = ?4 AND event_id = ?5",
     );
     stmt.bind_refs(&[
         D1Type::Text(checked_in_at),
         D1Type::Text(checked_in_by),
         D1Type::Text(claim_token),
         D1Type::Text(id),
+        D1Type::Text(event_id),
     ])
     .map_err(|e| format!("D1 check_in_attendee bind: {e:?}"))?
     .run()
@@ -270,8 +275,10 @@ pub(crate) async fn claim_attendee(
 }
 
 /// Write deposit verification to D1.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn verify_deposit(
     db: &D1Database,
+    event_id: &str,
     id: &str,
     deposit_status: &str,
     deposit_tx_hash: &str,
@@ -284,7 +291,7 @@ pub(crate) async fn verify_deposit(
          SET deposit_status = ?1, deposit_tx_hash = ?2, deposit_amount_usdc = ?3, \
          deposit_verified_at = ?4, deposit_verified_by = ?5, \
          updated_at = datetime('now') \
-         WHERE id = ?6",
+         WHERE id = ?6 AND event_id = ?7",
     );
     stmt.bind_refs(&[
         D1Type::Text(deposit_status),
@@ -293,6 +300,7 @@ pub(crate) async fn verify_deposit(
         D1Type::Text(verified_at),
         D1Type::Text(verified_by),
         D1Type::Text(id),
+        D1Type::Text(event_id),
     ])
     .map_err(|e| format!("D1 verify_deposit bind: {e:?}"))?
     .run()
@@ -307,15 +315,26 @@ pub(crate) async fn verify_deposit(
 /// Required because the public ticket endpoint reads `qr_url` from D1
 /// (D1-first path). Without this, a QR written only to the Google Sheet is
 /// invisible to the ticket page until a manual sheet→D1 sync runs.
-pub(crate) async fn set_qr_url(db: &D1Database, id: &str, qr_url: &str) -> Result<(), String> {
+pub(crate) async fn set_qr_url(
+    db: &D1Database,
+    event_id: &str,
+    id: &str,
+    qr_url: &str,
+) -> Result<(), String> {
     let stmt = db.prepare(
-        "UPDATE attendees \n         SET qr_url = ?1, updated_at = datetime('now') \n         WHERE id = ?2",
+        "UPDATE attendees \
+         SET qr_url = ?1, updated_at = datetime('now') \
+         WHERE id = ?2 AND event_id = ?3",
     );
-    stmt.bind_refs(&[D1Type::Text(qr_url), D1Type::Text(id)])
-        .map_err(|e| format!("D1 set_qr_url bind: {e:?}"))?
-        .run()
-        .await
-        .map_err(|e| format!("D1 set_qr_url run: {e:?}"))?;
+    stmt.bind_refs(&[
+        D1Type::Text(qr_url),
+        D1Type::Text(id),
+        D1Type::Text(event_id),
+    ])
+    .map_err(|e| format!("D1 set_qr_url bind: {e:?}"))?
+    .run()
+    .await
+    .map_err(|e| format!("D1 set_qr_url run: {e:?}"))?;
 
     Ok(())
 }
@@ -329,21 +348,34 @@ pub(crate) async fn set_qr_url(db: &D1Database, id: &str, qr_url: &str) -> Resul
 /// NOTE: the deposit-deadline auto-switch (`check_and_switch_deadline`)
 /// only writes the Sheet, not D1. This helper keeps D1 in sync for the
 /// manual path so the public ticket page and admin list agree.
+///
+/// Scoped to `event_id`: `attendees.id` is global, so an id-only `WHERE`
+/// let staff of one event rewrite another event's attendee (Issue 153).
+/// Returns whether a row changed; `false` means no such attendee on the event.
 pub(crate) async fn set_participation_type(
     db: &D1Database,
+    event_id: &str,
     id: &str,
     participation_type: &str,
-) -> Result<(), String> {
-    let stmt = db.prepare(
-        "UPDATE attendees \n         SET participation_type = ?1, updated_at = datetime('now') \n         WHERE id = ?2",
-    );
-    stmt.bind_refs(&[D1Type::Text(participation_type), D1Type::Text(id)])
+) -> Result<bool, String> {
+    let result = db
+        .prepare(include_str!("../sql/attendee_participation_set.sql"))
+        .bind_refs(&[
+            D1Type::Text(event_id),
+            D1Type::Text(id),
+            D1Type::Text(participation_type),
+        ])
         .map_err(|e| format!("D1 set_participation_type bind: {e:?}"))?
         .run()
         .await
         .map_err(|e| format!("D1 set_participation_type run: {e:?}"))?;
-
-    Ok(())
+    let changes = result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0);
+    Ok(changes > 0)
 }
 
 /// Write QR URLs to D1 for multiple attendees in one statement.
@@ -351,6 +383,7 @@ pub(crate) async fn set_participation_type(
 /// `entries` is `(attendee_id, qr_url)` pairs. Used by batch QR generation.
 pub(crate) async fn set_qr_urls_batch(
     db: &D1Database,
+    event_id: &str,
     entries: &[(String, String)],
 ) -> Result<usize, String> {
     if entries.is_empty() {
@@ -358,7 +391,7 @@ pub(crate) async fn set_qr_urls_batch(
     }
     let mut updated = 0usize;
     for (id, qr_url) in entries {
-        if let Err(e) = set_qr_url(db, id, qr_url).await {
+        if let Err(e) = set_qr_url(db, event_id, id, qr_url).await {
             tracing::warn!(attendee_id = %id, error = %e, "D1 set_qr_urls_batch: row failed");
             continue;
         }
@@ -370,6 +403,7 @@ pub(crate) async fn set_qr_urls_batch(
 /// Write refund status to D1.
 pub(crate) async fn mark_refund(
     db: &D1Database,
+    event_id: &str,
     id: &str,
     deposit_status: &str,
     refund_tx_hash: &str,
@@ -381,7 +415,7 @@ pub(crate) async fn mark_refund(
          SET deposit_status = ?1, refund_tx_hash = ?2, \
          refund_marked_at = ?3, refund_marked_by = ?4, \
          updated_at = datetime('now') \
-         WHERE id = ?5",
+         WHERE id = ?5 AND event_id = ?6",
     );
     stmt.bind_refs(&[
         D1Type::Text(deposit_status),
@@ -389,6 +423,7 @@ pub(crate) async fn mark_refund(
         D1Type::Text(refund_marked_at),
         D1Type::Text(refund_marked_by),
         D1Type::Text(id),
+        D1Type::Text(event_id),
     ])
     .map_err(|e| format!("D1 mark_refund bind: {e:?}"))?
     .run()
@@ -399,14 +434,14 @@ pub(crate) async fn mark_refund(
 }
 
 /// Undo a check-in in D1 (clear checked_in fields).
-pub(crate) async fn undo_check_in(db: &D1Database, id: &str) -> Result<(), String> {
+pub(crate) async fn undo_check_in(db: &D1Database, event_id: &str, id: &str) -> Result<(), String> {
     let stmt = db.prepare(
         "UPDATE attendees \
          SET checked_in_at = NULL, checked_in_by = NULL, claim_token = NULL, \
          updated_at = datetime('now') \
-         WHERE id = ?1",
+         WHERE id = ?1 AND event_id = ?2",
     );
-    stmt.bind_refs(&[D1Type::Text(id)])
+    stmt.bind_refs(&[D1Type::Text(id), D1Type::Text(event_id)])
         .map_err(|e| format!("D1 undo_check_in bind: {e:?}"))?
         .run()
         .await

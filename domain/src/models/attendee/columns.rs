@@ -310,6 +310,52 @@ impl ColumnMapping {
     }
 }
 
+/// Columns a PDPA erasure blanks on the attendee's sheet row.
+///
+/// Identity, contact, wallet, claim and bank fields: the set the privacy
+/// handler used to clear by fixed letter (B–E, J–L, S–V, Y–AA, AC).
+pub const PII_COLUMNS: &[ColumnKey] = &[
+    ColumnKey::Name,
+    ColumnKey::FirstName,
+    ColumnKey::LastName,
+    ColumnKey::Email,
+    ColumnKey::Phone,
+    ColumnKey::ContactChannel,
+    ColumnKey::ContactHandle,
+    ColumnKey::CheckedInBy,
+    ColumnKey::SolanaAddress,
+    ColumnKey::QrCodeUrl,
+    ColumnKey::ClaimToken,
+    ColumnKey::BankAccount,
+    ColumnKey::BankName,
+    ColumnKey::AccountName,
+    ColumnKey::RefundLink,
+];
+
+impl ColumnMapping {
+    /// The letters of every [`PII_COLUMNS`] column on this sheet.
+    ///
+    /// A recognised header row (`is_valid`) is trusted as is: a PII key with
+    /// no header has no column, and blanking its standard-layout letter would
+    /// wipe whatever unrelated column sits there. A header row we cannot
+    /// recognise falls back to the standard layout, as every writer does.
+    pub fn pii_column_letters(&self) -> Vec<String> {
+        let hardcoded;
+        let mapping = match self.is_valid() {
+            true => self,
+            false => {
+                hardcoded = Self::hardcoded();
+                &hardcoded
+            }
+        };
+        PII_COLUMNS
+            .iter()
+            .filter_map(|&key| mapping.get(key))
+            .map(index_to_column_letter)
+            .collect()
+    }
+}
+
 /// Normalize a header string for comparison: lowercase, trim, replace `-`/` ` with `_`.
 fn normalize_header(s: &str) -> String {
     s.trim().to_lowercase().replace(['-', ' '], "_")

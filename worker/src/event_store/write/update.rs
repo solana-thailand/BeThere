@@ -4,8 +4,8 @@ use worker::KvStore;
 
 use event_checkin_domain::models::event::{
     DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus, EventConfig,
-    UpdateEventRequest, normalize_map_url, normalize_sheet_name, normalize_ticket_note,
-    slug_taken_by_other,
+    UpdateEventRequest, normalize_map_url, normalize_postponed_note, normalize_sheet_name,
+    normalize_ticket_note, slug_taken_by_other,
 };
 
 use crate::event_store::read::get_event_index;
@@ -379,6 +379,11 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     }
     if let Some(ref note) = req.ticket_note_online {
         config.ticket_note_online = normalize_ticket_note(note)?;
+    }
+    // Only the notice changes: status stays as it is, so a postponed event
+    // keeps taking registrations. `Some("")` un-postpones it.
+    if let Some(ref note) = req.postponed_note {
+        config.postponed_note = normalize_postponed_note(note)?;
     }
     if let Some(ref url) = req.calendar_subscribe_url {
         config.calendar_subscribe_url = url.clone();

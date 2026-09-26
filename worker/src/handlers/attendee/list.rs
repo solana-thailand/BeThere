@@ -8,7 +8,9 @@ use serde_json::json;
 
 use crate::error::ApiOk;
 use event_checkin_domain::models::api::{AttendeeListItem, StatsResponse};
-use event_checkin_domain::models::attendee::{RECENT_CHECK_INS_PER_TYPE, recent_check_ins};
+use event_checkin_domain::models::attendee::{
+    RECENT_CHECK_INS_PER_TYPE, ROSTER_PAGE_MAX, recent_check_ins, roster_page,
+};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
@@ -22,8 +24,8 @@ use crate::state::AppState;
 /// List attendees with cursor-based pagination and statistics.
 ///
 /// Stats are computed over ALL attendees regardless of pagination.
-/// Attendees are sorted by `row_index` ascending for deterministic pagination.
-/// Use `cursor` (row_index of last item) and `limit` (page size) for pagination.
+/// Approved attendees are ordered by `(row_index, api_id)`. `cursor` is the
+/// offset returned as `next_cursor`; `limit` is the page size (max 200).
 #[worker::send]
 pub async fn list_attendees(
     State(state): State<AppState>,
@@ -113,36 +115,23 @@ pub async fn list_attendees(
         recent_check_ins,
     };
 
-    // Cursor-based pagination: sort approved attendees by row_index,
-    // filter by cursor, then take up to `page_limit`.
-    let page_limit = query.limit.unwrap_or(200).min(200);
-
-    let mut approved: Vec<_> = attendees.iter().filter(|a| a.is_approved()).collect();
-    approved.sort_by_key(|a| a.row_index);
-
-    let filtered: Vec<_> = match query.cursor {
-        Some(cursor) => approved
-            .into_iter()
-            .filter(|a| a.row_index > cursor)
-            .collect(),
-        None => approved,
-    };
-
-    let has_more = filtered.len() > page_limit;
-    let page: Vec<_> = filtered.into_iter().take(page_limit).collect();
-
-    let next_cursor = if has_more {
-        page.last().map(|a| a.row_index)
-    } else {
-        None
-    };
+    // Offset cursor over a total order; `row_index` alone is 0 for every
+    // D1-created attendee, so it cannot be the key (`.issues/151` C).
+    let page = roster_page(
+        &attendees,
+        query.cursor,
+        query.limit.unwrap_or(ROSTER_PAGE_MAX),
+    );
+    let has_more = page.next_cursor.is_some();
+    let next_cursor = page.next_cursor;
 
     let mut attendee_responses: Vec<AttendeeListItem> = page
+        .items
         .iter()
         .map(|a| AttendeeListItem::from_attendee(a))
         .collect();
 
-    // Annotate each row from three independent batch queries, run
+    // Annotate each row from four independent batch queries, run
     // concurrently (plan 028 W9). All three are best-effort: a failure
     // degrades a badge, never the roster. An organizer at the door needs the
     // list of names far more than the badges on it.
@@ -156,16 +145,20 @@ pub async fn list_attendees(
     //    code). A staff comp and a credit-covered registration both looked
     //    like an unpaid attendee and the door screen said "Deposit
     //    pending". See `.issues/137`.
+    //  - attendance_answer: what the registrant said when asked whether they
+    //    can still come (migration 0052); `attendance_answers` is read by
+    //    nobody else, so it joins the batch without ordering concerns.
     //
     // Running them together is safe: `thb_balances_by_email` first writes
     // `return` rows for ended events, and neither sibling reads those rows
     // (`emails_applied_credit` reads `apply` rows, `settlement_by_attendee`
     // reads `thb_deposits`).
     if let Some(db) = state.d1.as_deref() {
-        let (balances, applied, settlements) = futures_util::join!(
+        let (balances, applied, settlements, answers) = futures_util::join!(
             crate::db::credit_ledger::thb_balances_by_email(db, &event.organization_id),
             crate::db::credit_ledger::emails_applied_credit(db, &event.id),
             crate::db::thb_deposits::settlement_by_attendee(db, &event.id),
+            crate::db::attendance_answers::by_event(db, &event.id),
         );
         if let Ok(balances) = balances {
             for item in attendee_responses.iter_mut() {
@@ -188,6 +181,11 @@ pub async fn list_attendees(
                     item.thb_verified = s.verified;
                     item.thb_refunded = s.refunded;
                 }
+            }
+        }
+        if let Ok(answers) = answers {
+            for item in attendee_responses.iter_mut() {
+                item.attendance_answer = answers.get(&item.api_id).copied();
             }
         }
     }

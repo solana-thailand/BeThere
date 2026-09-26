@@ -283,6 +283,7 @@ pub(crate) async fn recover_and_verify_deposit(
     if let Some(db) = d1
         && let Err(e) = crate::db::attendees::verify_deposit(
             db,
+            &event.id,
             &attendee_id,
             "verified",
             sig,
@@ -325,13 +326,7 @@ pub(crate) async fn recover_and_verify_deposit(
     let deposit_amount_str = status.amount.to_string();
     let (mapping_result, attendee_result) = futures_util::join!(
         crate::sheets::get_column_mapping(state, &event.sheet_id, &event.sheet_name, kv,),
-        crate::sheets::get_attendee_by_id(
-            &attendee_id,
-            state,
-            &event.sheet_id,
-            &event.sheet_name,
-            kv,
-        )
+        crate::sheets::get_attendee_by_id(&attendee_id, state, event, kv)
     );
     if let (Ok(mapping), Ok(Some(attendee))) = (mapping_result, attendee_result) {
         if let Some(ctx) = &state.worker_ctx {
@@ -353,7 +348,8 @@ pub(crate) async fn recover_and_verify_deposit(
 
                 if let Some(ref d1) = state.d1
                     && let Err(e) =
-                        crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url).await
+                        crate::db::attendees::set_qr_url(d1, &event.id, &attendee.api_id, &qr_url)
+                            .await
                 {
                     tracing::warn!(
                         attendee_id = %attendee.api_id,
@@ -399,7 +395,8 @@ pub(crate) async fn recover_and_verify_deposit(
 
                 if let Some(ref d1) = state.d1
                     && let Err(e) =
-                        crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url).await
+                        crate::db::attendees::set_qr_url(d1, &event.id, &attendee.api_id, &qr_url)
+                            .await
                 {
                     tracing::warn!(
                         attendee_id = %attendee.api_id,
