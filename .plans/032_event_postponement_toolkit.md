@@ -82,6 +82,23 @@ can't come are moved to online and refunded later.
   the worker requires a receipt (same validator as the single refund) and
   writes D1 attendees per refund; the page needs the receipt link and a
   confirm. Guard: `worker/tests/refund_proof_link_guard.rs`. Not deployed.
+  The batch now also writes refund_link to the Sheet (`c323440b`).
+- Staging, 2026-09-27 (deploy `a941d6bb`, git `c323440b`, session
+  `event-checkin-2e`):
+  - cancel page in headless Chrome (`flow-test-event`): the batch button is
+    disabled with an empty field and with a `javascript:` link, enabled for
+    an https link; the confirm shows the pending count and the link;
+    dismissing it refunds nothing;
+  - API: batch with no proof → "refund_proof_url is required", with a
+    `javascript:` proof → the https error;
+  - create → `warnings: []`; duplicate keeps its sheet warning; archive and
+    restore return `name`. Probe events deleted.
+  - Not exercised: a real failed D1 write (no way to force one), and the
+    toasts themselves (the chrome-devtools profile was held by a peer).
+  - Found: duplicating an event with no Sheet ID returns 500 "internal error".
+    `create_event` rejects it ("google sheet_id is required"), and the
+    duplicate and create handlers map every error except "already exists" to
+    Internal. Predates this work.
 
 - [x] Participation switch (`PATCH /attendee/{id}/participation-type`) returned
   500 when the event's Sheet could not be read. Fixed in `.issues/153`
