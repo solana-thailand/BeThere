@@ -176,7 +176,14 @@ then the deck polish. W1 live, W2 and W5 are not cuttable.
 
 ## 6. Progress log
 
-### 27 Sep: W1 shadow-mode slip agent, on develop (not on staging)
+### 27 Sep: W1 shadow-mode slip agent, on staging (not prod)
+
+Staging `33a0775e` = git `4ddb6439`, migration 0054 applied and read back.
+Verified with the published bank vector as `slip_qr` on two disposable
+events: the first upload is `needs_review` (ref new ✓), the same QR on the
+second event is `rejected` (ref new ✗, `bank_ref` NULL, `claimed_ref` kept).
+Opened the admin Deposits screen in headless Chrome: both lines render (muted
+and red), no page errors. Probe rows removed afterwards.
 
 - **Checker** `domain/src/slip_proposal.rs`: four checks (amount, ref new,
   in window, receiver tail), `Pass/Fail/Unknown`, any fail rejects, any unknown
@@ -209,7 +216,8 @@ then the deck polish. W1 live, W2 and W5 are not cuttable.
 **Still owed for W1:**
 - the privacy line on the upload page before vision is switched on;
 - the admin-upload path (`slip_admin_upload.rs`) doesn't propose yet;
-- staging: apply 0054, then upload a real slip and a doctored one (reused ref)
-  in the browser;
+- a real bank slip photographed on a phone, uploaded through the attendee
+  page (the probe sent `slip_qr` directly; the browser decoder was tested
+  separately in headless Chrome on a synthetic slip image);
 - measure worker CPU with vision on (`.issues/134` method);
 - the agreement numbers (proposal vs organizer decision).

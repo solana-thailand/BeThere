@@ -126,3 +126,7 @@ Apply migrations 0052 and 0053 before the code. Build the frontend. Then
   line, under the fail line.
 - Worker is 51.75% of the 3 MiB free-plan ceiling (+53819 B since
   2026-09-22).
+- Staging 2026-09-27 (session `event-checkin-d9`): version `33a0775e` = git
+  `4ddb6439`, which carries the Later items and `a22f749d`. Verified: a
+  create refused for an empty Sheet ID or a backwards date returns 400 with
+  the reason (`validation error: google sheet_id is required`). Not on prod.
