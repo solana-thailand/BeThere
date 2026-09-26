@@ -35,13 +35,23 @@ can't come are moved to online and refunded later.
   `pages/admin_refund_queue_filter.rs`.
 - [ ] Verify on staging with a switched attendee who has a cash deposit.
 
-## 4. Postponed notice (develop, subagent worktree)
+## 4. Postponed notice (develop, `58dc161c`)
 
-- [ ] `postponed_note` on the event (migration 0053). The event stays
-  `Active`, so registration, check-in and credit keep working. A new
-  `EventStatus` was rejected because signup and the public list are gated on
-  `Active`.
-- [ ] Banner on the public event page and ticket; badge on the public list.
+- [x] `postponed_note` on the event (migration 0053). Empty means not
+  postponed. The event stays `Active`, so registration, check-in and credit
+  keep working. A new `EventStatus` was rejected because signup and the
+  public list are gated on `Active`.
+- [x] Event form field in the "Ticket Announcements" section. It is capped at
+  500 characters by `normalize_postponed_note`, which shares its body with
+  the ticket-note normalizer.
+- [x] Banner on the public event page (live events) and above both ticket
+  views. Badge on the landing list and `/discover`. The note is rendered as
+  plain text only. `EventMeta` carries the note for the KV fallback of the
+  list.
+- [x] Duplicate does not carry the note forward.
+- [ ] Open on staging: form, public page, ticket, landing badge.
+- [ ] Deploy order: migration 0053 **before** the code, because the D1-first
+  public list selects `postponed_note` and fails without the column.
 
 ## Later / not chosen
 
