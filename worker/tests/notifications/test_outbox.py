@@ -174,6 +174,30 @@ class OutboxTests(Harness):
         self.db.execute("UPDATE events SET time_tba=0 WHERE id='event-a'")
         self.assertEqual(self.db.execute(query('claim'), (MODE,)).fetchone()['kind'],'reminder')
 
+    def test_reschedule_through_the_event_upsert(self):
+        # The worker saves events with `INSERT … ON CONFLICT (id) DO UPDATE`
+        # (`db::events::upsert_event`), not a plain UPDATE. That outer conflict
+        # policy overrides a trigger's own `OR IGNORE`, so a reschedule that
+        # re-inserted an existing reminder aborted the whole save and D1 kept
+        # the old date (`.issues/152`). The plain-UPDATE tests above cannot see it.
+        upsert_src = (WORKER / 'src/db/events.rs').read_text()
+        self.assertIn('ON CONFLICT (id) DO UPDATE SET', upsert_src)
+        self.assertIn('event_start_ms = excluded.event_start_ms', upsert_src)
+        self.register()
+        self.register('b')
+        moved = (self.now + 172800) * 1000
+        self.db.execute(
+            "INSERT INTO events(id,name,slug,status,event_start_ms,event_end_ms) "
+            "VALUES ('event-a','Builder night','event-a','active',?,?) "
+            "ON CONFLICT (id) DO UPDATE SET event_start_ms=excluded.event_start_ms, "
+            "event_end_ms=excluded.event_end_ms",
+            (moved, moved + 10_000_000))
+        self.assertEqual(
+            self.db.execute("SELECT event_start_ms FROM events WHERE id='event-a'").fetchone()[0], moved)
+        reminders = [j for j in self.jobs() if j['kind'] == 'reminder']
+        self.assertEqual(len(reminders), 2)
+        self.assertTrue(all(j['due_at'] == self.now + 86400 for j in reminders))
+
     def test_tba_registration_later_gets_reminder(self):
         self.db.execute("UPDATE events SET time_tba=1 WHERE id='event-a'")
         self.register()
