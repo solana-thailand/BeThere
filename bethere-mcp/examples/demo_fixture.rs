@@ -4,6 +4,12 @@
 //! (`/api/escrow/init` then `/api/escrow/confirm-init`), as in
 //! `scripts/e2e_devnet_test.sh` step 2–3.
 //!
+//! It also does the two steps a fresh API-created event needs before an
+//! agent can register: activate it (create ignores `status`) and give it one
+//! D1 attendee, a checked-in host walk-in. Until an event has a D1 attendee,
+//! registration's duplicate check reads Google Sheets, and the placeholder
+//! `sheet_id` below is unreachable there.
+//!
 //! ```sh
 //! BETHERE_ORGANIZER_KEYPAIR=~/.config/solana/id.json \
 //!   cargo run --example demo_fixture
@@ -12,6 +18,7 @@
 
 use bethere_mcp::api::unwrap_envelope;
 use bethere_mcp::config::Config;
+use reqwest::Method;
 use serde_json::{json, Value};
 use solana_sdk::signer::Signer;
 
@@ -54,17 +61,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // does the same). Attendee reads are D1-first.
         "sheet_id": "agent-demo-no-sheet",
         "visibility": "public",
-        "status": "active",
     });
-    let created = admin_post(&http, &base, "/api/events", &event).await?;
+    let created = admin_send(&http, Method::POST, &base, "/api/events", &event).await?;
     let event_id = created["id"]
         .as_str()
         .ok_or("no event id in create response")?
         .to_string();
     eprintln!("event created: {event_id}");
 
-    let init = admin_post(
+    admin_send(
         &http,
+        Method::PUT,
+        &base,
+        &format!("/api/events/{event_id}"),
+        &json!({ "status": "active" }),
+    )
+    .await?;
+    eprintln!("event activated");
+
+    admin_send(
+        &http,
+        Method::POST,
+        &base,
+        "/api/walkin/register",
+        &json!({
+            "event_id": event_id,
+            "name": "Demo Host",
+            "email": format!("host+{stamp}@bethere.invalid"),
+            "override_capacity": true,
+        }),
+    )
+    .await?;
+    eprintln!("host walk-in seeded (D1 attendee)");
+
+    let init = admin_send(
+        &http,
+        Method::POST,
         &base,
         "/api/escrow/init",
         &json!({ "event_id": event_id }),
@@ -77,8 +109,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         flow_harness::chain::submit_signed_by(config.rpc_url.as_str(), &organizer, tx_b64).await?;
     eprintln!("escrow init tx: {sig}");
 
-    let confirmed = admin_post(
+    let confirmed = admin_send(
         &http,
+        Method::POST,
         &base,
         "/api/escrow/confirm-init",
         &json!({ "event_id": event_id }),
@@ -97,14 +130,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn admin_post(
+async fn admin_send(
     http: &reqwest::Client,
+    method: Method,
     base: &str,
     path: &str,
     body: &Value,
 ) -> Result<Value, Box<dyn std::error::Error>> {
     let resp = http
-        .post(format!("{base}{path}"))
+        .request(method, format!("{base}{path}"))
         .bearer_auth(ADMIN_TOKEN)
         .json(body)
         .send()

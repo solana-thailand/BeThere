@@ -274,3 +274,20 @@ and red), no page errors. Probe rows removed afterwards.
   unreachable. Real events have a real sheet; the fixture needed a seeded
   attendee row.
 
+
+### W3 log, 27 Sep (later): Claude as the MCP client
+
+- A headless Claude Code session was the MCP client (`claude -p --mcp-config`
+  with a throwaway config). From a plain-language task it found the event,
+  registered, paid the 1 USDC devnet deposit and confirmed `verified`.
+  Tx `jwmzATe6…` is finalized. It took 9 turns and cost $0.60. The full
+  record is in `bethere-mcp/README.md` §"Verified run with Claude as the MCP
+  client".
+- `demo_fixture` now also activates the event and seeds a host walk-in.
+  The fixture is a single command.
+- Found and fixed: the first `register` returned a 400 (missing contact
+  channel), and the agent then made up a handle. The tool descriptions now
+  point at `require_contact_info` and say to ask for the handle.
+- **Still owed for W3 submission:** a screen *video* of an interactive run for
+  the submission package (W5). That is the owner's recording; the headless
+  transcript proves the flow works.

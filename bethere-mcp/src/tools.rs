@@ -99,8 +99,8 @@ impl ToolName {
                     "consent_given": { "type": "boolean", "description": "The person agreed to the privacy notice. Must be true." },
                     "deposit_agreed": { "type": "boolean", "description": "The person agreed to the deposit commitment (deposit events)." },
                     "participation_type": { "type": "string", "enum": ["In-Person", "Online"] },
-                    "contact_channel": { "type": "string", "description": "Telegram, Line, Facebook or X (Twitter), when the event requires contact info." },
-                    "contact_handle": { "type": "string" }
+                    "contact_channel": { "type": "string", "description": "Telegram, Line, Facebook or X (Twitter). Required when event_details shows require_contact_info: true." },
+                    "contact_handle": { "type": "string", "description": "The person's own handle on contact_channel. Ask for it; never invent one." }
                 },
                 "required": ["slug", "name", "email", "consent_given"],
                 "additionalProperties": false
