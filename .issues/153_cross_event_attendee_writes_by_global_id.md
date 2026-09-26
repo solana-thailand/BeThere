@@ -1,8 +1,9 @@
 # 153: Staff of one event can write another event's attendee by id
 
-**Status:** fixed on develop (parts 1–2 session `event-checkin-fa`, part 3
-session `event-checkin-90`). Not in
-prod yet: it ships with the next worker release and needs no migration.
+**Status:** deployed 2026-09-26 (prod `f3b32edf`, git `70a36f3e`, session `event-checkin-3f`).
+Parts 1–2 by session `event-checkin-fa`, part 3 by `event-checkin-90`. The
+exact release SHA passed the staging write smoke first. The prod cross-event
+404 probe is still owed: it needs a staff token (see "Not done").
 **Found by:** staging verification of plan 032 (session `event-checkin-2e`).
 `PATCH /attendee/{id}/participation-type` returned 500 for an event whose
 `sheet_id` is a placeholder. Reading the handler turned up the authz gap
@@ -134,4 +135,5 @@ binaries, 976 tests, 0 failures; clippy `-D warnings` clean.
 ## Not done
 
 - Nothing in code. Prod verification (cross-event case is 404 with a
-  readable Sheet) waits for the next owner-approved prod deploy.
+  readable Sheet) is owed: the agent session had no `SMOKE_TOKEN` or staff
+  token. Unauthenticated, the new routes return 401 on prod.

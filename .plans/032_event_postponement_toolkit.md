@@ -91,6 +91,12 @@ Apply migrations 0052 and 0053 before the code. Build the frontend. Then
 - Staging done 2026-09-26: migrations 0052 and 0053 applied, deploy
   `20260926T101341Z` = git `3fa0eb4d`, Content-Type, security headers and
   write smoke all green.
+- Prod done 2026-09-26 (session `event-checkin-3f`, owner go in session):
+  D1 backup `backup-prod-20260926-1821.sql` (gitignored), migrations 0052 and
+  0053 applied and read back, prod `f3b32edf`, git `70a36f3e`, deploy tag `20260926T122155Z`.
+  Content-Type and security headers green; `postponed_note` is in
+  `/api/public/events`. Preflight bypassed with `--force` (fixtures missing,
+  `.issues/084`/141). The write smoke on prod is owed (no `SMOKE_TOKEN`).
 - Frontend first load is +36213 B over the baseline: above the 25600 warn
   line, under the fail line.
 - Worker is 51.75% of the 3 MiB free-plan ceiling (+53819 B since
