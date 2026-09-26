@@ -25,7 +25,12 @@ can't come are moved to online and refunded later.
 - [x] Roster: `attendance_answer` on `AttendeeListItem` (a 4th batch
   annotation), a per-row picker, an answer filter bar with counts, and a CSV
   column. UI in `pages/admin_attendance_answer.rs`.
-- [ ] Open the admin page on staging and record, change and clear an answer.
+- [x] Staging, 2026-09-26 (`3fa0eb4d`), in the browser:
+  - picker and filter pills render;
+  - saving "Can't come" updates the counts and survives a refresh;
+  - the filters show the right rows;
+  - clearing works;
+  - a write for another event's attendee → 404, a bad value → 422.
 
 ## 3. Refund Queue filter (develop)
 
@@ -34,7 +39,11 @@ can't come are moved to online and refunded later.
 - [x] Filter pills: All · Moved online · Can't come · Not checked in. A row
   without context passes only "All". UI in
   `pages/admin_refund_queue_filter.rs`.
-- [ ] Verify on staging with a switched attendee who has a cash deposit.
+- [x] Staging: pills render with counts; "Can't come" shows the queued row;
+  "Moved online" and "Not checked in" hide it (a checked-in walk-in). The
+  "Moved online" positive case was not exercised in the browser, because the
+  participation switch 500s on a fixture without a real Sheet (see Later);
+  it is covered by the SQL and domain tests.
 
 ## 4. Postponed notice (develop, `58dc161c`)
 
@@ -50,7 +59,12 @@ can't come are moved to online and refunded later.
   plain text only. `EventMeta` carries the note for the KV fallback of the
   list.
 - [x] Duplicate does not carry the note forward.
-- [ ] Open on staging: form, public page, ticket, landing badge.
+- [x] Staging:
+  - the form field saves (Thai text and a newline reach D1);
+  - the banner shows on `/e/{slug}` and on the ticket;
+  - `<b>` renders as literal text (no element);
+  - registration stays open;
+  - exactly one "Postponed" badge on the landing list.
 - [ ] Deploy order: migration 0053 **before** the code, because the D1-first
   public list selects `postponed_note` and fails without the column.
 
@@ -63,7 +77,21 @@ can't come are moved to online and refunded later.
 - [ ] "Batch THB refund" (cancel page) refunds every verified deposit with no
   proof and skips D1 `attendees.mark_refund`. Guard it or retire it.
 
+- [ ] Participation switch (`PATCH /attendee/{id}/participation-type`) returns
+  500 when the event's Sheet cannot be read (seen on the staging smoke fixture
+  with `sheet_id = smoke-no-sheet`). It fails hard on the Sheet lookup although
+  the D1 update alone would do. Pre-existing and not caused by this plan; RTM#6
+  (real Sheet) switched 3 people fine.
+
 ## Deploy (owner-gated)
 
 Apply migrations 0052 and 0053 before the code. Build the frontend. Then
 `worker/deploy.sh` with an owner go.
+
+- Staging done 2026-09-26: migrations 0052 and 0053 applied, deploy
+  `20260926T101341Z` = git `3fa0eb4d`, Content-Type, security headers and
+  write smoke all green.
+- Frontend first load is +36213 B over the baseline: above the 25600 warn
+  line, under the fail line.
+- Worker is 51.75% of the 3 MiB free-plan ceiling (+53819 B since
+  2026-09-22).
