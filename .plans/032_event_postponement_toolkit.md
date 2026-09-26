@@ -77,11 +77,11 @@ can't come are moved to online and refunded later.
 - [ ] "Batch THB refund" (cancel page) refunds every verified deposit with no
   proof and skips D1 `attendees.mark_refund`. Guard it or retire it.
 
-- [ ] Participation switch (`PATCH /attendee/{id}/participation-type`) returns
-  500 when the event's Sheet cannot be read (seen on the staging smoke fixture
-  with `sheet_id = smoke-no-sheet`). It fails hard on the Sheet lookup although
-  the D1 update alone would do. Pre-existing and not caused by this plan; RTM#6
-  (real Sheet) switched 3 people fine.
+- [x] Participation switch (`PATCH /attendee/{id}/participation-type`) returned
+  500 when the event's Sheet could not be read. Fixed in `.issues/153`
+  (`445c1eb5`): an unreadable Sheet now degrades to a D1-only update. Staging
+  verified on 2026-09-26 (`d1_updated: true, sheet_row_updated: false`).
+  Reading it also turned up a cross-event write by id, fixed in the same issue.
 
 ## Deploy (owner-gated)
 

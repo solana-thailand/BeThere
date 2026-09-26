@@ -1,7 +1,7 @@
 # 153: Staff of one event can write another event's attendee by id
 
-**Status:** fixed on develop (both parts, session `event-checkin-fa`), not
-deployed. It ships with the next worker deploy and needs no migration.
+**Status:** fixed on develop (both parts, session `event-checkin-fa`). Not in
+prod yet: it ships with the next worker release and needs no migration.
 **Found by:** staging verification of plan 032 (session `event-checkin-2e`).
 `PATCH /attendee/{id}/participation-type` returned 500 for an event whose
 `sheet_id` is a placeholder. Reading the handler turned up the authz gap
@@ -92,6 +92,21 @@ an `events.id` would now miss D1 and fall back to the Sheet.
   id or slug.
 - Staging: 5 of 16, from deleted smoke fixtures.
 - No live event is affected.
+
+## Staging verification (2026-09-26, deploy `73140039`, git `14642b3c`)
+
+- `post_deploy_smoke.sh`: Content-Type, headers and writes green. Its admin
+  slip upload exercises the scoped lookup on the positive path.
+- Own event (`flow-test-event`, placeholder Sheet): participation → Online →
+  In-Person, both 200 with `d1_updated: true, sheet_row_updated: false`. This
+  was a 500 before.
+- Cross-event (event `flow-deposit-20260912`, attendee of `flow-test-event`):
+  participation, read, check-in and undo-checkin all refused. D1 read back
+  afterwards shows no change: `checked_in_at` kept, `claim_token` still null.
+- The refusals are 500, not 404, on staging. After the scoped D1 miss the
+  lookup falls back to the Sheet, and staging Sheets are placeholders, so
+  absence cannot be proven. With a readable Sheet (prod) the same case is a
+  404. Not verified on prod.
 
 ## Not done
 
