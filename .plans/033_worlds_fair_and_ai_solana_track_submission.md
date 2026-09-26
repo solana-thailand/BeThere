@@ -1,6 +1,7 @@
 # Plan 033: Win Crypto World's Fair and the AI × Solana Thailand track
 
-**Status:** proposed 2026-09-27, session `event-checkin-2e`. Nothing started.
+**Status:** in progress. W1 code landed on develop 2026-09-27 (session
+`event-checkin-d9`), not deployed; see §6. Proposed 2026-09-27 by `event-checkin-2e`.
 **Supersedes the schedule of** `.plans/026` (its design rule and compliance
 section still stand and are not repeated here).
 **Deadlines (read 2026-09-27):**
@@ -172,3 +173,43 @@ then the deck polish. W1 live, W2 and W5 are not cuttable.
 - **PDPA.** See §4 Q3; slips stay in our R2; the proposal row holds no image.
 - **Free-plan limits.** W1 adds I/O wait, not CPU; measure CPU on staging
   (`.issues/134` method) before prod.
+
+## 6. Progress log
+
+### 27 Sep: W1 shadow-mode slip agent, on develop (not on staging)
+
+- **Checker** `domain/src/slip_proposal.rs`: four checks (amount, ref new,
+  in window, receiver tail), `Pass/Fail/Unknown`, any fail rejects, any unknown
+  needs review. A QR-only slip can never be `accepted`: the QR carries no
+  amount. Tests: `domain/tests/slip_proposal.rs` (9; mutation-checked).
+- **Storage** migration `0054_slip_proposals.sql`: `claimed_ref` (evidence) +
+  `bank_ref` UNIQUE (first claimant only), so a reused ref is stored, not
+  refused. Rows are deleted with their deposit (90-day retention). The
+  migration and the upsert were run against SQLite to confirm the race path's
+  `UNIQUE constraint failed: slip_proposals.bank_ref` text.
+- **QR path**: the browser decodes the mini-QR (`frontend-leptos/js/slip_qr.js`,
+  BarcodeDetector then self-hosted jsQR), keeps it only if the `domain`
+  parser accepts it, and sends `slip_qr` with the upload; the worker re-parses
+  it (`slip_agent::facts_from_qr`) after the deposit is saved. Errors are
+  logged and never fail the upload.
+- **Vision fallback** `worker/src/slip_vision.rs`: `claude-opus-5`, structured
+  output (`output_config.format` json_schema), `effort: low`,
+  `fallbacks: "default"`. Runs in `wait_until` only when there is no usable QR
+  AND `ANTHROPIC_API_KEY` is set AND `SLIP_AGENT_VISION=on`. Default off
+  until §4 Q3 is answered. Every returned field is re-parsed; hostile or vague
+  text becomes unknown. Vision refs are namespaced `vision:` (no bank code),
+  so they are compared only with other vision reads.
+- **Admin**: the pending-slip list returns `slip_proposals`; each card shows
+  "Slip check (read from the slip QR): amount ? · ref new ✓ · … → needs your
+  review".
+- Guards in `worker/tests/slip_duplicate_guards.rs`: the agent writes no deposit,
+  the upload records after saving and can't fail on it, UNIQUE + retention,
+  and the vision parser.
+
+**Still owed for W1:**
+- the privacy line on the upload page before vision is switched on;
+- the admin-upload path (`slip_admin_upload.rs`) doesn't propose yet;
+- staging: apply 0054, then upload a real slip and a doctored one (reused ref)
+  in the browser;
+- measure worker CPU with vision on (`.issues/134` method);
+- the agreement numbers (proposal vs organizer decision).
