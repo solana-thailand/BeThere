@@ -393,13 +393,18 @@ pub fn Ticket() -> impl IntoView {
                         let eid = query.get().get("event_id").map(|s| s.to_string());
                         let mut vd = TicketViewData::from_data(&data);
                         vd.deposit_href = build_deposit_href(&vd.api_id, eid.as_deref());
+                        // Above both views: a new date concerns in-person and
+                        // online attendees alike, so it is not a per-view card.
+                        let postponed = crate::components::postponed_banner(&data.postponed_note);
 
                         if vd.is_online {
                             view! {
+                                {postponed}
                                 <OnlineView view_data=vd />
                             }.into_any()
                         } else {
                             view! {
+                                {postponed}
                                 <InPersonView
                                     view_data=vd
                                     show_qr=show_qr

@@ -212,6 +212,11 @@ pub async fn duplicate_event(
         // and the duplicate always lands in draft for review.
         ticket_note_in_person: source.ticket_note_in_person.clone(),
         ticket_note_online: source.ticket_note_online.clone(),
+        // Deliberately NOT carried forward: a postponement belongs to one
+        // date of one event. A copy of a postponed event is a new, not
+        // postponed event, and inheriting the banner would tell its attendees
+        // a date change that never happened.
+        postponed_note: String::new(),
         calendar_subscribe_url: source.calendar_subscribe_url.clone(),
     };
 

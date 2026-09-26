@@ -4,8 +4,8 @@
 //! that renders the full form UI with validation, save, and escrow init logic.
 
 use event_checkin_domain::models::event::{
-    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, MAX_TICKET_NOTE_CHARS,
-    normalize_sheet_name,
+    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, MAX_POSTPONED_NOTE_CHARS,
+    MAX_TICKET_NOTE_CHARS, normalize_sheet_name,
 };
 use event_checkin_domain::money::{UsdcDepositCheck, check_usdc_deposit, parse_usdc_atomic};
 use leptos::prelude::*;
@@ -82,6 +82,8 @@ pub struct EventForm {
     pub ticket_note_in_person: String,
     /// Ticket-page announcement shown to online attendees (migration 0049).
     pub ticket_note_online: String,
+    /// Postponed notice (migration 0053). Empty = not postponed.
+    pub postponed_note: String,
 }
 
 // ===== Helpers =====
@@ -226,6 +228,7 @@ pub fn default_form() -> EventForm {
         calendar_subscribe_url: String::new(),
         ticket_note_in_person: String::new(),
         ticket_note_online: String::new(),
+        postponed_note: String::new(),
     }
 }
 
@@ -331,6 +334,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         community_links: detail.community_links.clone(),
         ticket_note_in_person: detail.ticket_note_in_person.clone(),
         ticket_note_online: detail.ticket_note_online.clone(),
+        postponed_note: detail.postponed_note.clone(),
         calendar_subscribe_url: detail.calendar_subscribe_url.clone(),
     }
 }
@@ -714,6 +718,7 @@ pub fn EventFormComponent(
                 community_links: cl_links.get(),
                 ticket_note_in_person: current_form.ticket_note_in_person.clone(),
                 ticket_note_online: current_form.ticket_note_online.clone(),
+                postponed_note: current_form.postponed_note.clone(),
                 calendar_subscribe_url: current_form.calendar_subscribe_url.trim().to_string(),
             };
 
@@ -979,6 +984,8 @@ pub fn EventFormComponent(
                 community_links: Some(cl_links.get()),
                 ticket_note_in_person: Some(current_form.ticket_note_in_person.clone()),
                 ticket_note_online: Some(current_form.ticket_note_online.clone()),
+                // Always sent, so emptying the box un-postpones the event.
+                postponed_note: Some(current_form.postponed_note.clone()),
                 calendar_subscribe_url: Some(
                     current_form.calendar_subscribe_url.trim().to_string(),
                 ),
@@ -2400,6 +2407,22 @@ pub fn EventFormComponent(
                                 placeholder="The YouTube live link goes up about 30 minutes before we start.\n\nWatch: https://example.com/live\nClaim your badge from this page once the session begins."
                                 prop:value=move || form.get().ticket_note_online
                                 on:input=move |ev| set_form.update(|f| f.ticket_note_online = event_target_value(&ev))
+                            ></textarea>
+                        </div>
+                        // Postponed notice (migration 0053). A note, not a
+                        // status: the event stays Active and keeps taking
+                        // registrations.
+                        <div class="quiz-setting-item">
+                            <label class="quiz-field-label">"Postponed notice"</label>
+                            <p class="quiz-setting-hint">
+                                "Leave empty unless the event is postponed. Shown as a banner on the event page and tickets."
+                            </p>
+                            <textarea
+                                class="quiz-textarea"
+                                maxlength=MAX_POSTPONED_NOTE_CHARS
+                                placeholder="Postponed from 27 Sep because of flooding. New date: 4 Oct, same venue."
+                                prop:value=move || form.get().postponed_note
+                                on:input=move |ev| set_form.update(|f| f.postponed_note = event_target_value(&ev))
                             ></textarea>
                         </div>
                     </div>

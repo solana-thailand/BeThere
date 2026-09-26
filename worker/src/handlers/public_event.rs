@@ -67,6 +67,8 @@ pub async fn list_public_events(
                     "in_person_capacity": e.in_person_capacity,
                     "online_capacity": e.online_capacity,
                     "visibility": e.visibility.as_str(),
+                    // Same field the D1 path emits (`public_event_json`).
+                    "postponed_note": e.postponed_note,
                 })
             })
             .collect()
@@ -250,6 +252,13 @@ pub async fn get_public_event(
     response_fields.insert(
         "archive_url".to_string(),
         serde_json::Value::String(genesis_archive_url(&config.link)),
+    );
+    // Non-empty = postponed; the page renders it as a plain-text banner.
+    // Inserted rather than listed in `json!` above, which is at the macro's
+    // recursion limit.
+    response_fields.insert(
+        "postponed_note".to_string(),
+        serde_json::Value::String(config.postponed_note.clone()),
     );
     // Server-calculated so a client cannot keep a stale CTA visible after the
     // organizer's post-event enrollment deadline has elapsed.

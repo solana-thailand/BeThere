@@ -459,6 +459,41 @@ pub fn LightboxImage(
     }
 }
 
+// ===== Postponed notice (migration 0053) =====
+
+/// "Postponed" banner for the public event page and the ticket, or nothing
+/// when the organizer has not written a notice (empty = not postponed).
+///
+/// **Plain text, never HTML** — the same contract as the ticket announcement:
+/// the note is organizer prose from D1, so it is placed as a text node and
+/// never through `inner_html`. Line breaks survive through
+/// `white-space: pre-wrap` on `.postponed-banner-body`, not generated `<br>`.
+pub fn postponed_banner(note: &str) -> AnyView {
+    let note = note.trim().to_string();
+    if note.is_empty() {
+        return ().into_any();
+    }
+    view! {
+        <div class="postponed-banner" role="note">
+            <div class="postponed-banner-title">
+                <Icon icon=IconName::Calendar class="icon-sm" />
+                <span>"Postponed"</span>
+            </div>
+            <p class="postponed-banner-body">{note}</p>
+        </div>
+    }
+    .into_any()
+}
+
+/// Small "Postponed" badge for event cards, or nothing when not postponed.
+/// The note itself is left for the event page; a card only flags it.
+pub fn postponed_badge(note: &str) -> AnyView {
+    match note.trim().is_empty() {
+        true => ().into_any(),
+        false => view! { <span class="badge badge-warning">"Postponed"</span> }.into_any(),
+    }
+}
+
 #[cfg(test)]
 mod status_badge_tests {
     use super::StatusTone;

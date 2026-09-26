@@ -409,6 +409,11 @@ pub struct AttendeeData {
     /// into links — never through `inner_html`.
     #[serde(default)]
     pub ticket_note: String,
+    /// Organizer's postponed notice (migration 0053), sent to every audience.
+    /// Empty = not postponed. Plain text, rendered by
+    /// `components::postponed_banner` and never through `inner_html`.
+    #[serde(default)]
+    pub postponed_note: String,
     /// NFT badge image URL.
     #[serde(default)]
     pub nft_image_url: String,

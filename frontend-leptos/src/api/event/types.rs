@@ -172,6 +172,9 @@ pub struct EventDetail {
     /// Ticket-page announcement for online attendees (migration 0049).
     #[serde(default)]
     pub ticket_note_online: String,
+    /// Postponed notice (migration 0053). Empty = not postponed.
+    #[serde(default)]
+    pub postponed_note: String,
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<crate::api::types::CommunityLink>,
@@ -321,6 +324,9 @@ pub struct CreateEventBody {
     /// Ticket-page announcement for online attendees (migration 0049).
     #[serde(default)]
     pub ticket_note_online: String,
+    /// Postponed notice (migration 0053). Empty = not postponed.
+    #[serde(default)]
+    pub postponed_note: String,
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<crate::api::types::CommunityLink>,
@@ -441,6 +447,9 @@ pub struct UpdateEventBody {
     /// Ticket-page announcement for online attendees.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ticket_note_online: Option<String>,
+    /// Postponed notice. `None` leaves it untouched; `Some("")` clears it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub postponed_note: Option<String>,
     /// Community/social links for the event. Replaces all existing links.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community_links: Option<Vec<crate::api::types::CommunityLink>>,

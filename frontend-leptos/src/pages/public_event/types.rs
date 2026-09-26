@@ -256,6 +256,10 @@ pub struct PublicEventData {
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<crate::api::CommunityLink>,
+    /// Organizer's postponed notice (migration 0053). Empty = not postponed.
+    /// Plain text; rendered by `components::postponed_banner`, never as HTML.
+    #[serde(default)]
+    pub postponed_note: String,
 }
 
 // ---------------------------------------------------------------------------

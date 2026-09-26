@@ -384,6 +384,9 @@ pub async fn get_public_ticket(
             true => &event.ticket_note_in_person,
             false => &event.ticket_note_online,
         },
+        // Unlike the ticket note this goes to every audience: a new date
+        // concerns in-person and online attendees alike. Empty = not postponed.
+        "postponed_note": event.postponed_note,
         "calendar_subscribe_url": event.calendar_subscribe_url,
     });
     Ok(ApiOk::new(data))

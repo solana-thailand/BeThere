@@ -1,0 +1,21 @@
+-- 0053_event_postponed_note.sql
+-- Organizer's "this event is postponed" notice, shown as a banner on the
+-- public event page and the ticket, and as a badge on public event cards.
+--
+-- Found when RTM#6 was postponed (27 Sep -> 4 Oct 2026, flooding): the new
+-- date went onto the event, but nothing told an attendee who had registered
+-- for 27 Sep that the date had *moved* rather than always been 4 Oct.
+--
+-- A free-text column, deliberately NOT a new `status` value. Signup is gated on
+-- `status = 'active'` and the public upcoming list filters on it too, so a
+-- 'postponed' status would close registration and hide the event from the
+-- landing page — the opposite of what a postponed event needs. The event stays
+-- 'active' (registration, check-in and credit keep working); this column is
+-- only what the attendee is told: the old date, the new date, and why.
+--
+-- Empty string = not postponed, which is the state every existing event starts
+-- in. Nothing on any page changes until an organizer writes a notice.
+--
+-- NOTE: NOT idempotent — ALTER TABLE ADD COLUMN fails if the column already
+-- exists. Relies on the d1_migrations tracker to prevent re-execution.
+ALTER TABLE events ADD COLUMN postponed_note TEXT NOT NULL DEFAULT '';

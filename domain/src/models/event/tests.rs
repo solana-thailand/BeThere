@@ -10,6 +10,7 @@ fn make_event() -> EventConfig {
         link: String::new(),
         ticket_note_in_person: String::new(),
         ticket_note_online: String::new(),
+        postponed_note: String::new(),
         status: EventStatus::Active,
         event_start_ms: 2_000_000_000_000, // ~2033
         event_end_ms: 2_000_001_000_000,

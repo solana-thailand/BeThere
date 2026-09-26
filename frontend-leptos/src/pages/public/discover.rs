@@ -32,6 +32,9 @@ struct PublicEventItem {
     nft_image_url: String,
     #[serde(default)]
     poster_url: String,
+    /// Non-empty = postponed (migration 0053).
+    #[serde(default)]
+    postponed_note: String,
 }
 
 #[derive(Clone, Deserialize, Default)]
@@ -128,7 +131,10 @@ pub fn Discover() -> impl IntoView {
                         time_tba: e.time_tba,
                         location: e.location,
                         image: pick_image(&e.poster_url, &e.nft_image_url),
-                        status: None,
+                        // Public rows have no registration status, so the
+                        // pill is free to flag a postponed event.
+                        status: (!e.postponed_note.trim().is_empty())
+                            .then(|| "Postponed".to_string()),
                         past: false,
                     })
                     .collect(),

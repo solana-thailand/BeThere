@@ -571,6 +571,10 @@ fn render_loaded_event(
             }}
         </div>
 
+        // Postponed notice, above the CTA: the new date is the first thing a
+        // returning registrant needs. Registration itself stays open.
+        {crate::components::postponed_banner(&data.postponed_note)}
+
         // Hero CTA — the primary action, reachable above the fold. Jumps to the
         // reserve/action zone (the form itself is further down the page). Label
         // adapts once we know the attendee's registration state.

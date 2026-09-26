@@ -93,6 +93,8 @@ pub struct D1EventRow {
     // Columns added by migration 0049 (ticket announcements)
     pub ticket_note_in_person: Option<String>,
     pub ticket_note_online: Option<String>,
+    // Column added by migration 0053 (postponed notice)
+    pub postponed_note: Option<String>,
     // Columns added for Issue #053 Phase 3f
     pub form_config: Option<String>,
     // Columns added for organization calendar subscribe
@@ -323,6 +325,7 @@ impl D1EventRow {
             .unwrap_or_default(),
             ticket_note_in_person: self.ticket_note_in_person.clone().unwrap_or_default(),
             ticket_note_online: self.ticket_note_online.clone().unwrap_or_default(),
+            postponed_note: self.postponed_note.clone().unwrap_or_default(),
             calendar_subscribe_url: self.calendar_subscribe_url.clone().unwrap_or_default(),
             location_map_url: self.location_map_url.clone().unwrap_or_default(),
             poster_url: self.poster_url.clone().unwrap_or_default(),
@@ -542,7 +545,7 @@ pub async fn upsert_event(
          online_open_mode, online_registration_open, \
          deposit_deadline_hours, updated_by, dev_profile_enabled, community_links, \
          calendar_subscribe_url, poster_url, recap_published, location_map_url, \
-         ticket_note_in_person, ticket_note_online) \
+         ticket_note_in_person, ticket_note_online, postponed_note) \
          VALUES (?, ?, ?, ?, ?, \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
@@ -562,7 +565,7 @@ pub async fn upsert_event(
          ?, {online_registration_open}, \
          {deposit_deadline_hours}, ?, {dev_profile_enabled}, ?, \
          ?, ?, {recap_published}, ?, \
-         ?, ?) \
+         ?, ?, ?) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -613,7 +616,8 @@ pub async fn upsert_event(
          recap_published = excluded.recap_published, \
          location_map_url = excluded.location_map_url, \
          ticket_note_in_person = excluded.ticket_note_in_person, \
-         ticket_note_online = excluded.ticket_note_online",
+         ticket_note_online = excluded.ticket_note_online, \
+         postponed_note = excluded.postponed_note",
         event_start_ms = config.event_start_ms,
         event_end_ms = config.event_end_ms,
         deposit_enabled = config.deposit_enabled as i32,
@@ -681,6 +685,7 @@ pub async fn upsert_event(
         D1Type::Text(&config.location_map_url),
         D1Type::Text(&config.ticket_note_in_person),
         D1Type::Text(&config.ticket_note_online),
+        D1Type::Text(&config.postponed_note),
     ];
 
     db.prepare(&sql)
@@ -949,12 +954,13 @@ struct PublicEventRow {
     in_person_capacity: Option<i64>,
     online_capacity: Option<i64>,
     visibility: Option<String>,
+    postponed_note: Option<String>,
 }
 
 /// The columns both listings select. Kept next to the struct that receives them.
 const PUBLIC_EVENT_COLUMNS: &str = "id, name, slug, status, event_format, event_start_ms, \
      event_end_ms, time_tba, deposit_enabled, tagline, location, nft_image_url, poster_url, \
-     created_at, in_person_capacity, online_capacity, visibility";
+     created_at, in_person_capacity, online_capacity, visibility, postponed_note";
 
 /// The payload both listings emit.
 fn public_event_json(r: &PublicEventRow) -> serde_json::Value {
@@ -1003,6 +1009,7 @@ fn public_event_json(r: &PublicEventRow) -> serde_json::Value {
         "in_person_capacity": r.in_person_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
         "online_capacity": r.online_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
         "visibility": visibility.as_str(),
+        "postponed_note": r.postponed_note.clone().unwrap_or_default(),
     })
 }
 
