@@ -10,6 +10,9 @@ pub fn EventContext(
     /// NFT/event badge image URL (empty = hidden)
     #[prop(into)]
     nft_image_url: String,
+    /// Event name, shown as the card heading (empty = hidden)
+    #[prop(optional, into)]
+    name: String,
     /// Event tagline / subtitle (empty = hidden)
     #[prop(into)]
     tagline: String,
@@ -27,6 +30,7 @@ pub fn EventContext(
     event_link_text: Option<String>,
 ) -> impl IntoView {
     let has_content = !nft_image_url.is_empty()
+        || !name.is_empty()
         || !tagline.is_empty()
         || !location.is_empty()
         || !event_link.is_empty();
@@ -47,6 +51,16 @@ pub fn EventContext(
                         alt="Event badge"
                         class="ticket-event-badge-img"
                     />
+                }.into_any()
+            } else {
+                view! { <div></div> }.into_any()
+            }}
+            {if !name.is_empty() {
+                let n = name.clone();
+                view! {
+                    <h2 class="ticket-event-name">
+                        {utils::escape_html(&n)}
+                    </h2>
                 }.into_any()
             } else {
                 view! { <div></div> }.into_any()

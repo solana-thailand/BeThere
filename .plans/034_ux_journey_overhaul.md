@@ -41,7 +41,7 @@ Only items that are on camera, a door-day risk, or an honesty problem.
 | A2 | Scanner: the active event name is always visible at the top; the picker is not covered by the video | Door-day risk at RTM #6 | `pages/scanner/page.rs` |
 | A3 | Deposit: USDC becomes a real button, like the PromptPay card | On camera in the W2/W3 demo | `pages/deposit/choose_payment.rs` |
 | A4 | Ticket: event name as the heading; `in_person` shown as "In-person" | On camera | `pages/ticket/in_person_view.rs` |
-| A5 | Deposit: an unknown attendee id shows an error, not the active event's pay screen | Wrong-event payment risk | `pages/deposit/` + the API it calls |
+| ~~A5~~ | Moved to Part B (B2), 27 Sep. The upload already refuses an unknown attendee (`slip_upload.rs:152`), so no deposit lands on a bogus id. But the fix changes a public read path on the money page (`deposit/usdc/handlers/status.rs` falls back to the active event), and that is not worth doing a week before RTM #6. | — | — |
 
 Each fix is verified by opening the page ([[verify-frontend-by-opening-it]]).
 
@@ -59,6 +59,11 @@ Each fix is verified by opening the page ([[verify-frontend-by-opening-it]]).
 - `/e`: show participation mode (online is exempt) and the deposit before
   sign-in, or say why sign-in comes first. Use the desktop width (it is one
   700 px column now).
+- Deposit: `/deposit/{unknown id}` shows the active event's pay screen
+  (`GET /api/deposit/status` resolves the event and never checks that the
+  attendee exists). Return 404 when the attendee lookup says "absent", and
+  fail open on a lookup error. A person on a mistyped link could transfer
+  money before the upload refuses them.
 - Claim: replace the raw "API error (0): not found…" with friendly text and a
   "find my ticket" path (`pages/claim/page.rs:215`).
 - Recap: prod has zero past events, so the last step of the journey is empty.

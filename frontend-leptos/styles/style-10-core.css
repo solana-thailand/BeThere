@@ -560,7 +560,10 @@
     background: var(--bg-secondary);
     border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
     font-size: 0.85rem;
-    z-index: 10;
+    /* Above .scanner-fullscreen (30), which is fixed over the whole viewport,
+       and the bottom sheet (40); below the sticky .header (100). Staff must
+       always see which event they are checking people into. */
+    z-index: 45;
     position: relative;
 }
 .scanner-event-select {
