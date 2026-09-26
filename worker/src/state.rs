@@ -94,6 +94,10 @@ pub struct AppState {
     /// operational dial for one handler pair, not part of the domain contract
     /// the frontend mirrors.
     pub thb_slip_duplicate_mode: String,
+    /// The Anthropic API key for the slip agent's vision fallback
+    /// (`slip_vision.rs`), present only when `ANTHROPIC_API_KEY` is set AND
+    /// `SLIP_AGENT_VISION=on`. `None` means no slip image leaves the worker.
+    pub slip_vision_key: Option<String>,
     pub auth_rate_limiter: Option<Arc<RateLimiter>>,
     pub claim_rate_limiter: Option<Arc<RateLimiter>>,
     pub deposit_rate_limiter: Option<Arc<RateLimiter>>,
@@ -434,6 +438,14 @@ impl AppState {
             // unrecognised to Report, which records the collision without
             // blocking anyone.
             thb_slip_duplicate_mode: get_var(env, "THB_SLIP_DUPLICATE_MODE").unwrap_or_default(),
+            // Two switches on purpose: the key may be set for another reason,
+            // and sending slip images out is an owner decision (plan 033 §4 Q3).
+            slip_vision_key: match get_var(env, "SLIP_AGENT_VISION").as_deref() {
+                Ok("on") => get_secret(env, "ANTHROPIC_API_KEY")
+                    .ok()
+                    .filter(|k| !k.is_empty()),
+                _ => None,
+            },
             worker_ctx: None,
         })
     }

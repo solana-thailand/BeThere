@@ -768,6 +768,7 @@ mod tests {
             sheets_fallback_rate_limiter: None,
             webhook_secret: String::new(),
             thb_slip_duplicate_mode: String::new(),
+            slip_vision_key: None,
             worker_ctx: None,
         }
     }

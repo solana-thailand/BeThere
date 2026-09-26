@@ -109,6 +109,9 @@ pub struct ThbSlipUploadRequest {
     pub bank_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_name: Option<String>,
+    /// The slip's mini-QR text, decoded in the browser (`.plans/033` W1).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slip_qr: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -216,6 +219,10 @@ pub struct PendingSlipResponse {
     /// ones, so a new slip matching an approved deposit is still flagged.
     #[serde(default)]
     pub duplicate_slip_hashes: Vec<String>,
+    /// The slip agent's advisory proposal per attendee id (`.plans/033` W1).
+    #[serde(default)]
+    pub slip_proposals:
+        std::collections::HashMap<String, event_checkin_domain::slip_proposal::SlipProposal>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]

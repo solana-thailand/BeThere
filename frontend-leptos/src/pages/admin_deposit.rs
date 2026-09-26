@@ -21,6 +21,7 @@ use crate::icons::{Icon, IconName};
 use crate::pages::admin_deposit_bank_info::refund_bank_info;
 use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
+use crate::pages::admin_deposit_slip_proposal::SlipProposalLine;
 use crate::pages::admin_linked_emails::AdminLinkedEmails;
 use crate::pages::admin_refund_queue_filter::{RefundQueueFilter, RefundQueueFilterBar};
 use crate::utils;
@@ -61,6 +62,11 @@ pub fn AdminDeposits(
     // the same payment image, sent by two different people. The organizer used
     // to catch these by recognising the person at refund time (`.issues/129`).
     let (duplicate_slip_hashes, set_duplicate_slip_hashes) = signal(Vec::<String>::new());
+    // The slip agent's advisory proposal per attendee id (`.plans/033` W1).
+    let (slip_proposals, set_slip_proposals) = signal(HashMap::<
+        String,
+        event_checkin_domain::slip_proposal::SlipProposal,
+    >::new());
     let (refunds, set_refunds) = signal(Vec::<ThbDepositInfo>::new());
     let (refund_context, set_refund_context) = signal(HashMap::<
         String,
@@ -126,6 +132,7 @@ pub fn AdminDeposits(
 
         let set_slips = set_slips;
         let set_duplicate_slip_hashes = set_duplicate_slip_hashes;
+        let set_slip_proposals = set_slip_proposals;
         let set_refunds = set_refunds;
         let set_held_list = set_held_list;
         let set_liability = set_liability;
@@ -148,6 +155,7 @@ pub fn AdminDeposits(
                 Ok(data) => {
                     set_slips.set(data.slips);
                     set_duplicate_slip_hashes.set(data.duplicate_slip_hashes);
+                    set_slip_proposals.set(data.slip_proposals);
                 }
                 Err(e) => {
                     log::warn!("[admin-deposit] failed to load pending slips: {e}");
@@ -689,6 +697,7 @@ pub fn AdminDeposits(
                     {move || {
                         let current_action = action_pending.get();
                         let duplicates = duplicate_slip_hashes.get();
+                        let proposals = slip_proposals.get();
                         slips.get().iter().map(|slip| {
                             // A row is flagged only when its OWN fingerprint is
                             // in the set. A slip with no fingerprint (anything
@@ -700,6 +709,7 @@ pub fn AdminDeposits(
                                 .as_deref()
                                 .is_some_and(|h| !h.is_empty() && duplicates.iter().any(|d| d == h));
                             let slip_id = slip.attendee_id.clone();
+                            let proposal = proposals.get(&slip_id).cloned();
                             let approve_key = format!("approve-{slip_id}");
                             let reject_key = format!("reject-{slip_id}");
                             let approve_disabled = current_action.as_ref().is_some_and(|k| k == &approve_key || k == &reject_key);
@@ -743,6 +753,7 @@ pub fn AdminDeposits(
                                                     "⚠ Same image as another attendee's slip in this event — check before approving. Approving is what promises the refund."
                                                 </div>
                                             </Show>
+                                            <SlipProposalLine proposal=proposal />
                                             <div class="panel-hint">
                                                 {"Uploaded: "}
                                                 <span title={uploaded_formatted.clone()}>{uploaded_ago.clone()}</span>

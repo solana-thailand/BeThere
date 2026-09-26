@@ -5,6 +5,7 @@ mod hold_credit;
 mod hold_refund_request;
 mod refund;
 mod slip_admin_upload;
+mod slip_agent;
 mod slip_fingerprint;
 mod slip_list;
 mod slip_upload;

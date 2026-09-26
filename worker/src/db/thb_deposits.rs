@@ -554,7 +554,8 @@ pub async fn delete_thb_deposits_for_event(db: &D1Database, event_id: &str) -> R
         .await
         .map_err(|e| format!("D1 delete_thb_deposits run: {e:?}"))?;
 
-    Ok(())
+    // The slip agent's proposals share the deposits' retention (0054).
+    super::slip_proposals::delete_for_event(db, event_id).await
 }
 
 /// Delete a single THB deposit by event + attendee (attendee deletion).
@@ -570,7 +571,7 @@ pub async fn delete_thb_deposit(
         .await
         .map_err(|e| format!("D1 delete_thb_deposit run: {e:?}"))?;
 
-    Ok(())
+    super::slip_proposals::delete_one(db, event_id, attendee_id).await
 }
 
 // ---------------------------------------------------------------------------

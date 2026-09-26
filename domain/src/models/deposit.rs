@@ -393,6 +393,11 @@ pub struct PendingSlipResponse {
     /// hash yet (everything uploaded before 2026-09-22) — absence of evidence.
     #[serde(default)]
     pub duplicate_slip_hashes: Vec<String>,
+    /// The slip agent's shadow-mode proposal per attendee id (`.plans/033`
+    /// W1). Attendees with no proposal are absent. Advisory only: the
+    /// organizer's approve/reject is still the decision.
+    #[serde(default)]
+    pub slip_proposals: std::collections::HashMap<String, crate::slip_proposal::SlipProposal>,
 }
 
 /// Response for GET /api/refund/queue — THB refunds pending.

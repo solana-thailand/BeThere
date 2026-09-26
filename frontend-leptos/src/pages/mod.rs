@@ -5,6 +5,7 @@ pub mod admin_deposit;
 pub mod admin_deposit_bank_info;
 pub mod admin_deposit_queue_comp;
 pub mod admin_deposit_record_slip;
+pub mod admin_deposit_slip_proposal;
 pub mod admin_escrow;
 pub mod admin_event_selector;
 pub mod admin_feedback;

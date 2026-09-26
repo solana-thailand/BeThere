@@ -26,6 +26,7 @@ pub mod organizations;
 pub mod person;
 pub mod quiz;
 pub mod readiness;
+pub mod slip_proposals;
 pub mod thb_deposits;
 
 pub(crate) use audit::*;
