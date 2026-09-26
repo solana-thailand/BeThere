@@ -10,7 +10,8 @@ can't come are moved to online and refunded later.
 ## 0. Found first
 
 - [x] `.issues/152`: a date change never reached D1. The trigger was fixed
-  (migration 0051) and applied to prod. RTM#6's D1 row needs one more save.
+  (migration 0051) and applied to prod. The owner re-saved RTM#6 at 08:18 UTC,
+  and D1 and the public list now read 4 Oct.
 
 ## 1. Record each registrant's answer (develop)
 

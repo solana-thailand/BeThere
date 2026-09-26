@@ -1,11 +1,13 @@
 # 152: Changing an event's start date never reached D1
 
-**Status:** in progress. Migration 0051 was applied to prod on 2026-09-26 at
+**Status:** deployed 2026-09-26. Migration 0051 was applied to prod at about
 07:17 UTC, with owner go in session `event-checkin-b9`. There is no code
 change. Before applying it: a staging rehearsal, a D1 backup
 (`worker/backup-prod-20260926-1417.sql`, gitignored), and the trigger read back
-from `sqlite_master`. Still open: RTM#6's D1 row has the old date until the
-owner saves the event once more (see "Prod now").
+from `sqlite_master`. **Verified live:** the owner re-saved RTM#6 at 08:18 UTC,
+and D1 now reads 1791093600000 / 1791104400000 (4 Oct, 13:00–16:00 Bangkok
+time). `/api/public/events` shows 4 Oct. RTM#6 has 0 credit `return` rows, so
+nothing was released early.
 **Found by:** the owner postponing RTM#6 (27 Sep → 4 Oct 2026, flooding). A
 read-only check afterwards showed the public page on 4 Oct and D1 still on
 27 Sep.
