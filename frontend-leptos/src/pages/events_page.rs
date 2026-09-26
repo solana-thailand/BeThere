@@ -416,10 +416,10 @@ pub fn EventsPage(
                                                             leptos::task::spawn_local(async move {
                                                                 match api::restore_event(&rid).await {
                                                                     Ok(data) => {
-                                                                        components::show_toast(
+                                                                        components::show_mutation_toast(
                                                                             &set_toast,
                                                                             &format!("Event '{}' restored", data.name),
-                                                                            components::ToastType::Success,
+                                                                            &data.warnings,
                                                                         );
                                                                         reload();
                                                                     }
@@ -680,10 +680,10 @@ pub fn EventsPage(
                                                             leptos::task::spawn_local(async move {
                                                                 match api::archive_event(&aid).await {
                                                                     Ok(data) => {
-                                                                        components::show_toast(
+                                                                        components::show_mutation_toast(
                                                                             &set_toast,
                                                                             &format!("Event '{}' archived", data.name),
-                                                                            components::ToastType::Success,
+                                                                            &data.warnings,
                                                                         );
                                                                         reload();
                                                                     }
@@ -715,10 +715,10 @@ pub fn EventsPage(
                                                             leptos::task::spawn_local(async move {
                                                                 match api::restore_event(&rid).await {
                                                                     Ok(data) => {
-                                                                        components::show_toast(
+                                                                        components::show_mutation_toast(
                                                                             &set_toast,
                                                                             &format!("Event '{}' restored", data.name),
-                                                                            components::ToastType::Success,
+                                                                            &data.warnings,
                                                                         );
                                                                         reload();
                                                                     }

@@ -50,7 +50,9 @@ pub async fn update_event(
     config.updated_by = updated_by.to_string();
 
     // D1 write (primary — always if available)
-    sync_event_to_d1(d1, &config).await;
+    // Logged inside. This path serves the poster and escrow-status handlers,
+    // not the event form, so there is no admin response to warn in.
+    let _ = sync_event_to_d1(d1, &config).await;
 
     // KV write-through cache (if available)
     if let Some(kv_ref) = kv {

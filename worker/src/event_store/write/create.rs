@@ -182,7 +182,9 @@ pub async fn create_event(
     };
 
     // D1 write (primary — always if available)
-    sync_event_to_d1(d1, &config).await;
+    // Logged inside; the handler that owns the admin response re-syncs and
+    // reports the outcome (`D1Sync::warnings`).
+    let _ = sync_event_to_d1(d1, &config).await;
 
     // KV write-through cache (if available, non-fatal)
     if let Some(kv_ref) = kv {

@@ -143,7 +143,7 @@ pub async fn update_event(
     }
 
     // D1 dual-write
-    crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
+    let d1_sync = crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
     // Escrow reverse index dual-write (when escrow address set or changed)
     if !config.escrow_address.is_empty() {
@@ -262,5 +262,6 @@ pub async fn update_event(
         "slug": config.slug,
         "status": config.status.as_str(),
         "updated_at": config.updated_at,
+        "warnings": d1_sync.warnings(),
     })))
 }

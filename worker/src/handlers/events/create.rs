@@ -58,7 +58,7 @@ pub async fn create_event(
         })?;
 
     // D1 is primary — always write (sync_event_to_d1 is non-fatal)
-    crate::event_store::sync_event_to_d1(d1, &config).await;
+    let d1_sync = crate::event_store::sync_event_to_d1(d1, &config).await;
 
     tracing::info!(
         event_id = %config.id,
@@ -103,5 +103,6 @@ pub async fn create_event(
         "slug": config.slug,
         "status": config.status.as_str(),
         "updated_at": config.updated_at,
+        "warnings": d1_sync.warnings(),
     })))
 }

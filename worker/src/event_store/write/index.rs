@@ -37,13 +37,48 @@ pub async fn save_event_config(kv: &KvStore, config: &EventConfig) -> Result<(),
         .map_err(|e| format!("failed to write event config to KV: {e:?}"))
 }
 
+/// Outcome of the D1 event dual-write.
+///
+/// `#[must_use]` so a handler can't drop a failure silently: the D1-first
+/// public list serves the old row until the next successful save (`.issues/152`).
+#[must_use]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum D1Sync {
+    Synced,
+    NoDatabase,
+    Failed,
+}
+
+impl D1Sync {
+    /// Warning for the admin who saved, when the D1 copy did not update.
+    pub fn warning(self) -> Option<&'static str> {
+        match self {
+            D1Sync::Failed => Some(
+                "Saved, but the database copy did not update. Public pages may show the old details. Save again to retry.",
+            ),
+            D1Sync::Synced | D1Sync::NoDatabase => None,
+        }
+    }
+
+    /// `warning()` as the `warnings` list the admin UI renders.
+    pub fn warnings(self) -> Vec<&'static str> {
+        self.warning().into_iter().collect()
+    }
+}
+
 /// Dual-write: persist event config to D1 alongside KV.
-/// Non-blocking — errors are logged, not propagated, so KV remains the source of truth.
-pub async fn sync_event_to_d1(d1: Option<&worker::D1Database>, config: &EventConfig) {
-    if let Some(db) = d1
-        && let Err(e) = crate::db::events::upsert_event(db, config).await
-    {
-        tracing::warn!(event_id = %config.id, error = %e, "D1 event dual-write failed");
+/// Non-blocking — errors are logged and returned as [`D1Sync::Failed`], not
+/// propagated, so the KV write still happens.
+pub async fn sync_event_to_d1(d1: Option<&worker::D1Database>, config: &EventConfig) -> D1Sync {
+    let Some(db) = d1 else {
+        return D1Sync::NoDatabase;
+    };
+    match crate::db::events::upsert_event(db, config).await {
+        Ok(()) => D1Sync::Synced,
+        Err(e) => {
+            tracing::warn!(event_id = %config.id, error = %e, "D1 event dual-write failed");
+            D1Sync::Failed
+        }
     }
 }
 
