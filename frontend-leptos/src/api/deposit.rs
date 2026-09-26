@@ -162,6 +162,9 @@ pub struct AdminSlipUploadRequest {
     /// When true (default), also marks the deposit as verified in the same call.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub auto_verify: bool,
+    /// The slip's mini-QR text, decoded in the browser (`.plans/033` W1).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slip_qr: Option<String>,
 }
 
 impl Default for AdminSlipUploadRequest {
@@ -174,6 +177,7 @@ impl Default for AdminSlipUploadRequest {
             bank_name: None,
             account_name: None,
             auto_verify: true,
+            slip_qr: None,
         }
     }
 }

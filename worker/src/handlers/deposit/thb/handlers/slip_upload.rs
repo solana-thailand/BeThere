@@ -4,7 +4,6 @@ use event_checkin_domain::image_kind::ImageKind;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::deposit::{DepositMethod, DepositStatus, ThbDeposit};
 use event_checkin_domain::models::error::AppError;
-use event_checkin_domain::slip_proposal::FactSource;
 
 use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
@@ -365,42 +364,16 @@ pub async fn upload_thb_slip_handler(
         .map_err(AppError::Internal)?;
 
     // Slip agent, shadow mode: propose a verdict for the organizer to compare
-    // with their own. Cannot fail the upload. The QR is read in the browser;
-    // only a slip without one goes to vision, and only when vision is enabled.
-    let qr_facts = body.slip_qr.as_deref().and_then(|payload| {
-        super::slip_agent::facts_from_qr(payload, &event.id, &body.attendee_id)
-    });
-    if qr_facts.is_none()
-        && let Some(api_key) = state.slip_vision_key.clone()
-        && body.slip_url.starts_with("data:image/")
-    {
-        let vision = super::slip_agent::propose_from_vision(
-            state.clone(),
-            api_key,
-            event.clone(),
-            body.attendee_id.clone(),
-            upload_attendee.registration_date.clone(),
-            body.slip_url.clone(),
-        );
-        match &state.worker_ctx {
-            Some(ctx) => ctx.wait_until(vision),
-            None => vision.await,
-        }
-    }
-    if let (Some(db), Some(facts)) = (d1, qr_facts) {
-        super::slip_agent::record(
-            db,
-            super::slip_agent::ProposalInput {
-                event: &event,
-                attendee_id: &body.attendee_id,
-                registered_at: upload_attendee.registration_date.as_deref(),
-                source: FactSource::Qr,
-                model: None,
-                facts,
-            },
-        )
-        .await;
-    }
+    // with their own. Cannot fail the upload.
+    super::slip_agent::propose_after_upload(
+        &state,
+        &event,
+        &body.attendee_id,
+        upload_attendee.registration_date.as_deref(),
+        body.slip_qr.as_deref(),
+        &body.slip_url,
+    )
+    .await;
 
     // Write bank info to Google Sheet for organizer refund reference
     if (body.bank_account.is_some() || body.bank_name.is_some() || body.account_name.is_some())

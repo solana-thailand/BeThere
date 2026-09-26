@@ -136,6 +136,60 @@ pub(crate) async fn record(db: &D1Database, input: ProposalInput<'_>) -> Option<
     }
 }
 
+/// The shadow-mode hook both upload handlers call once the deposit is saved.
+///
+/// The QR is read in the browser and re-parsed here; only a slip without a
+/// usable one goes to vision, only when vision is switched on, and only for an
+/// uploaded image (a pasted URL is someone else's host and is not fetched).
+/// Returns nothing: in shadow mode no outcome of this may reach the caller.
+pub(crate) async fn propose_after_upload(
+    state: &crate::state::AppState,
+    event: &EventConfig,
+    attendee_id: &str,
+    registered_at: Option<&str>,
+    slip_qr: Option<&str>,
+    slip_url: &str,
+) {
+    let qr_facts = slip_qr.and_then(|payload| facts_from_qr(payload, &event.id, attendee_id));
+    match (qr_facts, state.d1.as_deref()) {
+        (Some(facts), Some(db)) => {
+            record(
+                db,
+                ProposalInput {
+                    event,
+                    attendee_id,
+                    registered_at,
+                    source: FactSource::Qr,
+                    model: None,
+                    facts,
+                },
+            )
+            .await;
+        }
+        (Some(_), None) => {}
+        (None, _) => {
+            let Some(api_key) = state.slip_vision_key.clone() else {
+                return;
+            };
+            if !slip_url.starts_with("data:image/") {
+                return;
+            }
+            let vision = propose_from_vision(
+                state.clone(),
+                api_key,
+                event.clone(),
+                attendee_id.to_string(),
+                registered_at.map(str::to_string),
+                slip_url.to_string(),
+            );
+            match &state.worker_ctx {
+                Some(ctx) => ctx.wait_until(vision),
+                None => vision.await,
+            }
+        }
+    }
+}
+
 /// The vision fallback: read the slip image with the model, then record the
 /// proposal exactly as the QR path does. Owned arguments so it can run under
 /// `wait_until` after the upload has already answered the attendee.

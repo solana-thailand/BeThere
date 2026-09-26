@@ -146,17 +146,24 @@ pub fn AdminRecordSlipModal(
         }
 
         set_submitting.set(true);
-        let body = AdminSlipUploadRequest {
-            event_id,
-            attendee_id: attendee,
-            slip_url: slip.unwrap_or_default(),
-            bank_account: Some(bank_acc),
-            bank_name: Some(bank_nm),
-            account_name: Some(acc_name),
-            auto_verify: verify,
-        };
-
         leptos::task::spawn_local(async move {
+            let slip_url = slip.unwrap_or_default();
+            // Same as the attendee upload: only an uploaded image can carry a
+            // QR we can read; a pasted URL is not fetched.
+            let slip_qr = match slip_url.starts_with("data:image/") {
+                true => js_interop::decode_slip_qr(&slip_url).await,
+                false => None,
+            };
+            let body = AdminSlipUploadRequest {
+                event_id,
+                attendee_id: attendee,
+                slip_url,
+                bank_account: Some(bank_acc),
+                bank_name: Some(bank_nm),
+                account_name: Some(acc_name),
+                auto_verify: verify,
+                slip_qr,
+            };
             match api::admin_upload_thb_slip(&body).await {
                 Ok(_) => {
                     let msg = if body.auto_verify {

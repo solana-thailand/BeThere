@@ -219,28 +219,40 @@ fn the_slip_agent_never_writes_a_deposit() {
 }
 
 /// The agent runs after the deposit is saved and its result is not `?`-ed: a
-/// failing proposal must not turn a paid upload into an error.
+/// failing proposal must not turn a paid upload into an error. BOTH writers
+/// propose: a guard on one entry point and not its sibling is the recurring
+/// defect this file exists for.
 #[test]
-fn the_upload_records_a_proposal_after_saving_and_cannot_fail_on_it() {
-    let upload = strip_comments(&src("src/handlers/deposit/thb/handlers/slip_upload.rs"));
-    let saved = upload
-        .find("save_thb_deposit(kv, &thb_deposit")
-        .expect("upload saves the deposit");
-    let record = upload
-        .find("slip_agent::record(")
-        .expect("upload records a proposal");
+fn both_uploads_propose_after_saving_and_cannot_fail_on_it() {
+    for path in [ATTENDEE_UPLOAD, ADMIN_UPLOAD] {
+        let upload = strip_comments(&src(path));
+        let saved = upload
+            .find("save_thb_deposit(kv, &thb_deposit")
+            .unwrap_or_else(|| panic!("{path} saves the deposit"));
+        let propose = upload
+            .find("slip_agent::propose_after_upload(")
+            .unwrap_or_else(|| panic!("{path} proposes"));
+        assert!(
+            propose > saved,
+            "{path}: the proposal runs after the deposit is saved"
+        );
+        let call_end = upload[propose..]
+            .find(".await")
+            .expect("propose is awaited")
+            + propose;
+        assert!(
+            !upload[call_end..call_end + 8].starts_with(".await?"),
+            "{path}: the proposal must not propagate an error into the upload"
+        );
+    }
+    let agent = strip_comments(&src(SLIP_AGENT));
     assert!(
-        record > saved,
-        "the proposal is recorded after the deposit is saved"
-    );
-    let call_end = upload[record..].find(".await").expect("record is awaited") + record;
-    assert!(
-        !upload[call_end..call_end + 8].starts_with(".await?"),
-        "slip_agent::record must not propagate an error into the upload"
-    );
-    assert!(
-        upload.contains("facts_from_qr(payload"),
+        agent.contains("facts_from_qr(payload"),
         "the client's QR text is re-parsed server-side, not trusted"
+    );
+    assert!(
+        agent.contains("fn propose_after_upload(") && !agent.contains("-> Result"),
+        "the shadow-mode hook returns nothing the caller could act on"
     );
 }
 

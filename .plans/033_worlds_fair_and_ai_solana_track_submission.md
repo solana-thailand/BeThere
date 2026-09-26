@@ -243,8 +243,16 @@ and red), no page errors. Probe rows removed afterwards.
   and the vision parser.
 
 **Still owed for W1:**
-- the privacy line on the upload page before vision is switched on;
-- the admin-upload path (`slip_admin_upload.rs`) doesn't propose yet;
+- ~~the privacy line on the upload page before vision is switched on~~ done
+  27 Sep (`b23dc06c`). It shows only while `SLIP_AGENT_VISION` is on (deposit
+  status `slip_vision_enabled`), so it is never missing and never false. Not
+  yet opened in a browser with vision on. Whether the `/privacy` policy page
+  should also name Anthropic as a processor is the owner's call (legal text);
+- ~~the admin-upload path (`slip_admin_upload.rs`) doesn't propose yet~~ done
+  27 Sep. Both uploads call `slip_agent::propose_after_upload`, and the admin
+  form decodes the QR too. With auto-verify on, every admin-recorded slip is a
+  free agreement sample. Found along the way: `.issues/154` (unchecking
+  Auto-verify still verifies);
 - a real bank slip photographed on a phone, uploaded through the attendee
   page (the probe sent `slip_qr` directly; the browser decoder was tested
   separately in headless Chrome on a synthetic slip image);
