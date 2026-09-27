@@ -1,55 +1,48 @@
-# BeThere — Solana-Powered Event Check-In
+# BeThere — get your deposit back by showing up
 
-**Turn every event into an on-chain experience.**
+A free event has no way to price commitment. BeThere takes a small refundable
+deposit when you register and gives it back when you turn up. It has run real
+meetups in Bangkok since spring 2026.
 
-[![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?logo=solana)](https://solana.com)
+[![Solana](https://img.shields.io/badge/Escrow-Solana%20devnet-9945FF?logo=solana)](https://explorer.solana.com/address/C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T?cluster=devnet)
 [![Rust](https://img.shields.io/badge/Rust-100%25-000000?logo=rust)](https://www.rust-lang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Edge-Cloudflare-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
-[![Tests](https://img.shields.io/badge/tests-85%20passing-success)](./scripts/e2e/)
 
+## What is deployed today (27 Sep 2026)
 
-> Free events have **30-40% no-show rates**. BeThere fixes this with **USDC deposit commitments** — attendees get their money back when they show up, forfeit if they don't. Built on Solana for **$0.001 NFT badges**, **$0.00087 on-chain costs**, and **< 500ms check-in** at the edge.
+| Part | Where it runs | State |
+|---|---|---|
+| Registration, THB deposits over PromptPay, QR check-in, refunds and rolling credit | **Production** (`bethere.solana-thailand.workers.dev`) | Live. THB refunds are made by the organizer; **no deposit has ever been forfeited** |
+| Slip checker: bank QR read in the browser, deterministic checks, proposal next to each slip | **Production**, shadow mode | Live. The organizer still approves or rejects; nothing moves money |
+| Attendance badges (compressed NFT via Crossmint) | **Solana mainnet** | Live |
+| `bethere-escrow`: USDC deposit → on-chain check-in → refund | **Solana devnet** (`C6HDeZES…`) | Runs end to end (`scripts/e2e_devnet_test.sh`). **No real attendee money has gone through it**; mainnet is the next step |
+| `bethere-mcp`: an AI agent registers a person and pays the escrow deposit from its own wallet | Staging + devnet | Verified with Claude as the client |
 
-### 🎯 The Problem → The Solution
+What is new in the Colosseum window (14 Sep – 12 Oct) and what came before:
+[`docs/submission/built_in_window.md`](docs/submission/built_in_window.md).
+How the pieces fit: [`docs/submission/architecture_one_page.md`](docs/submission/architecture_one_page.md).
 
-| Problem | BeThere Solution |
-|---------|------------------|
-| 30-40% no-show rates for free events | USDC deposit commitment — skin in the game |
-| No on-chain proof of attendance | Compressed NFT badges (cNFT) — ~50× cheaper than POAP |
-| Web2-only event tools | Solana-native: deposits, refunds, NFTs all on-chain |
-| Expensive NFT minting ($0.05–0.20/ea on Gnosis) | cNFT on Solana: **$0.001 per badge** |
-| ETH gas fees too high | Solana: **$0.00087 per transaction** |
+### Stack
 
-### 🏗️ Stack
+`Rust` everywhere: the Solana program (Quasar), a Cloudflare Worker compiled
+to WebAssembly (D1, KV, R2), and a Leptos WASM frontend, sharing one `domain`
+crate. Google Sheets is a mirror for organizers, not the source of truth.
 
-`Rust` → `Solana (Quasar)` → `Cloudflare Workers` → `Leptos WASM` → `Google Sheets`
-
-100% Rust codebase — shared types from on-chain program → edge worker → WASM frontend. Zero serialization bugs.
-
-### 📊 Key Numbers
-
-| Metric | Value |
-|--------|-------|
-| On-chain program | **88 KB** (optimized, 89,856 bytes) |
-| NFT mint cost | **$0.001** on-chain (cNFT) · hosted mint billed per Crossmint pricing |
-| Transaction cost | **$0.00087** (at $172/SOL) |
-| Check-in latency | **< 500ms** (edge worker) |
-| Tests | **250 passing** (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses |
-| Program ID (devnet) | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
-
-> Every figure above is sourced in [`docs/sources.md`](docs/sources.md) — the evidence ledger (primary sources, measurement method, confidence, and known caveats). Refresh self-measured rows with `python3 scripts/measure_metrics.py`.
-
-### 🎮 Live Demo Flow (Devnet)
+### Devnet escrow flow
 
 ```
-1. 📋 Organizer creates event → sets $5 USDC deposit
-2. 📝 Attendee clicks "Reserve Spot" → auto-redirect to deposit page
-3. 🪙 Attendee deposits USDC via Phantom wallet (Solana Pay QR)
-   → Or uploads THB slip → auto-redirect to ticket/QR page
-4. 📱 Staff scans QR at door → on-chain check-in
-5. 💰 Attendee gets refund + compressed NFT badge
-6. ❌ No-show? → Organizer claims forfeited deposit
+1. Organizer creates an event with a USDC deposit and initializes its escrow
+2. Attendee (or an AI agent, via bethere-mcp) deposits USDC into the escrow
+3. At the door the organizer marks the attendee checked in, on chain
+4. After the event the program returns the deposit to anyone checked in
+   (the organizer cannot claim a checked-in attendee's deposit)
+5. No-shows: the program lets the organizer claim after the refund
+   deadline. BeThere's production rule for THB is stricter: no deposit is
+   ever kept.
 ```
+
+> Older figures (program size, per-transaction cost) are sourced in
+> [`docs/sources.md`](docs/sources.md) with their measurement dates.
 
 ---
 
