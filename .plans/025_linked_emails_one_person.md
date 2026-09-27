@@ -276,9 +276,41 @@ Phase 2
         request), and clearing the flag clears the person's other flags;
       - the claim message said "linked emails" even when it fired on a second
         row under the same unlinked address (only walk-ins can create one).
-- [ ] 7.8 Per-event recipient-wallet uniqueness (6.2 decided yes, 2026-09-27). This is the
+- [x] 7.8 Per-event recipient-wallet uniqueness (6.2 decided yes, 2026-09-27).
+      Done 2026-09-27, session `event-checkin-40`, git `0ee6436c`: migration
+      `0055` adds `UNIQUE (event_id, wallet)` on `claim_locks`, and the D1 and
+      DO lock paths return 409 "this wallet already received this event's
+      badge" (a busy token stays 429).
+      - Tests: `worker/tests/security/test_claim_lock_wallet.py` (8), run
+        against every migration.
+      - **On staging** (`0055` applied, deploy `0ee6436c`, smoke green). The
+        same SQL was run on staging D1 itself: the second insert changed 0
+        rows, the lookup named the other token, and the old targeted insert
+        raised `UNIQUE constraint failed`. The probe rows were deleted.
+      - Not yet exercised: two real claims (mints) to one wallet through the
+        API.
+      - **Prod:** needs `0055` applied before the code. This is the
       part that bites a farmer who never links; 7.6/7.7 only bind linked emails.
-- [ ] 7.9 Possible-duplicate roster flag (6.3 decided yes, 2026-09-27).
+- [x] 7.9 Possible-duplicate roster flag (6.3 decided yes, 2026-09-27).
+      Done 2026-09-27, session `event-checkin-40`, git `be1d77e4`.
+      - `domain::possible_duplicates` flags rows in one event that share a
+        normalized name, an exact wallet, or a channel+handle under a
+        different email. The list handler runs it over the whole event,
+        before paging.
+      - The In-Person roster row shows "⚠ Possible duplicate"; its tooltip
+        names the other row and the reason. It blocks nothing.
+      - Tests: `domain/tests/possible_duplicates.rs` (7) and
+        `frontend-leptos/tests/admin_duplicate_hint.rs` (2).
+      - **Opened on staging** (deploy `3e0d9c1a`). Fixture: two rows named
+        "Somchai Probe" / "somchai  probe" under different emails, and one
+        other person. Both duplicates showed the badge, each tooltip named
+        the other row, the third row had none, and there were 0 page errors.
+        The fixture was deleted.
+      - Not covered: the Recent Check-ins panel doesn't show the badge.
+      - **7.8 live claim attempt on the same fixture:** both walk-in claims
+        to one wallet got Crossmint 502. Staging has **no Crossmint secret**,
+        so staging can't mint at all, and the 409 path needs a mint to
+        succeed first. The failed mint did release its lock (0 rows left).
 
 Phase 3 (only if needed)
 - [ ] 7.10 Canonical session email (primary) across email-keyed tables.
