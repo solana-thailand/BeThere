@@ -1,6 +1,6 @@
 # 156: The Solana blockhash cache never stored anything
 
-**Status:** fixed on develop 2026-09-28 (session `event-checkin-7c`). Not deployed. Staging and prod still run the old code. Found during the plan 028 M1 burst run on staging. The one-retry follow-up (session `event-checkin-62`) is also on develop only.
+**Status:** deployed to staging 2026-09-28 as version `0de8ec15` (`a6343840`, which includes `3a6f69f2` and the one-retry follow-up; session `event-checkin-62`). Prod still runs the old code. Verified in `.benchmarks/004`: no 500s at concurrency 10–40, and the retry was proven against a local stub RPC. Found during the plan 028 M1 burst run on staging.
 
 ## What happens
 
@@ -78,9 +78,10 @@ was a 500 to the wallet.
   `Math::random` draft.
 - Tests: `worker/tests/rpc_retry.rs` (5). Dropping `429` from the transient
   set fails them.
-- Not measured yet: there is no staging deploy of this. The burst rerun
-  (plan 028 M1, `.benchmarks/004`) should show the 429 lines as retries
-  rather than 500s.
+- Measured in `.benchmarks/004`. On staging, Helius sent no 429, so the
+  retry never ran there. The cache alone took concurrency 10 from six 500s to
+  none. Against a local stub, one 429 became a 200, two 429s a 500, and a 400
+  failed without a retry.
 
 Declined, with reasons:
 - **Share the hash across isolates through KV, stamped with its fetch time.**
@@ -94,6 +95,6 @@ Declined, with reasons:
 
 ## Not covered
 
-- The burst run stopped at concurrency 10. CPU was 6–17 ms per request, all
-  `ok`, and no `exceededCpu`. Going higher would have only measured Helius's
-  rate limit. Rerun it after this deploys (plan 028 M1).
+- A real Helius 429 has not been met since the fix. From one client IP, the
+  worker's own deposit limiter (60/min) answers first (`.benchmarks/004`).
+- Prod: ships with the 3 Oct deploy (owner-gated).
