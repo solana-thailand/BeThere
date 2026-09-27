@@ -315,6 +315,15 @@ Phase 2
         to one wallet got Crossmint 502. Staging has **no Crossmint secret**,
         so staging can't mint at all, and the 409 path needs a mint to
         succeed first. The failed mint did release its lock (0 rows left).
+      - **2026-09-28, session `event-checkin-24`:** a second route to the
+        409 without a mint: seed a finalized `claim_locks` row for
+        (event, W) on staging D1, claim W (expect 409), then claim W2 (expect
+        the Crossmint 502, which shows the lock did not block it). The
+        agent's permission mode denied the staging D1 insert, so the probe
+        stopped. Needs an owner go for that write, or a racing
+        two-claims-one-wallet run. **Leftover fixture:** walk-in
+        `probe78-1790537427@example.invalid` on `slipdemo-1790494035`,
+        unclaimed; delete it with the probe.
 
 Phase 3 (only if needed)
 - [ ] 7.10 Canonical session email (primary) across email-keyed tables.
