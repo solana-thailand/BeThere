@@ -25,7 +25,7 @@ pub async fn list_public_events(
 
     let mut public_events: Vec<Value> = if let Some(d1) = &state.d1 {
         // D1-first: use raw JSON deserialization to avoid workers-rs serde panics
-        crate::db::events::list_public_events_raw(d1)
+        crate::db::events::list_public_events_raw(d1, now_ms)
             .await
             .map_err(AppError::Internal)?
     } else if let Some(kv) = &state.events_kv {
