@@ -122,6 +122,7 @@
     "size_budget_guards tests/size_budget_guards.rs": 10,
     "slip_duplicate_guards tests/slip_duplicate_guards.rs": 14,
     "slip_magic_bytes tests/slip_magic_bytes.rs": 6,
+    "slip_ocr tests/slip_ocr.rs": 13,
     "slip_proposal tests/slip_proposal.rs": 9,
     "slug_cache_guard tests/slug_cache_guard.rs": 2,
     "sql_interpolation_guard tests/sql_interpolation_guard.rs": 2,

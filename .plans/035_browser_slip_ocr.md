@@ -128,3 +128,24 @@ Steps, in order. Each step is its own commit.
 - Plan 033's "no new features after 9 Oct" still holds. If §4 has not passed
   by **Wed 8 Oct**, OCR moves past the submission and the W1 story is the QR
   path plus the checker.
+
+## 6. Progress log
+
+### 28 Sep: §3.1 parser in `domain`
+
+- `domain/src/slip_ocr.rs` provides `facts_from_ocr_text` and
+  `MAX_OCR_TEXT_BYTES`. It reads the amount and the transfer time (Bangkok →
+  UTC, BE year). `bank_ref` and `receiver_account` are always `None`.
+- No `regex` dependency, because the crate ships to wasm32.
+- It adds one guard the bench's JS extractor lacked: only `:` counts as a
+  time separator, so an amount such as "20.00" can't be read as 20:00.
+- Tests: `domain/tests/slip_ocr.rs` (13). Fixtures are raw tesseract text from
+  the bench slips, plus the misreads.
+- Mutation-checked: 6 of 6 mutants fail a test:
+  - dropping the sara-am fold;
+  - `.` allowed as a time separator;
+  - label and fee rules ignored;
+  - an ambiguous figure taken anyway;
+  - any lead-group length accepted;
+  - a time taken from another line.
+- Nothing calls the parser yet. §3.2 (the table) is next and is ungated.
