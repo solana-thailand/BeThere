@@ -376,3 +376,29 @@ version `5b7b875c` = git `4842135f`. The preflight gate was bypassed with
 `ANTHROPIC_API_KEY`, so only the QR path runs. The write smoke was not run on
 prod, because there is no `SMOKE_TOKEN`. The `thb_deposits` baseline for
 20–26 Sep is 4/3/3/1/0/4/1 a day; re-check it after RTM #6 slips arrive.
+
+### W3 log, 27 Sep (afternoon): demo video clip produced
+
+The owner topped up the agent wallet (40 devnet USDC, 5.05 SOL). A fresh
+fixture was made with `demo_fixture`: event `agent-demo-meetup-1790482206`,
+escrow `9XWPpsFg…`. Headless Claude Code was again the MCP client (8 turns,
+$0.54, no retries). It called `find_events` → `event_details` →
+`agent_wallet` → `register` → `pay_deposit` → `ticket_status`. Tx
+`v9H1A84w…QtQB4B` is `Success`/`Finalized` on Explorer, and the ticket shows
+"Deposit verified · Ready for Check-In".
+
+- **Clip:** `~/Movies/bethere/w3_agent_demo.mp4` (69.8 s, 1280×720, H.264;
+  not in git). Its parts:
+  - a title card;
+  - a replay of the recorded session, built from its stream-json, with real
+    tool outputs shortened and an on-screen line saying it is a replay;
+  - the transaction on Solana Explorer (devnet);
+  - the BeThere ticket page.
+- **Raw record:** `~/Movies/bethere/w3_agent_run_20260927.jsonl`.
+- **Recording scripts:** `/tmp/w3/replay.html` and `/tmp/w3/record.mjs`
+  (puppeteer screencast + ffmpeg); not in the repo yet.
+- **Still owed for W5:**
+  - the founder-on-camera presentation video (owner);
+  - W2 (the on-chain refund loop), which can be recorded the same way;
+  - the W1 slip queue clip.
+- **Cosmetic:** the Explorer clip shows its instruction panel still "Loading".
