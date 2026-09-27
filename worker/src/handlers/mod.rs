@@ -382,6 +382,7 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/events/reseed-kv", post(events::reseed_kv_from_d1))
         .route("/events/readiness", get(events::get_readiness))
         .route("/events/{id}/sync-sheet", post(events::sync_sheet_to_d1))
+        .route("/events/{id}/sheet-backfill", post(events::sheet_backfill))
         .route(
             "/events/{id}",
             get(events::get_event)
