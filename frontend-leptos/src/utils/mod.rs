@@ -164,7 +164,9 @@ pub fn get_participation_badge(participation_type: &str) -> ParticipationBadge {
 
     let lower = participation_type.to_lowercase();
 
-    if lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person") {
+    // A walk-in was at the door. The row's own Walk-in badge says how they
+    // came, so this badge only says where: never the raw `walkin` sentinel.
+    if is_on_site_roster(participation_type) {
         return ParticipationBadge {
             label: "In-Person".to_string(),
             css_class: "badge-info",
@@ -482,6 +484,13 @@ mod tests {
         let badge = get_participation_badge("Hybrid");
         assert_eq!(badge.label, "Hybrid");
         assert_eq!(badge.css_class, "badge-warning");
+    }
+
+    #[test]
+    fn test_participation_badge_walkin_is_in_person() {
+        let badge = get_participation_badge("walkin");
+        assert_eq!(badge.label, "In-Person");
+        assert_eq!(badge.css_class, "badge-info");
     }
 
     #[test]
