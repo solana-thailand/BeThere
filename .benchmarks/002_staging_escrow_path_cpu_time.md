@@ -39,12 +39,18 @@ session (6 requests: `GET /api/health`, `GET /api/public/events`) gave
 
 - **Every write path measured is above the 10 ms figure the plans treat as
   binding** ([[free-plan-cpu-cap-is-binding]]), and none was cut off: all
-  `ok`. This record does not establish why. Candidates, none checked: the
-  account is not on the free plan's limits, the free-plan limit is enforced
-  on something other than a single request's `cpuTime`, or the figure
-  includes isolate start-up for a cold isolate. Settle that (the account's
-  plan and Cloudflare's current enforcement rule) before using these numbers
-  to rank work, and before treating any path as "over the cap".
+  `ok`. **Why (partly settled 2026-09-28):** Cloudflare's limits page
+  (developers.cloudflare.com/workers/platform/limits, read 2026-09-28) says
+  the Free plan's 10 ms is "CPU time per HTTP request", but "each isolate has
+  some built-in flexibility to allow for cases where your Worker infrequently
+  runs over the configured limit. If your Worker starts hitting the limit
+  consistently, its execution will be terminated". Global-scope start-up has
+  its own 1 s limit. A cut-off shows as error 1102 and outcome `exceededCpu`.
+  So `ok` on a handful of spaced requests is what that rule predicts and says
+  nothing about a sustained burst (event-day check-in). `worker/wrangler.toml`
+  sets no `[limits]`. Still unchecked: the account's actual plan. Until that
+  and a burst run settle it, treat 14–34 ms write paths as at risk under
+  load, not as safe.
 - n is 1 or 2 per path, so there is no tail. Cold and warm isolates are mixed
   and not identified.
 - Not covered: the staff scan `POST /api/checkin` (off-chain check-in) and
