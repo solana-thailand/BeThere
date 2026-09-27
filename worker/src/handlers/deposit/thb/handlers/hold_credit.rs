@@ -126,7 +126,9 @@ pub async fn hold_deposit_handler(
         }
     };
 
-    if resolved.sheet_id.is_empty() {
+    // The D1 ledger is the record of the credit; the sheet only mirrors it
+    // (.issues/155). Without D1 the sheet is the only record, so require it.
+    if resolved.sheet_id.is_empty() && d1.is_none() {
         return Err(AppError::Internal("contacts sheet not configured".to_string()).into());
     }
 
@@ -189,7 +191,11 @@ pub async fn hold_deposit_handler(
         .map_err(AppError::Internal)?;
     }
     // Best-effort Sheets mirror (display only — never fails the request).
-    if let Err(e) = crate::sheets::contacts::increment_credit(
+    if resolved.sheet_id.is_empty() {
+        tracing::warn!(
+            "credit Sheets mirror skipped: no contacts sheet configured — D1 ledger is authoritative"
+        );
+    } else if let Err(e) = crate::sheets::contacts::increment_credit(
         &state,
         &resolved.sheet_id,
         &resolved.contacts_sheet_name,

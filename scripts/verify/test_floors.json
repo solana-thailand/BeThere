@@ -75,6 +75,7 @@
     "event_slug_uniqueness_guard tests/event_slug_uniqueness_guard.rs": 3,
     "golden_vectors tests/golden_vectors.rs": 9,
     "golden_vectors_escrow tests/golden_vectors_escrow.rs": 2,
+    "hold_contacts_sheet_guard tests/hold_contacts_sheet_guard.rs": 2,
     "image_kind tests/image_kind.rs": 5,
     "isolate_cache tests/isolate_cache.rs": 5,
     "linked_email_guards tests/linked_email_guards.rs": 2,
