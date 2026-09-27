@@ -1,6 +1,6 @@
 # 121 — Frontend Solana cluster cache is only seeded on the dev dashboard
 
-**Status:** Merged to `develop` (`197126d`, PR #131); staging `e6404cbb`; prod deploy awaits owner go
+**Status:** deployed — fix `197126d` (PR #131) is in every prod tag since `deploy/production/20260924T124456Z` (checked 2026-09-28); staging `e6404cbb`
 **Found:** 2026-09-17, while verifying the prod cluster config (mainnet `HELIUS_RPC_URL` next to `SOLANA_CLUSTER = "devnet"`)
 **Severity:** Low today, High at escrow mainnet cutover
 

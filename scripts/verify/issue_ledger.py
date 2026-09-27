@@ -173,9 +173,13 @@ def classify(block: str) -> Claim:
             return Claim.NONE
         case _ if "not deployed" in low or "undeployed" in low:
             return Claim.FIXED_UNDEPLOYED
-        case _ if "deployed" in low:
+        case _ if "deployed" in low or "live in prod" in low:
             return Claim.DEPLOYED
-        case _ if re.search(r"\b(fixed|implemented|resolved|shipped|built|closed|completed)\b", low):
+        # "IN PROGRESS — Phase 1 code done" is still open work, not a fix claim.
+        case _ if "in progress" in low:
+            return Claim.OPEN
+        # Legacy issues (<= LEGACY_MAX) say "✅ COMPLETE", "Done", "Merged", "Verified".
+        case _ if re.search(r"\b(fixed|implemented|resolved|shipped|built|closed|completed?|done|merged|verified)\b", low):
             return Claim.FIXED
         case _ if "open" in low:
             return Claim.OPEN
@@ -259,7 +263,11 @@ def self_test() -> int:
     blocks: list[tuple[str, str, Claim]] = [
         ("wrapped status line", "**Status:** fixed 2026-09-13, not\ndeployed yet.", Claim.FIXED_UNDEPLOYED),
         ("bold field ends it", "**Status:** open.\n**Severity:** high (prod cannot be deployed)", Claim.OPEN),
-        ("quoted field ends it", "> **Status**: in progress\n> Prerequisite: #046 ✅ DEPLOYED", Claim.OTHER),
+        ("quoted field ends it", "> **Status**: in progress\n> Prerequisite: #046 ✅ DEPLOYED", Claim.OPEN),
+        ("in progress beats a done phase", "> **Status: IN PROGRESS — Phase 1+2 code done**", Claim.OPEN),
+        ("legacy completion word", "> **Status: ✅ Phase 1 + Phase 2 COMPLETE**", Claim.FIXED),
+        ("legacy prod phrasing", "**Status:** live in prod 2026-09-14", Claim.DEPLOYED),
+        ("completion word inside another word", "## Status: incomplete, undone", Claim.OTHER),
     ]
     block_failures = 0
     for label, text, want in blocks:
