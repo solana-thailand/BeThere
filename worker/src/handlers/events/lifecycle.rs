@@ -265,34 +265,32 @@ pub async fn hard_delete_event(
         );
     }
 
-    // Load event config BEFORE deletion — KV first, D1 fallback
-    let pre_delete_config = if let Some(kv_ref) = kv {
-        crate::event_store::get_event_config(kv_ref, &id)
+    // Load event config BEFORE deletion. D1 first: event writes land there
+    // before KV, so right after an archive the KV copy can still read
+    // "active" and the status guard would refuse a delete that is allowed.
+    let d1_config = match state.d1.as_deref() {
+        Some(d1) => crate::db::events::get_event(d1, &id)
             .await
             .ok()
             .flatten()
-    } else {
-        None
+            .map(|row| row.to_event_config()),
+        None => None,
     };
 
-    let pre_delete_config = match pre_delete_config {
+    let pre_delete_config = match d1_config.clone() {
         Some(c) => Some(c),
-        None => {
-            if let Some(ref d1) = state.d1 {
-                crate::db::events::get_event(d1, &id)
-                    .await
-                    .ok()
-                    .flatten()
-                    .map(|row| row.to_event_config())
-            } else {
-                None
-            }
-        }
+        None => match kv {
+            Some(kv_ref) => crate::event_store::get_event_config(kv_ref, &id)
+                .await
+                .ok()
+                .flatten(),
+            None => None,
+        },
     };
 
     // KV delete (if available)
     if let Some(kv_ref) = kv {
-        crate::event_store::hard_delete_event(kv_ref, &id, force)
+        crate::event_store::hard_delete_event(kv_ref, &id, force, d1_config.as_ref())
             .await
             .map_err(|e| {
                 tracing::error!(event_id = %id, error = %e, "failed to hard-delete event from KV");
