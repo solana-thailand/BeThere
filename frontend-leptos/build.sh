@@ -73,14 +73,16 @@ bump_sw_version() {
     echo "🔁 SW cache version → bethere-${ver} (auto-invalidates stale caches on deploy)"
 }
 
-precompress_wasm() {
+precompress_assets() {
     # Cloudflare compresses assets on the fly at ~brotli q4; q11 done once here
-    # saves ~380 KB per first load (.issues/135 §6.3). The Worker serves this
-    # sibling to clients that accept br (worker/src/precompressed.rs) and falls
-    # back to the plain file otherwise, so a missing .br only costs bytes.
-    local wasm
-    for wasm in dist/event-checkin-frontend-*_bg.wasm; do
-        [[ -f "$wasm" ]] || { echo "⚠️  No wasm in dist/ — skipping precompression"; return; }
+    # saves ~380 KB per first load (.issues/135 §6.3) and ~20 KB per jsQR load
+    # (plan 028 F10). The Worker serves this sibling to clients that accept br
+    # (worker/src/precompressed.rs) and falls back to the plain file otherwise,
+    # so a missing .br only costs bytes. Keep this list in step with
+    # PRECOMPRESSED_ASSETS and wrangler.toml's run_worker_first.
+    local asset
+    for asset in dist/event-checkin-frontend-*_bg.wasm dist/jsqr-*.js; do
+        [[ -f "$asset" ]] || { echo "⚠️  No $asset in dist/ — skipping its precompression"; continue; }
         # shellcheck disable=SC2016 # ${...} below is a JS template literal
         node -e '
 const fs = require("fs"), z = require("zlib");
@@ -93,7 +95,7 @@ const br = z.brotliCompressSync(raw, { params: {
 if (!z.brotliDecompressSync(br).equals(raw)) { console.error("brotli round-trip mismatch"); process.exit(1); }
 fs.writeFileSync(src + ".br", br);
 console.log(`🗜️  ${src}.br: ${raw.length} → ${br.length} bytes (brotli q11)`);
-' "$wasm"
+' "$asset"
     done
 }
 
@@ -117,7 +119,7 @@ build() {
 
     cleanup_html
     bump_sw_version
-    precompress_wasm
+    precompress_assets
 }
 
 # --watch mode: auto-rebuild on file changes

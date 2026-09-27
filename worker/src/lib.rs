@@ -140,10 +140,10 @@ async fn fetch(
     // build fails. Static assets (JS/CSS/WASM) are served by Cloudflare's
     // [assets] binding before the worker is invoked.
     let path = req.uri().path();
-    // The frontend wasm is routed here by `run_worker_first` so it can be
-    // served pre-compressed (brotli 11) instead of Cloudflare's on-the-fly q4.
-    if precompressed::is_precompressed_asset(path) {
-        return precompressed::serve(req, &env).await;
+    // The frontend wasm and jsQR are routed here by `run_worker_first` so they
+    // can be served pre-compressed (brotli 11) instead of Cloudflare's q4.
+    if let Some(asset) = precompressed::precompressed_asset(path) {
+        return precompressed::serve(req, &env, asset).await;
     }
     if is_spa_route(path) {
         return Ok(spa_fallback().await);
