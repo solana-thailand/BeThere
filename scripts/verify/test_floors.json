@@ -15,7 +15,7 @@
     "flow_harness src/main.rs": 0
   },
   "frontend": {
-    "admin_duplicate_hint tests/admin_duplicate_hint.rs": 2,
+    "admin_duplicate_hint tests/admin_duplicate_hint.rs": 3,
     "admin_slip_link tests/admin_slip_link.rs": 2,
     "admin_slip_request tests/admin_slip_request.rs": 2,
     "cluster_networks tests/cluster_networks.rs": 5,
