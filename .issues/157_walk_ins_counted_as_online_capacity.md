@@ -38,6 +38,14 @@ the sheet were not affected; only D1-served counts were.
 cap, i.e. whether any real online registration was closed early. That needs a
 read-only prod D1 query, not run.
 
+**RTM #6 exposure checked 2026-09-28** (public API, no D1 query): the event is
+hybrid, in-person 25/40, online 32/100 (68 remaining), `online_open_mode =
+always`. Walk-ins arrive on the day (2026-10-04). Closing online registration
+through this bug would take more than 68 walk-ins on an event whose whole
+in-person cap is 40, so no hotfix before RTM #6; the fix merges with W3 after
+it. The online remaining figure on that page will read low by one per walk-in
+on the day.
+
 ## Fix (on the branch)
 
 `handlers::capacity::count_tracks` is the one counter: a D1
