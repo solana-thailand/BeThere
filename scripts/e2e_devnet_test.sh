@@ -39,7 +39,12 @@ if [ "${WORKER_URL%/}" = "$PROD_URL" ] && [ "${E2E_ALLOW_PROD:-0}" != "1" ]; the
   echo "Refusing to run against production ($PROD_URL); set E2E_ALLOW_PROD=1 to override." >&2
   exit 2
 fi
-PUBLIC_RPC="https://api.devnet.solana.com"
+# The public endpoint stopped answering getAccountInfo from some networks
+# (2026-09-27): the call hung with no reply while getSlot answered in 0.1 s.
+# E2E_RPC_URL points the run at another devnet RPC (e.g. Helius). It may carry
+# an API key, so print only its host (RPC_HOST).
+PUBLIC_RPC="${E2E_RPC_URL:-https://api.devnet.solana.com}"
+RPC_HOST=$(printf '%s' "$PUBLIC_RPC" | sed -E 's#^[a-z]+://([^/?]+).*#\1#')
 ESCROW_PROGRAM="C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T"
 USDC_MINT="4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 TIMESTAMP=$(date +%s)
@@ -74,7 +79,8 @@ fail() { echo -e "${RED}[FAIL]${NC} $*"; exit 1; }
 rpc_call() {
   local method="$1"
   local params="$2"
-  curl -s -X POST "$PUBLIC_RPC" \
+  # A hung node must fail the run, not freeze it.
+  curl -s --max-time 30 --retry 3 --retry-all-errors -X POST "$PUBLIC_RPC" \
     -H "Content-Type: application/json" \
     -d "{\"jsonrpc\":\"2.0\",\"id\":\"e2e\",\"method\":\"$method\",\"params\":$params}"
 }
@@ -889,7 +895,7 @@ main() {
   echo "  BeThere Escrow — E2E Devnet Test"
   echo "============================================================"
   echo "  Worker: $WORKER_URL"
-  echo "  RPC:    $PUBLIC_RPC"
+  echo "  RPC:    $RPC_HOST"
   echo "  Event:  $EVENT_SLUG"
   echo "============================================================"
   echo ""

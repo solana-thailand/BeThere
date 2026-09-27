@@ -402,3 +402,36 @@ $0.54, no retries). It called `find_events` → `event_details` →
   - W2 (the on-chain refund loop), which can be recorded the same way;
   - the W1 slip queue clip.
 - **Cosmetic:** the Explorer clip shows its instruction panel still "Loading".
+
+### W2 log, 27 Sep (afternoon): on-chain loop run green and clipped
+
+`scripts/e2e_devnet_test.sh` hung at step 5. The public devnet RPC stopped
+answering `getAccountInfo` from this network (no reply in 20 s), while
+`getSlot` answered in 0.1 s, and the script's `curl` had no timeout.
+
+- **Fix (this commit):**
+  - `E2E_RPC_URL` overrides the RPC; only its host is printed, because a URL
+    can carry an API key;
+  - every RPC call has `--max-time 30 --retry 3`.
+- **Re-run through Helius devnet: ALL PASSED**, event
+  `e2e-test-event-1790493197`, escrow `D5eK3gjh…`, all finalized with no
+  errors:
+  - init `4WutxyLj…`;
+  - deposit `5xPB2EbL…`: attendee −1.00 USDC, escrow +1.00;
+  - check-in `4VtB7Ctj…`: signed by the organizer key, no token movement;
+  - refund `QgsveL7u…`: escrow −1.00, attendee +1.00; the deposit account
+    is closed.
+- **Clip:** `~/Movies/bethere/w2_onchain_loop.mp4` (48 s). It has a title
+  card, three Explorer pages with captions, and an end card. Explorer's
+  token-balance panel doesn't load (its RPC hits the same hang), so each
+  scene shows the balance change read from `getTransaction`
+  pre/post token balances.
+- **Wording checked against the chain:**
+  - The check-in caption says the organizer marked the attendee present,
+    not "staff scanned". This run checked in through the API, not a scan.
+  - The end card says the program refuses to let the organizer claim a
+    checked-in attendee's deposit. `claim_forfeited` has
+    `constraints(!attendee_deposit.checked_in())`. No-shows can forfeit on
+    this program after the refund deadline, so "no one can keep the
+    deposit" would have been false for USDC.
+- **Run log:** `~/Movies/bethere/w2_e2e_run_20260927.log` (no key inside).
