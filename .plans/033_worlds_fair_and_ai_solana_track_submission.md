@@ -311,3 +311,13 @@ Staging version `b18fbb4a` = git `367cfe4c`; no migrations. Smoke: reads and wri
 - The admin "Record Slip for Attendee" modal opens with no page errors.
   **Not exercised:** an admin submit end to end (browser QR decode, then
   proposal row). Staging has no THB fixture event.
+
+### W1 log, 27 Sep (night): admin submit end to end on staging
+
+Staging version `81217b91` = git `dc80091d` (the `.issues/154` fix). A headless
+probe drove the admin modal on a throwaway THB event with a walk-in attendee:
+it selected the event, attached a slip, unchecked Auto-verify and submitted.
+The upload returned 200 and the deposit read back as pending. Details are in
+`.issues/154`.
+**Still not exercised:** the proposal row from the admin path. It needs a slip
+with a real mini-QR (the probe used a 1×1 PNG) or vision switched on.

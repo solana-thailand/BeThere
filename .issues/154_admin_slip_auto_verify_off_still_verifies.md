@@ -1,6 +1,6 @@
 # 154: Unchecking "Auto-verify" on the admin record-slip form still verifies
 
-**Status:** fixed on develop, not deployed. Found by code reading on 2026-09-27 (session `event-checkin-c6`); fixed the same day (session `event-checkin-ef`). The live repro below has not been run on staging.
+**Status:** fixed on develop (`dc80091d`), verified on staging (version `81217b91`), not on prod. Found by code reading on 2026-09-27 (session `event-checkin-c6`) and fixed the same day (session `event-checkin-ef`).
 
 ## What happens
 
@@ -51,3 +51,20 @@ contains `"auto_verify":false`. Keep the worker default of `true` for callers
 that omit the field; `default_auto_verify_is_true` pins it.
 
 Applied: `skip_serializing_if` removed; `frontend-leptos/tests/admin_slip_request.rs` pins `"auto_verify":false` on the wire and fails when the skip is restored (mutation-checked).
+
+## Verified on staging (2026-09-27)
+
+Staging version `81217b91` = git `dc80091d`. A headless Chrome probe drove the
+real admin modal on a throwaway THB event (`probe154-1790467487`, walk-in
+attendee). It unchecked Auto-verify, attached a slip and submitted.
+
+- The request body carried `"auto_verify": false` (captured in the browser).
+- `POST /api/deposit/thb/admin-upload` → 200.
+- `GET /api/deposit/status/{id}?event_id=…` → `verified: false`; the roster
+  showed `deposit_status: pending`.
+- No page errors. The fixture was archived and deleted afterwards.
+
+The checked path is covered by the serialization test and by
+`post_deploy_smoke.sh` step 3. This also closes the plan 033 W1 item
+"admin submit end to end on a THB event", minus the slip-agent proposal:
+the probe slip had no QR and vision is off on staging.
