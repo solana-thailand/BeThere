@@ -323,6 +323,13 @@ within the 150-block window.
 on finalized commitment's ~13s expiration reduction; BeThere's
 `fetch_blockhash_from_rpc` uses `"commitment": "finalized"`.
 
+**Follow-up (2026-09-28, .issues/156):** the 30s cache argued about here never
+held anything. KV rejects `expiration_ttl` below 60, so every put failed with a
+400 and every transaction build called the RPC. A staging burst at
+concurrency 10 got `429 rate limited` from Helius devnet on 6 of 50 requests.
+The cache is now per isolate with a 20s TTL (KV at 60s would add up to 60s of
+edge-read lag). Worst case by the budget above: ~20 + 13 + 15 + 2 ≈ 50s.
+
 **Preconditions that would re-open it:**
 - BeThere switches to `"commitment": "confirmed"` (gains ~13s of validity
   headroom at the cost of ~5% blockhash-from-dropped-fork risk). Not planned.
