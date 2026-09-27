@@ -292,8 +292,8 @@ Admin dashboard stats (deposit count, check-in count, etc.) are loaded once on p
 - `leptos-use` (hooks: `use_event_listener`, `use_document_visibility`) — pause/resume polling when tab is hidden
 
 **Files to modify**:
-- `worker/src/handlers/admin.rs` (add SSE endpoint or set cache headers)
-- `frontend-leptos/src/pages/admin.rs` (add polling timer)
+- `worker/src/handlers/attendee/list.rs` (add SSE endpoint or set cache headers)
+- `frontend-leptos/src/pages/admin/page.rs` (add polling timer)
 
 ---
 
@@ -367,7 +367,7 @@ Walk-in attendees are stored in KV but not synced back to the Google Sheet after
 
 **Files to modify**:
 - `worker/src/handlers/walkin.rs` (sync function)
-- `worker/src/handlers/admin.rs` (export endpoint)
+- `worker/src/handlers/attendee/list.rs` (export endpoint)
 
 **Issue ref**: `.issues/014_walkin_attendee_flow.md`
 
