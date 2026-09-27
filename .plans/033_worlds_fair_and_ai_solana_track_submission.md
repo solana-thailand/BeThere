@@ -11,8 +11,13 @@ section still stand and are not repeated here).
 - Superteam Earn, AI × Solana Track Thailand: $10,000, closes
   **13 Oct 06:59 UTC** (13:59 ICT). Needs the Colosseum submission first, with
   Thailand as the country.
-- **Our deadline: submit both by Sun 12 Oct 18:00 ICT.** That leaves a
+- **Our deadline: submit both by Mon 12 Oct 18:00 ICT.** That leaves a
   ~20-hour buffer and no deploys on the last day.
+- **Weekdays corrected 2026-09-28 (`event-checkin-08`):** most weekday labels
+  here were one day early ("Sun 12 Oct" is a Monday, "Fri 3 Oct" a Saturday).
+  The dates were kept and the weekdays fixed, because the deadlines above are
+  dated. If a plan meant the weekday (for example a Friday deploy, i.e. 2 Oct),
+  the owner should move the date.
 
 ## 0. Where we stand (checked, not recalled)
 
@@ -56,7 +61,7 @@ instruction. So W3 is a thin MCP wrapper over existing code, not new chain work.
 
 **Changes:**
 - W3 goes from "should ship, cut first" to **must ship**, scheduled
-  Mon 29 Sep – Tue 30 Sep (before RTM #6, devnet only, no prod deploy needed).
+  Tue 29 Sep – Wed 30 Sep (before RTM #6, devnet only, no prod deploy needed).
 - New cut order: W1 vision fallback + backtest first (vision is gated on §4 Q3
   anyway), then deck polish. W1 QR path live, W2, W3 and W5 are not cuttable.
 - One story instead of two: **BeThere is an attendance-commitment layer.
@@ -66,6 +71,12 @@ instruction. So W3 is a thin MCP wrapper over existing code, not new chain work.
   crypto; the chain is where the commitment and the proof live.
 - Rejected: writing slip verdicts or hashes on chain. That is Solana as
   decoration, which §1 says loses.
+
+**28 Sep:** the browser-OCR 0 THB path (`.plans/035`) is parked, not
+built. The owner found that OCR looks ordinary, and it is commodity. W1's AI
+claim rests on the QR path plus the "proposes / disposes" split and its
+shadow-mode numbers from RTM #6. The slip reader gets one line in the pitch;
+W3 leads.
 
 **What would lose** (from plan 026 §5, still true): AI as decoration;
 a demo that needs narration to excuse a manual step; claiming the escrow holds
@@ -132,7 +143,7 @@ new slip gets a proposal, and nothing changes money.
 
 ### W4. RTM #6 on 4 Oct: the live proof (must ship)
 
-- W1 running in shadow mode on prod before the event (deploy **Fri 3 Oct**,
+- W1 running in shadow mode on prod before the event (deploy **Sat 3 Oct**,
   owner go).
 - Film: the door scan, the organizer's slip queue with AI proposals, badges
   claimed. Collect 2–3 short attendee quotes (consent first).
@@ -157,22 +168,22 @@ new slip gets a proposal, and nothing changes money.
 
 | Date | Work | Owner step |
 |---|---|---|
-| Sat 27 Sep | This plan | Register on Colosseum (Thailand) + Earn; answer §4 |
-| Sun 28 – Tue 30 Sep | W1: proposal table (migration), client QR path, Claude vision fallback, checker, admin display. Staging. | Add `ANTHROPIC_API_KEY` as a Worker secret (staging + prod) |
-| Wed 1 Oct | W1 staging browser verification; W2 devnet rehearsal #1 | — |
-| Thu 2 Oct | W2 rehearsal #2; fixes | — |
-| Fri 3 Oct | Prod deploy with W1 in shadow mode | **Deploy go**, D1 backup |
+| Sun 27 Sep | This plan | Register on Colosseum (Thailand) + Earn; answer §4 |
+| Mon 28 – Wed 30 Sep | W1: proposal table (migration), client QR path, Claude vision fallback, checker, admin display. Staging. | Add `ANTHROPIC_API_KEY` as a Worker secret (staging + prod) |
+| Thu 1 Oct | W1 staging browser verification; W2 devnet rehearsal #1 | — |
+| Fri 2 Oct | W2 rehearsal #2; fixes | — |
+| Sat 3 Oct | Prod deploy with W1 in shadow mode | **Deploy go**, D1 backup |
 | **Sun 4 Oct** | **RTM #6**: film, collect numbers | Run the event |
-| Mon 5 – Tue 7 Oct | W3 MCP + agent devnet payment; W1 numbers write-up | — |
-| Wed 8 Oct | W2 final demo take (clean) | On camera for the scan |
-| Thu 9 Oct | Deck, listing text, disclosure, GTM refresh | Review the texts |
-| Fri 10 Oct | Demo video edit; README/docs | Record the 2–3 min presentation |
-| Sat 11 Oct | Full dry-run of both forms; fix gaps | Read everything once |
-| **Sun 12 Oct** | **Submit Colosseum, then Earn, by 18:00** | Press submit (it's your account) |
+| Mon 5 – Wed 7 Oct | W3 MCP + agent devnet payment; W1 numbers write-up | — |
+| Thu 8 Oct | W2 final demo take (clean) | On camera for the scan |
+| Fri 9 Oct | Deck, listing text, disclosure, GTM refresh | Review the texts |
+| Sat 10 Oct | Demo video edit; README/docs | Record the 2–3 min presentation |
+| Sun 11 Oct | Full dry-run of both forms; fix gaps | Read everything once |
+| **Mon 12 Oct** | **Submit Colosseum, then Earn, by 18:00** | Press submit (it's your account) |
 
 Cut order if behind (changed 27 Sep, §1a): the W1 vision fallback and backtest
 first (keep live QR-path shadow numbers), then the deck polish. W1 QR path,
-W2, W3 and W5 are not cuttable. W3 moves up to Mon 29 – Tue 30 Sep.
+W2, W3 and W5 are not cuttable. W3 moves up to Tue 29 – Wed 30 Sep.
 
 ## 4. Decisions only the owner can make
 
@@ -213,6 +224,10 @@ path stays dormant. Checked before deciding:
   new migration). Candidate: tesseract.js (Apache-2.0, digits + Latin are
   enough for amount and time). Cost: a lazy download on the upload page
   only; measure it against the frontend budget before committing.
+  **Measured 28 Sep → `.plans/035`:** engine + Thai data is 2.3 MB brotli
+  (`.benchmarks/001`), and an attendee-side reading can't be verified by the
+  server. So OCR moves to the **organizer's** browser, with a real-slip
+  go/no-go before anything ships.
 - If OCR can't reach usable accuracy on real slips, the fallback is
   QR-only, and the organizer reads the amount. The W1 "AI" claim then rests
   on the OCR model plus the checker; W3 carries AI × Solana.

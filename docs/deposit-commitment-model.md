@@ -158,6 +158,37 @@ inconsistent. Options:
 Whichever is chosen, write it in the event page's deposit section in one line
 ("Didn't make it? …"). An attendee should know the downside before paying.
 
+*Agent recommendation (2026-09-28): **B**, with no-show cash going to charity
+rather than the organizer, so the organizer never profits from a forfeit.
+Still open: this is the owner's call.*
+
+*Owner input (2026-09-28), not yet a decision: today nothing is forfeited. A
+payer who tells the organizer in advance gets a refund or keeps the deposit as
+credit for a later event, because keeping the community coming matters more.
+If anything is ever forfeited, the likely case is covering food already paid
+for; which cases qualify is not settled. That points to a fourth option,
+**A′: nothing is forfeited except, for a no-show who gave no notice, the
+per-head cost the organizer already spent**. That only reimburses a cost, so
+the organizer still makes no profit from a no-show.*
+
+**D1a. Proposed "BeThere System Architecture & Mechanism Spec" (reviewed
+2026-09-28, not in the repo).** Treat it as a target for after the 12 Oct
+submission, not a description of today. It can't be finalized before D1.
+- **Adopt:** no pooling, ≤100% back (already true); the organizer never profits
+  from forfeits; a T-48h "still coming?" confirm that releases the seat to the
+  waitlist.
+- **Conflicts with today:**
+  - Blanket forfeiting contradicts #118 (§3.2).
+  - `claim_forfeited` pays the organizer (§6.2), and the spec's "offset
+    logistics" clause is still money to the organizer.
+  - "The scan refunds instantly" is true on no rail (§7).
+  - PromptPay has no pre-authorization, so there is no hold to release.
+  - A `status` enum in the deposit PDA is a program change, with the
+    struct-offset drift risk that every offset reader carries.
+  - A TOTP QR answers a threat (screenshot sharing) that hasn't been observed;
+    today's QR is a static URL.
+  - The gambling-law claim needs a lawyer before it goes in any copy.
+
 **D2. Is "100%" a promise?** If yes, retire `max_refundable_deposits` (or force N ≥
 capacity). If no, the copy has to say "first N".
 

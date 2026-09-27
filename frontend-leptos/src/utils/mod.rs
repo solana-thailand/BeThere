@@ -164,7 +164,9 @@ pub fn get_participation_badge(participation_type: &str) -> ParticipationBadge {
 
     let lower = participation_type.to_lowercase();
 
-    if lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person") {
+    // A walk-in was at the door. The row's own Walk-in badge says how they
+    // came, so this badge only says where: never the raw `walkin` sentinel.
+    if is_on_site_roster(participation_type) {
         return ParticipationBadge {
             label: "In-Person".to_string(),
             css_class: "badge-info",
@@ -319,6 +321,22 @@ pub fn is_in_person(participation_type: &str) -> bool {
     lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person")
 }
 
+/// Walk-ins are stored with the literal sentinel `participation_type = 'walkin'`
+/// (`worker/src/db/attendees/walkin.rs`). `is_in_person` deliberately says no
+/// to it, mirroring `ParticipationType::parse("walkin") == Other`.
+pub fn is_walkin(participation_type: &str) -> bool {
+    participation_type.trim().eq_ignore_ascii_case("walkin")
+}
+
+/// Whether an attendee belongs on the organizer's on-site (In-Person) roster.
+///
+/// A walk-in was physically at the door, so it is on-site even though
+/// `is_in_person` is false for it. Routing by `!is_in_person` alone filed
+/// every walk-in under the Online tab.
+pub fn is_on_site_roster(participation_type: &str) -> bool {
+    is_in_person(participation_type) || is_walkin(participation_type)
+}
+
 /// Retrospective enrollment is a post-event learning lead, never a live
 /// online registration. Keep this separate from `is_in_person` so callers do
 /// not accidentally classify it as online by negation.
@@ -466,6 +484,13 @@ mod tests {
         let badge = get_participation_badge("Hybrid");
         assert_eq!(badge.label, "Hybrid");
         assert_eq!(badge.css_class, "badge-warning");
+    }
+
+    #[test]
+    fn test_participation_badge_walkin_is_in_person() {
+        let badge = get_participation_badge("walkin");
+        assert_eq!(badge.label, "In-Person");
+        assert_eq!(badge.css_class, "badge-info");
     }
 
     #[test]

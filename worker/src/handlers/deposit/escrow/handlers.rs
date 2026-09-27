@@ -119,7 +119,6 @@ pub async fn init_escrow_tx_handler(
 
     let tx = crate::solana_escrow::build_init_escrow_transaction(
         &rpc_url,
-        kv,
         organizer_pubkey,
         on_chain_event_id,
         event.deposit_amount_usdc,
@@ -269,7 +268,6 @@ pub async fn refund_and_close_tx_handler(
 
     let tx = crate::solana_escrow::build_refund_and_close_transaction(
         &rpc_url,
-        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
         &body.wallet_address,
@@ -380,7 +378,6 @@ pub async fn mark_checked_in_tx_handler(
 
     let tx = crate::solana_escrow::build_mark_checked_in_transaction(
         &rpc_url,
-        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
         &attendee_wallet,
@@ -508,7 +505,6 @@ pub async fn deactivate_event_tx_handler(
 
     let tx = crate::solana_escrow::build_deactivate_event_transaction(
         &rpc_url,
-        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
     )
@@ -606,7 +602,6 @@ pub async fn close_event_tx_handler(
 
     let tx = crate::solana_escrow::build_close_event_transaction(
         &rpc_url,
-        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
     )
@@ -815,7 +810,6 @@ pub async fn claim_forfeited_tx_handler(
 
     let tx = crate::solana_escrow::build_batch_claim_forfeited_transaction(
         &rpc_url,
-        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
         &forfeited,
@@ -923,7 +917,6 @@ pub async fn close_deposit_tx_handler(
 
     let tx = crate::solana_escrow::build_close_deposit_transaction(
         &rpc_url,
-        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
         &body.wallet_address,

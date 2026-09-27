@@ -1,6 +1,6 @@
 # 090 — What is not in production before the 15 Sep Foundation call
 
-**Status:** deployed 2026-09-13 (prod `253717a5`) — two follow-ups remain, see the outcome section
+**Status:** deployed 2026-09-13 (prod version `253717a5`, carrying `d41d81d7`, `dedd7ee9`, `8848432e` and `40513def`) — two follow-ups remain, see the outcome section
 **Found:** 2026-09-13, checking BeThere against `solana-thailand-devrel-helper`
 **Severity:** high — DevRel's top-priority ask is merged and invisible
 

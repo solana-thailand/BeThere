@@ -1,0 +1,55 @@
+<!doctype html><meta charset=utf-8>
+<!--
+  In-browser OCR bench page for `.plans/035` (served by run_ocr.mjs).
+  extract() is the candidate field reader: it proposes, and a figure it is not
+  sure of stays null. A miss is cheap (the organizer reads the slip); a WRONG
+  amount is the failure the bench exists to count.
+-->
+<script src="/tesseract.min.js"></script>
+<script>
+const TH_MON=["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."];
+// "1.500.00" is a misread "1,500.00": every separator but the last is a thousands mark
+const norm=x=>x.slice(0,-3).replace(/[,.]/g,"")+x.slice(-3);
+function extract(text){
+  // Tesseract emits sara am decomposed (U+0E4D U+0E32); fold it so labels match.
+  const t=text.replace(/\u0E4D\u0E32/g,"\u0E33").replace(/[ \t]+/g," ");
+  const lines=t.split("\n");
+  const AMT=/(?<![\d.,])\d{1,3}(?:[,.]\d{3})*\.\d{2}(?![\d.,])/g;
+  let amount=null;
+  // 1) a money figure on a line naming baht/amount, or on the line after the label
+  for(let i=0;i<lines.length && amount===null;i++){
+    const m=lines[i].match(AMT)?.filter(x=>x!=="0.00");
+    const near=/บาท|จำนวน/.test(lines[i])||(i>0&&/จำนวน/.test(lines[i-1]));
+    if(m&&m.length&&near&&!/ธรรมเนียม/.test(lines[i])) amount=norm(m[0]);
+  }
+  // 2) no label read: accept only a single distinct non-fee figure
+  if(amount===null){const all=new Set();for(const l of lines){if(/ธรรมเนียม|fee/i.test(l))continue;for(const x of (l.match(AMT)||[]))if(x!=="0.00")all.add(norm(x));}
+    if(all.size===1) amount=[...all][0];}
+  const time=(t.match(/\b([01]\d|2[0-3])[:.]([0-5]\d)\b/)||[]).slice(1,3).join(":")||null;
+  let day=null,month=null;
+  for(let k=0;k<12;k++){const re=new RegExp("(\\d{1,2})\\s*"+TH_MON[k].replace(/\./g,"\\.?"));const m=t.match(re);if(m){day=+m[1];month=k+1;break;}}
+  return {amount,time,day,month};
+}
+// "photo": half scale, 2 degree tilt, blur, JPEG q45: a phone photo of a screen, roughly.
+async function degrade(url,mode){
+  if(mode==="clean") return url;
+  const img=new Image(); img.src=url; await img.decode();
+  const s=0.5,c=document.createElement("canvas"),w=img.width*s,h=img.height*s;
+  c.width=w;c.height=h;const x=c.getContext("2d");
+  x.fillStyle="#fff";x.fillRect(0,0,w,h);x.filter="blur(0.8px)";
+  x.translate(w/2,h/2);x.rotate(2*Math.PI/180);x.drawImage(img,-w/2,-h/2,w,h);
+  return c.toDataURL("image/jpeg",0.45);
+}
+window.run=async(lang,mode,truth,psm)=>{
+  const t0=performance.now();
+  const w=await Tesseract.createWorker(lang.split("+"),1,{workerPath:"/worker.min.js",corePath:"/",langPath:"/lang",gzip:false,cacheMethod:"none"});
+  if(psm)await w.setParameters({tessedit_pageseg_mode:psm});const init=performance.now()-t0; const rows=[];
+  for(const g of truth){
+    const src=await degrade("/"+g.file,mode); const s=performance.now();
+    const {data}=await w.recognize(src); const ms=performance.now()-s;
+    const e=extract(data.text);
+    rows.push({file:g.file,ms:Math.round(ms),amount:e.amount===g.amount,amount_wrong:e.amount!==null&&e.amount!==g.amount,time:e.time===g.time,date:e.day===g.day&&e.month===g.month,rtail:data.text.includes(g.rtail),got:e,text:data.text});
+  }
+  await w.terminate(); return {init:Math.round(init),rows};
+};
+</script>

@@ -15,6 +15,22 @@
  */
 
 /**
+ * Resolvers of pending waitForScanEvent() promises. Every place that sets
+ * __qrResult or __cameraError, or stops the scanner, calls
+ * _notifyScanWaiters() so the Rust side wakes at once instead of on its
+ * next poll tick.
+ */
+var _scanWaiters = [];
+
+function _notifyScanWaiters() {
+  var waiters = _scanWaiters;
+  _scanWaiters = [];
+  waiters.forEach(function (wake) {
+    wake();
+  });
+}
+
+/**
  * Load QR libraries via dynamic import.
  *
  * Uses dynamic import() instead of static import so the browser doesn't
@@ -135,6 +151,7 @@ export function startCamera() {
                 var results = await detector.detect(video);
                 if (results.length > 0 && !window.__qrResult) {
                   window.__qrResult = results[0].rawValue;
+                  _notifyScanWaiters();
                 }
               }
             } catch {
@@ -182,6 +199,7 @@ export function startCamera() {
                 );
                 if (code && !window.__qrResult) {
                   window.__qrResult = code.data;
+                  _notifyScanWaiters();
                 }
               }
             } catch {
@@ -195,12 +213,14 @@ export function startCamera() {
       } else {
         window.__cameraError =
           "QR scanning requires a modern browser. Please use Chrome, Edge, Safari, or Firefox.";
+        _notifyScanWaiters();
       }
     } catch (e) {
       console.error("[scanner] camera error:", e);
       window.__cameraError =
         e.message ||
         "Camera access denied. Please allow camera access and retry.";
+      _notifyScanWaiters();
     }
   })();
 }
@@ -222,6 +242,34 @@ export function stopCamera() {
   }
   var video = document.getElementById("scanner-video");
   if (video) video.srcObject = null;
+  _notifyScanWaiters();
+}
+
+/**
+ * Resolve when there is something for the Rust side to read: a QR result,
+ * a camera error, or the scanner stopping. Resolves at once if one is
+ * already there, and after `timeoutMs` regardless, as a safety net.
+ *
+ * @param {number} timeoutMs
+ * @returns {Promise<void>}
+ */
+export function waitForScanEvent(timeoutMs) {
+  if (window.__qrResult || window.__cameraError || !window.__scannerActive) {
+    return Promise.resolve();
+  }
+  return new Promise(function (resolve) {
+    var timer = setTimeout(function () {
+      _scanWaiters = _scanWaiters.filter(function (w) {
+        return w !== wake;
+      });
+      resolve();
+    }, timeoutMs);
+    function wake() {
+      clearTimeout(timer);
+      resolve();
+    }
+    _scanWaiters.push(wake);
+  });
 }
 
 /**

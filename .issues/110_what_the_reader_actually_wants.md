@@ -1,6 +1,6 @@
 # 110 — The page asked a favour without saying what the favour buys
 
-**Status:** implemented 2026-09-14, **not deployed**
+**Status:** deployed — `d80e3a1f` is an ancestor of `deploy/production/20260927T155700Z` (checked 2026-09-28). Originally: implemented 2026-09-14.
 **Found:** 2026-09-14, asked to think about what the reader wants and feels
 **Severity:** medium — it is response rate, which is the only output the page has
 

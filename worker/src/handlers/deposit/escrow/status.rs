@@ -635,7 +635,6 @@ pub async fn rollover_deposit_tx_handler(
 
     let tx = crate::solana_escrow::build_rollover_deposit_transaction(
         &rpc_url,
-        Some(kv),
         organizer_pubkey,
         source_on_chain_id,
         target_on_chain_id,

@@ -59,25 +59,17 @@ pub fn EventsPage(
     let (loading_more_events, set_loading_more_events) = signal(false);
     let (readiness, set_readiness) = signal(api::CoreReadinessData::default());
 
-    // Ctrl+K keyboard shortcut to focus search
-    Effect::new(move |_| {
-        let search_ref = search_input_ref;
-        let handler = wasm_bindgen::closure::Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
-            move |ev: web_sys::KeyboardEvent| {
-                if (ev.ctrl_key() || ev.meta_key()) && ev.key() == "k" {
-                    ev.prevent_default();
-                    if let Some(el) = search_ref.get() {
-                        el.focus().ok();
-                    }
-                }
-            },
-        );
-        let window = web_sys::window().expect("no window");
-        use wasm_bindgen::JsCast;
-        let _ =
-            window.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
-        handler.forget();
+    // Ctrl+K keyboard shortcut to focus search. Removed on unmount: a
+    // forgotten listener stacked one more handler per visit.
+    let shortcut = window_event_listener(leptos::ev::keydown, move |ev: web_sys::KeyboardEvent| {
+        if (ev.ctrl_key() || ev.meta_key()) && ev.key() == "k" {
+            ev.prevent_default();
+            if let Some(el) = search_input_ref.get_untracked() {
+                el.focus().ok();
+            }
+        }
     });
+    on_cleanup(move || shortcut.remove());
 
     // Load events on mount and on refresh
     Effect::new(move |_| {

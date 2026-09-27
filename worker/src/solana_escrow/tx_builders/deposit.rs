@@ -1,5 +1,4 @@
 use event_checkin_domain::onchain::EventIx;
-use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
 use super::super::{DepositTransaction, EscrowError};
@@ -21,7 +20,6 @@ use super::{EscrowCtx, acct_r, acct_sw, acct_w, finalize_tx};
 /// A `DepositTransaction` with the base64-encoded transaction and a message.
 pub async fn build_deposit_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     attendee_pubkey: &str,
@@ -49,7 +47,6 @@ pub async fn build_deposit_transaction(
 
     let tx_b64 = finalize_tx(
         rpc_url,
-        kv,
         &ctx,
         instruction_accounts,
         ctx.ix_data(EventIx::Deposit),

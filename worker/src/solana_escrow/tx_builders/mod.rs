@@ -2,12 +2,11 @@
 
 use base64::Engine;
 use event_checkin_domain::onchain::{EscrowIxData, EventIx};
-use worker::KvStore;
 
+use super::blockhash::get_latest_blockhash;
 use super::crypto::{find_program_address, get_associated_token_address, pubkey_from_base58};
 use super::wire::{
-    AccountMeta, CompiledInstruction, build_message_accounts, get_latest_blockhash,
-    serialize_transaction,
+    AccountMeta, CompiledInstruction, build_message_accounts, serialize_transaction,
 };
 use super::{
     ASSOCIATED_TOKEN_PROGRAM_ID, EscrowError, INSTRUCTIONS_SYSVAR_ID, PubkeyBytes, RENT_SYSVAR_ID,
@@ -161,11 +160,10 @@ impl EscrowCtx {
 /// Serialize instructions into a base64-encoded transaction string.
 pub(crate) async fn serialize_to_b64(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     message_accounts: &[AccountMeta],
     compiled_ixs: &[CompiledInstruction],
 ) -> Result<String, EscrowError> {
-    let bh = get_latest_blockhash(rpc_url, kv).await?;
+    let bh = get_latest_blockhash(rpc_url).await?;
     let bh_bytes = pubkey_from_base58(&bh.value)?;
     let tx_bytes = serialize_transaction(message_accounts, compiled_ixs, &bh_bytes);
     Ok(base64::engine::general_purpose::STANDARD.encode(&tx_bytes))
@@ -174,7 +172,6 @@ pub(crate) async fn serialize_to_b64(
 /// Build and serialize a single-instruction transaction.
 pub(crate) async fn finalize_tx(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     ctx: &EscrowCtx,
     instruction_accounts: Vec<AccountMeta>,
     ix_data: Vec<u8>,
@@ -187,7 +184,7 @@ pub(crate) async fn finalize_tx(
         accounts: ix_idx,
         data: ix_data,
     };
-    serialize_to_b64(rpc_url, kv, &msg, &[compiled]).await
+    serialize_to_b64(rpc_url, &msg, &[compiled]).await
 }
 
 /// Merge accounts from multiple instructions into a single deduplicated

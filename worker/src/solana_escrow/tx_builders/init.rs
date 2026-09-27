@@ -1,5 +1,4 @@
 use event_checkin_domain::onchain::EscrowIxData;
-use worker::KvStore;
 
 use super::super::EscrowError;
 use super::super::InitEscrowTransaction;
@@ -24,7 +23,6 @@ use super::{EscrowCtx, acct_r, acct_sw, acct_w, merge_message_accounts, serializ
 /// * `refund_deadline` — Refund deadline as unix timestamp (seconds)
 pub async fn build_init_escrow_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     deposit_amount: u64,
@@ -100,7 +98,6 @@ pub async fn build_init_escrow_transaction(
 
     let tx_b64 = serialize_to_b64(
         rpc_url,
-        kv,
         &message_accounts,
         &[ata_compiled_ix, escrow_compiled_ix],
     )

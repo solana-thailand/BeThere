@@ -1,6 +1,6 @@
 # 105 — Two role switchers, and a post-login deep link to the wrong event
 
-**Status:** implemented 2026-09-14, **not deployed**
+**Status:** deployed — `2f4cee4f` is an ancestor of `deploy/production/20260927T155700Z` (checked 2026-09-28). Originally: implemented 2026-09-14.
 **Found:** 2026-09-14, reviewing the landing page against the live DOM
 **Severity:** medium — one is cosmetic, one sent repeat attendees to an April ticket
 

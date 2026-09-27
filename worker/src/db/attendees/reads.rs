@@ -710,7 +710,7 @@ mod tests {
             assert!(
                 !ticket.to_lowercase().contains("vip"),
                 "{name:?} must not read as a VIP ticket — that is the exact test \
-                 frontend-leptos/src/pages/admin.rs:is_vip_ticket applies"
+                 frontend-leptos/src/pages/admin/types.rs:is_vip_ticket applies"
             );
         }
     }

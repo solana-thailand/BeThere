@@ -1,6 +1,6 @@
 # 088 — The claim flow asserted a `status` field the API has never returned
 
-**Status:** fixed 2026-09-13
+**Status:** fixed 2026-09-13 in `6b4caea4`
 **Found:** 2026-09-13, working through `.issues/084`
 **Severity:** low in impact, high in cost — it made a healthy endpoint look broken
 

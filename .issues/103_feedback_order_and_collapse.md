@@ -1,6 +1,6 @@
 # 103 — 60% see one question set; the 14% who see four or more are the regulars
 
-**Status:** implemented 2026-09-14, **not deployed**
+**Status:** deployed — `d7f96ad6` is an ancestor of `deploy/production/20260927T155700Z` (checked 2026-09-28). Originally: implemented 2026-09-14.
 **Found:** 2026-09-14, asked directly: *"ตอนนี้ที่ถูกที่ควรที่ดีต่อ ux ต้องเป็นยังไงกันแน่"*
 **Severity:** medium — it decides the response rate of the cohort that matters most
 

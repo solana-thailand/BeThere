@@ -1,6 +1,6 @@
 # 092 — `cargo fmt --all` never reached the frontend, and six files had drifted
 
-**Status:** fixed 2026-09-13
+**Status:** fixed 2026-09-13 in `08f209f0`
 **Found:** 2026-09-13, while shipping `.issues/091`
 **Severity:** low (formatting only) — but it is a gate that reads as covering
 more than it does, which is the part worth fixing

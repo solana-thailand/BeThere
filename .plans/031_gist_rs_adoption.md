@@ -96,6 +96,18 @@ reflex-site has no license, so its code is a pattern only.
 - [ ] Build stamp on `/api/health`: git sha, `BUILD_TAG`, and "stale" when
   built outside `deploy.sh`.
 
+### reflex, after 12 Oct (research only)
+
+Probed live 2026-09-28 (reflex 0.2.3): it abstained on slip and no-show
+questions (confidence 0.009 and 0.0002) and routed them to its built-in `ops`
+corpus. It serves on localhost only, has no public API for loading our data,
+and publishes 0.22–0.51 accuracy. So nothing ships in the product.
+- [ ] Offline A/B: replay RTM #6 W1 shadow-mode decisions through reflex and
+  compare agreement with the deterministic checks. Record under `.benchmarks/`.
+- [ ] No-show prediction: can past check-in history predict a no-show well
+  enough to matter for D1a's T-48h confirm (`docs/deposit-commitment-model.md`)?
+  Needs labeled data from at least two deposit events first.
+
 ## 4. Owner decisions
 
 - [ ] Parity-before-use in the lucky-draw spec (`.plans/030` §4): the browser

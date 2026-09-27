@@ -31,3 +31,18 @@ fn the_wire_field_defaults_to_empty() {
         serde_json::from_str(r#"{"api_id":"a","name":"A","email":"a@x.com"}"#).expect("parse");
     assert!(item.possible_duplicates.is_empty());
 }
+
+/// The door-side Recent Check-ins panel is where staff see who just walked
+/// in, so it carries the same badge as the roster row.
+#[test]
+fn recent_check_ins_panel_shows_the_badge() {
+    const ADMIN: &str = include_str!("../src/pages/admin/render.rs");
+    let start = ADMIN
+        .find("fn render_recent_check_ins(")
+        .expect("render_recent_check_ins moved; update this guard");
+    let body = &ADMIN[start..];
+    let end = body[1..].find("\nfn ").map_or(body.len(), |i| i + 1);
+    let body = &body[..end];
+    assert!(body.contains("duplicate_hint(&a.possible_duplicates)"));
+    assert!(body.contains("{duplicate_badge}"));
+}

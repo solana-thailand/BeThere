@@ -11,6 +11,7 @@ use wasm_bindgen::prelude::*;
 // - stopCamera()       — stop camera stream and QR detection
 // - checkQrResult()    — poll for detected QR code (string | null)
 // - checkCameraError() — poll for camera error message (string | null)
+// - waitForScanEvent() — promise that resolves on a result, an error or a stop
 // - isScannerActive()  — check if scanner loop is running (bool)
 //
 // Rust call sites use snake_case names mapped via #[wasm_bindgen(js_name = ...)].
@@ -38,6 +39,12 @@ extern "C" {
     /// Poll for camera errors set by the JS scanning loop.
     #[wasm_bindgen(js_name = "checkCameraError")]
     pub(super) fn check_camera_error_js() -> Option<String>;
+
+    /// Resolve when a QR result or camera error is ready or the scanner
+    /// stops, or after `timeout_ms` as a safety net. Replaces a fixed Rust
+    /// poll tick that added up to 300 ms on top of the JS detection loop.
+    #[wasm_bindgen(js_name = "waitForScanEvent")]
+    pub(super) fn wait_for_scan_event_js(timeout_ms: u32) -> js_sys::Promise;
 
     /// Check if the scanner is still active (set by start/stop).
     #[wasm_bindgen(js_name = "isScannerActive")]

@@ -211,9 +211,9 @@ pub fn Adventure() -> impl IntoView {
     let scroll_game = game;
     let scroll_grid_ref = grid_container_ref;
     Effect::new(move |_| {
-        let g = scroll_game.get();
+        let _pos = scroll_game.with(|g| g.player_pos);
         // Trigger on player position change
-        let _pos = g.player_pos;
+
         // Defer scroll to next frame so DOM has updated
         let grid_ref = scroll_grid_ref;
         request_animation_frame(move || {
@@ -222,10 +222,10 @@ pub fn Adventure() -> impl IntoView {
             let tile_size = 48.0_f64;
             let container_width = el.client_width() as f64;
             let container_height = el.client_height() as f64;
-            let levels = levels_signal.get();
-            let g = scroll_game.get();
-            let grid_width = levels.get(g.current_level).map(|l| l.width).unwrap_or(12) as f64;
-            let grid_height = levels.get(g.current_level).map(|l| l.height).unwrap_or(8) as f64;
+            let levels = levels_signal.read();
+            let current_level = scroll_game.with(|g| g.current_level);
+            let grid_width = levels.get(current_level).map(|l| l.width).unwrap_or(12) as f64;
+            let grid_height = levels.get(current_level).map(|l| l.height).unwrap_or(8) as f64;
             let total_w = grid_width * tile_size;
             let total_h = grid_height * tile_size;
             if total_w <= container_width && total_h <= container_height {
@@ -252,11 +252,11 @@ pub fn Adventure() -> impl IntoView {
     let auto_save_completed_read = completed_levels;
     let auto_save_required_level = required_level_from_api;
     Effect::new(move |_| {
-        let g = auto_save_game.get();
+        let g = auto_save_game.read();
         if !g.level_completed {
             return;
         }
-        let levels = auto_save_levels.get();
+        let levels = auto_save_levels.read();
         let Some(level) = levels.get(g.current_level) else {
             return;
         };
@@ -371,8 +371,7 @@ pub fn Adventure() -> impl IntoView {
 
     // Dismiss intro on first interaction
     let dismiss_intro = move || {
-        let g = game.get();
-        if g.showing_intro {
+        if game.with(|g| g.showing_intro) {
             set_game.update(|g| g.showing_intro = false);
             set_elapsed_seconds.set(0);
         }
@@ -380,7 +379,7 @@ pub fn Adventure() -> impl IntoView {
 
     // Load a level by index
     let load_level = move |level_idx: usize| {
-        let levels = levels_signal.get();
+        let levels = levels_signal.read();
         if let Some(level) = levels.get(level_idx) {
             let mut state = engine::init_game_state(level);
             state.current_level = level_idx;
@@ -405,104 +404,11 @@ pub fn Adventure() -> impl IntoView {
         }
     };
 
-    // Handle keyboard input — global listener
-    let handle_keydown = move |ev: web_sys::KeyboardEvent| {
+    // One move, shared by keyboard, d-pad and swipe. Every input path must
+    // stop at a finished level: the auto-save Effect tracks `game`, so a move
+    // after completion would re-run it and post another save.
+    let step = move |dir: engine::Direction| {
         let g = game.get();
-
-        // If level select is showing, Escape closes it
-        if show_level_select.get() {
-            match ev.key().as_str() {
-                "Escape" => {
-                    set_show_level_select.set(false);
-                    return;
-                }
-                _ => return,
-            }
-        }
-
-        // If dialog is active, any key dismisses it
-        if g.active_dialog.is_some() {
-            set_game.update(|g| *g = engine::dismiss_dialog(g.clone()));
-            return;
-        }
-
-        // If intro is showing, any key dismisses
-        if g.showing_intro {
-            dismiss_intro();
-            return;
-        }
-
-        // If puzzle is active, don't process movement
-        if g.active_puzzle.is_some() {
-            return;
-        }
-
-        let direction = match ev.key().as_str() {
-            "ArrowUp" | "w" | "k" => Some(engine::Direction::Up),
-            "ArrowDown" | "s" | "j" => Some(engine::Direction::Down),
-            "ArrowLeft" | "a" | "h" => Some(engine::Direction::Left),
-            "ArrowRight" | "d" | "l" => Some(engine::Direction::Right),
-            _ => None,
-        };
-
-        if let Some(dir) = direction {
-            ev.prevent_default();
-            let current = game.get();
-            let (new_state, result) = engine::apply_move(current, dir);
-
-            match &result {
-                MoveResult::CollectedKey { name, description } => {
-                    set_notification.set(Some(format!("Collected: {name} — {description}")));
-                    auto_dismiss_notification();
-                }
-                MoveResult::ExitReached => {
-                    let levels = levels_signal.get();
-                    if let Some(level) = levels.get(new_state.current_level)
-                        && engine::check_level_complete(&new_state, level)
-                    {
-                        let completed_idx = new_state.current_level;
-                        set_game.update(|g| {
-                            g.player_pos = new_state.player_pos;
-                            g.moves_count = new_state.moves_count;
-                            g.level_completed = true;
-                        });
-                        set_completed_levels.update(|c| {
-                            c.insert(completed_idx);
-                        });
-                        set_notification.set(Some("Level Complete!".to_string()));
-                        return;
-                    }
-                }
-                MoveResult::HitCodeBlock { puzzle_id } | MoveResult::HitGate { puzzle_id } => {
-                    let levels = levels_signal.get();
-                    set_game.update(|g| {
-                        *g = engine::open_puzzle_by_id(g.clone(), puzzle_id, &levels);
-                    });
-                    set_notification.set(Some(
-                        "Gate locked! Solve the puzzle to open it.".to_string(),
-                    ));
-                    auto_dismiss_notification();
-                    return;
-                }
-                MoveResult::Blocked => {}
-                _ => {}
-            }
-
-            set_game.set(new_state);
-        }
-    };
-
-    // Global keyboard listener
-    let _ = window_event_listener(leptos::ev::keydown, handle_keydown);
-
-    // D-pad handler for mobile
-    let dpad_move = move |dir: engine::Direction| {
-        dismiss_intro();
-        let g = game.get();
-        if g.active_dialog.is_some() {
-            set_game.update(|g| *g = engine::dismiss_dialog(g.clone()));
-            return;
-        }
         if g.active_puzzle.is_some() || g.showing_intro || g.level_completed {
             return;
         }
@@ -513,7 +419,7 @@ pub fn Adventure() -> impl IntoView {
                 auto_dismiss_notification();
             }
             MoveResult::ExitReached => {
-                let levels = levels_signal.get();
+                let levels = levels_signal.read();
                 if let Some(level) = levels.get(new_state.current_level)
                     && engine::check_level_complete(&new_state, level)
                 {
@@ -531,7 +437,7 @@ pub fn Adventure() -> impl IntoView {
                 }
             }
             MoveResult::HitCodeBlock { puzzle_id } | MoveResult::HitGate { puzzle_id } => {
-                let levels = levels_signal.get();
+                let levels = levels_signal.read();
                 set_game.update(|g| {
                     *g = engine::open_puzzle_by_id(g.clone(), puzzle_id, &levels);
                 });
@@ -544,6 +450,72 @@ pub fn Adventure() -> impl IntoView {
             _ => {}
         }
         set_game.set(new_state);
+    };
+
+    // Handle keyboard input — global listener
+    let handle_keydown = move |ev: web_sys::KeyboardEvent| {
+        let (has_dialog, showing_intro, has_puzzle) = game.with(|g| {
+            (
+                g.active_dialog.is_some(),
+                g.showing_intro,
+                g.active_puzzle.is_some(),
+            )
+        });
+
+        // If level select is showing, Escape closes it
+        if show_level_select.get() {
+            match ev.key().as_str() {
+                "Escape" => {
+                    set_show_level_select.set(false);
+                    return;
+                }
+                _ => return,
+            }
+        }
+
+        // If dialog is active, any key dismisses it
+        if has_dialog {
+            set_game.update(|g| *g = engine::dismiss_dialog(g.clone()));
+            return;
+        }
+
+        // If intro is showing, any key dismisses
+        if showing_intro {
+            dismiss_intro();
+            return;
+        }
+
+        // If puzzle is active, don't process movement
+        if has_puzzle {
+            return;
+        }
+
+        let direction = match ev.key().as_str() {
+            "ArrowUp" | "w" | "k" => Some(engine::Direction::Up),
+            "ArrowDown" | "s" | "j" => Some(engine::Direction::Down),
+            "ArrowLeft" | "a" | "h" => Some(engine::Direction::Left),
+            "ArrowRight" | "d" | "l" => Some(engine::Direction::Right),
+            _ => None,
+        };
+
+        if let Some(dir) = direction {
+            ev.prevent_default();
+            step(dir);
+        }
+    };
+
+    // Global keyboard listener, removed on unmount (dropping the handle does not).
+    let keydown = window_event_listener(leptos::ev::keydown, handle_keydown);
+    on_cleanup(move || keydown.remove());
+
+    // D-pad handler for mobile
+    let dpad_move = move |dir: engine::Direction| {
+        dismiss_intro();
+        if game.with(|g| g.active_dialog.is_some()) {
+            set_game.update(|g| *g = engine::dismiss_dialog(g.clone()));
+            return;
+        }
+        step(dir);
     };
 
     // Swipe support for mobile
@@ -602,8 +574,8 @@ pub fn Adventure() -> impl IntoView {
         }
     }
 
-    let first_level_ref = levels_signal.get();
-    let first_level_width = first_level_ref.first().map(|l| l.width).unwrap_or(12);
+    let first_level_width =
+        levels_signal.with_untracked(|l| l.first().map(|l| l.width).unwrap_or(12));
 
     // Format elapsed time as MM:SS
     let format_time = move || {
@@ -674,7 +646,7 @@ pub fn Adventure() -> impl IntoView {
                         {format_time}
                     </span>
                     <span class="adventure-moves">
-                        "Moves: " {move || game.get().moves_count}
+                        "Moves: " {move || game.with(|g| g.moves_count)}
                     </span>
                     <button
                         class="btn btn-outline btn-sm"
@@ -687,8 +659,8 @@ pub fn Adventure() -> impl IntoView {
 
             // Current level name
             {move || {
-                let g = game.get();
-                let levels = levels_signal.get();
+                let g = game.read();
+                let levels = levels_signal.read();
                 let level_name = levels.get(g.current_level)
                     .map(|l| format!("Level {} — {}", g.current_level + 1, l.name))
                     .unwrap_or_default();
@@ -701,7 +673,7 @@ pub fn Adventure() -> impl IntoView {
             <div class="adventure-keys-bar">
                 <span class="keys-label">"Keys: "</span>
                 {move || {
-                    let keys: Vec<String> = game.get().collected_keys.iter().cloned().collect();
+                    let keys: Vec<String> = game.with(|g| g.collected_keys.iter().cloned().collect());
                     if keys.is_empty() {
                         vec![view! { <span class="key-empty">"none yet"</span> }.into_any()]
                     } else {
@@ -714,8 +686,8 @@ pub fn Adventure() -> impl IntoView {
 
             // Required keys hint
             {move || {
-                let g = game.get();
-                let levels = levels_signal.get();
+                let g = game.read();
+                let levels = levels_signal.read();
                 if let Some(level) = levels.get(g.current_level) {
                     let missing: Vec<String> = level.required_keys.iter()
                         .filter(|k| !g.collected_keys.contains(*k))
@@ -747,8 +719,8 @@ pub fn Adventure() -> impl IntoView {
             // === Level Select Overlay ===
             {move || {
                 if show_level_select.get() {
-                    let levels = levels_signal.get();
-                    let current = game.get().current_level;
+                    let levels = levels_signal.read();
+                    let current = game.with(|g| g.current_level);
                     let completed = completed_levels.get();
                     let levels_vec: Vec<(usize, String, String, bool, bool)> = levels.iter()
                         .enumerate()
@@ -800,9 +772,9 @@ pub fn Adventure() -> impl IntoView {
 
             // === Intro Overlay ===
             {move || {
-                let g = game.get();
+                let g = game.read();
                 if g.showing_intro {
-                    let levels = levels_signal.get();
+                    let levels = levels_signal.read();
                     let level_info = levels.get(g.current_level)
                         .map(|l| (l.intro_text.clone(), l.name.clone()));
                     let (intro, level_name) = level_info.unwrap_or_default();
@@ -833,9 +805,9 @@ pub fn Adventure() -> impl IntoView {
 
             // === Level Complete Overlay ===
             {move || {
-                let g = game.get();
+                let g = game.read();
                 if g.level_completed {
-                    let levels = levels_signal.get();
+                    let levels = levels_signal.read();
                     let level_info = levels.get(g.current_level)
                         .map(|l| (l.completion_text.clone(), l.id.clone()));
                     let (completion, _level_id) = level_info.unwrap_or_default();
@@ -910,7 +882,7 @@ pub fn Adventure() -> impl IntoView {
                                                         if let Some(ls) = gloo_utils::window().local_storage().ok().flatten() {
                                                             let _ = ls.remove_item(LS_COMPLETED_KEY);
                                                         }
-                                                        if let Some(level) = levels_signal.get().first() {
+                                                        if let Some(level) = levels_signal.read().first() {
                                                             let mut state = engine::init_game_state(level);
                                                             state.current_level = 0;
                                                             set_game.set(state);
@@ -974,7 +946,7 @@ pub fn Adventure() -> impl IntoView {
 
             // === Dialog Overlay (NPC / Sign) ===
             {move || {
-                game.get().active_dialog.as_ref().map(|dialog| view! {
+                game.read().active_dialog.as_ref().map(|dialog| view! {
                     <div class="adventure-overlay" on:click=move |_| {
                         set_game.update(|g| *g = engine::dismiss_dialog(g.clone()));
                     }>
@@ -989,7 +961,7 @@ pub fn Adventure() -> impl IntoView {
 
             // === Puzzle Overlay ===
             {move || {
-                game.get().active_puzzle.as_ref().map(|puzzle_state| {
+                game.read().active_puzzle.as_ref().map(|puzzle_state| {
                     let puzzle = &puzzle_state.puzzle;
                     let pid = puzzle.id().to_string();
                     let hint_text = puzzle.hint().to_string();
@@ -1206,9 +1178,7 @@ pub fn Adventure() -> impl IntoView {
                                                                     engine::try_match_pair(g, right_display_idx);
                                                                 });
                                                                 if correct {
-                                                                    let g = game.get();
-                                                                    if let Some(ps) = &g.active_puzzle
-                                                                        && ps.matched_pairs.len() == pairs_count {
+                                                                    if game.with(|g| g.active_puzzle.as_ref().is_some_and(|ps| ps.matched_pairs.len() == pairs_count)) {
                                                                             set_notification.set(Some("All pairs matched!".to_string()));
                                                                         }
                                                                 } else {
@@ -1263,7 +1233,7 @@ pub fn Adventure() -> impl IntoView {
                                                 // shouldn't have active puzzle after correct
                                             } else {
                                                 // The puzzle was just solved — find the gate
-                                                let levels = levels_signal.get();
+                                                let levels = levels_signal.read();
                                                 if let Some(level) = levels.get(new_state.current_level) {
                                                     for gate in &level.gates {
                                                         if gate.puzzle_id == pid {
@@ -1303,14 +1273,14 @@ pub fn Adventure() -> impl IntoView {
             // === Game Grid ===
             <div class="adventure-grid-container" node_ref=grid_container_ref on:touchstart=touch_start_handler on:touchend=touch_end_handler>
                 <div class="adventure-grid" style={move || {
-                    let g = game.get();
-                    let levels = levels_signal.get();
+                    let g = game.read();
+                    let levels = levels_signal.read();
                     let width = levels.get(g.current_level).map(|l| l.width).unwrap_or(first_level_width);
                     format!("grid-template-columns: repeat({}, var(--tile-size))", width)
                 }}>
                     {move || {
-                        let g = game.get();
-                        let levels = levels_signal.get();
+                        let g = game.read();
+                        let levels = levels_signal.read();
                         let grid = &g.tile_grid;
                         let player_pos = g.player_pos;
                         let collected = &g.collected_keys;

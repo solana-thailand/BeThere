@@ -1,6 +1,6 @@
 # 095 — The notification inbox was invisible to half the people who attended
 
-**Status:** fixed 2026-09-13 (migration 0036 + corrective backfill); **not deployed**
+**Status:** deployed — `e62fc4b8` is an ancestor of `deploy/production/20260927T155700Z` (checked 2026-09-28). Migration 0036 is applied on prod (`d1_migrations` 2026-09-13 17:08:17). Originally: fixed 2026-09-13 (migration 0036 + corrective backfill).
 **Found:** 2026-09-13, by the organizer checking his own account
 **Severity:** high — it silently halved every notification the platform has ever
 been able to show, and it was invisible from the outside

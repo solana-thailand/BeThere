@@ -289,6 +289,20 @@ Phase 2
         raised `UNIQUE constraint failed`. The probe rows were deleted.
       - Not yet exercised: two real claims (mints) to one wallet through the
         API.
+      - **409 path run end to end, locally (2026-09-28, session
+        `event-checkin-ad`):** `wrangler dev --local` on a clean
+        `--persist-to` store, all 55 migrations applied, the worker at
+        `62c2c337`. Seeded a finalized `claim_locks` row for (event, W) plus
+        two unclaimed walk-ins T1 and T2. `POST /api/claim/T1` with W gave
+        409 "this wallet already received this event's badge" (log: `claim
+        refused: wallet already claimed in this event (D1)`), and gave it
+        again on retry. `POST /api/claim/T2` with W2 got past the lock
+        (`claim lock acquired (D1+KV)`) and failed only at the mint: the
+        local worker has no Crossmint key, so no request left the machine.
+        The lock was then released. Afterwards `claim_locks` held only the
+        seeded row, and neither walk-in was marked claimed. This covers the
+        handler's 409 mapping without a staging write. A real mint followed
+        by a second claim still waits for a Crossmint key on staging.
       - **Deployed 2026-09-27** (owner go, session `event-checkin-40`): D1
         backup, `0055` applied to prod and read back (0 duplicate pairs first),
         prod `3065bc25` = git `9c246de4`. This is the
@@ -315,6 +329,15 @@ Phase 2
         to one wallet got Crossmint 502. Staging has **no Crossmint secret**,
         so staging can't mint at all, and the 409 path needs a mint to
         succeed first. The failed mint did release its lock (0 rows left).
+      - **2026-09-28, session `event-checkin-24`:** a second route to the
+        409 without a mint: seed a finalized `claim_locks` row for
+        (event, W) on staging D1, claim W (expect 409), then claim W2 (expect
+        the Crossmint 502, which shows the lock did not block it). The
+        agent's permission mode denied the staging D1 insert, so the probe
+        stopped. Needs an owner go for that write, or a racing
+        two-claims-one-wallet run. **Leftover fixture:** walk-in
+        `probe78-1790537427@example.invalid` on `slipdemo-1790494035`,
+        unclaimed; delete it with the probe.
 
 Phase 3 (only if needed)
 - [ ] 7.10 Canonical session email (primary) across email-keyed tables.

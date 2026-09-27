@@ -365,7 +365,8 @@ pub fn ImageLightbox(
                     set_visible.set(false);
                 }
             });
-        on_cleanup(move || drop(cleanup));
+        // Dropping a `WindowListenerHandle` does not remove the listener.
+        on_cleanup(move || cleanup.remove());
     });
 
     view! {

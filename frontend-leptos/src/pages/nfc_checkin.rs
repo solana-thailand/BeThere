@@ -17,6 +17,34 @@ pub struct ApiWrapper<T> {
     pub error: Option<String>,
 }
 
+/// Starts a WebNFC scan through Reflect. `js_sys::eval` needs `'unsafe-eval'`,
+/// which the CSP does not grant, so the eval'd scan never ran.
+fn start_ndef_scan(win: &web_sys::Window) {
+    use wasm_bindgen::JsCast;
+    let scan = js_sys::Reflect::get(win, &"NDEFReader".into())
+        .ok()
+        .and_then(|ctor| ctor.dyn_into::<js_sys::Function>().ok())
+        .and_then(|ctor| js_sys::Reflect::construct(&ctor, &js_sys::Array::new()).ok())
+        .and_then(|reader| {
+            let scan = js_sys::Reflect::get(&reader, &"scan".into()).ok()?;
+            scan.dyn_into::<js_sys::Function>()
+                .ok()?
+                .call0(&reader)
+                .ok()
+        })
+        .and_then(|promise| promise.dyn_into::<js_sys::Promise>().ok());
+    let Some(scan) = scan else {
+        log::info!("[nfc] NDEFReader scan could not start");
+        return;
+    };
+    leptos::task::spawn_local(async move {
+        match wasm_bindgen_futures::JsFuture::from(scan).await {
+            Ok(_) => log::info!("[nfc] NDEFReader scanning started"),
+            Err(e) => log::info!("[nfc] WebNFC info: {e:?}"),
+        }
+    });
+}
+
 /// NFC Tap-to-Checkin Page (`/checkin/nfc?event=XYZ&nonce=123`)
 #[component]
 pub fn NfcCheckin() -> impl IntoView {
@@ -45,18 +73,7 @@ pub fn NfcCheckin() -> impl IntoView {
             let supported = js_sys::Reflect::has(&win, &"NDEFReader".into()).unwrap_or(false);
             nfc_supported.set(supported);
             if supported {
-                let _ = js_sys::eval(
-                    r#"
-                    if ('NDEFReader' in window) {
-                        try {
-                            const ndef = new NDEFReader();
-                            ndef.scan().then(() => {
-                                console.log("NDEFReader scanning started successfully");
-                            }).catch(e => console.log("WebNFC info:", e));
-                        } catch(e) {}
-                    }
-                "#,
-                );
+                start_ndef_scan(&win);
             }
         }
     });

@@ -1,6 +1,6 @@
 # 111 — A closed tab threw the whole form away
 
-**Status:** implemented 2026-09-14, **not deployed**
+**Status:** deployed — `ceef7ccb` is an ancestor of `deploy/production/20260927T155700Z` (checked 2026-09-28). Originally: implemented 2026-09-14.
 **Found:** 2026-09-14, flagged as the remaining risk in `.issues/110`
 **Severity:** medium — it costs exactly the answers that are hardest to get
 

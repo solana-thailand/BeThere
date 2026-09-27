@@ -1,6 +1,6 @@
 # 091 — Asking 30 people for feedback on events that already happened
 
-**Status:** live in prod 2026-09-13 — backfill applied (45 survey rows / 30 people) and `/feedback` deployed as `8d7ed82d`
+**Status:** live in prod 2026-09-13 (`a850be7d`) — backfill applied (45 survey rows / 30 people) and `/feedback` deployed as `8d7ed82d`
 **Found:** 2026-09-13, deciding how to reach attendees with no email transport
 **Severity:** medium (the feature shipped in `.issues/080`/`087` currently reaches nobody)
 

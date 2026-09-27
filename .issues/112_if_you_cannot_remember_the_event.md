@@ -1,6 +1,6 @@
 # 112 — Nothing on the page helped someone who could not remember the event
 
-**Status:** implemented 2026-09-14, **not deployed**
+**Status:** deployed — `7f42d325` is an ancestor of `deploy/production/20260927T155700Z` (checked 2026-09-28). Originally: implemented 2026-09-14.
 **Found:** 2026-09-14, asked directly whether the page should point at the ticket
 **Severity:** medium — "I cannot remember this one" is the main way a
 retrospective survey gets abandoned

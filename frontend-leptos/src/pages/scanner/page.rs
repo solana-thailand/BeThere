@@ -12,6 +12,9 @@ use super::logic::*;
 use super::state::*;
 use super::views::*;
 
+/// Upper bound on one wait for a scan event (see `wait_for_scan_event_js`).
+const SCAN_WAIT_TIMEOUT_MS: u32 = 1000;
+
 // ===== Scanner Component =====
 
 /// Staff scanner page component.
@@ -112,11 +115,14 @@ pub fn Scanner() -> impl IntoView {
             let set_s_total = set_session_total;
 
             leptos::task::spawn_local(async move {
-                // Brief delay for camera to initialize
-                gloo_timers::future::TimeoutFuture::new(500).await;
-
                 loop {
-                    gloo_timers::future::TimeoutFuture::new(300).await;
+                    // Woken by the JS side as soon as there is a result, an
+                    // error or a stop; the timeout only bounds how long a
+                    // superseded round lingers.
+                    let _ = wasm_bindgen_futures::JsFuture::from(wait_for_scan_event_js(
+                        SCAN_WAIT_TIMEOUT_MS,
+                    ))
+                    .await;
 
                     // Stop polling when superseded by a new round — or when
                     // the page unmounted: `.get()` on a disposed signal
@@ -393,16 +399,14 @@ pub fn Scanner() -> impl IntoView {
 
     // ===== Event selector Effects =====
 
-    // Load events on mount — populate events_list, auto-select first active event,
-    // and check escrow status for the selected event.
+    // Load events on mount — populate events_list and auto-select the first
+    // active event. The escrow/format detail comes from the active_event_id
+    // effect below; fetching it here too requested it twice per mount.
     Effect::new(move |_| {
         set_events_loading.set(true);
         let set_eid = set_active_event_id;
-        let set_ee = set_escrow_enabled;
         let set_el = set_events_list;
         let set_el_loading = set_events_loading;
-        let set_ef = set_active_event_format;
-        let set_cap = set_active_in_person_capacity;
         leptos::task::spawn_local(async move {
             let data = match api::list_events().await {
                 Ok(data) => data,
@@ -417,30 +421,8 @@ pub fn Scanner() -> impl IntoView {
             let first_active = events.iter().find(|e| e.status == api::EventStatus::Active);
             let selected_id = first_active.map(|e| e.id.clone());
             set_el.set(events);
-            set_eid.set(selected_id.clone());
+            set_eid.set(selected_id);
             set_el_loading.set(false);
-
-            // Load event detail for escrow status
-            if let Some(ref event_id) = selected_id {
-                match api::get_event_detail(event_id).await {
-                    Ok(detail) => {
-                        let enabled =
-                            detail.event.deposit_enabled && !detail.event.escrow_address.is_empty();
-                        log::info!(
-                            "[scanner] event '{}' escrow_enabled={} format={:?}",
-                            event_id,
-                            enabled,
-                            detail.event.event_format,
-                        );
-                        set_ee.set(enabled);
-                        set_ef.set(detail.event.event_format);
-                        set_cap.set(detail.event.in_person_capacity);
-                    }
-                    Err(e) => {
-                        log::warn!("[scanner] failed to load event detail: {e}");
-                    }
-                }
-            }
         });
     });
 
@@ -455,7 +437,13 @@ pub fn Scanner() -> impl IntoView {
                 if event_id.is_empty() {
                     return;
                 }
-                match api::get_event_detail(event_id).await {
+                let detail = api::get_event_detail(event_id).await;
+                // A slower response for an event the operator already switched
+                // away from must not overwrite the current event's settings.
+                if active_event_id.try_get_untracked().flatten().as_deref() != Some(event_id) {
+                    return;
+                }
+                match detail {
                     Ok(detail) => {
                         let enabled =
                             detail.event.deposit_enabled && !detail.event.escrow_address.is_empty();

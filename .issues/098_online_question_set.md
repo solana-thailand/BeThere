@@ -1,6 +1,6 @@
 # 098 — The question DevRel most wants answered is in neither form
 
-**Status:** implemented 2026-09-14, **not deployed**
+**Status:** deployed — `2c2b5563` is an ancestor of `deploy/production/20260927T155700Z` (checked 2026-09-28). Originally: implemented 2026-09-14.
 **Found:** 2026-09-14, reading the online Google Form's own definition
 **Severity:** medium — it decides whether 337 online registrations produce a
 number or an explanation

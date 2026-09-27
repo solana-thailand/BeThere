@@ -33,11 +33,14 @@ const GOOGLE_TOKEN_KV_KEY: &str = "google_access_token";
 /// TTL for the cached Google access token (3500s = ~58 min, 100s buffer before 3600s expiry).
 const GOOGLE_TOKEN_TTL_SECS: u64 = 3500;
 
-/// KV key for caching the staff members list.
-const STAFF_CACHE_KEY: &str = "cache:staff_members";
+/// KV key for caching the staff members list. `v2` holds a
+/// [`StaffCacheEntry`]; the old plain-array key expires on its own TTL.
+const STAFF_CACHE_KEY: &str = "cache:staff_members:v2";
 
-/// TTL for the cached staff members list (60 seconds).
+/// TTL for the cached staff members list (60 seconds). This is also the
+/// revocation latency: the owner kept it at 60 s (plan 028 W1, 2026-09-24).
 const STAFF_CACHE_TTL_SECS: u64 = 60;
+const STAFF_CACHE_TTL_MS: f64 = (STAFF_CACHE_TTL_SECS * 1000) as f64;
 
 /// KV key prefix for caching column mappings.
 const COLUMN_MAP_CACHE_KEY_PREFIX: &str = "cache:column_map";
@@ -782,9 +785,33 @@ pub struct StaffMember {
     pub role: String,
 }
 
+/// The staff list as cached in KV, stamped with when it was read from Sheets.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct StaffCacheEntry {
+    fetched_at_ms: f64,
+    members: Vec<StaffMember>,
+}
+
+type StaffIsolateCache =
+    crate::isolate_cache::BoundedCache<String, crate::isolate_cache::Expiring<Vec<StaffMember>>>;
+
+thread_local! {
+    /// The staff list per isolate (plan 028 W1). It expires at the Sheets
+    /// fetch time + TTL, the same instant the KV copy does, so it saves the KV
+    /// read on every authed request without lengthening revocation.
+    static STAFF_IN_ISOLATE: std::cell::RefCell<StaffIsolateCache> =
+        const { std::cell::RefCell::new(crate::isolate_cache::BoundedCache::new(1)) };
+}
+
+fn remember_staff_in_isolate(key: String, entry: &StaffCacheEntry) {
+    let expires_at_ms = entry.fetched_at_ms + STAFF_CACHE_TTL_MS;
+    let value = crate::isolate_cache::Expiring::new(entry.members.clone(), expires_at_ms);
+    STAFF_IN_ISOLATE.with_borrow_mut(|cache| cache.insert(key, value));
+}
+
 /// Fetch staff members from the dedicated "staff" sheet tab.
 ///
-/// Uses KV cache when available: returns cached staff on cache hit,
+/// Checks this isolate's copy first, then the KV cache: returns cached staff on cache hit,
 /// fetches from Google Sheets on cache miss and stores with 60-second TTL.
 ///
 /// Reads columns A (email) and B (role) starting from row 2 (row 1 is header).
@@ -798,13 +825,29 @@ pub async fn get_staff_members(
     staff_sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Vec<StaffMember>, String> {
-    // Try KV cache first
+    let now_ms = js_sys::Date::now();
+    let isolate_key = format!("{sheet_id}\n{staff_sheet_name}");
+    let in_isolate = STAFF_IN_ISOLATE.with_borrow(|cache| {
+        cache
+            .get(isolate_key.as_str())
+            .and_then(|entry| entry.get(now_ms))
+    });
+    if let Some(members) = in_isolate {
+        tracing::debug!(count = members.len(), "cache hit: staff members in isolate");
+        return Ok(members);
+    }
+
+    // Then the KV cache
     if let Some(kv) = kv {
         match kv.get(STAFF_CACHE_KEY).text().await {
-            Ok(Some(cached)) => match serde_json::from_str::<Vec<StaffMember>>(&cached) {
-                Ok(members) => {
-                    tracing::info!(count = members.len(), "cache hit: staff members from KV");
-                    return Ok(members);
+            Ok(Some(cached)) => match serde_json::from_str::<StaffCacheEntry>(&cached) {
+                Ok(entry) => {
+                    tracing::info!(
+                        count = entry.members.len(),
+                        "cache hit: staff members from KV"
+                    );
+                    remember_staff_in_isolate(isolate_key, &entry);
+                    return Ok(entry.members);
                 }
                 Err(e) => {
                     tracing::info!(error = ?e, "staff cache deserialize error, fetching fresh");
@@ -855,8 +898,15 @@ pub async fn get_staff_members(
         "fetched staff members from google sheets"
     );
 
+    // Stamp with the pre-fetch time: the earlier instant expires sooner.
+    let entry = StaffCacheEntry {
+        fetched_at_ms: now_ms,
+        members,
+    };
+    remember_staff_in_isolate(isolate_key, &entry);
+
     // Write to KV cache
-    if let (Some(kv), Ok(json)) = (kv, serde_json::to_string(&members)) {
+    if let (Some(kv), Ok(json)) = (kv, serde_json::to_string(&entry)) {
         match kv
             .put(STAFF_CACHE_KEY, &json)
             .map_err(|e| format!("failed to build staff cache KV put: {e:?}"))
@@ -866,7 +916,7 @@ pub async fn get_staff_members(
                     tracing::info!(error = ?e, "failed to cache staff members in KV");
                 } else {
                     tracing::info!(
-                        count = members.len(),
+                        count = entry.members.len(),
                         ttl = STAFF_CACHE_TTL_SECS,
                         "cached staff members in KV"
                     );
@@ -878,7 +928,7 @@ pub async fn get_staff_members(
         }
     }
 
-    Ok(members)
+    Ok(entry.members)
 }
 
 // ---------------------------------------------------------------------------

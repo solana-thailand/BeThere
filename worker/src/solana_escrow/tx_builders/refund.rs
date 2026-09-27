@@ -1,5 +1,4 @@
 use event_checkin_domain::onchain::EventIx;
-use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
 use super::super::wire::{AccountMeta, CompiledInstruction};
@@ -52,7 +51,6 @@ pub(crate) fn refund_instruction_accounts(
 #[allow(dead_code)]
 pub async fn build_refund_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     attendee_pubkey: &str,
@@ -72,7 +70,6 @@ pub async fn build_refund_transaction(
 
     let tx_b64 = finalize_tx(
         rpc_url,
-        kv,
         &ctx,
         instruction_accounts,
         ctx.ix_data(EventIx::Refund),
@@ -94,7 +91,6 @@ pub async fn build_refund_transaction(
 /// Both instructions are combined into a single atomic transaction.
 pub async fn build_refund_and_close_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     attendee_pubkey: &str,
@@ -151,7 +147,7 @@ pub async fn build_refund_and_close_transaction(
         data: ctx.ix_data(EventIx::CloseDeposit),
     };
 
-    let tx_b64 = serialize_to_b64(rpc_url, kv, &message_accounts, &[refund_ix, close_ix]).await?;
+    let tx_b64 = serialize_to_b64(rpc_url, &message_accounts, &[refund_ix, close_ix]).await?;
 
     Ok(RefundAndCloseTransaction {
         transaction_b64: tx_b64,
@@ -167,7 +163,6 @@ pub async fn build_refund_and_close_transaction(
 ///
 /// # Arguments
 /// * `rpc_url` — Solana RPC URL (with API key if needed)
-/// * `kv` — Optional KV store for blockhash caching
 /// * `organizer_pubkey` — Organizer's wallet address (base58), must be signer
 /// * `event_id` — Numeric event ID used for PDA derivation
 /// * `attendee_pubkeys` — List of attendee wallet addresses (base58) to claim
@@ -176,7 +171,6 @@ pub async fn build_refund_and_close_transaction(
 /// Returns `EscrowError` if the list is empty or any pubkey is invalid.
 pub async fn build_batch_claim_forfeited_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     attendee_pubkeys: &[String],
@@ -259,7 +253,7 @@ pub async fn build_batch_claim_forfeited_transaction(
         })
         .collect();
 
-    let tx_b64 = serialize_to_b64(rpc_url, kv, &message_accounts, &compiled_ixs).await?;
+    let tx_b64 = serialize_to_b64(rpc_url, &message_accounts, &compiled_ixs).await?;
 
     Ok(ClaimForfeitedTransaction {
         transaction_b64: tx_b64,
