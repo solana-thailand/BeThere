@@ -2355,11 +2355,10 @@ fn render_recent_check_ins(
 ) -> AnyView {
     match stats {
         Some(s) if !s.recent_check_ins.is_empty() => {
-            // Build a lookup map for participation type by api_id
-            let participation_map: HashMap<String, String> = attendees
-                .iter()
-                .map(|a| (a.api_id.clone(), a.participation_type.clone()))
-                .collect();
+            // Roster rows by api_id: the stats feed carries only name and time,
+            // so participation type and the duplicate hint come from here.
+            let roster: HashMap<&str, &AttendeeListItem> =
+                attendees.iter().map(|a| (a.api_id.as_str(), a)).collect();
 
             let recent: Vec<_> = {
                 let mut r = s.recent_check_ins.clone();
@@ -2373,11 +2372,10 @@ fn render_recent_check_ins(
                 // Filter by active tab
                 r.into_iter()
                     .filter(|ci| {
-                        let p_type = participation_map
-                            .get(&ci.api_id)
-                            .cloned()
-                            .unwrap_or_default();
-                        tab.matches(&p_type)
+                        let p_type = roster
+                            .get(ci.api_id.as_str())
+                            .map_or("", |a| a.participation_type.as_str());
+                        tab.matches(p_type)
                     })
                     .take(RECENT_CHECK_INS_PER_TYPE)
                     .collect()
@@ -2410,13 +2408,13 @@ fn render_recent_check_ins(
                                 if by.is_empty() { String::new() } else { format!(" by {by}") }
                             });
 
-                            let p_type = participation_map
-                                .get(&api_id)
-                                .cloned()
-                                .unwrap_or_default();
-                            let participation = utils::get_participation_badge(&p_type);
+                            let row = roster.get(api_id.as_str());
+                            let p_type = row.map_or("", |a| a.participation_type.as_str());
+                            let participation = utils::get_participation_badge(p_type);
                             let p_class = participation.css_class.to_string();
                             let p_label = participation.label;
+                            let duplicate_badge =
+                                row.and_then(|a| duplicate_hint(&a.possible_duplicates));
 
                             view! {
                                 <div class="attendee-item">
@@ -2425,6 +2423,7 @@ fn render_recent_check_ins(
                                         <span class=format!("{p_class} admin-badge-inline")>
                                             {p_label.clone()}
                                         </span>
+                                        {duplicate_badge}
                                     </div>
                                     <div class="attendee-row-bottom">
                                         <div class="attendee-meta">
