@@ -1,7 +1,7 @@
 # Plan 033: Win Crypto World's Fair and the AI × Solana Thailand track
 
-**Status:** in progress. W1 code landed on develop 2026-09-27 (session
-`event-checkin-d9`), not deployed; see §6. Proposed 2026-09-27 by `event-checkin-2e`.
+**Status:** in progress. W1 is on prod in shadow mode, QR path only (prod
+`5b7b875c`, 2026-09-27); see §6. Proposed 2026-09-27 by `event-checkin-2e`.
 **Supersedes the schedule of** `.plans/026` (its design rule and compliance
 section still stand and are not repeated here).
 **Deadlines (read 2026-09-27):**
@@ -193,6 +193,29 @@ W2, W3 and W5 are not cuttable. W3 moves up to Mon 29 – Tue 30 Sep.
    Recommended: a $10 monthly limit in the Anthropic console. Vision stays
    off until the owner creates the key.
 5. and 6. **Parked by the owner**, reopen before W5.
+
+**Amended the same day: the owner's target is 0 THB running cost.** No
+Claude key, so `SLIP_AGENT_VISION` stays off and the `slip_vision.rs` code
+path stays dormant. Checked before deciding:
+- The slip mini-QR (`domain/src/slip_verify.rs`) carries **only** the bank
+  reference, with no amount, time or receiver. The QR path proves "ref new"
+  and nothing else.
+- riir-reflex (`~/src/gist-rs/riir-reflex`, pulled 2026-09-27 at `10ef9e7`)
+  is a typed text decision engine (choice / score / abstain) served as a
+  local native binary. It reads no images, and it can't run in the Worker
+  (native, and it depends on katgpt-rs; memory `gist-rs-repos-study`). It
+  doesn't fit this step, and our verdict step is already deterministic.
+- **The 0 THB path: OCR in the browser**, on the attendee's device, with a
+  self-hosted, lazy-loaded engine. The image never leaves the device for
+  this, and the worker pays no CPU (`.issues/134`). Its fields are a client
+  claim, like `slip_qr`: the server re-parses them, and they only feed the
+  proposal, never money. New source value `ocr` (needs a CHECK change in a
+  new migration). Candidate: tesseract.js (Apache-2.0, digits + Latin are
+  enough for amount and time). Cost: a lazy download on the upload page
+  only; measure it against the frontend budget before committing.
+- If OCR can't reach usable accuracy on real slips, the fallback is
+  QR-only, and the organizer reads the amount. The W1 "AI" claim then rests
+  on the OCR model plus the checker; W3 carries AI × Solana.
 
 The original questions and defaults:
 
