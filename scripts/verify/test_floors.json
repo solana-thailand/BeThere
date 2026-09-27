@@ -15,6 +15,7 @@
     "flow_harness src/main.rs": 0
   },
   "frontend": {
+    "admin_duplicate_hint tests/admin_duplicate_hint.rs": 2,
     "admin_slip_link tests/admin_slip_link.rs": 2,
     "admin_slip_request tests/admin_slip_request.rs": 2,
     "cluster_networks tests/cluster_networks.rs": 5,
@@ -89,6 +90,7 @@
     "participation_type_parse tests/participation_type_parse.rs": 3,
     "pii_columns tests/pii_columns.rs": 4,
     "pod tests/pod.rs": 9,
+    "possible_duplicates tests/possible_duplicates.rs": 7,
     "postponed_note tests/postponed_note.rs": 8,
     "precompressed_asset tests/precompressed_asset.rs": 2,
     "public_cache_policy tests/public_cache_policy.rs": 5,

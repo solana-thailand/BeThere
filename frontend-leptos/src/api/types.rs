@@ -277,6 +277,10 @@ pub struct AttendeeListItem {
     /// (migration 0052). `None` = not asked or no answer yet.
     #[serde(default)]
     pub attendance_answer: Option<event_checkin_domain::models::attendee::AttendanceAnswer>,
+    /// Rows in this event that share a name, wallet or handle under another
+    /// email (plan 025 §7.9). Empty when none.
+    #[serde(default)]
+    pub possible_duplicates: Vec<event_checkin_domain::models::attendee::DuplicateMatch>,
     #[serde(default)]
     pub thb_refunded: bool,
 }

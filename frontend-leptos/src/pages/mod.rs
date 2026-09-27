@@ -10,6 +10,7 @@ pub mod admin_deposit_settled;
 pub mod admin_deposit_slip_link;
 pub mod admin_deposit_slip_proposal;
 pub mod admin_deposit_summary_chips;
+pub mod admin_duplicate_hint;
 pub mod admin_escrow;
 pub mod admin_event_selector;
 pub mod admin_feedback;

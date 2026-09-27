@@ -204,6 +204,11 @@ pub struct AttendeeListItem {
     /// come (migration 0052). Absent = not asked or no answer yet.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub attendance_answer: Option<crate::models::attendee::AttendanceAnswer>,
+    /// Other rows in this event that share a name, wallet or contact handle
+    /// under a different email (plan 025 §7.9). Annotated by the list handler
+    /// over the whole event, not the page. A hint for staff; blocks nothing.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub possible_duplicates: Vec<crate::models::attendee::DuplicateMatch>,
 }
 
 impl AttendeeListItem {
@@ -243,6 +248,7 @@ impl AttendeeListItem {
             thb_refunded: false,
             // Annotated by the list handler from `attendance_answers`.
             attendance_answer: None,
+            possible_duplicates: Vec::new(),
         }
     }
 }
