@@ -264,11 +264,7 @@ mod tests {
     fn logged_out_shape_rejects_authenticated_true() {
         let r = resp(true, None);
         let err = assert_logged_out_shape(&r).unwrap_err();
-        assert!(
-            err.to_string().contains("authenticated=true"),
-            "{}",
-            err
-        );
+        assert!(err.to_string().contains("authenticated=true"), "{}", err);
     }
 
     #[test]
@@ -321,7 +317,10 @@ mod tests {
     fn config_defaults_align_with_seed_staging() {
         let c = AuthConfig::default();
         assert_eq!(c.expected_email, "flow-test-attendee-1@staging.local");
-        assert!(c.session_cookie.is_none(), "default must not assume a session");
+        assert!(
+            c.session_cookie.is_none(),
+            "default must not assume a session"
+        );
     }
 
     #[test]
@@ -331,7 +330,10 @@ mod tests {
         std::env::remove_var("FLOW_HARNESS_ATTENDEE_EMAIL");
         let flow = AuthFlow::from_env();
         assert!(flow.config.session_cookie.is_none());
-        assert_eq!(flow.config.expected_email, "flow-test-attendee-1@staging.local");
+        assert_eq!(
+            flow.config.expected_email,
+            "flow-test-attendee-1@staging.local"
+        );
 
         // With the session env set, from_env picks it up.
         std::env::set_var("FLOW_HARNESS_ATTENDEE_SESSION", "session=abc");
@@ -369,7 +371,10 @@ mod tests {
         let json = r#"{"authenticated":true,"email":"flow-test-attendee-1@staging.local"}"#;
         let r: AuthSessionResponse = serde_json::from_str(json).expect("deserialise");
         assert!(r.authenticated);
-        assert_eq!(r.email.as_deref(), Some("flow-test-attendee-1@staging.local"));
+        assert_eq!(
+            r.email.as_deref(),
+            Some("flow-test-attendee-1@staging.local")
+        );
     }
 
     // ── Pure-logic sanity on FlowOutcome (used by the runner, asserted here so
@@ -400,6 +405,9 @@ mod tests {
         assert_eq!(stripped.base_url(), original.base_url());
         // Belt-and-braces: the normalised host must still be the staging host,
         // never production.
-        assert_eq!(stripped.base_url().host_str(), Some("staging.example.workers.dev"));
+        assert_eq!(
+            stripped.base_url().host_str(),
+            Some("staging.example.workers.dev")
+        );
     }
 }

@@ -114,7 +114,10 @@ fn main() -> ExitCode {
         // Live attendee endpoints require a JWT. Use the dedicated staging
         // keypair to perform SIWS rather than requiring an operator to copy a
         // browser cookie into the shell.
-        let auth_rt = match tokio::runtime::Builder::new_current_thread().enable_all().build() {
+        let auth_rt = match tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+        {
             Ok(rt) => rt,
             Err(e) => {
                 eprintln!("❌ flow-harness: failed to build SIWS runtime: {e}");

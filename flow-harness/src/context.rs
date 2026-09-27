@@ -36,8 +36,8 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signer::Signer;
 use solana_sdk::signer::keypair::Keypair;
+use solana_sdk::signer::Signer;
 use url::Url;
 
 use crate::error::{HarnessError, HarnessResult};
@@ -290,11 +290,7 @@ impl StagingContext {
     /// Worker-side Solana Pay callback URL. `POST /api/deposit/usdc` creates a
     /// pending deposit and returns this URL in `solana_pay_url`; the wallet then
     /// fetches this endpoint to obtain the unsigned transaction.
-    pub fn deposit_usdc_tx_url(
-        &self,
-        attendee_id: &str,
-        wallet: &str,
-    ) -> HarnessResult<Url> {
+    pub fn deposit_usdc_tx_url(&self, attendee_id: &str, wallet: &str) -> HarnessResult<Url> {
         let mut url = join_path(&self.worker_url, "/api/deposit/usdc/tx")?;
         url.query_pairs_mut()
             .append_pair("event_id", &self.event_id_str)
@@ -533,7 +529,11 @@ fn derive_on_chain_event_id(event_id: &str) -> u64 {
         hash ^= u64::from(byte);
         hash = hash.wrapping_mul(0x100000001b3);
     }
-    if hash == 0 { 1 } else { hash }
+    if hash == 0 {
+        1
+    } else {
+        hash
+    }
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

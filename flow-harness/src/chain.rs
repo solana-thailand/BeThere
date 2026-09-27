@@ -31,16 +31,14 @@ use std::str::FromStr;
 use base64::Engine as _;
 use serde_json::{json, Value};
 use solana_sdk::{
-    pubkey::Pubkey,
-    signature::Signature,
-    signer::keypair::Keypair,
-    transaction::Transaction,
+    pubkey::Pubkey, signature::Signature, signer::keypair::Keypair, transaction::Transaction,
 };
 
 use crate::context::StagingContext;
 use crate::error::{EscrowCode, HarnessError, HarnessResult, WorkerError};
 
-const B64: base64::engine::general_purpose::GeneralPurpose = base64::engine::general_purpose::STANDARD;
+const B64: base64::engine::general_purpose::GeneralPurpose =
+    base64::engine::general_purpose::STANDARD;
 
 /// How many times to poll `getSignatureStatuses` before giving up (≈ the
 /// blockhash validity window at ~1s between polls).
@@ -75,8 +73,8 @@ pub fn sign_worker_tx(tx_b64: &str, payer: &Keypair) -> HarnessResult<(String, S
             "sign failed (is ctx.payer the required signer / fee payer?): {e}"
         ))
     })?;
-    let signed = bincode::serialize(&tx)
-        .map_err(|e| HarnessError::Solana(format!("tx serialize: {e}")))?;
+    let signed =
+        bincode::serialize(&tx).map_err(|e| HarnessError::Solana(format!("tx serialize: {e}")))?;
     let sig = tx
         .signatures
         .first()
@@ -497,7 +495,12 @@ mod tests {
         let view = decode_attendee_deposit(&data).unwrap();
         assert_eq!(
             view,
-            AttendeeDepositView { version: 1, amount: 15_000_000, checked_in: false, refunded: true }
+            AttendeeDepositView {
+                version: 1,
+                amount: 15_000_000,
+                checked_in: false,
+                refunded: true
+            }
         );
     }
 
@@ -511,7 +514,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             decode_attendee_deposit(&data).unwrap(),
-            AttendeeDepositView { version: 1, amount: 1_000_000, checked_in: true, refunded: false }
+            AttendeeDepositView {
+                version: 1,
+                amount: 1_000_000,
+                checked_in: true,
+                refunded: false
+            }
         );
     }
 
