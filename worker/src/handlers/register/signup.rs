@@ -211,31 +211,12 @@ pub async fn register_attendee(
     }
 
     // 5. Check for duplicate email (D1 first, then the event's sheet)
-    let attendees = match sheets::get_attendees_for_event(
-        &state,
-        &config.sheet_id,
-        &config.sheet_name,
-        kv,
-        &config.id,
-    )
-    .await
-    {
-        Ok(attendees) => attendees,
-        // A new event has no D1 rows yet, so the read falls back to its sheet;
-        // an unreachable sheet used to 500 the first registration. With D1 the
-        // UNIQUE(event_id, lower(email)) insert below still refuses a duplicate,
-        // so an empty list only skips the friendly redirect for a returner.
-        Err(e) if state.d1.is_some() => {
-            tracing::warn!(error = ?e, "could not fetch attendees for dedup — relying on the D1 unique index");
-            Vec::new()
-        }
-        Err(e) => {
+    let attendees = super::attendees::registration_attendees(&state, &config, kv)
+        .await
+        .map_err(|e| {
             tracing::warn!(error = ?e, "could not fetch attendees for dedup");
-            return Err(
-                AppError::Internal(format!("failed to check existing registrations: {e}")).into(),
-            );
-        }
-    };
+            AppError::Internal(format!("failed to check existing registrations: {e}"))
+        })?;
 
     // Duplicate email check: if already registered, return existing attendee info
     // so the frontend can redirect to the correct step (deposit/ticket) instead of
