@@ -162,6 +162,15 @@ Whichever is chosen, write it in the event page's deposit section in one line
 rather than the organizer, so the organizer never profits from a forfeit.
 Still open: this is the owner's call.*
 
+*Owner input (2026-09-28), not yet a decision: today nothing is forfeited. A
+payer who tells the organizer in advance gets a refund or keeps the deposit as
+credit for a later event, because keeping the community coming matters more.
+If anything is ever forfeited, the likely case is covering food already paid
+for; which cases qualify is not settled. That points to a fourth option,
+**A′: nothing is forfeited except, for a no-show who gave no notice, the
+per-head cost the organizer already spent**. That only reimburses a cost, so
+the organizer still makes no profit from a no-show.*
+
 **D1a. Proposed "BeThere System Architecture & Mechanism Spec" (reviewed
 2026-09-28, not in the repo).** Treat it as a target for after the 12 Oct
 submission, not a description of today. It can't be finalized before D1.
