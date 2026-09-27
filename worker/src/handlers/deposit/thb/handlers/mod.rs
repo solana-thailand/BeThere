@@ -33,9 +33,14 @@ pub use slip_verify::verify_thb_slip_handler;
 // Shared helpers
 // ---------------------------------------------------------------------------
 
-/// Resolve attendee display names from Google Sheets for a list of deposits.
+/// Resolve attendee display names for a list of deposits.
 /// Returns a map of `attendee_id → display_name`.
-/// Silently skips attendees not found — the frontend falls back to showing the raw ID.
+///
+/// D1 first: it holds every attendee. Names used to come from the Google
+/// Sheet only, so an event whose sheet was unreadable, or whose rows had
+/// shifted (`.issues/151`), showed the organizer raw ids on every slip. The
+/// sheet is asked only for ids D1 does not have. Attendees found nowhere are
+/// skipped; the frontend falls back to showing the raw id.
 pub(crate) async fn resolve_attendee_names(
     state: &crate::state::AppState,
     sheet_id: &str,
@@ -45,24 +50,43 @@ pub(crate) async fn resolve_attendee_names(
     use crate::handlers::ext::resolve_kv;
     use crate::sheets;
 
-    if deposits.is_empty() {
-        return std::collections::HashMap::new();
+    let mut names = std::collections::HashMap::new();
+    let Some(first) = deposits.first() else {
+        return names;
+    };
+
+    if let Some(d1) = state.d1.as_deref() {
+        match crate::db::attendees::get_attendees_by_event(d1, &first.event_id).await {
+            Ok(attendees) => {
+                for a in attendees {
+                    if deposits.iter().any(|d| d.attendee_id == a.api_id) {
+                        names.insert(a.api_id.clone(), a.display_name().to_string());
+                    }
+                }
+            }
+            Err(e) => tracing::warn!(error = %e, "D1 attendee names for deposits failed"),
+        }
+    }
+    if deposits.iter().all(|d| names.contains_key(&d.attendee_id)) {
+        return names;
     }
 
     let kv = resolve_kv(state);
     match sheets::get_attendees_map(state, sheet_id, sheet_name, kv).await {
-        Ok(map) => deposits
-            .iter()
-            .filter_map(|d| {
-                map.get(&d.attendee_id)
-                    .map(|a| (d.attendee_id.clone(), a.display_name().to_string()))
-            })
-            .collect(),
+        Ok(map) => {
+            for d in deposits {
+                if !names.contains_key(&d.attendee_id)
+                    && let Some(a) = map.get(&d.attendee_id)
+                {
+                    names.insert(d.attendee_id.clone(), a.display_name().to_string());
+                }
+            }
+        }
         Err(e) => {
             tracing::warn!(error = %e, "failed to resolve attendee names for deposits");
-            std::collections::HashMap::new()
         }
     }
+    names
 }
 
 /// Migrate any inline base64 `data:` URLs (slip_url, refund_proof_url) to R2

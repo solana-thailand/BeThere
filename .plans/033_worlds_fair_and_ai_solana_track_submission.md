@@ -435,3 +435,40 @@ answering `getAccountInfo` from this network (no reply in 20 s), while
     this program after the refund deadline, so "no one can keep the
     deposit" would have been false for USDC.
 - **Run log:** `~/Movies/bethere/w2_e2e_run_20260927.log` (no key inside).
+
+### W1/W5 log, 27 Sep (afternoon): slip-agent clip and the combined product demo
+
+Staging event `slipdemo-1790494035`, two walk-ins (Nok, Pim). The demo slip
+is a **synthetic image, labelled as such on the slip itself**. Its QR holds
+a valid bank slip payload: fresh reference `179049399412345`, with a
+CRC-16/CCITT-FALSE the fixture's own checksum confirms. Both slips were
+recorded through the admin upload with `slip_qr` (what the admin form sends
+after decoding) and auto-verify off. Proposals read back:
+
+- Nok: `ref_new: pass`, amount/time/receiver unknown → `needs_review`.
+- Pim, same image and reference: `ref_new: fail` → `rejected`; the UI shows
+  "a check failed". The duplicate-image warning shows on both cards.
+
+**Found and fixed on the way:** the Deposits tab showed raw attendee ids,
+because names came only from the Google Sheet (same class as the unnamed
+RTM#6 slip in `.issues/151`). `resolve_attendee_names` now reads D1 first
+and falls back to the sheet. Guard: `worker/tests/deposit_names_d1_first_guard.rs`.
+On staging, not prod.
+
+**Videos** (`~/Movies/bethere/`, not in git):
+
+| File | Length | Story |
+|---|---|---|
+| `w1_slip_agent.mp4` | 58 s | a slip arrives → QR reference → queue with proposals → the organizer decides |
+| `w2_onchain_loop.mp4` | 48 s | deposit → check-in → refund on devnet, balance changes from the chain |
+| `w3_agent_demo.mp4` | 70 s | Claude registers and pays the deposit from its own wallet |
+| `bethere_product_demo.mp4` | 2 min 56 s | W1 + W2 + W3 in that order: the ≤ 3 min product demo for W5 |
+
+Every caption was checked against what the recording shows:
+- The check-in was an API call, so the caption doesn't say "scan".
+- No-shows can forfeit USDC on the program, so there's no "no one can keep
+  the deposit" claim.
+- The slip image is stored by BeThere, so the claim is "no AI service sees
+  the slip".
+
+**Still owed:** the founder-on-camera presentation video (owner).
