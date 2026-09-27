@@ -125,8 +125,9 @@ top-level GET redirect.
    email is in the person's set already has `claimed_at`.
 3. **Recipient wallet, one badge per event (recommended, independent of
    linking):** refuse a second claim in the same event to a wallet that already
-   received one. Cheap: a unique partial index on
-   `(event_id, LOWER(recipient_wallet))`.
+   received one. Cheap: a unique index on `claim_locks (event_id, wallet)`.
+   It must be the exact wallet string, not `LOWER()`, because base58 is
+   case-sensitive (see §6.2 (e)).
 
 ### What linking can and cannot stop (be explicit)
 
@@ -172,6 +173,25 @@ otherwise.
       prod first (an aggregate `GROUP BY ... HAVING COUNT(*) > 1`, no PII);
       (d) claims older than `0001` have no lock row, so the guard doesn't cover
       them.
+      **Prep (2026-09-27, session `event-checkin-ef`), still no decision:**
+      (e) **Don't use `LOWER(wallet)`.** Base58 is case-sensitive: two
+      addresses that differ only in case are different wallets, so a
+      case-folded index would wrongly block a real second wallet. Every
+      `claim_locks` writer takes an address that passed
+      `solana::validate_wallet_address` (strict base58, no whitespace). A
+      32-byte key has exactly one base58 encoding, so the exact string is
+      already canonical. Use `UNIQUE (event_id, wallet)`; §5.3 needs the same
+      correction when 7.8 is built.
+      (a) is moot for now: `EVENT_DO` is commented out for prod and staging
+      in `worker/wrangler.toml`, because the versions API blocks DO bindings.
+      Only the D1 path writes locks today. If DO is re-enabled, its
+      `claim_locks` copy needs the same index.
+      (c) Staging has 0 `claim_locks` rows, so its count means nothing. The
+      prod count still has to be run; the agent's prod read was blocked in
+      this session. The query is aggregate only and prints no wallet:
+      `SELECT COUNT(*) FROM (SELECT 1 FROM claim_locks GROUP BY event_id,
+      wallet HAVING COUNT(*) > 1)`, via
+      `npx wrangler d1 execute bethere-db --remote --command "…"`.
 - [ ] 6.3 **Possible-duplicate roster flag** (§5)? (Recommended: yes, but after
       Phase 1.) **Blocked on owner decision.** Gates 7.9. Phase 1 is now
       deployed, so the "after Phase 1" condition is met.
