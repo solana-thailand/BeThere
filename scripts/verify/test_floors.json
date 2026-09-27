@@ -28,6 +28,7 @@
     "public_ticket_page_never_redirects tests/public_ticket_page_never_redirects.rs": 3,
     "serde_contract tests/serde_contract.rs": 55,
     "ssot_mirror_audit tests/ssot_mirror_audit.rs": 9,
+    "sw_storage_passthrough tests/sw_storage_passthrough.rs": 2,
     "wire tests/wire.rs": 3,
     "wire_nullability tests/wire_nullability.rs": 4
   },

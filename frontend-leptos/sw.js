@@ -105,6 +105,14 @@ self.addEventListener("fetch", function (event) {
   // forcing users to hard-refresh. The backend already emits
   // `Cache-Control: no-store`, but that header does not stop the SW from
   // caching — only network-only strategy prevents it.
+  // /api/storage/* — R2 objects (posters, slips). Not intercepted: the worker
+  // already sets the right Cache-Control per object (`public, max-age=86400`
+  // for posters, `private, no-store` for slips; worker/src/storage.rs), and
+  // the network-only branch below forced `no-store` on all of them. A 3.9 MB
+  // event poster was re-downloaded on every page view, and a navigation
+  // mid-download surfaced as "ServiceWorker ... unexpected error".
+  if (url.pathname.startsWith("/api/storage/")) return;
+
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(networkOnly(req));
     return;
