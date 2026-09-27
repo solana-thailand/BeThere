@@ -27,6 +27,14 @@ pub(super) fn init_schema(sql: &worker::SqlStorage) {
     )
     .expect("DO init: create claim_locks expires index");
 
+    // Plan 025 §5.3, mirrors D1 migration 0055: one badge per wallet per event.
+    sql.exec(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_claim_locks_event_wallet \
+         ON claim_locks(event_id, wallet)",
+        None,
+    )
+    .expect("DO init: create claim_locks event+wallet index");
+
     // Attendees table — mirrors D1 attendees schema for Phase 2 operations
     sql.exec(
         "CREATE TABLE IF NOT EXISTS attendees ( \

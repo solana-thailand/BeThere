@@ -7,6 +7,7 @@
 //! truly ACID claim lock operations. Falls back to D1 + KV when DO is not
 //! configured.
 
+use event_checkin_domain::models::error::AppError;
 use worker::{KvStore, Method, ObjectNamespace, Request, RequestInit, Response};
 
 use crate::db;
@@ -116,7 +117,39 @@ pub(crate) fn claim_lock_key(event_id: &str, token: &str) -> String {
     format!("event:{event_id}:claim_lock:{token}")
 }
 
-/// Try to acquire a claim lock. Returns Ok(()) if acquired, Err if already locked.
+/// Error text the Durable Object returns when the wallet is already used in
+/// the event. Shared so the DO reply maps to the same typed error as D1.
+pub(crate) const WALLET_ALREADY_CLAIMED: &str =
+    "this wallet already received this event's badge; use a different wallet";
+
+/// Why a claim lock was not acquired.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ClaimLockError {
+    /// The claim is in flight or done, or the lock store failed (retryable).
+    Busy(String),
+    /// Plan 025 §5.3: one badge per recipient wallet per event.
+    WalletAlreadyClaimed,
+}
+
+impl From<ClaimLockError> for AppError {
+    fn from(e: ClaimLockError) -> Self {
+        match e {
+            ClaimLockError::Busy(msg) => AppError::RateLimited(msg),
+            ClaimLockError::WalletAlreadyClaimed => {
+                AppError::Conflict(WALLET_ALREADY_CLAIMED.to_string())
+            }
+        }
+    }
+}
+
+impl From<String> for ClaimLockError {
+    fn from(msg: String) -> Self {
+        ClaimLockError::Busy(msg)
+    }
+}
+
+/// Try to acquire a claim lock. Returns Ok(()) if acquired, Err if already
+/// locked or if the recipient wallet already claimed in this event.
 /// Sets a 5-minute TTL as safety net.
 ///
 /// Phase 1 (Issue #050): Routes through Durable Object when available for
@@ -128,7 +161,7 @@ pub(crate) async fn acquire_claim_lock(
     wallet: &str,
     d1: Option<&worker::D1Database>,
     event_do: Option<&ObjectNamespace>,
-) -> Result<(), String> {
+) -> Result<(), ClaimLockError> {
     // DO path: truly ACID (single-threaded per event)
     if let Some(namespace) = event_do {
         let lock_id = uuid::Uuid::now_v7().to_string();
@@ -153,9 +186,12 @@ pub(crate) async fn acquire_claim_lock(
                 error = ?resp.error,
                 "claim lock race: already locked (DO)"
             );
-            return Err(resp.error.unwrap_or_else(|| {
-                "claim is already being processed or has been completed".to_string()
-            }));
+            return Err(match resp.error.as_deref() {
+                Some(WALLET_ALREADY_CLAIMED) => ClaimLockError::WalletAlreadyClaimed,
+                _ => ClaimLockError::Busy(resp.error.unwrap_or_else(|| {
+                    "claim is already being processed or has been completed".to_string()
+                })),
+            });
         }
 
         // DO lock acquired — also write KV for read compatibility
@@ -182,15 +218,24 @@ pub(crate) async fn acquire_claim_lock(
     if let Some(db) = d1 {
         let lock_id = uuid::Uuid::now_v7().to_string();
         let expires_at = (chrono::Utc::now() + chrono::Duration::seconds(300)).to_rfc3339();
-        let acquired =
-            db::acquire_claim_lock(db, event_id, token, &lock_id, wallet, &expires_at).await?;
-
-        if !acquired {
-            tracing::warn!(
-                claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
-                "claim lock race: already locked (D1)"
-            );
-            return Err("claim is already being processed or has been completed".to_string());
+        match db::acquire_claim_lock(db, event_id, token, &lock_id, wallet, &expires_at).await? {
+            db::ClaimLockInsert::Acquired => {}
+            db::ClaimLockInsert::TokenHeld => {
+                tracing::warn!(
+                    claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
+                    "claim lock race: already locked (D1)"
+                );
+                return Err(ClaimLockError::Busy(
+                    "claim is already being processed or has been completed".to_string(),
+                ));
+            }
+            db::ClaimLockInsert::WalletUsed => {
+                tracing::warn!(
+                    claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(token),
+                    "claim refused: wallet already claimed in this event (D1)"
+                );
+                return Err(ClaimLockError::WalletAlreadyClaimed);
+            }
         }
 
         // D1 lock acquired — also write KV for read compatibility
@@ -261,7 +306,9 @@ pub(crate) async fn acquire_claim_lock(
                     ?stored_id,
                     "claim lock race: another request won"
                 );
-                Err("claim is already being processed or has been completed".to_string())
+                Err(ClaimLockError::Busy(
+                    "claim is already being processed or has been completed".to_string(),
+                ))
             }
         }
         None => {

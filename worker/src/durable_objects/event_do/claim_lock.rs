@@ -34,6 +34,21 @@ impl EventDurableObject {
             return DoResponse::err("claim is already being processed");
         }
 
+        // Plan 025 §5.3 (D1 migration 0055): another token already sent a
+        // badge to this wallet in this event.
+        let wallet_used = self
+            .sql
+            .exec(
+                "SELECT 1 AS one FROM claim_locks WHERE event_id = ?1 AND wallet = ?2 LIMIT 1",
+                Some(vec![event_id.into(), wallet.into()]),
+            )
+            .ok()
+            .and_then(|cursor| cursor.one::<serde_json::Value>().ok())
+            .is_some();
+        if wallet_used {
+            return DoResponse::err(crate::claim::WALLET_ALREADY_CLAIMED);
+        }
+
         // Insert new lock
         let result = self.sql.exec(
             "INSERT INTO claim_locks (lock_id, event_id, token, wallet, expires_at) \

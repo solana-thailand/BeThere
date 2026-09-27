@@ -91,7 +91,7 @@ pub(super) async fn execute_walkin_claim(
         )
         .await
     {
-        return Err(AppError::RateLimited(e));
+        return Err(e.into());
     }
 
     // Mint compressed NFT via Crossmint (custodial signer + tree + fees)
