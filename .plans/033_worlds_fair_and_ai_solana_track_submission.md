@@ -376,3 +376,99 @@ version `5b7b875c` = git `4842135f`. The preflight gate was bypassed with
 `ANTHROPIC_API_KEY`, so only the QR path runs. The write smoke was not run on
 prod, because there is no `SMOKE_TOKEN`. The `thb_deposits` baseline for
 20–26 Sep is 4/3/3/1/0/4/1 a day; re-check it after RTM #6 slips arrive.
+
+### W3 log, 27 Sep (afternoon): demo video clip produced
+
+The owner topped up the agent wallet (40 devnet USDC, 5.05 SOL). A fresh
+fixture was made with `demo_fixture`: event `agent-demo-meetup-1790482206`,
+escrow `9XWPpsFg…`. Headless Claude Code was again the MCP client (8 turns,
+$0.54, no retries). It called `find_events` → `event_details` →
+`agent_wallet` → `register` → `pay_deposit` → `ticket_status`. Tx
+`v9H1A84w…QtQB4B` is `Success`/`Finalized` on Explorer, and the ticket shows
+"Deposit verified · Ready for Check-In".
+
+- **Clip:** `~/Movies/bethere/w3_agent_demo.mp4` (69.8 s, 1280×720, H.264;
+  not in git). Its parts:
+  - a title card;
+  - a replay of the recorded session, built from its stream-json, with real
+    tool outputs shortened and an on-screen line saying it is a replay;
+  - the transaction on Solana Explorer (devnet);
+  - the BeThere ticket page.
+- **Raw record:** `~/Movies/bethere/w3_agent_run_20260927.jsonl`.
+- **Recording scripts:** `/tmp/w3/replay.html` and `/tmp/w3/record.mjs`
+  (puppeteer screencast + ffmpeg); not in the repo yet.
+- **Still owed for W5:**
+  - the founder-on-camera presentation video (owner);
+  - W2 (the on-chain refund loop), which can be recorded the same way;
+  - the W1 slip queue clip.
+- **Cosmetic:** the Explorer clip shows its instruction panel still "Loading".
+
+### W2 log, 27 Sep (afternoon): on-chain loop run green and clipped
+
+`scripts/e2e_devnet_test.sh` hung at step 5. The public devnet RPC stopped
+answering `getAccountInfo` from this network (no reply in 20 s), while
+`getSlot` answered in 0.1 s, and the script's `curl` had no timeout.
+
+- **Fix (this commit):**
+  - `E2E_RPC_URL` overrides the RPC; only its host is printed, because a URL
+    can carry an API key;
+  - every RPC call has `--max-time 30 --retry 3`.
+- **Re-run through Helius devnet: ALL PASSED**, event
+  `e2e-test-event-1790493197`, escrow `D5eK3gjh…`, all finalized with no
+  errors:
+  - init `4WutxyLj…`;
+  - deposit `5xPB2EbL…`: attendee −1.00 USDC, escrow +1.00;
+  - check-in `4VtB7Ctj…`: signed by the organizer key, no token movement;
+  - refund `QgsveL7u…`: escrow −1.00, attendee +1.00; the deposit account
+    is closed.
+- **Clip:** `~/Movies/bethere/w2_onchain_loop.mp4` (48 s). It has a title
+  card, three Explorer pages with captions, and an end card. Explorer's
+  token-balance panel doesn't load (its RPC hits the same hang), so each
+  scene shows the balance change read from `getTransaction`
+  pre/post token balances.
+- **Wording checked against the chain:**
+  - The check-in caption says the organizer marked the attendee present,
+    not "staff scanned". This run checked in through the API, not a scan.
+  - The end card says the program refuses to let the organizer claim a
+    checked-in attendee's deposit. `claim_forfeited` has
+    `constraints(!attendee_deposit.checked_in())`. No-shows can forfeit on
+    this program after the refund deadline, so "no one can keep the
+    deposit" would have been false for USDC.
+- **Run log:** `~/Movies/bethere/w2_e2e_run_20260927.log` (no key inside).
+
+### W1/W5 log, 27 Sep (afternoon): slip-agent clip and the combined product demo
+
+Staging event `slipdemo-1790494035`, two walk-ins (Nok, Pim). The demo slip
+is a **synthetic image, labelled as such on the slip itself**. Its QR holds
+a valid bank slip payload: fresh reference `179049399412345`, with a
+CRC-16/CCITT-FALSE the fixture's own checksum confirms. Both slips were
+recorded through the admin upload with `slip_qr` (what the admin form sends
+after decoding) and auto-verify off. Proposals read back:
+
+- Nok: `ref_new: pass`, amount/time/receiver unknown → `needs_review`.
+- Pim, same image and reference: `ref_new: fail` → `rejected`; the UI shows
+  "a check failed". The duplicate-image warning shows on both cards.
+
+**Found and fixed on the way:** the Deposits tab showed raw attendee ids,
+because names came only from the Google Sheet (same class as the unnamed
+RTM#6 slip in `.issues/151`). `resolve_attendee_names` now reads D1 first
+and falls back to the sheet. Guard: `worker/tests/deposit_names_d1_first_guard.rs`.
+On staging, not prod.
+
+**Videos** (`~/Movies/bethere/`, not in git):
+
+| File | Length | Story |
+|---|---|---|
+| `w1_slip_agent.mp4` | 58 s | a slip arrives → QR reference → queue with proposals → the organizer decides |
+| `w2_onchain_loop.mp4` | 48 s | deposit → check-in → refund on devnet, balance changes from the chain |
+| `w3_agent_demo.mp4` | 70 s | Claude registers and pays the deposit from its own wallet |
+| `bethere_product_demo.mp4` | 2 min 56 s | W1 + W2 + W3 in that order: the ≤ 3 min product demo for W5 |
+
+Every caption was checked against what the recording shows:
+- The check-in was an API call, so the caption doesn't say "scan".
+- No-shows can forfeit USDC on the program, so there's no "no one can keep
+  the deposit" claim.
+- The slip image is stored by BeThere, so the claim is "no AI service sees
+  the slip".
+
+**Still owed:** the founder-on-camera presentation video (owner).
