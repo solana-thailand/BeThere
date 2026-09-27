@@ -210,19 +210,13 @@ pub async fn register_attendee(
         .into());
     }
 
-    // 5. Check for duplicate email in the Google Sheet
-    let attendees = sheets::get_attendees_for_event(
-        &state,
-        &config.sheet_id,
-        &config.sheet_name,
-        kv,
-        &config.id,
-    )
-    .await
-    .map_err(|e| {
-        tracing::warn!(error = ?e, "could not fetch attendees for dedup");
-        AppError::Internal(format!("failed to check existing registrations: {e}"))
-    })?;
+    // 5. Check for duplicate email (D1 first, then the event's sheet)
+    let attendees = super::attendees::registration_attendees(&state, &config, kv)
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = ?e, "could not fetch attendees for dedup");
+            AppError::Internal(format!("failed to check existing registrations: {e}"))
+        })?;
 
     // Duplicate email check: if already registered, return existing attendee info
     // so the frontend can redirect to the correct step (deposit/ticket) instead of

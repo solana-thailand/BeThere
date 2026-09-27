@@ -98,7 +98,20 @@ investigating it.
 
 - **Backfill.** The statuses missing from the sheet (12 deposits, 22 QRs on
   RTM#6, and every earlier event) are not written back. They are still correct
-  in D1. A D1 → sheet backfill is a separate change.
+  in D1. **Built 2026-09-27 (session `event-checkin-40`), not yet run:**
+  `POST /api/events/{id}/sheet-backfill`.
+  - It fills **empty cells only**, with what the live writers write: cash
+    deposits approved (`THB` / amount / `Yes`), ticket QR, and check-in
+    (time, by, claim token).
+  - It finds rows by api_id, and counts and skips missing or duplicated ids.
+  - It is a dry run unless `?apply=true`. Super admin only.
+  - Tests: planner `domain/tests/sheet_backfill.rs` (5), rails
+    `worker/tests/sheet_backfill_guard.rs` (3).
+  - To run it, the owner needs an admin JWT on prod. Dry run first:
+    `curl -X POST -H "Authorization: Bearer $SMOKE_TOKEN" https://bethere.solana-thailand.workers.dev/api/events/<id>/sheet-backfill`.
+    Read the counts; then run the same request again with `?apply=true`.
+    Staging events have no real sheet, so staging can't exercise the Sheets
+    calls.
 - **`sync-sheet` still reads D1-first**, so it cannot refresh anything. It
   matters less now that nothing addresses rows by a stored number.
 - ~~**Attendee list paging.**~~ Deployed 2026-09-26 (prod `f3b32edf`, git `70a36f3e`).

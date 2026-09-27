@@ -15,6 +15,22 @@ pub(crate) struct ClaimLockRow {
     pub claimed_at: Option<String>,
 }
 
+/// What an attempt to insert a claim lock found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ClaimLockInsert {
+    Acquired,
+    /// This token already holds a lock: in flight, or claimed.
+    TokenHeld,
+    /// Another token in this event already locked this recipient wallet
+    /// (0055, one badge per wallet per event).
+    WalletUsed,
+}
+
+#[derive(Deserialize)]
+struct LockHolder {
+    same_token: i64,
+}
+
 pub(crate) async fn acquire_claim_lock(
     db: &D1Database,
     event_id: &str,
@@ -22,11 +38,14 @@ pub(crate) async fn acquire_claim_lock(
     lock_id: &str,
     wallet: &str,
     expires_at: &str,
-) -> Result<bool, String> {
+) -> Result<ClaimLockInsert, String> {
+    // Targetless DO NOTHING: a clash on the (event_id, token) key or on the
+    // 0055 (event_id, wallet) index both insert nothing instead of raising.
+    // The lookup below says which one held.
     let stmt = db.prepare(
         "INSERT INTO claim_locks (lock_id, event_id, token, wallet, expires_at) \
          VALUES (?1, ?2, ?3, ?4, ?5) \
-         ON CONFLICT (event_id, token) DO NOTHING",
+         ON CONFLICT DO NOTHING",
     );
     let result = stmt
         .bind_refs(&[
@@ -47,7 +66,37 @@ pub(crate) async fn acquire_claim_lock(
         .flatten()
         .and_then(|m| m.changes)
         .unwrap_or(0);
-    Ok(changes > 0)
+    if changes > 0 {
+        return Ok(ClaimLockInsert::Acquired);
+    }
+
+    // The token's own row wins over a wallet match, so a retry of the same
+    // claim still reads as "already being processed".
+    let holder = db
+        .prepare(
+            "SELECT (token = ?2) AS same_token FROM claim_locks \
+             WHERE event_id = ?1 AND (token = ?2 OR wallet = ?3) \
+             ORDER BY same_token DESC LIMIT 1",
+        )
+        .bind_refs(&[
+            D1Type::Text(event_id),
+            D1Type::Text(token),
+            D1Type::Text(wallet),
+        ])
+        .map_err(|e| format!("D1 acquire_claim_lock holder bind: {e:?}"))?
+        .first::<LockHolder>(None)
+        .await
+        .map_err(|e| format!("D1 acquire_claim_lock holder query: {e:?}"))?;
+    Ok(classify_holder(holder.map(|h| h.same_token != 0)))
+}
+
+/// `None` means the conflicting row was released between the insert and the
+/// lookup; report it as busy so the client retries.
+fn classify_holder(same_token: Option<bool>) -> ClaimLockInsert {
+    match same_token {
+        Some(false) => ClaimLockInsert::WalletUsed,
+        Some(true) | None => ClaimLockInsert::TokenHeld,
+    }
 }
 
 pub(crate) async fn finalize_claim_lock(

@@ -53,7 +53,7 @@
         "Staff pay to use the scanner"
       ],
       "correct_index": 1,
-      "explanation": "BeThere's deposit model: attendees commit money upfront, get refunded when they show up and complete the quiz. No-shows forfeit their deposit."
+      "explanation": "BeThere's deposit model: attendees commit money upfront and get it back when they show up. No deposit is ever kept: if plans change, it can stay as credit for a future event or be paid back."
     }
   ],
   "passing_score_percent": 60,

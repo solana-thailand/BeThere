@@ -9,7 +9,7 @@ use serde_json::json;
 use crate::error::ApiOk;
 use event_checkin_domain::models::api::{AttendeeListItem, StatsResponse};
 use event_checkin_domain::models::attendee::{
-    RECENT_CHECK_INS_PER_TYPE, ROSTER_PAGE_MAX, recent_check_ins, roster_page,
+    RECENT_CHECK_INS_PER_TYPE, ROSTER_PAGE_MAX, possible_duplicates, recent_check_ins, roster_page,
 };
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
@@ -115,6 +115,10 @@ pub async fn list_attendees(
         recent_check_ins,
     };
 
+    // Over the whole event, before paging: a pair split across two pages
+    // would otherwise never be flagged (plan 025 §7.9).
+    let mut duplicates = possible_duplicates(&attendees);
+
     // Offset cursor over a total order; `row_index` alone is 0 for every
     // D1-created attendee, so it cannot be the key (`.issues/151` C).
     let page = roster_page(
@@ -128,7 +132,11 @@ pub async fn list_attendees(
     let mut attendee_responses: Vec<AttendeeListItem> = page
         .items
         .iter()
-        .map(|a| AttendeeListItem::from_attendee(a))
+        .map(|a| {
+            let mut item = AttendeeListItem::from_attendee(a);
+            item.possible_duplicates = duplicates.remove(&a.api_id).unwrap_or_default();
+            item
+        })
         .collect();
 
     // Annotate each row from four independent batch queries, run

@@ -1,7 +1,7 @@
 # Plan 033: Win Crypto World's Fair and the AI × Solana Thailand track
 
-**Status:** in progress. W1 code landed on develop 2026-09-27 (session
-`event-checkin-d9`), not deployed; see §6. Proposed 2026-09-27 by `event-checkin-2e`.
+**Status:** in progress. W1 is on prod in shadow mode, QR path only (prod
+`5b7b875c`, 2026-09-27); see §6. Proposed 2026-09-27 by `event-checkin-2e`.
 **Supersedes the schedule of** `.plans/026` (its design rule and compliance
 section still stand and are not repeated here).
 **Deadlines (read 2026-09-27):**
@@ -176,6 +176,49 @@ W2, W3 and W5 are not cuttable. W3 moves up to Mon 29 – Tue 30 Sep.
 
 ## 4. Decisions only the owner can make
 
+**Answered 2026-09-27 (owner, session `event-checkin-40`):**
+1. **Solo.**
+2. **Devnet demo first.** Mainnet escrow comes after the demo has proved
+   itself, so the next real event can use it. The submission states mainnet
+   as the next step, not as done.
+3. **Owner deferred to the recommendation:** the default below stands. The
+   QR path sends no image. Vision runs only for a slip with no readable QR,
+   the privacy line shows on the upload page, and `/privacy` names Anthropic
+   as a processor once vision is switched on. No historical backtest.
+4. **Owner asked for the numbers first.** Measured from
+   `worker/src/slip_vision.rs` (`claude-opus-5`, `effort: low`, one image of
+   about 1,600 tokens plus a short prompt, structured JSON out): about
+   $0.02–0.03 per vision call. Only slips without a readable QR make one.
+   Worst case, 40 slips a week all on vision, is about $5 a month.
+   Recommended: a $10 monthly limit in the Anthropic console. Vision stays
+   off until the owner creates the key.
+5. and 6. **Parked by the owner**, reopen before W5.
+
+**Amended the same day: the owner's target is 0 THB running cost.** No
+Claude key, so `SLIP_AGENT_VISION` stays off and the `slip_vision.rs` code
+path stays dormant. Checked before deciding:
+- The slip mini-QR (`domain/src/slip_verify.rs`) carries **only** the bank
+  reference, with no amount, time or receiver. The QR path proves "ref new"
+  and nothing else.
+- riir-reflex (`~/src/gist-rs/riir-reflex`, pulled 2026-09-27 at `10ef9e7`)
+  is a typed text decision engine (choice / score / abstain) served as a
+  local native binary. It reads no images, and it can't run in the Worker
+  (native, and it depends on katgpt-rs; memory `gist-rs-repos-study`). It
+  doesn't fit this step, and our verdict step is already deterministic.
+- **The 0 THB path: OCR in the browser**, on the attendee's device, with a
+  self-hosted, lazy-loaded engine. The image never leaves the device for
+  this, and the worker pays no CPU (`.issues/134`). Its fields are a client
+  claim, like `slip_qr`: the server re-parses them, and they only feed the
+  proposal, never money. New source value `ocr` (needs a CHECK change in a
+  new migration). Candidate: tesseract.js (Apache-2.0, digits + Latin are
+  enough for amount and time). Cost: a lazy download on the upload page
+  only; measure it against the frontend budget before committing.
+- If OCR can't reach usable accuracy on real slips, the fallback is
+  QR-only, and the organizer reads the amount. The W1 "AI" claim then rests
+  on the OCR model plus the checker; W3 carries AI × Solana.
+
+The original questions and defaults:
+
 1. **Solo or with `lidm`?** One product per person. The old listing names both.
    *Default: solo, as said for this round.*
 2. **Mainnet escrow before 12 Oct?** Rent ~0.63 SOL, and it would hold real
@@ -321,3 +364,15 @@ The upload returned 200 and the deposit read back as pending. Details are in
 `.issues/154`.
 **Still not exercised:** the proposal row from the admin path. It needs a slip
 with a real mini-QR (the probe used a 1×1 PNG) or vision switched on.
+
+### W1/W4 log, 27 Sep: on prod in shadow mode
+
+Owner go in session `event-checkin-40`. D1 backup taken, migration `0054`
+applied and read back (`slip_proposals` and its index exist, 0 rows). Prod
+version `5b7b875c` = git `4842135f`. The preflight gate was bypassed with
+`--force`, because the flow-harness live fixture was never configured
+(`.issues/084`). Served wasm is byte-identical to `dist/`. Landing and
+`/admin` opened headless with 0 page errors. Vision is off: there is no
+`ANTHROPIC_API_KEY`, so only the QR path runs. The write smoke was not run on
+prod, because there is no `SMOKE_TOKEN`. The `thb_deposits` baseline for
+20–26 Sep is 4/3/3/1/0/4/1 a day; re-check it after RTM #6 slips arrive.

@@ -21,6 +21,7 @@ use crate::auth;
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
 use crate::pages::admin_attendance_answer::{AnswerFilter, AnswerFilterBar, AnswerPicker};
+use crate::pages::admin_duplicate_hint::duplicate_hint;
 use crate::utils;
 
 // ===== Tab Type =====
@@ -1713,6 +1714,7 @@ pub fn Admin() -> impl IntoView {
                                         && attendee.refund_status.is_none();
                                     let apply_credit_id_click = attendee.api_id.clone();
                                     let apply_credit_id_disabled = attendee.api_id.clone();
+                                    let duplicate_badge = duplicate_hint(&attendee.possible_duplicates);
 
                                     view! {
                                         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
@@ -1789,6 +1791,7 @@ pub fn Admin() -> impl IntoView {
                                                         }
                                                     }
                                                 </Show>
+                                                {duplicate_badge}
                                             </div>
                                             // Row 2: email + ticket + time ago + action buttons
                                             <div class="attendee-row-bottom">

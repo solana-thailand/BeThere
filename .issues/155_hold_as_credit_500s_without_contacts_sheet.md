@@ -1,6 +1,6 @@
 # 155: Hold as credit 500s when no contacts sheet is configured
 
-**Status:** fixed on develop (`3f757cce`), verified on staging (version `2dc6235a`), not on prod. Found on staging on 2026-09-27 (session `event-checkin-40`) while building a fixture for the `admin_deposit.rs` split check.
+**Status:** deployed 2026-09-27 (prod `5b7b875c`, git `4842135f`, owner go in session `event-checkin-40`). Fixed in `3f757cce`, verified on staging (version `2dc6235a`). Prod has `CONTACTS_SHEET_ID`, so its hold path never failed; what changes there is that a missing sheet can no longer block it. Found on staging on 2026-09-27 (session `event-checkin-40`) while building a fixture for the `admin_deposit.rs` split check.
 
 ## What happens
 

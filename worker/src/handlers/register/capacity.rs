@@ -25,15 +25,9 @@ pub(super) async fn enforce_capacity(
     );
 
     // Count current attendees from sheet
-    let attendees = crate::sheets::get_attendees_for_event(
-        state,
-        &config.sheet_id,
-        &config.sheet_name,
-        kv,
-        &config.id,
-    )
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to check capacity: {e}")))?;
+    let attendees = super::attendees::registration_attendees(state, config, kv)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to check capacity: {e}")))?;
 
     let mut in_person_count: u32 = 0;
     let mut online_count: u32 = 0;

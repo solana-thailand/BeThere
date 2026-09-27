@@ -5,6 +5,7 @@
 //!
 //! Validates input, checks for duplicates, appends to Google Sheet, returns next step.
 
+mod attendees;
 mod capacity;
 mod contact;
 mod my_registration;

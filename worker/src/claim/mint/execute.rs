@@ -364,7 +364,7 @@ pub async fn execute_claim(
         )
         .await
     {
-        return Err(AppError::RateLimited(e));
+        return Err(e.into());
     }
 
     // 9. Mint compressed NFT via Crossmint (custodial signer + tree + fees)

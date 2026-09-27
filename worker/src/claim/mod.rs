@@ -8,7 +8,7 @@ mod mint;
 mod ttl;
 
 // Lock management (pub(crate) for internal reuse)
-pub(crate) use lock::{claim_lock_key, finalized_expires_at};
+pub(crate) use lock::{WALLET_ALREADY_CLAIMED, claim_lock_key, finalized_expires_at};
 
 // Mint/claim orchestration (public API)
 pub use mint::{execute_claim, lookup_claim};

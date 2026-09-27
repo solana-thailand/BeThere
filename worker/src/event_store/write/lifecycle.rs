@@ -2,7 +2,7 @@
 
 use worker::KvStore;
 
-use event_checkin_domain::models::event::EventStatus;
+use event_checkin_domain::models::event::{EventConfig, EventStatus};
 
 use crate::event_store::read as read_mod;
 use crate::event_store::read::get_event_index;
@@ -81,10 +81,22 @@ pub async fn restore_event(kv: &KvStore, id: &str) -> Result<(), String> {
 ///
 /// When `force` is true, allows deleting Draft events and bypasses the escrow guard.
 /// Intended for devnet cleanup of test events. SuperAdmin-gated at the handler level.
-pub async fn hard_delete_event(kv: &KvStore, id: &str, force: bool) -> Result<(), String> {
-    let config = read_mod::get_event_config(kv, id)
+///
+/// `fresh` is the D1 copy when the caller has one. Event writes land in D1
+/// first and KV reads are eventually consistent, so right after an archive
+/// the KV copy can still say "active" and the delete used to 400 once
+/// before succeeding on a retry. The status and escrow guards read `fresh`
+/// when it is there; the KV copy still supplies what gets cleaned up.
+pub async fn hard_delete_event(
+    kv: &KvStore,
+    id: &str,
+    force: bool,
+    fresh: Option<&EventConfig>,
+) -> Result<(), String> {
+    let kv_config = read_mod::get_event_config(kv, id)
         .await?
         .ok_or_else(|| format!("event '{id}' not found"))?;
+    let config = fresh.unwrap_or(&kv_config);
 
     if force {
         // Force mode: allow Draft + Archived, skip escrow guard
@@ -126,8 +138,8 @@ pub async fn hard_delete_event(kv: &KvStore, id: &str, force: bool) -> Result<()
         .map_err(|e| format!("failed to delete event config: {e:?}"))?;
 
     // Clean up escrow reverse index (H7)
-    if !config.escrow_address.is_empty() {
-        let _ = delete_escrow_index(None, Some(kv), &config.escrow_address).await;
+    if !kv_config.escrow_address.is_empty() {
+        let _ = delete_escrow_index(None, Some(kv), &kv_config.escrow_address).await;
     }
 
     // Remove from index
