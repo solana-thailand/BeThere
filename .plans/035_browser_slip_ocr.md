@@ -53,7 +53,7 @@ first.
 TrueMoney, and so on), photographed paper, dark mode. Synthetic text is a
 best case, so treat 24/24 as an upper bound.
 
-## 3. Build (steps 1–2 now, steps 3–5 after §4 passes)
+## 3. Build (step 1 done; steps 2–5 after §4 passes)
 
 Steps, in order. Each step is its own commit.
 
@@ -123,8 +123,10 @@ Steps, in order. Each step is its own commit.
 
 - W1 goes to prod in shadow mode on **Fri 3 Oct**, QR path only. This plan
   does not block that.
-- §3 steps 1–2 are safe to build before §4: a parser with tests, and a table
-  nobody writes to yet. Steps 3–4 wait for §4.
+- §3 step 1 (the parser) was safe to build before §4, and it is done.
+  Step 2 waits with the rest. A migration that nobody writes to would still
+  have to be applied before the 3 Oct prod deploy, since `deploy.sh` doesn't
+  apply migrations. If §4 fails, it would be dead schema.
 - Plan 033's "no new features after 9 Oct" still holds. If §4 has not passed
   by **Wed 8 Oct**, OCR moves past the submission and the W1 story is the QR
   path plus the checker.
@@ -148,4 +150,4 @@ Steps, in order. Each step is its own commit.
   - an ambiguous figure taken anyway;
   - any lead-group length accepted;
   - a time taken from another line.
-- Nothing calls the parser yet. §3.2 (the table) is next and is ungated.
+- Nothing calls the parser yet. §3.2 waits for §4 (see §5).
