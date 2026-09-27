@@ -186,3 +186,23 @@ fn staff_comp_writes_the_status_the_router_reads() {
         "existing comps are backfilled without overwriting a real status"
     );
 }
+
+/// Plan 028 W5: a page that needs both currencies reads them with one
+/// `balances` call. Two `balance` calls ran the release write twice per request.
+#[test]
+fn both_currency_readers_release_once() {
+    for file in [
+        "src/handlers/register/signup.rs",
+        "src/handlers/deposit/thb/handlers/hold_credit.rs",
+    ] {
+        let code = read(file);
+        assert!(
+            code.contains("credit_ledger::balances("),
+            "{file} must read both currencies with one `balances` call"
+        );
+        assert!(
+            !code.contains("credit_ledger::balance("),
+            "{file} reads one currency at a time again: each `balance` call reruns the release write"
+        );
+    }
+}
