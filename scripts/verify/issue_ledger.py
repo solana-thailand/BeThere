@@ -56,7 +56,8 @@ BRANCH_RE = re.compile(r"`((?:feature|hotfix|release|fix)/[\w./-]+)`")
 # How commit messages name an issue: `.issues/138`, `#138`, `docs(138)`, `issue 138`.
 LINK_RE = re.compile(r"(?:\.issues/|#|\(|\b[Ii]ssue )(\d{3})\b")
 # Doc-only commits land after the deploy they describe; they are not the fix.
-CODE_PATHS = (".", ":!.issues", ":!.plans", ":!.handovers", ":!docs", ":!*.md")
+# Nor is a commit to this script: its message names the issues it re-judged.
+CODE_PATHS = (".", ":!.issues", ":!.plans", ":!.handovers", ":!docs", ":!*.md", ":!scripts/verify/issue_ledger.py")
 # The terminal and in-flight states an issue may declare. Longest first, so
 # "closed negative" wins over "closed".
 VERDICTS = (
