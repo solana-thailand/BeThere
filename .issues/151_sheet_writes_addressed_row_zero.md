@@ -99,8 +99,16 @@ investigating it.
 - **Backfill.** The statuses missing from the sheet (12 deposits, 22 QRs on
   RTM#6, and every earlier event) are not written back. They are still correct
   in D1. **Built 2026-09-27 (session `event-checkin-40`), on prod since
-  `3065bc25` the same day, not yet run:**
-  `POST /api/events/{id}/sheet-backfill`.
+  `3065bc25` the same day.** `POST /api/events/{id}/sheet-backfill`.
+  - **RTM#6 done, 2026-09-28**, run by the owner from the prod admin
+    console (session cookie):
+    - dry run: 57 attendees, 74 cells D1 has values for (48 deposit, 26 QR,
+      0 check-in), 62 empty, 12 already filled, 0 rows missing,
+      0 duplicated;
+    - `?apply=true`: `written: 62`.
+    - Owed: a second dry run should read `writes: 0, already_filled: 74`,
+      plus a look at the sheet.
+  - **Earlier events** are not backfilled yet (dry-run each first).
   - It fills **empty cells only**, with what the live writers write: cash
     deposits approved (`THB` / amount / `Yes`), ticket QR, and check-in
     (time, by, claim token).
@@ -108,9 +116,13 @@ investigating it.
   - It is a dry run unless `?apply=true`. Super admin only.
   - Tests: planner `domain/tests/sheet_backfill.rs` (5), rails
     `worker/tests/sheet_backfill_guard.rs` (3).
-  - To run it, the owner needs an admin JWT on prod. Dry run first:
-    `curl -X POST -H "Authorization: Bearer $SMOKE_TOKEN" https://bethere.solana-thailand.workers.dev/api/events/<id>/sheet-backfill`.
-    Read the counts; then run the same request again with `?apply=true`.
+  - How to run it: in the prod `/admin` DevTools console, signed in as a
+    super admin, run
+    `await (await fetch('/api/events/<id>/sheet-backfill', {method:'POST', credentials:'same-origin'})).json()`.
+    Add `?apply=true` only after reading the counts. Do not send
+    `Authorization: Bearer <localStorage token>`: prod sessions are a cookie,
+    the stored token is empty, and `Bearer null` is rejected before the
+    cookie is read (seen 2026-09-28).
     Staging events have no real sheet, so staging can't exercise the Sheets
     calls.
 - **`sync-sheet` still reads D1-first**, so it cannot refresh anything. It
