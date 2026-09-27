@@ -289,7 +289,9 @@ Phase 2
         raised `UNIQUE constraint failed`. The probe rows were deleted.
       - Not yet exercised: two real claims (mints) to one wallet through the
         API.
-      - **Prod:** needs `0055` applied before the code. This is the
+      - **Deployed 2026-09-27** (owner go, session `event-checkin-40`): D1
+        backup, `0055` applied to prod and read back (0 duplicate pairs first),
+        prod `3065bc25` = git `9c246de4`. This is the
       part that bites a farmer who never links; 7.6/7.7 only bind linked emails.
 - [x] 7.9 Possible-duplicate roster flag (6.3 decided yes, 2026-09-27).
       Done 2026-09-27, session `event-checkin-40`, git `be1d77e4`.
@@ -307,6 +309,8 @@ Phase 2
         the other row, the third row had none, and there were 0 page errors.
         The fixture was deleted.
       - Not covered: the Recent Check-ins panel doesn't show the badge.
+      - **Deployed** with 7.8 (prod `3065bc25`); the served wasm carries the
+        badge. Not opened on prod: the admin page needs a signed-in organizer.
       - **7.8 live claim attempt on the same fixture:** both walk-in claims
         to one wallet got Crossmint 502. Staging has **no Crossmint secret**,
         so staging can't mint at all, and the 409 path needs a mint to

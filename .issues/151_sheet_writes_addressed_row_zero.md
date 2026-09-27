@@ -98,7 +98,8 @@ investigating it.
 
 - **Backfill.** The statuses missing from the sheet (12 deposits, 22 QRs on
   RTM#6, and every earlier event) are not written back. They are still correct
-  in D1. **Built 2026-09-27 (session `event-checkin-40`), not yet run:**
+  in D1. **Built 2026-09-27 (session `event-checkin-40`), on prod since
+  `3065bc25` the same day, not yet run:**
   `POST /api/events/{id}/sheet-backfill`.
   - It fills **empty cells only**, with what the live writers write: cash
     deposits approved (`THB` / amount / `Yes`), ticket QR, and check-in
