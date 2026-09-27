@@ -165,7 +165,7 @@ pub fn AdminEventSelector(
     // backdrop stays put — a jarring visual bug.
     //
     // The listener is registered ONCE on mount and `.forget()`-ed (matches
-    // the keydown-shortcut pattern in admin.rs). The closure reads the `open`
+    // the keydown-shortcut pattern in admin/sidebar.rs). The closure reads the `open`
     // signal and no-ops when closed, so there's no add/remove churn per open
     // and no non-Send `Closure` inside `on_cleanup` (which requires Send+Sync).
     //

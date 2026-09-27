@@ -36,7 +36,7 @@ fn the_wire_field_defaults_to_empty() {
 /// in, so it carries the same badge as the roster row.
 #[test]
 fn recent_check_ins_panel_shows_the_badge() {
-    const ADMIN: &str = include_str!("../src/pages/admin.rs");
+    const ADMIN: &str = include_str!("../src/pages/admin/render.rs");
     let start = ADMIN
         .find("fn render_recent_check_ins(")
         .expect("render_recent_check_ins moved; update this guard");

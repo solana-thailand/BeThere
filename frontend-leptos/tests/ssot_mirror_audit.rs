@@ -33,7 +33,7 @@
 //!
 //! - **Inline re-implementations.** A line like
 //!   `let is_checked_in = attendee.checked_in_at.is_some();` in
-//!   `frontend-leptos/src/pages/admin.rs` re-implements
+//!   `frontend-leptos/src/pages/admin/attendee_row.rs` re-implements
 //!   `Attendee::is_checked_in()` inline, not as a named method. Detecting this
 //!   requires semantic analysis of boolean expressions, not text scanning.
 //!   Documented as a known gap in `.plans/014_ssot_audit.md`.

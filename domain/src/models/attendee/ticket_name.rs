@@ -50,7 +50,7 @@ pub fn is_system_ticket_name(ticket_name: &str) -> bool {
 mod tests {
     use super::*;
 
-    /// The Walk-in badge in `frontend-leptos/src/pages/admin.rs` compares with
+    /// The Walk-in badge in `frontend-leptos/src/pages/admin/attendee_row.rs` compares with
     /// `eq_ignore_ascii_case("Walk-in")`. If this constant is ever renamed, the
     /// badge silently stops appearing — there is no type connecting them.
     #[test]
