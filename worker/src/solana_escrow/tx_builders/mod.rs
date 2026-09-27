@@ -3,10 +3,10 @@
 use base64::Engine;
 use event_checkin_domain::onchain::{EscrowIxData, EventIx};
 
+use super::blockhash::get_latest_blockhash;
 use super::crypto::{find_program_address, get_associated_token_address, pubkey_from_base58};
 use super::wire::{
-    AccountMeta, CompiledInstruction, build_message_accounts, get_latest_blockhash,
-    serialize_transaction,
+    AccountMeta, CompiledInstruction, build_message_accounts, serialize_transaction,
 };
 use super::{
     ASSOCIATED_TOKEN_PROGRAM_ID, EscrowError, INSTRUCTIONS_SYSVAR_ID, PubkeyBytes, RENT_SYSVAR_ID,

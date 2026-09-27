@@ -1,4 +1,4 @@
-//! Wire format serialization, blockhash management, and on-chain verification.
+//! Wire format serialization and on-chain verification.
 
 use super::crypto::{find_program_address, pubkey_from_base58, pubkey_to_base58};
 use super::{EscrowError, PubkeyBytes, escrow_program_id};
@@ -8,110 +8,6 @@ use super::{EscrowError, PubkeyBytes, escrow_program_id};
 // with {"code":-32603,"message":"Method not found"}, so we fall back to N
 // individual `getAccountInfo` calls run in parallel.
 use futures_util::future::join_all;
-
-// ---------------------------------------------------------------------------
-// Blockhash cache
-// ---------------------------------------------------------------------------
-
-/// How long one isolate reuses a fetched blockhash.
-///
-/// A blockhash is valid for 150 slots (roughly 60–90 s), and the wallet still
-/// has to sign after we hand the transaction over, so the copy we serve must be
-/// young. This used to be a 30 s KV entry, but KV rejects `expiration_ttl`
-/// below 60, so every put failed and every build went to the RPC (.issues/156).
-/// KV would be the wrong tier even at 60 s: an edge read can lag a write by up
-/// to 60 s, so a served hash could be two minutes old.
-const BLOCKHASH_CACHE_TTL_MS: f64 = 20_000.0;
-
-type BlockhashIsolateCache =
-    crate::isolate_cache::BoundedCache<String, crate::isolate_cache::Expiring<String>>;
-
-thread_local! {
-    /// The last blockhash per RPC URL, for this isolate only.
-    static BLOCKHASH_IN_ISOLATE: std::cell::RefCell<BlockhashIsolateCache> =
-        const { std::cell::RefCell::new(crate::isolate_cache::BoundedCache::new(2)) };
-}
-
-// ---------------------------------------------------------------------------
-// RPC helpers
-// ---------------------------------------------------------------------------
-
-/// Recent blockhash from Solana RPC.
-pub(crate) struct RecentBlockhash {
-    /// The blockhash as base58 string.
-    pub(crate) value: String,
-}
-
-/// Fetch the latest blockhash, reusing this isolate's copy while it is younger
-/// than [`BLOCKHASH_CACHE_TTL_MS`].
-pub(crate) async fn get_latest_blockhash(rpc_url: &str) -> Result<RecentBlockhash, EscrowError> {
-    let now_ms = js_sys::Date::now();
-    let cached = BLOCKHASH_IN_ISOLATE
-        .with_borrow(|cache| cache.get(rpc_url).and_then(|entry| entry.get(now_ms)));
-    if let Some(value) = cached {
-        tracing::debug!("using cached blockhash");
-        return Ok(RecentBlockhash { value });
-    }
-
-    let blockhash = fetch_blockhash_from_rpc(rpc_url).await?;
-    let expires_at_ms = now_ms + BLOCKHASH_CACHE_TTL_MS;
-    let entry = crate::isolate_cache::Expiring::new(blockhash.value.clone(), expires_at_ms);
-    BLOCKHASH_IN_ISOLATE.with_borrow_mut(|cache| cache.insert(rpc_url.to_string(), entry));
-    Ok(blockhash)
-}
-
-/// Fetch the latest blockhash directly from the Solana JSON-RPC endpoint.
-async fn fetch_blockhash_from_rpc(rpc_url: &str) -> Result<RecentBlockhash, EscrowError> {
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-deposit",
-        "method": "getLatestBlockhash",
-        "params": [{ "commitment": "finalized" }]
-    });
-
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(rpc_url, &init)
-        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
-
-    let mut response = worker::Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("fetch: {e:?}")))?;
-
-    let status = response.status_code();
-    if !(200..300).contains(&status) {
-        let text = response.text().await.unwrap_or_default();
-        return Err(EscrowError::RpcFailed(format!("HTTP {status}: {text}")));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("read body: {e:?}")))?;
-
-    let json: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
-
-    let blockhash = json["result"]["value"]["blockhash"]
-        .as_str()
-        .ok_or_else(|| EscrowError::RpcFailed("no blockhash in response".to_string()))?;
-
-    Ok(RecentBlockhash {
-        value: blockhash.to_string(),
-    })
-}
 
 // ---------------------------------------------------------------------------
 // Escrow PDA address derivation

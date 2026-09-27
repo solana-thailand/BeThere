@@ -1,6 +1,6 @@
 # 156: The Solana blockhash cache never stored anything
 
-**Status:** fixed on develop 2026-09-28 (session `event-checkin-7c`). Not deployed. Staging and prod still run the old code. Found during the plan 028 M1 burst run on staging.
+**Status:** fixed on develop 2026-09-28 (session `event-checkin-7c`). Not deployed. Staging and prod still run the old code. Found during the plan 028 M1 burst run on staging. The one-retry follow-up (session `event-checkin-62`) is also on develop only.
 
 ## What happens
 
@@ -60,11 +60,40 @@ never showed up.
   `.max(KV_MIN_TTL)`). A planted `const … = 30` fails it. Every other TTL in
   the tree is already ≥ 60.
 
+## Follow-up: one retry on a transient failure (session `event-checkin-62`)
+
+Per-isolate means each isolate makes its own first fetch. A burst that lands
+on many cold isolates at once, or on one warm isolate right after its copy
+expires, still makes one RPC call per request that misses. A 429 on that call
+was a 500 to the wallet.
+
+- `solana_escrow/blockhash.rs` (the blockhash code moved out of `wire.rs`,
+  which was 1,021 lines after the change) retries `getLatestBlockhash` once
+  when the first attempt gets 429, 5xx or no response. Other statuses and
+  malformed bodies fail at once.
+- The pause is 500–1,000 ms: `rpc_retry::retry_delay_ms` adds the failure's
+  millisecond mod 501. Requests rejected in one burst fan out instead of
+  retrying together. It is not random because `solana_escrow` is under the
+  no-RNG guard (`tests/deterministic_monetary_code.rs`), which caught a
+  `Math::random` draft.
+- Tests: `worker/tests/rpc_retry.rs` (5). Dropping `429` from the transient
+  set fails them.
+- Not measured yet: there is no staging deploy of this. The burst rerun
+  (plan 028 M1, `.benchmarks/004`) should show the 429 lines as retries
+  rather than 500s.
+
+Declined, with reasons:
+- **Share the hash across isolates through KV, stamped with its fetch time.**
+  A KV read at a PoP is itself cached for at least 60 s (`cacheTtl` default
+  and floor), so under a burst most readers would get a copy past the 20 s
+  budget, reject it, fetch, and write again. On the Free plan, KV writes are
+  capped per day. It would add writes and save little.
+- **Single-flight within an isolate** (concurrent misses await one fetch).
+  Workers do not let one request await I/O started by another request's
+  context, and a waiter would fail if the owning request is cancelled.
+
 ## Not covered
 
-- Per-isolate means each isolate makes its own first fetch. A burst that
-  lands on many cold isolates at once still makes one RPC call per isolate.
-  Far fewer calls than before, but not zero.
 - The burst run stopped at concurrency 10. CPU was 6–17 ms per request, all
   `ok`, and no `exceededCpu`. Going higher would have only measured Helius's
   rate limit. Rerun it after this deploys (plan 028 M1).
