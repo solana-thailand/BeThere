@@ -404,6 +404,54 @@ pub fn Adventure() -> impl IntoView {
         }
     };
 
+    // One move, shared by keyboard, d-pad and swipe. Every input path must
+    // stop at a finished level: the auto-save Effect tracks `game`, so a move
+    // after completion would re-run it and post another save.
+    let step = move |dir: engine::Direction| {
+        let g = game.get();
+        if g.active_puzzle.is_some() || g.showing_intro || g.level_completed {
+            return;
+        }
+        let (new_state, result) = engine::apply_move(g, dir);
+        match &result {
+            MoveResult::CollectedKey { name, description } => {
+                set_notification.set(Some(format!("Collected: {name} — {description}")));
+                auto_dismiss_notification();
+            }
+            MoveResult::ExitReached => {
+                let levels = levels_signal.read();
+                if let Some(level) = levels.get(new_state.current_level)
+                    && engine::check_level_complete(&new_state, level)
+                {
+                    let completed_idx = new_state.current_level;
+                    set_game.update(|g| {
+                        g.player_pos = new_state.player_pos;
+                        g.moves_count = new_state.moves_count;
+                        g.level_completed = true;
+                    });
+                    set_completed_levels.update(|c| {
+                        c.insert(completed_idx);
+                    });
+                    set_notification.set(Some("Level Complete!".to_string()));
+                    return;
+                }
+            }
+            MoveResult::HitCodeBlock { puzzle_id } | MoveResult::HitGate { puzzle_id } => {
+                let levels = levels_signal.read();
+                set_game.update(|g| {
+                    *g = engine::open_puzzle_by_id(g.clone(), puzzle_id, &levels);
+                });
+                set_notification.set(Some(
+                    "Gate locked! Solve the puzzle to open it.".to_string(),
+                ));
+                auto_dismiss_notification();
+                return;
+            }
+            _ => {}
+        }
+        set_game.set(new_state);
+    };
+
     // Handle keyboard input — global listener
     let handle_keydown = move |ev: web_sys::KeyboardEvent| {
         let (has_dialog, showing_intro, has_puzzle) = game.with(|g| {
@@ -452,48 +500,7 @@ pub fn Adventure() -> impl IntoView {
 
         if let Some(dir) = direction {
             ev.prevent_default();
-            let current = game.get();
-            let (new_state, result) = engine::apply_move(current, dir);
-
-            match &result {
-                MoveResult::CollectedKey { name, description } => {
-                    set_notification.set(Some(format!("Collected: {name} — {description}")));
-                    auto_dismiss_notification();
-                }
-                MoveResult::ExitReached => {
-                    let levels = levels_signal.read();
-                    if let Some(level) = levels.get(new_state.current_level)
-                        && engine::check_level_complete(&new_state, level)
-                    {
-                        let completed_idx = new_state.current_level;
-                        set_game.update(|g| {
-                            g.player_pos = new_state.player_pos;
-                            g.moves_count = new_state.moves_count;
-                            g.level_completed = true;
-                        });
-                        set_completed_levels.update(|c| {
-                            c.insert(completed_idx);
-                        });
-                        set_notification.set(Some("Level Complete!".to_string()));
-                        return;
-                    }
-                }
-                MoveResult::HitCodeBlock { puzzle_id } | MoveResult::HitGate { puzzle_id } => {
-                    let levels = levels_signal.read();
-                    set_game.update(|g| {
-                        *g = engine::open_puzzle_by_id(g.clone(), puzzle_id, &levels);
-                    });
-                    set_notification.set(Some(
-                        "Gate locked! Solve the puzzle to open it.".to_string(),
-                    ));
-                    auto_dismiss_notification();
-                    return;
-                }
-                MoveResult::Blocked => {}
-                _ => {}
-            }
-
-            set_game.set(new_state);
+            step(dir);
         }
     };
 
@@ -504,52 +511,11 @@ pub fn Adventure() -> impl IntoView {
     // D-pad handler for mobile
     let dpad_move = move |dir: engine::Direction| {
         dismiss_intro();
-        let g = game.get();
-        if g.active_dialog.is_some() {
+        if game.with(|g| g.active_dialog.is_some()) {
             set_game.update(|g| *g = engine::dismiss_dialog(g.clone()));
             return;
         }
-        if g.active_puzzle.is_some() || g.showing_intro || g.level_completed {
-            return;
-        }
-        let (new_state, result) = engine::apply_move(g, dir);
-        match &result {
-            MoveResult::CollectedKey { name, description } => {
-                set_notification.set(Some(format!("Collected: {name} — {description}")));
-                auto_dismiss_notification();
-            }
-            MoveResult::ExitReached => {
-                let levels = levels_signal.read();
-                if let Some(level) = levels.get(new_state.current_level)
-                    && engine::check_level_complete(&new_state, level)
-                {
-                    let completed_idx = new_state.current_level;
-                    set_game.update(|g| {
-                        g.player_pos = new_state.player_pos;
-                        g.moves_count = new_state.moves_count;
-                        g.level_completed = true;
-                    });
-                    set_completed_levels.update(|c| {
-                        c.insert(completed_idx);
-                    });
-                    set_notification.set(Some("Level Complete!".to_string()));
-                    return;
-                }
-            }
-            MoveResult::HitCodeBlock { puzzle_id } | MoveResult::HitGate { puzzle_id } => {
-                let levels = levels_signal.read();
-                set_game.update(|g| {
-                    *g = engine::open_puzzle_by_id(g.clone(), puzzle_id, &levels);
-                });
-                set_notification.set(Some(
-                    "Gate locked! Solve the puzzle to open it.".to_string(),
-                ));
-                auto_dismiss_notification();
-                return;
-            }
-            _ => {}
-        }
-        set_game.set(new_state);
+        step(dir);
     };
 
     // Swipe support for mobile
