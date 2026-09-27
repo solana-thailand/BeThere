@@ -18,6 +18,30 @@ pub fn PublicEvent() -> impl IntoView {
     // Reactive state
     let (state, set_state) = signal(PublicEventState::Loading);
     let (countdown, set_countdown) = signal(String::new());
+    // Start time the countdown ticks toward. The interval lives in an Effect
+    // keyed on this signal, because an `on_cleanup` inside the fetch task runs
+    // after `.await`, where there is no owner, so it never ran and each visit
+    // left a 1 s interval behind.
+    let (countdown_start_ms, set_countdown_start_ms) = signal(None::<i64>);
+    Effect::new(move |_| {
+        let Some(start_ms) = countdown_start_ms.get() else {
+            return;
+        };
+        if let Ok(handle) = set_interval_with_handle(
+            move || {
+                let remaining = start_ms - js_sys::Date::now() as i64;
+                if remaining <= 0 {
+                    set_countdown.set(String::new());
+                    set_countdown_start_ms.set(None);
+                } else {
+                    set_countdown.set(format_countdown(remaining));
+                }
+            },
+            std::time::Duration::from_secs(1),
+        ) {
+            on_cleanup(move || handle.clear());
+        }
+    });
     let (event_completed, set_event_completed) = signal(false);
     let (event_name, set_event_name) = signal(String::new());
     let (share_copied, set_share_copied) = signal(false);
@@ -57,6 +81,9 @@ pub fn PublicEvent() -> impl IntoView {
             return;
         }
 
+        // A new slug must not keep ticking toward the previous event's start.
+        set_countdown_start_ms.set(None);
+        set_countdown.set(String::new());
         log::info!("[public_event] fetching slug: {slug}");
         let slug_clone = slug.clone();
         leptos::task::spawn_local(async move {
@@ -100,22 +127,7 @@ pub fn PublicEvent() -> impl IntoView {
                                             if !is_completed && start_ms > now_ms {
                                                 set_countdown
                                                     .set(format_countdown(start_ms - now_ms));
-
-                                                if let Ok(handle) = set_interval_with_handle(
-                                                    move || {
-                                                        let now = js_sys::Date::now() as i64;
-                                                        let remaining = start_ms - now;
-                                                        if remaining <= 0 {
-                                                            set_countdown.set(String::new());
-                                                        } else {
-                                                            set_countdown
-                                                                .set(format_countdown(remaining));
-                                                        }
-                                                    },
-                                                    std::time::Duration::from_secs(1),
-                                                ) {
-                                                    on_cleanup(move || handle.clear());
-                                                }
+                                                set_countdown_start_ms.set(Some(start_ms));
                                             }
                                         } else {
                                             set_state.set(PublicEventState::Error(

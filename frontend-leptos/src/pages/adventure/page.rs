@@ -492,8 +492,9 @@ pub fn Adventure() -> impl IntoView {
         }
     };
 
-    // Global keyboard listener
-    let _ = window_event_listener(leptos::ev::keydown, handle_keydown);
+    // Global keyboard listener, removed on unmount (dropping the handle does not).
+    let keydown = window_event_listener(leptos::ev::keydown, handle_keydown);
+    on_cleanup(move || keydown.remove());
 
     // D-pad handler for mobile
     let dpad_move = move |dir: engine::Direction| {

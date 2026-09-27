@@ -64,7 +64,12 @@ pub fn Admin() -> impl IntoView {
     // Data state
     let (attendees, set_attendees) = signal(Vec::<AttendeeListItem>::new());
     let (stats, set_stats) = signal(None::<StatsResponse>);
+    // `search_input` follows the box; `search_query` drives the roster filter
+    // and trails it by SEARCH_DEBOUNCE_MS, so typing a name filters once
+    // rather than once per keystroke.
+    let (search_input, set_search_input) = signal(String::new());
     let (search_query, set_search_query) = signal(String::new());
+    let search_timer = StoredValue::new(None::<TimeoutHandle>);
     let (is_loading, set_is_loading) = signal(true);
     let (qr_generating, set_qr_generating) = signal(false);
     let (qr_result, set_qr_result) = signal(None::<GenerateQrData>);
@@ -105,6 +110,8 @@ pub fn Admin() -> impl IntoView {
 
     // B6: Pagination state — show PAGE_SIZE attendees at a time
     const PAGE_SIZE: usize = 50;
+    /// Delay between the last keystroke in the roster search and the refilter.
+    const SEARCH_DEBOUNCE_MS: u64 = 150;
     let (visible_count, set_visible_count) = signal(PAGE_SIZE);
 
     // Refresh counter — increment to trigger data reload
@@ -469,6 +476,7 @@ pub fn Admin() -> impl IntoView {
     let row_ctx = RowCtx {
         active_event_id,
         deposit_enabled: current_deposit_enabled,
+        selected_ids,
         set_selected_ids,
         switching_ids,
         set_switching_ids,
@@ -648,10 +656,18 @@ pub fn Admin() -> impl IntoView {
                         <input
                             type="text"
                             placeholder="Search by name, email, ID, or ticket..."
-                            prop:value=move || search_query.get()
+                            prop:value=move || search_input.get()
                             on:input=move |ev| {
                                 let val = event_target_value(&ev);
-                                set_search_query.set(val);
+                                set_search_input.set(val.clone());
+                                if let Some(pending) = search_timer.get_value() {
+                                    pending.clear();
+                                }
+                                let handle = set_timeout_with_handle(
+                                    move || set_search_query.set(val),
+                                    std::time::Duration::from_millis(SEARCH_DEBOUNCE_MS),
+                                );
+                                search_timer.set_value(handle.ok());
                             }
                         />
                     </div>
@@ -785,8 +801,9 @@ pub fn Admin() -> impl IntoView {
 
                         // Inline attendee items with checkboxes (B6: paginated)
                         {move || {
+                            // Rows read the selection themselves, so ticking a
+                            // checkbox no longer rebuilds every row.
                             let filtered = filtered_attendees.get();
-                            let selected = selected_ids.get();
                             let limit = visible_count.get();
                             if filtered.is_empty() {
                                 view! {
@@ -801,10 +818,7 @@ pub fn Admin() -> impl IntoView {
 
                                 let items = visible
                                     .into_iter()
-                                    .map(|attendee| {
-                                        let is_selected = selected.contains(&attendee.api_id);
-                                        attendee_row(attendee, is_selected, row_ctx)
-                                    })
+                                    .map(|attendee| attendee_row(attendee, row_ctx))
                                     .collect_view();
 
                                 view! {

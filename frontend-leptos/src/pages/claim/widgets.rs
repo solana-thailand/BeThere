@@ -78,18 +78,22 @@ pub(super) fn SessionTimer(start_ms: i64, end_ms: i64) -> impl IntoView {
         leptos::task::spawn_local(async move {
             loop {
                 let now = js_sys::Date::now();
-                if now < event_start_ms {
+                // `try_set` hands the value back once the timer is unmounted;
+                // stop then, or every remount stacks another loop until the
+                // event ends.
+                let (label, value) = if now < event_start_ms {
                     let diff = ((event_start_ms - now) / 1000.0) as i64;
-                    set_s.set("Starts in".to_string());
-                    set_t.set(format_duration(diff));
+                    ("Starts in", format_duration(diff))
                 } else if now < event_end_ms {
                     let diff = ((now - event_start_ms) / 1000.0) as i64;
-                    set_s.set("Live".to_string());
-                    set_t.set(format!("+{}", format_duration(diff)));
+                    ("Live", format!("+{}", format_duration(diff)))
                 } else {
-                    set_s.set("Ended".to_string());
-                    set_t.set("Thanks for coming!".to_string());
+                    let _ = set_s.try_set("Ended".to_string());
+                    let _ = set_t.try_set("Thanks for coming!".to_string());
                     break; // stop polling after event ends
+                };
+                if set_s.try_set(label.to_string()).is_some() || set_t.try_set(value).is_some() {
+                    break;
                 }
                 // 5s interval — reduces re-renders vs 1s; sufficient granularity
                 // for countdown/elapsed display on event time scales (hours).

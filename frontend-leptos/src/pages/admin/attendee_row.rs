@@ -23,6 +23,7 @@ use crate::utils;
 pub(super) struct RowCtx {
     pub(super) active_event_id: ReadSignal<Option<String>>,
     pub(super) deposit_enabled: Memo<bool>,
+    pub(super) selected_ids: ReadSignal<HashSet<String>>,
     pub(super) set_selected_ids: WriteSignal<HashSet<String>>,
     pub(super) switching_ids: ReadSignal<HashSet<String>>,
     pub(super) set_switching_ids: WriteSignal<HashSet<String>>,
@@ -36,14 +37,11 @@ pub(super) struct RowCtx {
 }
 
 /// Render one roster row.
-pub(super) fn attendee_row(
-    attendee: &AttendeeListItem,
-    is_selected: bool,
-    ctx: RowCtx,
-) -> impl IntoView {
+pub(super) fn attendee_row(attendee: &AttendeeListItem, ctx: RowCtx) -> impl IntoView {
     let RowCtx {
         active_event_id,
         deposit_enabled: current_deposit_enabled,
+        selected_ids,
         set_selected_ids,
         switching_ids,
         set_switching_ids,
@@ -165,18 +163,24 @@ pub(super) fn attendee_row(
     let apply_credit_id_disabled = attendee.api_id.clone();
     let duplicate_badge = duplicate_hint(&attendee.possible_duplicates);
 
+    // A memo per row: toggling one checkbox re-renders that row only.
+    let is_selected = {
+        let id = attendee.api_id.clone();
+        Memo::new(move |_| selected_ids.with(|ids| ids.contains(&id)))
+    };
+
     view! {
         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
             // Row 1: checkbox + name + badges + status indicators
             <div class="attendee-row-top">
                 <button
-                    class=format!("attendee-checkbox{}", if is_selected { " checked" } else { "" })
+                    class=move || format!("attendee-checkbox{}", if is_selected.get() { " checked" } else { "" })
                     on:click=move |_| set_selected_ids.update(|ids| {
                         if ids.contains(&api_id) { ids.remove(&api_id); } else { ids.insert(api_id.clone()); }
                     })
                     disabled=is_checked_in
                 >
-                    {if is_selected { "✓" } else { "" }}
+                    {move || if is_selected.get() { "✓" } else { "" }}
                 </button>
                 <div class="attendee-name">{name.clone()}</div>
                 <span class=p_class.clone()>{p_label.clone()}</span>

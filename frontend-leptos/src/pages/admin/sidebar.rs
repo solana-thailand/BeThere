@@ -24,69 +24,63 @@ pub(super) struct SidebarState {
     pub(super) attendees: ReadSignal<Vec<AttendeeListItem>>,
 }
 
-/// Keyboard shortcuts for sidebar navigation (Alt+1…Alt+0).
+/// Keyboard shortcuts for sidebar navigation (Alt+1…Alt+0). Call from the
+/// component body: the listener is removed when that owner is cleaned up.
 pub(super) fn install_section_shortcuts(
     set_active_section: WriteSignal<AdminSection>,
     set_active_tab: WriteSignal<DashboardTab>,
 ) {
-    Effect::new(move |_| {
-        let handler = wasm_bindgen::closure::Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
-            move |ev: web_sys::KeyboardEvent| {
-                if ev.alt_key() {
-                    match ev.key().as_str() {
-                        "1" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::Events);
-                        }
-                        "2" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::Campaigns);
-                        }
-                        "3" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::Quiz);
-                        }
-                        "4" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::FormBuilder);
-                        }
-                        "5" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::Adventure);
-                        }
-                        "6" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::Attendance);
-                            set_active_tab.set(DashboardTab::InPerson);
-                        }
-                        "7" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::Attendance);
-                            set_active_tab.set(DashboardTab::Online);
-                        }
-                        "8" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::Deposits);
-                        }
-                        "9" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::Escrow);
-                        }
-                        "0" => {
-                            ev.prevent_default();
-                            set_active_section.set(AdminSection::Cancellation);
-                        }
-                        _ => {}
+    let shortcuts =
+        window_event_listener(leptos::ev::keydown, move |ev: web_sys::KeyboardEvent| {
+            if ev.alt_key() {
+                match ev.key().as_str() {
+                    "1" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::Events);
                     }
+                    "2" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::Campaigns);
+                    }
+                    "3" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::Quiz);
+                    }
+                    "4" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::FormBuilder);
+                    }
+                    "5" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::Adventure);
+                    }
+                    "6" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::Attendance);
+                        set_active_tab.set(DashboardTab::InPerson);
+                    }
+                    "7" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::Attendance);
+                        set_active_tab.set(DashboardTab::Online);
+                    }
+                    "8" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::Deposits);
+                    }
+                    "9" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::Escrow);
+                    }
+                    "0" => {
+                        ev.prevent_default();
+                        set_active_section.set(AdminSection::Cancellation);
+                    }
+                    _ => {}
                 }
-            },
-        );
-        let window = web_sys::window().expect("no window");
-        use wasm_bindgen::JsCast;
-        let _ =
-            window.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
-        handler.forget();
-    });
+            }
+        });
+    on_cleanup(move || shortcuts.remove());
 }
 
 /// Render the admin sidebar.
