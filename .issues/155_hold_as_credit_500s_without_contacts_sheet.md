@@ -1,6 +1,6 @@
 # 155: Hold as credit 500s when no contacts sheet is configured
 
-**Status:** fixed on develop, not deployed. Found on staging on 2026-09-27 (session `event-checkin-40`) while building a fixture for the `admin_deposit.rs` split check.
+**Status:** fixed on develop (`3f757cce`), verified on staging (version `2dc6235a`), not on prod. Found on staging on 2026-09-27 (session `event-checkin-40`) while building a fixture for the `admin_deposit.rs` split check.
 
 ## What happens
 
@@ -55,3 +55,12 @@ verified slip (`/api/deposit/thb/admin-upload`), then
 `held_as_credit = 1`, and one `credit_ledger` row with `reason = 'hold'` for
 the event. The fixture script is `/tmp/ux_verify/split_fixture.sh` (outside the
 repo).
+
+## Verified on staging (2026-09-27)
+
+On fixture event `split-1790468757`, the same admin hold that returned
+`internal error` on version `0c91c0a9` returned 200 ("500 THB held as credit")
+on `2dc6235a`. Read back: `held_as_credit = 1` and one `credit_ledger` row with
+`reason = 'hold'`. The event was archived and deleted afterwards. The ledger
+row stays, so the staging liability chip now shows 500 THB for
+`probe-Held-split-1790468757@example.com`.
