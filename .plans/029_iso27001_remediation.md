@@ -85,7 +85,7 @@
       - Not precompressed: that needs a `run_worker_first` entry, which is the
         trap in `.issues/144`. Cloudflare's on-the-fly brotli is enough for a
         lazy iOS-only file.
-        **Superseded 2026-09-28 (plan 028 F10, `b15192f9`, on `develop`):** it is now
+        **Superseded 2026-09-28 (plan 028 F10, `f3817f42`, on `develop`):** it is now
         precompressed (53.4 → 33.2 KB). The `.issues/144` trap was the array
         form dropping `/api/*`; the new `/jsqr-*.js` entry keeps `/api/*` first, and
         `worker/tests/precompressed_asset.rs::table_routes_and_build_list_agree`
@@ -119,7 +119,7 @@
       scheme (5.12, 8.24).
 - [ ] Scheduled, encrypted D1 export with an offsite copy and a restore drill. **Blocker (2026-09-28): owner decision + credentials.** An offsite destination and credentials for it do not exist yet.
       Covers R2 and KV too (5.30, 8.13).
-- [ ] CSP: remove `script-src 'unsafe-inline'` (8.23).
+- [ ] CSP: remove `script-src 'unsafe-inline'` (8.23). **Implemented on branch `feature/csp-no-unsafe-inline` (`c4710201`, 2026-09-28), deliberately not merged:** `develop` ships to prod on 3 Oct and this changes how every page boots. Blocker: the RTM #6 hold; merge after 2026-10-04, then soak on staging. Evidence is in that commit's copy of this plan.
 - [ ] A separate log-fingerprint key, instead of reusing `JWT_SECRET` (8.11). **Blocker (2026-09-28): credentials.** A new secret has to be provisioned on staging and prod; the code change is small once it exists.
       Move capability tokens out of URL paths (`.issues/071`).
 
