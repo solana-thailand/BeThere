@@ -13,15 +13,19 @@ use std::collections::HashMap;
 use leptos::prelude::*;
 
 use crate::api::{
-    self, AdminHoldRequest, ClearCreditRefundRequest, CompDepositRequest, CreditLiability,
-    CreditRefundRequest, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest,
+    self, AdminHoldRequest, CompDepositRequest, CreditLiability, CreditRefundRequest,
+    MarkRefundRequest, ThbDepositInfo, VerifySlipRequest,
 };
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
 use crate::pages::admin_deposit_bank_info::refund_bank_info;
+use crate::pages::admin_deposit_credit_requests::CreditRefundRequests;
 use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
+use crate::pages::admin_deposit_settled::{SettledDepositList, SettledKind};
+use crate::pages::admin_deposit_slip_link::slip_link;
 use crate::pages::admin_deposit_slip_proposal::SlipProposalLine;
+use crate::pages::admin_deposit_summary_chips::DepositSummaryChips;
 use crate::pages::admin_linked_emails::AdminLinkedEmails;
 use crate::pages::admin_refund_queue_filter::{RefundQueueFilter, RefundQueueFilterBar};
 use crate::utils;
@@ -89,10 +93,6 @@ pub fn AdminDeposits(
     // other reads. Empty when D1 is unreachable (admin view still renders).
     let (credit_refund_requests, set_credit_refund_requests) =
         signal(Vec::<CreditRefundRequest>::new());
-    // Tracks which email is currently being cleared (organizer "✓ Clear" click)
-    // — disables the row's clear button while the POST is in flight and keys
-    // per-row pending state. Idempotent clear, so a re-click is a safe retry.
-    let (clear_pending_email, set_clear_pending_email) = signal(None::<String>);
     // Record-slip-on-behalf modal visibility — opens when admin clicks the
     // "Record Slip" button in the Deposits tab header. Backed by the new
     // `POST /api/deposit/thb/admin-upload` endpoint (skips the VULN-012
@@ -233,42 +233,6 @@ pub fn AdminDeposits(
     // Helper to refresh data after an action
     let refresh_data = move || {
         set_refresh_counter.update(|c| *c += 1);
-    };
-
-    // Clear a credit-refund-request flag (Issue #061 Phase 3 — exit path).
-    // Organizer clicks "✓ Clear" after processing the payout through the
-    // existing refund tooling. Idempotent server-side, so a re-click is a safe
-    // retry; the row's clear button stays disabled while its POST is in flight.
-    let handle_clear_credit_refund_request = move |email: String| {
-        let set_toast = set_toast;
-        let set_clear_pending = set_clear_pending_email;
-        let refresh = refresh_data;
-        set_clear_pending.set(Some(email.clone()));
-
-        leptos::task::spawn_local(async move {
-            let body = ClearCreditRefundRequest {
-                email: email.clone(),
-            };
-            match api::clear_credit_refund_request(&body).await {
-                Ok(_) => {
-                    components::show_toast(
-                        &set_toast,
-                        "Cleared credit refund request.",
-                        ToastType::Success,
-                    );
-                    refresh();
-                }
-                Err(e) => {
-                    log::warn!("[admin-deposit] failed to clear credit refund request: {e}");
-                    components::show_toast(
-                        &set_toast,
-                        &format!("Failed to clear request: {e}"),
-                        ToastType::Error,
-                    );
-                }
-            }
-            set_clear_pending.set(None);
-        });
     };
 
     // Approve a slip
@@ -534,68 +498,11 @@ pub fn AdminDeposits(
                 pending_attendee_id=pending_attendee_id
                 set_pending_attendee_id=set_pending_attendee_id
             />
-            // Credit liability header chip — organizer's total cash held as
-            // rolling deposit credit across all contacts (Issue #061 Phase 2
-            // option a2). Cross-event (global); only renders when there's
-            // actual liability to surface (no clutter when balance is zero).
-            <Show when=move || { let l = liability.get(); l.total_thb > 0 || l.total_usdc > 0 } fallback=|| view! { <div></div> }>
-                <div
-                    class="admin-dep-liability-chip"
-                    title="Your total cash liability from rolling deposit credit — attendees who chose credit over refund. Auto-applies to their next event registration."
-                >
-                    <Icon icon=IconName::MoneyWings class="icon-sm"/>
-                    <span>
-                        {move || {
-                            let l = liability.get();
-                            let mut parts: Vec<String> = Vec::new();
-                            if l.total_thb > 0 {
-                                parts.push(format!("{} THB", l.total_thb));
-                            }
-                            if l.total_usdc > 0 {
-                                parts.push(format!("{} USDC", l.total_usdc));
-                            }
-                            format!(
-                                "Total credit held: {} across {} contacts",
-                                parts.join(" + "),
-                                l.contact_count
-                            )
-                        }}
-                    </span>
-                </div>
-            </Show>
-            // Per-event Cash/Credit/Comp summary chip (GOAT reconciliation): how
-            // attendees got in for THIS event — paid cash, spent rolling credit,
-            // or staff comp. Complements the per-attendee "Credit ✓" roster badge.
-            <Show when=move || { let s = source_summary.get(); s.cash_count + s.credit_count + s.comp_count > 0 } fallback=|| view! { <div></div> }>
-                <div
-                    class="admin-dep-liability-chip"
-                    title="How attendees got in for this event: paid cash vs spent rolling credit vs free (staff/comp)."
-                >
-                    <Icon icon=IconName::MoneyWings class="icon-sm"/>
-                    <span>
-                        {move || {
-                            let s = source_summary.get();
-                            format!(
-                                "This event \u{2014} Cash: {} (\u{0e3f}{}) \u{00b7} Credit: {} (\u{0e3f}{}) \u{00b7} Free/staff: {}",
-                                s.cash_count, s.cash_thb, s.credit_count, s.credit_thb, s.comp_count
-                            )
-                        }}
-                    </span>
-                </div>
-            </Show>
-            // Who got in via credit (names) — the GOAT credit-used list on the money page.
-            <Show when=move || !credit_used_list.get().is_empty() fallback=|| view! { <div></div> }>
-                <div class="admin-dep-credit-used" style="margin:4px 0 8px; font-size:0.85em; opacity:0.85;">
-                    <strong>"Used credit: "</strong>
-                    {move || {
-                        let names: Vec<String> = credit_used_list.get().iter().map(|d| {
-                            let name = d.attendee_name.clone().unwrap_or_else(|| d.attendee_id.clone());
-                            format!("{name} (\u{0e3f}{})", d.amount_thb)
-                        }).collect();
-                        names.join(" \u{00b7} ")
-                    }}
-                </div>
-            </Show>
+            <DepositSummaryChips
+                liability=liability
+                source_summary=source_summary
+                credit_used_list=credit_used_list
+            />
             // Sub-tab navigation
             <div class="tabs">
                 <button
@@ -720,13 +627,6 @@ pub fn AdminDeposits(
                             let amount = format!("{} THB", slip.amount_thb);
                             let uploaded_ago = utils::time_ago(&slip.uploaded_at);
                             let uploaded_formatted = utils::format_timestamp(&slip.uploaded_at);
-                            let slip_url = slip.slip_url.clone();
-                            // Only real serving paths are viewable slips. Credit-covered /
-                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
-                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
-                            let has_slip_url = slip_url
-                                .as_deref()
-                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
                             let display_name = slip.attendee_name.as_deref().unwrap_or(&slip.attendee_id);
 
                             let slip_for_approve = slip.clone();
@@ -758,18 +658,7 @@ pub fn AdminDeposits(
                                                 {"Uploaded: "}
                                                 <span title={uploaded_formatted.clone()}>{uploaded_ago.clone()}</span>
                                             </div>
-                                            <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
-                                                <div class="admin-dep-slip-link-row">
-                                                    <a
-                                                        href=slip_url.clone().unwrap_or_default()
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        class="link-accent"
-                                                    >
-                                                        "View Slip"
-                                                    </a>
-                                                </div>
-                                            </Show>
+                                            {slip_link(slip.slip_url.clone())}
                                         </div>
                                         <div class="flex-row-gap">
                                             <button
@@ -858,13 +747,6 @@ pub fn AdminDeposits(
                             let verified_by = item.verified_by.as_deref().unwrap_or("Unknown");
                             let verified_at = item.verified_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
                             let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id);
-                            let slip_url = item.slip_url.clone();
-                            // Only real serving paths are viewable slips. Credit-covered /
-                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
-                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
-                            let has_slip_url = slip_url
-                                .as_deref()
-                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
                             let bank_info = refund_bank_info(
                                 item.bank_account.clone(),
                                 item.bank_name.clone(),
@@ -901,19 +783,7 @@ pub fn AdminDeposits(
                                                 {format!("Verified at: {verified_at}")}
                                             </div>
 
-                                            // Slip image link
-                                            <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
-                                                <div class="admin-dep-slip-link-row">
-                                                    <a
-                                                        href=slip_url.clone().unwrap_or_default()
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        class="link-accent"
-                                                    >
-                                                        "View Slip"
-                                                    </a>
-                                                </div>
-                                            </Show>
+                                            {slip_link(item.slip_url.clone())}
 
                                             {bank_info}
                                         </div>
@@ -1009,92 +879,7 @@ pub fn AdminDeposits(
                         </div>
                     </Show>
 
-                    {move || {
-                        let items: Vec<_> = refunded_list.get().iter().map(|item| {
-                            let amount = format!("{} THB", item.amount_thb);
-                            let verified_by = item.verified_by.as_deref().unwrap_or("Unknown").to_string();
-                            let refunded_at = item.refunded_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
-                            let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id).to_string();
-                            let slip_url = item.slip_url.clone();
-                            // Only real serving paths are viewable slips. Credit-covered /
-                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
-                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
-                            let has_slip_url = slip_url
-                                .as_deref()
-                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
-                            let bank_info = refund_bank_info(
-                                item.bank_account.clone(),
-                                item.bank_name.clone(),
-                                item.account_name.clone(),
-                                "⚠ No bank info was provided",
-                            );
-                            // Rows stored before .issues/145 may hold any scheme.
-                            let refund_proof_url = item
-                                .refund_proof_url
-                                .as_deref()
-                                .and_then(event_checkin_domain::validation::safe_document_link)
-                                .map(str::to_string);
-                            let has_refund_proof = refund_proof_url.is_some();
-
-                            (amount, verified_by, refunded_at, display_name, slip_url, has_slip_url, bank_info, refund_proof_url, has_refund_proof)
-                        }).collect();
-
-                        items.into_iter().map(|(amount, verified_by, refunded_at, display_name, slip_url, has_slip_url, bank_info, refund_proof_url, has_refund_proof)| {
-                            view! {
-                                <div class="card">
-                                    <div class="flex-row-wrap">
-                                        <div>
-                                            <div class="admin-attendee-name">
-                                                {format!("Attendee: {display_name}")}
-                                            </div>
-                                            <div class="admin-amount-line">
-                                                {amount}
-                                            </div>
-                                            <div class="panel-hint">
-                                                {format!("Verified by: {}", utils::escape_html(&verified_by))}
-                                            </div>
-                                            <div class="panel-hint">
-                                                {format!("Refunded at: {refunded_at}")}
-                                            </div>
-
-                                            // Slip image link
-                                            <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
-                                                <div class="admin-dep-slip-link-row">
-                                                    <a
-                                                        href=slip_url.clone().unwrap_or_default()
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        class="link-accent"
-                                                    >
-                                                        "View Slip"
-                                                    </a>
-                                                </div>
-                                            </Show>
-
-                                            {bank_info}
-
-                                            // Refund proof link
-                                            <Show when=move || has_refund_proof fallback=|| view! { <span></span> }>
-                                                <div class="admin-dep-slip-link-row">
-                                                    <a
-                                                        href=refund_proof_url.clone().unwrap_or_default()
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        class="link-accent"
-                                                    >
-                                                        "View Refund Proof"
-                                                    </a>
-                                                </div>
-                                            </Show>
-                                        </div>
-                                        <div>
-                                            <span class="badge badge-success">"✓ Refunded"</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            }
-                        }).collect_view()
-                    }}
+                    <SettledDepositList items=refunded_list kind=SettledKind::Refunded/>
                 </Show>
 
                 // ── Held as Credit Tab ──
@@ -1125,110 +910,11 @@ pub fn AdminDeposits(
                         when=move || refund_request_count.get() != 0
                         fallback=|| view! { <div></div> }
                     >
-                        <div class="admin-dep-credit-refund-requests">
-                            <div class="admin-dep-flow-hint">
-                                <Icon icon=IconName::Warning class="icon-sm"/>
-                                {format!(
-                                    "{} contact{} requested return of held credit. Process the payout through your refund channel, then clear the request.",
-                                    refund_request_count.get(),
-                                    if refund_request_count.get() != 1 { "s" } else { "" }
-                                )}
-                            </div>
-                            {move || {
-                                let items: Vec<_> = credit_refund_requests.get().iter().map(|req| {
-                                    let email = req.email.clone();
-                                    let name = req.name.clone();
-                                    let credit_thb = req.credit_thb;
-                                    let credit_usdc = req.credit_usdc;
-                                    let locked_thb = req.locked_thb;
-                                    let locked_until = req.locked_until.clone();
-                                    let requested_at = req.requested_at.clone();
-                                    (email, name, credit_thb, credit_usdc, locked_thb, locked_until, requested_at)
-                                }).collect();
-
-                                items.into_iter().map(|(email, name, credit_thb, credit_usdc, locked_thb, locked_until, requested_at)| {
-                                    let pending = clear_pending_email.get();
-                                    let is_pending = pending.as_deref() == Some(email.as_str());
-                                    // Issue #120 §3. Nothing payable and credit still covering an
-                                    // event that has not ended: clearing would reverse nothing and
-                                    // drop the request. The server refuses this with a 409 — this
-                                    // only saves the organizer the round trip, so a locked bucket
-                                    // the display does not cover (USDC) is still caught there.
-                                    let locked_only = credit_thb == 0 && credit_usdc == 0 && locked_thb > 0;
-                                    let display_name = if name.is_empty() { email.clone() } else { name.clone() };
-                                    let credit_str = if credit_thb > 0 && credit_usdc > 0 {
-                                        format!("{} THB + {} USDC", credit_thb, credit_usdc)
-                                    } else if credit_thb > 0 {
-                                        format!("{} THB", credit_thb)
-                                    } else if credit_usdc > 0 {
-                                        format!("{} USDC", credit_usdc)
-                                    } else {
-                                        "0".to_string()
-                                    };
-                                    let requested_display = if requested_at.is_empty() {
-                                        "N/A".to_string()
-                                    } else {
-                                        utils::format_timestamp(&requested_at)
-                                    };
-                                    let click_email = email.clone();
-                                    view! {
-                                        <div class="card admin-dep-credit-refund-row">
-                                            <div class="flex-row-wrap">
-                                                <div>
-                                                    <div class="admin-attendee-name">
-                                                        {utils::escape_html(&display_name)}
-                                                    </div>
-                                                    <div class="admin-amount-line">
-                                                        {format!("Held credit: {}", credit_str)}
-                                                    </div>
-                                                    {(locked_thb > 0).then(|| {
-                                                        let event = match locked_until.is_empty() {
-                                                            true => "an event that has not ended".to_string(),
-                                                            false => locked_until.clone(),
-                                                        };
-                                                        view! {
-                                                            <div class="panel-hint">
-                                                                {format!(
-                                                                    "{locked_thb} THB is covering {event} — it returns when that event ends"
-                                                                )}
-                                                            </div>
-                                                        }
-                                                    })}
-                                                    <div class="panel-hint">
-                                                        {format!("Requested: {}", requested_display)}
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <span class="badge badge-warning">"Refund Requested"</span>
-                                                    <button
-                                                        class="btn btn-success btn-xs admin-dep-clear-btn"
-                                                        disabled=move || is_pending || locked_only
-                                                        title=match locked_only {
-                                                            true => "Nothing to pay out yet — the credit is covering an event that has not ended. The request stays open until then.",
-                                                            false => "",
-                                                        }
-                                                        on:click=move |_| {
-                                                            handle_clear_credit_refund_request(click_email.clone());
-                                                        }
-                                                    >
-                                                        {move || if is_pending {
-                                                            view! { <span>"Clearing..."</span> }.into_any()
-                                                        } else if locked_only {
-                                                            view! { <span>"Waiting on event"</span> }.into_any()
-                                                        } else {
-                                                            view! {
-                                                                <Icon icon=IconName::Check class="icon-sm"/>
-                                                                " ✓ Clear"
-                                                            }.into_any()
-                                                        }}
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    }
-                                }).collect_view()
-                            }}
-                        </div>
+                        <CreditRefundRequests
+                            requests=credit_refund_requests
+                            set_toast=set_toast
+                            set_refresh_counter=set_refresh_counter
+                        />
                     </Show>
 
                     <Show
@@ -1240,73 +926,7 @@ pub fn AdminDeposits(
                         </div>
                     </Show>
 
-                    {move || {
-                        let items: Vec<_> = held_list.get().iter().map(|item| {
-                            let amount = format!("{} THB", item.amount_thb);
-                            let verified_by = item.verified_by.as_deref().unwrap_or("Unknown").to_string();
-                            let held_at = item.held_as_credit_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
-                            let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id).to_string();
-                            let slip_url = item.slip_url.clone();
-                            // Only real serving paths are viewable slips. Credit-covered /
-                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
-                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
-                            let has_slip_url = slip_url
-                                .as_deref()
-                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
-                            // Held credit can still be paid out later (a contact's
-                            // "Request Return"), so the payout details belong here too.
-                            let bank_info = refund_bank_info(
-                                item.bank_account.clone(),
-                                item.bank_name.clone(),
-                                item.account_name.clone(),
-                                "⚠ No bank info — ask attendee before any payout",
-                            );
-
-                            (amount, verified_by, held_at, display_name, slip_url, has_slip_url, bank_info)
-                        }).collect();
-
-                        items.into_iter().map(|(amount, verified_by, held_at, display_name, slip_url, has_slip_url, bank_info)| {
-                            view! {
-                                <div class="card">
-                                    <div class="flex-row-wrap">
-                                        <div>
-                                            <div class="admin-attendee-name">
-                                                {format!("Attendee: {display_name}")}
-                                            </div>
-                                            <div class="admin-amount-line">
-                                                {amount}
-                                            </div>
-                                            <div class="panel-hint">
-                                                {format!("Verified by: {}", utils::escape_html(&verified_by))}
-                                            </div>
-                                            <div class="panel-hint">
-                                                {format!("Held at: {held_at}")}
-                                            </div>
-
-                                            // Slip image link
-                                            <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
-                                                <div class="admin-dep-slip-link-row">
-                                                    <a
-                                                        href=slip_url.clone().unwrap_or_default()
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        class="link-accent"
-                                                    >
-                                                        "View Slip"
-                                                    </a>
-                                                </div>
-                                            </Show>
-
-                                            {bank_info}
-                                        </div>
-                                        <div>
-                                            <span class="badge badge-success">"✓ Held as Credit"</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            }
-                        }).collect_view()
-                    }}
+                    <SettledDepositList items=held_list kind=SettledKind::Held/>
                 </Show>
 
             </Show>

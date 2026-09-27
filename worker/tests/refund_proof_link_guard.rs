@@ -63,8 +63,8 @@ fn frontend_renders_only_safe_proof_links() {
             include_str!("../../frontend-leptos/src/pages/ticket/action_cards.rs"),
         ),
         (
-            "admin_deposit.rs",
-            include_str!("../../frontend-leptos/src/pages/admin_deposit.rs"),
+            "admin_deposit_settled.rs",
+            include_str!("../../frontend-leptos/src/pages/admin_deposit_settled.rs"),
         ),
     ] {
         assert!(
