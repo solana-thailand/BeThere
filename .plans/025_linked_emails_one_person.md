@@ -153,8 +153,12 @@ otherwise.
 
 - [x] 6.1 **Admin link:** allow super-admin manual linking with a mandatory reason
       and audit? **Yes (owner, 2026-09-25).** Built as 7.4.
-- [ ] 6.2 **One badge per wallet per event** (§5.3)? (Recommended: yes.)
-      **Blocked on owner decision.** Gates 7.8.
+- [x] 6.2 **One badge per wallet per event** (§5.3)? **Yes, as recommended
+      (owner, 2026-09-27, session `event-checkin-40`)**: `UNIQUE (event_id,
+      wallet)` on `claim_locks`, exact string per (e). Prod count (c), run
+      2026-09-27 with owner permission: 4 `claim_locks` rows, **0** duplicate
+      `(event_id, wallet)` pairs, 0 empty wallets. The index applies cleanly.
+      Unblocks 7.8.
       **Correction (2026-09-24):** §5.3's index names
       `recipient_wallet`, which no migration creates. `attendees` doesn't store
       the recipient: `claim_attendee` in `db/attendees/writes.rs` writes only
@@ -192,8 +196,8 @@ otherwise.
       `SELECT COUNT(*) FROM (SELECT 1 FROM claim_locks GROUP BY event_id,
       wallet HAVING COUNT(*) > 1)`, via
       `npx wrangler d1 execute bethere-db --remote --command "…"`.
-- [ ] 6.3 **Possible-duplicate roster flag** (§5)? (Recommended: yes, but after
-      Phase 1.) **Blocked on owner decision.** Gates 7.9. Phase 1 is now
+- [x] 6.3 **Possible-duplicate roster flag** (§5)? **Yes, as recommended
+      (owner, 2026-09-27, session `event-checkin-40`).** Unblocks 7.9. Phase 1 is now
       deployed, so the "after Phase 1" condition is met.
 
 ## 7. Tasks
@@ -272,9 +276,9 @@ Phase 2
         request), and clearing the flag clears the person's other flags;
       - the claim message said "linked emails" even when it fired on a second
         row under the same unlinked address (only walk-ins can create one).
-- [ ] 7.8 Per-event recipient-wallet uniqueness (gated on 6.2). This is the
+- [ ] 7.8 Per-event recipient-wallet uniqueness (6.2 decided yes, 2026-09-27). This is the
       part that bites a farmer who never links; 7.6/7.7 only bind linked emails.
-- [ ] 7.9 Possible-duplicate roster flag (gated on 6.3).
+- [ ] 7.9 Possible-duplicate roster flag (6.3 decided yes, 2026-09-27).
 
 Phase 3 (only if needed)
 - [ ] 7.10 Canonical session email (primary) across email-keyed tables.

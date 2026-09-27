@@ -1,6 +1,6 @@
 # 154: Unchecking "Auto-verify" on the admin record-slip form still verifies
 
-**Status:** fixed on develop (`dc80091d`), verified on staging (version `81217b91`), not on prod. Found by code reading on 2026-09-27 (session `event-checkin-c6`) and fixed the same day (session `event-checkin-ef`).
+**Status:** deployed 2026-09-27 (prod `5b7b875c`, git `4842135f`, owner go in session `event-checkin-40`). Fixed in `dc80091d`, verified on staging (version `81217b91`). The prod admin submit is not exercised: it needs a signed-in organizer. Found by code reading on 2026-09-27 (session `event-checkin-c6`) and fixed the same day (session `event-checkin-ef`).
 
 ## What happens
 
