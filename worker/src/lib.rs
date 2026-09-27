@@ -40,6 +40,7 @@ pub mod spike;
 mod state;
 // Public for the same reason as `db` above: `worker/tests/r2_cache_policy.rs`
 // drives `Visibility` and `if_none_match_hits` directly (`.issues/114`).
+pub mod slip_vision;
 pub mod storage;
 mod virtual_checkin;
 

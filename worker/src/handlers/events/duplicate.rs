@@ -221,21 +221,16 @@ pub async fn duplicate_event(
     };
 
     // ── 4. Delegate to create_event (slug dedup, KV+D1 write, validation) ───
-    let new_config = crate::event_store::create_event(kv, state.d1.as_deref(), &req, &claims.email)
+    let crate::event_store::SavedEvent {
+        config: new_config,
+        d1_sync,
+    } = crate::event_store::create_event(kv, state.d1.as_deref(), &req, &claims.email)
         .await
-        .map_err(|e| {
-            let err_msg = e.to_string();
-            // Mirror create.rs: duplicate-slug collapse is a validation error.
-            // In practice deduplicate_slug should make this rare, but if the
-            // -copy/-copy-1/... namespace is exhausted we surface a 409-style.
-            if err_msg.contains("already exists") {
-                tracing::warn!(source_id = %source_id, error = %err_msg, "duplicate slug collision after dedup");
-                AppError::Validation(err_msg)
-            } else {
-                tracing::error!(source_id = %source_id, error = %err_msg, "duplicate create_event failed");
-                AppError::Internal(err_msg)
-            }
-        })?;
+        // A source the copy cannot be created from (e.g. no Sheet ID) is a
+        // 400 with the reason, not a 500.
+        .map_err(|e| e.logged("duplicate event"))?;
+
+    warnings.extend(d1_sync.warning().map(String::from));
 
     // ── 5. Audit log — reuse EventCreated with metadata noting source ───────
     let audit_desc = format!(

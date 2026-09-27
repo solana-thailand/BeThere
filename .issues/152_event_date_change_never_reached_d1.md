@@ -83,6 +83,12 @@ holders. Nothing removes them automatically when the date is fixed later
 
 ## Not done
 
-- `sync_event_to_d1` still swallows errors. A failed dual-write should be
-  visible to the admin who saved, for example as a warning in the response.
-  Separate change.
+- [x] `sync_event_to_d1` swallowed errors. It now returns a `#[must_use]`
+  `D1Sync`, and the create, update, archive, restore and seed handlers put
+  `"warnings"` in their response when the D1 write fails. The event form and
+  events page show them as a warning toast. Guard: `worker/tests/d1_sync_warning.rs`.
+  On develop 2026-09-26, not deployed. Follow-up, same day: the store-level
+  `create_event`/`update_event` return a `SavedEvent` (config + `D1Sync`)
+  instead of discarding it, so the poster upload/remove, escrow confirm-init
+  and duplicate responses carry the warning too, and the create handler no
+  longer writes D1 twice. Not deployed.

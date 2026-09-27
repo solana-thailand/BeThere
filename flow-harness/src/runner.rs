@@ -272,24 +272,22 @@ impl Runner {
     /// Returns the directory path so the caller can surface it. The timestamp
     /// uses hyphens in place of colons so the directory name is portable
     /// across filesystems (Windows forbids `:`).
-    pub fn write_summary(&self, summary: &RunSummary, started_at: &chrono::DateTime<Utc>) -> HarnessResult<PathBuf> {
-        let dir_name = started_at
-            .format("%Y-%m-%dT%H-%M-%SZ")
-            .to_string();
+    pub fn write_summary(
+        &self,
+        summary: &RunSummary,
+        started_at: &chrono::DateTime<Utc>,
+    ) -> HarnessResult<PathBuf> {
+        let dir_name = started_at.format("%Y-%m-%dT%H-%M-%SZ").to_string();
         let run_dir = self.results_root.join(&dir_name);
 
         std::fs::create_dir_all(&run_dir).map_err(|e| {
-            HarnessError::Config(format!(
-                "create results dir {}: {e}",
-                run_dir.display()
-            ))
+            HarnessError::Config(format!("create results dir {}: {e}", run_dir.display()))
         })?;
 
         let json = serde_json::to_string_pretty(summary)?;
         let summary_path = run_dir.join("summary.json");
-        std::fs::write(&summary_path, json).map_err(|e| {
-            HarnessError::Config(format!("write {}: {e}", summary_path.display()))
-        })?;
+        std::fs::write(&summary_path, json)
+            .map_err(|e| HarnessError::Config(format!("write {}: {e}", summary_path.display())))?;
 
         Ok(run_dir)
     }
@@ -303,14 +301,8 @@ impl Runner {
         &self,
         started_at: &chrono::DateTime<Utc>,
     ) -> HarnessResult<()> {
-        let dir_name = started_at
-            .format("%Y-%m-%dT%H-%M-%SZ")
-            .to_string();
-        let body = format!(
-            "{}\nrun_dir={}\n",
-            started_at.to_rfc3339(),
-            dir_name
-        );
+        let dir_name = started_at.format("%Y-%m-%dT%H-%M-%SZ").to_string();
+        let body = format!("{}\nrun_dir={}\n", started_at.to_rfc3339(), dir_name);
 
         // Ensure the results root exists (the sentinel lives at its root).
         std::fs::create_dir_all(&self.results_root).map_err(|e| {
@@ -321,10 +313,7 @@ impl Runner {
         })?;
 
         std::fs::write(&self.last_green_path, body).map_err(|e| {
-            HarnessError::Config(format!(
-                "write {}: {e}",
-                self.last_green_path.display()
-            ))
+            HarnessError::Config(format!("write {}: {e}", self.last_green_path.display()))
         })
     }
 
@@ -332,10 +321,11 @@ impl Runner {
     /// sentinel does not exist (gate must treat this as "never green").
     pub fn last_green_mtime(&self) -> HarnessResult<Option<std::time::SystemTime>> {
         match std::fs::metadata(&self.last_green_path) {
-            Ok(m) => Ok(Some(
-                m.modified()
-                    .map_err(|e| HarnessError::Config(format!("stat mtime: {e}")))?,
-            )),
+            Ok(m) => {
+                Ok(Some(m.modified().map_err(|e| {
+                    HarnessError::Config(format!("stat mtime: {e}"))
+                })?))
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(e) => Err(HarnessError::Config(format!(
                 "stat {}: {e}",
@@ -429,11 +419,7 @@ mod tests {
         fn name(&self) -> &'static str {
             "always_ok"
         }
-        async fn run(
-            &self,
-            _ctx: &StagingContext,
-            _client: &WorkerClient,
-        ) -> HarnessResult<()> {
+        async fn run(&self, _ctx: &StagingContext, _client: &WorkerClient) -> HarnessResult<()> {
             Ok(())
         }
     }
@@ -443,11 +429,7 @@ mod tests {
         fn name(&self) -> &'static str {
             "always_fail"
         }
-        async fn run(
-            &self,
-            _ctx: &StagingContext,
-            _client: &WorkerClient,
-        ) -> HarnessResult<()> {
+        async fn run(&self, _ctx: &StagingContext, _client: &WorkerClient) -> HarnessResult<()> {
             Err(HarnessError::AssertionFailed {
                 flow: "always_fail",
                 reason: "intentional test failure".to_string(),
@@ -460,11 +442,7 @@ mod tests {
         fn name(&self) -> &'static str {
             "always_fail_worker"
         }
-        async fn run(
-            &self,
-            _ctx: &StagingContext,
-            _client: &WorkerClient,
-        ) -> HarnessResult<()> {
+        async fn run(&self, _ctx: &StagingContext, _client: &WorkerClient) -> HarnessResult<()> {
             Err(HarnessError::Worker(crate::error::WorkerError {
                 http_status: 400,
                 code: Some(crate::error::EscrowCode::RefundDeadlinePassed),
@@ -484,10 +462,7 @@ mod tests {
     }
 
     fn test_client() -> WorkerClient {
-        WorkerClient::new(
-            url::Url::parse("https://staging.example.workers.dev").unwrap(),
-        )
-        .unwrap()
+        WorkerClient::new(url::Url::parse("https://staging.example.workers.dev").unwrap()).unwrap()
     }
 
     fn runner_in_tmp() -> (Runner, TempDir) {
@@ -563,7 +538,11 @@ mod tests {
         let rec = &summary.flows[0];
         assert_eq!(rec.outcome, FlowOutcome::Failed);
         assert_eq!(rec.error_kind.as_deref(), Some("Worker"));
-        assert!(rec.error.as_deref().unwrap().contains("RefundDeadlinePassed"));
+        assert!(rec
+            .error
+            .as_deref()
+            .unwrap()
+            .contains("RefundDeadlinePassed"));
     }
 
     #[tokio::test]
@@ -650,7 +629,10 @@ mod tests {
             error_kind: None,
         };
         let json = serde_json::to_string(&rec).unwrap();
-        assert!(!json.contains("error"), "None error must be skipped: {json}");
+        assert!(
+            !json.contains("error"),
+            "None error must be skipped: {json}"
+        );
         assert!(
             !json.contains("error_kind"),
             "None error_kind must be skipped: {json}"
@@ -688,13 +670,11 @@ mod tests {
         let (mut runner, tmp) = runner_in_tmp();
         runner.register(AlwaysOk);
         let _ = runner.run_all().await.unwrap();
-        let body =
-            std::fs::read_to_string(tmp.path().join(".last-green")).unwrap();
+        let body = std::fs::read_to_string(tmp.path().join(".last-green")).unwrap();
         assert!(
             body.contains("T") && body.contains("Z"),
             "expected an ISO-ish timestamp in last-green body, got: {body}"
         );
         assert!(body.contains("run_dir="));
     }
-
 }

@@ -471,6 +471,9 @@ pub struct EventMutationData {
     pub status: String,
     #[serde(default)]
     pub updated_at: String,
+    /// Non-fatal warnings, e.g. a failed D1 dual-write. Empty when none.
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------

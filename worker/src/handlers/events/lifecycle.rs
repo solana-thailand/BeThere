@@ -87,7 +87,7 @@ pub async fn archive_event(
     }
 
     // D1 dual-write
-    crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
+    let d1_sync = crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
     tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "event archived");
 
@@ -120,7 +120,9 @@ pub async fn archive_event(
 
     Ok(ApiOk::new(json!({
         "id": id,
+        "name": config.name,
         "status": "archived",
+        "warnings": d1_sync.warnings(),
     })))
 }
 
@@ -201,7 +203,7 @@ pub async fn restore_event(
     config.status = event_checkin_domain::models::event::EventStatus::Draft;
     config.updated_by = claims.email.clone();
     config.updated_at = chrono::Utc::now().to_rfc3339();
-    crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
+    let d1_sync = crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
     tracing::info!(event_id = %id, staff_fingerprint = %state.log_fingerprint(&claims.email), "event restored from archive");
 
@@ -234,7 +236,9 @@ pub async fn restore_event(
 
     Ok(ApiOk::new(json!({
         "id": id,
+        "name": config.name,
         "status": "draft",
+        "warnings": d1_sync.warnings(),
     })))
 }
 

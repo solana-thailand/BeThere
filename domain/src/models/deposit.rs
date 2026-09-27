@@ -362,6 +362,12 @@ pub struct DepositStatusResponse {
     /// Frontend uses this to hide the USDC payment option when escrow is closed/deactivated.
     #[serde(default)]
     pub usdc_deposits_accepted: bool,
+    /// Whether the slip agent's vision fallback is switched on
+    /// (`SLIP_AGENT_VISION=on` with a key; `.plans/033` §4 Q3). When true, a
+    /// slip without a readable QR is sent to the Claude API, and the upload
+    /// page must say so before the attendee submits.
+    #[serde(default)]
+    pub slip_vision_enabled: bool,
 }
 
 /// Request body for POST /api/deposit/thb/verify — admin verifies/rejects a slip.
@@ -393,6 +399,11 @@ pub struct PendingSlipResponse {
     /// hash yet (everything uploaded before 2026-09-22) — absence of evidence.
     #[serde(default)]
     pub duplicate_slip_hashes: Vec<String>,
+    /// The slip agent's shadow-mode proposal per attendee id (`.plans/033`
+    /// W1). Attendees with no proposal are absent. Advisory only: the
+    /// organizer's approve/reject is still the decision.
+    #[serde(default)]
+    pub slip_proposals: std::collections::HashMap<String, crate::slip_proposal::SlipProposal>,
 }
 
 /// Response for GET /api/refund/queue — THB refunds pending.

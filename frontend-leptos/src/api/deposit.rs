@@ -83,6 +83,11 @@ pub struct DepositStatusResponse {
     /// `true` only when escrow_status is `Initialized`.
     #[serde(default)]
     pub usdc_deposits_accepted: bool,
+    /// Whether a slip without a readable QR is sent to the Claude API
+    /// (the worker's `SLIP_AGENT_VISION` switch). Drives the privacy line on
+    /// the upload form.
+    #[serde(default)]
+    pub slip_vision_enabled: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -109,6 +114,9 @@ pub struct ThbSlipUploadRequest {
     pub bank_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_name: Option<String>,
+    /// The slip's mini-QR text, decoded in the browser (`.plans/033` W1).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slip_qr: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -152,8 +160,11 @@ pub struct AdminSlipUploadRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_name: Option<String>,
     /// When true (default), also marks the deposit as verified in the same call.
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    /// Always serialized: the worker reads a missing field as `true` (.issues/154).
     pub auto_verify: bool,
+    /// The slip's mini-QR text, decoded in the browser (`.plans/033` W1).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slip_qr: Option<String>,
 }
 
 impl Default for AdminSlipUploadRequest {
@@ -166,6 +177,7 @@ impl Default for AdminSlipUploadRequest {
             bank_name: None,
             account_name: None,
             auto_verify: true,
+            slip_qr: None,
         }
     }
 }
@@ -216,6 +228,10 @@ pub struct PendingSlipResponse {
     /// ones, so a new slip matching an approved deposit is still flagged.
     #[serde(default)]
     pub duplicate_slip_hashes: Vec<String>,
+    /// The slip agent's advisory proposal per attendee id (`.plans/033` W1).
+    #[serde(default)]
+    pub slip_proposals:
+        std::collections::HashMap<String, event_checkin_domain::slip_proposal::SlipProposal>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]

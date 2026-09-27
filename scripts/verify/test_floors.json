@@ -1,9 +1,22 @@
 {
+  "bethere-mcp": {
+    "bethere_mcp src/lib.rs": 0,
+    "bethere_mcp src/main.rs": 0,
+    "doc-tests bethere_mcp": 0,
+    "protocol tests/protocol.rs": 11
+  },
   "domain-alloc-count": {
     "alloc_count tests/alloc_count.rs": 11,
     "alloc_count_checkin tests/alloc_count_checkin.rs": 5
   },
+  "flow-harness": {
+    "doc-tests flow_harness": 0,
+    "flow_harness src/lib.rs": 132,
+    "flow_harness src/main.rs": 0
+  },
   "frontend": {
+    "admin_slip_link tests/admin_slip_link.rs": 2,
+    "admin_slip_request tests/admin_slip_request.rs": 2,
     "cluster_networks tests/cluster_networks.rs": 5,
     "css_class_audit tests/css_class_audit.rs": 5,
     "date_formatting_has_one_home tests/date_formatting_has_one_home.rs": 1,
@@ -39,6 +52,7 @@
     "credit_ledger_guards tests/credit_ledger_guards.rs": 16,
     "credit_release_and_staff_comp tests/credit_release_and_staff_comp.rs": 6,
     "d1_int_bind_exactness tests/d1_int_bind_exactness.rs": 4,
+    "d1_sync_warning tests/d1_sync_warning.rs": 4,
     "dashboard_event_read tests/dashboard_event_read.rs": 2,
     "deposit_source_bind_guards tests/deposit_source_bind_guards.rs": 4,
     "deposit_source_guards tests/deposit_source_guards.rs": 8,
@@ -54,11 +68,14 @@
     "escrow_transition_contract tests/escrow_transition_contract.rs": 14,
     "event_checkin_domain src/lib.rs": 157,
     "event_checkin_worker src/lib.rs": 327,
+    "event_create_errors tests/event_create_errors.rs": 4,
     "event_enum_column_fallbacks tests/event_enum_column_fallbacks.rs": 13,
+    "event_lifecycle_response tests/event_lifecycle_response.rs": 1,
     "event_slug_ownership tests/event_slug_ownership.rs": 5,
     "event_slug_uniqueness_guard tests/event_slug_uniqueness_guard.rs": 3,
     "golden_vectors tests/golden_vectors.rs": 9,
     "golden_vectors_escrow tests/golden_vectors_escrow.rs": 2,
+    "hold_contacts_sheet_guard tests/hold_contacts_sheet_guard.rs": 2,
     "image_kind tests/image_kind.rs": 5,
     "isolate_cache tests/isolate_cache.rs": 5,
     "linked_email_guards tests/linked_email_guards.rs": 2,
@@ -79,7 +96,7 @@
     "quiz_readiness_guard tests/quiz_readiness_guard.rs": 2,
     "r2_cache_policy tests/r2_cache_policy.rs": 4,
     "recent_check_ins tests/recent_check_ins.rs": 5,
-    "refund_proof_link_guard tests/refund_proof_link_guard.rs": 2,
+    "refund_proof_link_guard tests/refund_proof_link_guard.rs": 5,
     "registration_field_bounds_guard tests/registration_field_bounds_guard.rs": 3,
     "registration_history_guard tests/registration_history_guard.rs": 3,
     "roster_page tests/roster_page.rs": 6,
@@ -94,8 +111,9 @@
     "sheet_row_lookup tests/sheet_row_lookup.rs": 7,
     "sheet_row_resolution_guard tests/sheet_row_resolution_guard.rs": 4,
     "size_budget_guards tests/size_budget_guards.rs": 10,
-    "slip_duplicate_guards tests/slip_duplicate_guards.rs": 6,
+    "slip_duplicate_guards tests/slip_duplicate_guards.rs": 14,
     "slip_magic_bytes tests/slip_magic_bytes.rs": 6,
+    "slip_proposal tests/slip_proposal.rs": 9,
     "slug_cache_guard tests/slug_cache_guard.rs": 2,
     "sql_interpolation_guard tests/sql_interpolation_guard.rs": 2,
     "sync_deposit_status_guard tests/sync_deposit_status_guard.rs": 2,

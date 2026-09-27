@@ -66,9 +66,26 @@ pub async fn pending_thb_slips_handler(
         })
         .collect();
 
+    // Shadow-mode proposals shown beside each slip. A read failure only hides
+    // them; the slip list itself must still load.
+    let slip_proposals = match d1 {
+        None => Default::default(),
+        Some(db) => crate::db::slip_proposals::by_event(db, &event.id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(event_id = %event.id, error = %e, "slip proposals read failed");
+                Default::default()
+            }),
+    };
+    let slip_proposals = slip_proposals
+        .into_iter()
+        .filter(|(attendee_id, _)| slips.iter().any(|d| &d.attendee_id == attendee_id))
+        .collect();
+
     Ok(ApiOk::new(PendingSlipResponse {
         slips,
         duplicate_slip_hashes,
+        slip_proposals,
     }))
 }
 

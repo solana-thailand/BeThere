@@ -342,22 +342,13 @@ pub fn EventsPage(
                                                             leptos::task::spawn_local(async move {
                                                                 match api::duplicate_event(&did).await {
                                                                     Ok(data) => {
-                                                                        // Inline any non-fatal warnings (e.g. shared sheet_id
-                                                                        // under Decision A1) into the success toast so the
-                                                                        // organizer sees them without depending on a
-                                                                        // Warning toast variant.
-                                                                        let mut msg = format!(
-                                                                            "Duplicated as '{}' (Draft)",
-                                                                            data.name
-                                                                        );
-                                                                        for warning in &data.warnings {
-                                                                            msg.push_str("\n⚠ ");
-                                                                            msg.push_str(warning);
-                                                                        }
-                                                                        components::show_toast(
+                                                                        // Non-fatal warnings (shared sheet_id under
+                                                                        // Decision A1, a failed D1 write) turn it into
+                                                                        // a warning toast.
+                                                                        components::show_mutation_toast(
                                                                             &set_toast,
-                                                                            &msg,
-                                                                            components::ToastType::Success,
+                                                                            &format!("Duplicated as '{}' (Draft)", data.name),
+                                                                            &data.warnings,
                                                                         );
                                                                         reload();
                                                                     }
@@ -416,10 +407,10 @@ pub fn EventsPage(
                                                             leptos::task::spawn_local(async move {
                                                                 match api::restore_event(&rid).await {
                                                                     Ok(data) => {
-                                                                        components::show_toast(
+                                                                        components::show_mutation_toast(
                                                                             &set_toast,
                                                                             &format!("Event '{}' restored", data.name),
-                                                                            components::ToastType::Success,
+                                                                            &data.warnings,
                                                                         );
                                                                         reload();
                                                                     }
@@ -680,10 +671,10 @@ pub fn EventsPage(
                                                             leptos::task::spawn_local(async move {
                                                                 match api::archive_event(&aid).await {
                                                                     Ok(data) => {
-                                                                        components::show_toast(
+                                                                        components::show_mutation_toast(
                                                                             &set_toast,
                                                                             &format!("Event '{}' archived", data.name),
-                                                                            components::ToastType::Success,
+                                                                            &data.warnings,
                                                                         );
                                                                         reload();
                                                                     }
@@ -715,10 +706,10 @@ pub fn EventsPage(
                                                             leptos::task::spawn_local(async move {
                                                                 match api::restore_event(&rid).await {
                                                                     Ok(data) => {
-                                                                        components::show_toast(
+                                                                        components::show_mutation_toast(
                                                                             &set_toast,
                                                                             &format!("Event '{}' restored", data.name),
-                                                                            components::ToastType::Success,
+                                                                            &data.warnings,
                                                                         );
                                                                         reload();
                                                                     }

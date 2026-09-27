@@ -101,6 +101,10 @@ pub struct ThbSlipUploadRequest {
     /// Account holder name for THB refund.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_name: Option<String>,
+    /// The slip's mini-QR text as the browser decoded it (`.plans/033` W1).
+    /// A claim: the server re-parses it before using it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slip_qr: Option<String>,
 }
 
 /// Record a THB payment slip upload.
@@ -358,6 +362,18 @@ pub async fn upload_thb_slip_handler(
     event_store::save_thb_deposit(kv, &thb_deposit, d1)
         .await
         .map_err(AppError::Internal)?;
+
+    // Slip agent, shadow mode: propose a verdict for the organizer to compare
+    // with their own. Cannot fail the upload.
+    super::slip_agent::propose_after_upload(
+        &state,
+        &event,
+        &body.attendee_id,
+        upload_attendee.registration_date.as_deref(),
+        body.slip_qr.as_deref(),
+        &body.slip_url,
+    )
+    .await;
 
     // Write bank info to Google Sheet for organizer refund reference
     if (body.bank_account.is_some() || body.bank_name.is_some() || body.account_name.is_some())

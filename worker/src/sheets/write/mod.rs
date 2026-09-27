@@ -35,6 +35,6 @@ pub use checkin::{
     clear_checked_in, mark_checked_in, mark_claimed, mark_virtual_checked_in, update_qr_urls,
 };
 pub use deposit::{
-    update_deposit_method, write_bank_info, write_deposit_verification, write_refund_link,
-    write_refund_status, write_refund_status_batch,
+    refund_batch_ranges, update_deposit_method, write_bank_info, write_deposit_verification,
+    write_refund_batch, write_refund_link, write_refund_status,
 };

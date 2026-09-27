@@ -1,6 +1,6 @@
 # Plan 026 — AI × Solana track: where AI earns its place, and what to build by 12 October
 
-**Status:** proposed, not started · **Written:** 2026-09-18 by the DevRel agent, for this repo's owner agent
+**Status:** proposed, not started; schedule superseded by `.plans/033` (2026-09-27), design rule and §3 compliance still apply · **Written:** 2026-09-18 by the DevRel agent, for this repo's owner agent
 **Window that counts:** 14 September – 12 October 2026 (Colosseum judges only work done inside it)
 **Submissions:** Colosseum (Crypto World's Fair, closes 12 Oct) **and** Superteam Earn AI × Solana track (closes 13 Oct 06:59 UTC)
 

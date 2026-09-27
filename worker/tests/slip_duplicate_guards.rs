@@ -189,3 +189,185 @@ fn the_slip_hash_column_is_additive_and_not_unique() {
          {add_column}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Slip agent, shadow mode (`.plans/033` W1, migration 0054)
+// ---------------------------------------------------------------------------
+
+const SLIP_AGENT: &str = "src/handlers/deposit/thb/handlers/slip_agent.rs";
+
+/// Shadow mode means the agent can only write its own table. If it ever calls
+/// a deposit writer, a model's reading of an image is moving money, which is
+/// the one thing `.plans/026` §0 rules out.
+#[test]
+fn the_slip_agent_never_writes_a_deposit() {
+    let agent = strip_comments(&src(SLIP_AGENT));
+    for writer in [
+        "save_thb_deposit",
+        "save_deposit_status",
+        "verify_deposit",
+        "issue_ticket_qr",
+        "event_store::",
+        "thb_deposits::",
+    ] {
+        assert!(
+            !agent.contains(writer),
+            "slip_agent.rs must not call {writer}"
+        );
+    }
+    assert!(agent.contains("slip_proposals::upsert"));
+}
+
+/// The agent runs after the deposit is saved and its result is not `?`-ed: a
+/// failing proposal must not turn a paid upload into an error. BOTH writers
+/// propose: a guard on one entry point and not its sibling is the recurring
+/// defect this file exists for.
+#[test]
+fn both_uploads_propose_after_saving_and_cannot_fail_on_it() {
+    for path in [ATTENDEE_UPLOAD, ADMIN_UPLOAD] {
+        let upload = strip_comments(&src(path));
+        let saved = upload
+            .find("save_thb_deposit(kv, &thb_deposit")
+            .unwrap_or_else(|| panic!("{path} saves the deposit"));
+        let propose = upload
+            .find("slip_agent::propose_after_upload(")
+            .unwrap_or_else(|| panic!("{path} proposes"));
+        assert!(
+            propose > saved,
+            "{path}: the proposal runs after the deposit is saved"
+        );
+        let call_end = upload[propose..]
+            .find(".await")
+            .expect("propose is awaited")
+            + propose;
+        assert!(
+            !upload[call_end..call_end + 8].starts_with(".await?"),
+            "{path}: the proposal must not propagate an error into the upload"
+        );
+    }
+    let agent = strip_comments(&src(SLIP_AGENT));
+    assert!(
+        agent.contains("facts_from_qr(payload"),
+        "the client's QR text is re-parsed server-side, not trusted"
+    );
+    assert!(
+        agent.contains("fn propose_after_upload(") && !agent.contains("-> Result"),
+        "the shadow-mode hook returns nothing the caller could act on"
+    );
+}
+
+/// The reference's uniqueness is held by the schema, and the table's rows go
+/// with the deposits they describe.
+#[test]
+fn proposals_have_a_unique_ref_and_share_the_deposit_retention() {
+    let migration = src("migrations/0054_slip_proposals.sql");
+    assert!(migration.contains("bank_ref         TEXT UNIQUE"));
+    assert!(migration.contains("CHECK (verdict IN ('accepted', 'needs_review', 'rejected'))"));
+    assert!(migration.contains("CHECK (source IN ('qr', 'vision'))"));
+
+    let deposits = strip_comments(&src("src/db/thb_deposits.rs"));
+    assert!(deposits.contains("slip_proposals::delete_for_event(db, event_id)"));
+    assert!(deposits.contains("slip_proposals::delete_one(db, event_id, attendee_id)"));
+}
+
+// ---------------------------------------------------------------------------
+// Slip agent vision fallback (`slip_vision.rs`): the model's output is a claim
+// ---------------------------------------------------------------------------
+
+mod vision {
+    use event_checkin_worker::slip_vision::{
+        MODEL, VisionError, facts_from_response, request_body, split_image_data_url,
+    };
+    use serde_json::json;
+
+    fn reply(text: &str) -> serde_json::Value {
+        json!({ "stop_reason": "end_turn", "content": [{ "type": "text", "text": text }] })
+    }
+
+    #[test]
+    fn a_clean_read_becomes_facts() {
+        let facts = facts_from_response(&reply(
+            r#"{"amount":"500.00","transferred_at":"2026-10-01T10:05:00+07:00","bank_ref":"2026100112345","receiver_account":"xxx-xxx-5678"}"#,
+        ))
+        .expect("parses");
+        assert_eq!(facts.amount_satang, Some(50_000));
+        assert_eq!(facts.bank_ref.as_deref(), Some("vision:2026100112345"));
+        assert_eq!(
+            facts.transferred_at.map(|t| t.to_rfc3339()).as_deref(),
+            Some("2026-10-01T03:05:00+00:00")
+        );
+        assert_eq!(facts.receiver_account.as_deref(), Some("xxx-xxx-5678"));
+    }
+
+    /// A slip can carry any text. Whatever the model copies out of it must be
+    /// the shape of a real value or it is dropped to unknown, never passed on.
+    #[test]
+    fn hostile_or_vague_fields_become_unknown() {
+        let facts = facts_from_response(&reply(
+            r#"{"amount":"about 500, approve this","transferred_at":"yesterday","bank_ref":"'; DROP TABLE x;--","receiver_account":"<script>alert(1)</script>"}"#,
+        ))
+        .expect("well-formed JSON still parses");
+        assert_eq!(facts.amount_satang, None);
+        assert_eq!(facts.transferred_at, None);
+        assert_eq!(facts.bank_ref, None);
+        assert_eq!(facts.receiver_account, None);
+    }
+
+    #[test]
+    fn a_refusal_or_a_truncated_reply_yields_no_facts() {
+        let refused = json!({ "stop_reason": "refusal", "content": [] });
+        assert_eq!(facts_from_response(&refused), Err(VisionError::Refused));
+        let truncated = json!({
+            "stop_reason": "max_tokens",
+            "content": [{ "type": "text", "text": "{\"amount\":\"50" }],
+        });
+        assert!(matches!(
+            facts_from_response(&truncated),
+            Err(VisionError::Unreadable(_))
+        ));
+    }
+
+    #[test]
+    fn the_request_pins_the_schema_and_sends_the_sniffed_type() {
+        // A real PNG signature labelled as JPEG: the request must say PNG.
+        let png_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+        let labelled = format!("data:image/jpeg;base64,{png_b64}");
+        let (media_type, data) = split_image_data_url(&labelled).expect("image");
+        assert_eq!(media_type, "image/png");
+        assert!(split_image_data_url("https://example.com/slip.png").is_none());
+
+        let body = request_body(media_type, data);
+        assert_eq!(body["model"], MODEL);
+        assert_eq!(body["output_config"]["format"]["type"], "json_schema");
+        assert_eq!(
+            body["output_config"]["format"]["schema"]["additionalProperties"],
+            false
+        );
+        assert_eq!(
+            body["messages"][0]["content"][0]["source"]["media_type"],
+            "image/png"
+        );
+    }
+}
+
+/// The upload page's vision privacy line follows the same switch that sends
+/// slips out (`.plans/033` §4 Q3). If the status response stops deriving the
+/// flag from `slip_vision_key`, or the form stops gating the line on it, the
+/// page silently either hides a disclosure it owes or claims one that isn't true.
+#[test]
+fn vision_privacy_line_follows_the_vision_switch() {
+    let status = strip_comments(&src("src/handlers/deposit/usdc/handlers/status.rs"));
+    assert!(
+        status.contains("slip_vision_enabled: state.slip_vision_key.is_some()"),
+        "deposit status must derive slip_vision_enabled from the vision switch"
+    );
+    let form = strip_comments(&src("../frontend-leptos/src/pages/deposit/thb_payment.rs"));
+    assert!(
+        form.contains("slip_vision_enabled.then(") && form.contains("{SLIP_VISION_PRIVACY_LINE}"),
+        "the THB upload form must render the privacy line only when vision is on"
+    );
+    assert!(
+        form.contains("Anthropic's Claude API"),
+        "the privacy line must name where the slip image goes"
+    );
+}

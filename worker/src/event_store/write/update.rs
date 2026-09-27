@@ -12,19 +12,19 @@ use crate::event_store::read::get_event_index;
 use crate::event_store::schema::slugify;
 
 use super::escrow::save_escrow_index;
-use super::index::{save_event_config, save_event_index, sync_event_to_d1};
+use super::index::{SavedEvent, save_event_config, save_event_index, sync_event_to_d1};
 
 /// Update an existing event's configuration.
 ///
 /// Only provided (non-None) fields are updated.
-/// Returns the updated EventConfig.
+/// Returns the updated EventConfig and the outcome of its D1 write.
 pub async fn update_event(
     kv: Option<&KvStore>,
     d1: Option<&worker::D1Database>,
     id: &str,
     req: &UpdateEventRequest,
     updated_by: &str,
-) -> Result<EventConfig, String> {
+) -> Result<SavedEvent, String> {
     let mut config = crate::event_store::get_event_config_with_fallback(kv, d1, id)
         .await?
         .ok_or_else(|| format!("event '{id}' not found"))?;
@@ -49,8 +49,9 @@ pub async fn update_event(
     config.updated_at = chrono::Utc::now().to_rfc3339();
     config.updated_by = updated_by.to_string();
 
-    // D1 write (primary — always if available)
-    sync_event_to_d1(d1, &config).await;
+    // D1 write (primary — always if available). Logged inside; the caller
+    // reports the outcome to the admin (`D1Sync::warnings`).
+    let d1_sync = sync_event_to_d1(d1, &config).await;
 
     // KV write-through cache (if available)
     if let Some(kv_ref) = kv {
@@ -73,7 +74,7 @@ pub async fn update_event(
 
     tracing::info!(event_id = %id, "event updated");
 
-    Ok(config)
+    Ok(SavedEvent { config, d1_sync })
 }
 
 /// `apply_update`, plus the checks that need the store: a slug change must not

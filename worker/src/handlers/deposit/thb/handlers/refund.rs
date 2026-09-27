@@ -12,6 +12,27 @@ use crate::event_store;
 use crate::state::AppState;
 use event_checkin_domain::models::attendee::SheetRow;
 
+/// A refund proof is required on every cash refund, single or batch.
+///
+/// Attendees click it on their ticket page (`.issues/145`): accept an uploaded
+/// image (checked like a slip) or an https link, nothing else.
+fn validate_refund_proof(proof: &str) -> Result<(), AppError> {
+    if proof.trim().is_empty() {
+        return Err(AppError::Validation(
+            "refund_proof_url is required".to_string(),
+        ));
+    }
+    if proof.starts_with("data:") {
+        return super::slip_upload::validate_slip_url(proof);
+    }
+    match event_checkin_domain::validation::safe_document_link(proof) {
+        Some(_) => Ok(()),
+        None => Err(AppError::Validation(
+            "refund proof must be an https link to the transfer receipt".to_string(),
+        )),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // POST /api/refund/mark/{attendee_id} (admin)
 // ---------------------------------------------------------------------------
@@ -73,21 +94,7 @@ pub async fn mark_refund_handler(
         );
     }
 
-    // Refund proof URL is required when marking a refund
-    if body.refund_proof_url.trim().is_empty() {
-        return Err(AppError::Validation("refund_proof_url is required".to_string()).into());
-    }
-    // Attendees click this on their ticket page (`.issues/145`): accept an
-    // uploaded image (checked like a slip) or an https link, nothing else.
-    if body.refund_proof_url.starts_with("data:") {
-        super::slip_upload::validate_slip_url(&body.refund_proof_url)?;
-    } else if event_checkin_domain::validation::safe_document_link(&body.refund_proof_url).is_none()
-    {
-        return Err(AppError::Validation(
-            "refund proof must be an https link to the transfer receipt".to_string(),
-        )
-        .into());
-    }
+    validate_refund_proof(&body.refund_proof_url)?;
 
     // Upload refund proof data URL to R2 if available
     let refund_proof_url = super::maybe_upload_to_r2(
@@ -260,10 +267,15 @@ pub async fn mark_refund_handler(
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct BatchThbRefundRequest {
     pub event_id: String,
+    /// Proof of the bulk transfer (https receipt link or uploaded image),
+    /// stored on every deposit this batch settles. Required.
+    #[serde(default)]
+    pub refund_proof_url: String,
 }
 
 /// Batch-refund all THB deposits for an event.
-/// Marks every verified, non-refunded THB deposit as refunded.
+/// Marks every verified, non-refunded cash THB deposit as refunded, with the
+/// same proof and D1 attendee write as the single refund (`mark_refund_handler`).
 #[worker::send]
 pub async fn batch_thb_refund_handler(
     State(state): State<AppState>,
@@ -279,6 +291,16 @@ pub async fn batch_thb_refund_handler(
     let event =
         crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&body.event_id))
             .await?;
+
+    validate_refund_proof(&body.refund_proof_url)?;
+    let refund_proof_url = super::maybe_upload_to_r2(
+        &state,
+        &event.id,
+        &format!("batch-{}", Utc::now().timestamp()),
+        &body.refund_proof_url,
+        crate::storage::PREFIX_REFUNDS,
+    )
+    .await;
 
     let deposits = event_store::list_thb_deposits(kv, &event.id, d1)
         .await
@@ -321,7 +343,7 @@ pub async fn batch_thb_refund_handler(
                 &event.id,
                 &dep.attendee_id,
                 &now,
-                dep.refund_proof_url.as_deref().unwrap_or(""),
+                &refund_proof_url,
             )
             .await
             .map_err(AppError::Internal)?,
@@ -336,9 +358,29 @@ pub async fn batch_thb_refund_handler(
         // columns (and the whole struct on the KV fallback path).
         dep.refunded = true;
         dep.refunded_at = Some(now.clone());
+        dep.refund_proof_url = Some(refund_proof_url.clone());
         event_store::save_thb_deposit(kv, &dep, d1)
             .await
             .map_err(AppError::Internal)?;
+        // Same D1 attendee write as the single refund (non-fatal).
+        if let Some(db) = d1
+            && let Err(e) = crate::db::attendees::mark_refund(
+                db,
+                &event.id,
+                &dep.attendee_id,
+                "refunded",
+                &refund_proof_url,
+                &now,
+                &claims.email,
+            )
+            .await
+        {
+            tracing::warn!(
+                attendee_id = %dep.attendee_id,
+                error = %e,
+                "D1 batch refund write failed (non-fatal)"
+            );
+        }
         refunded_attendee_ids.insert(dep.attendee_id.clone());
         refunded += 1;
     }
@@ -351,8 +393,9 @@ pub async fn batch_thb_refund_handler(
         "Batch THB refund completed"
     );
 
-    // Mirror D1 state into Google Sheet — write refund_status (AB) for all
-    // batch-refunded attendees in a single batch update. Non-fatal.
+    // Mirror D1 state into Google Sheet — refund_status and refund_link for
+    // all batch-refunded attendees in a single batch update, the same two
+    // columns the single refund writes. Non-fatal.
     if !refunded_attendee_ids.is_empty() {
         let mapping =
             crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
@@ -366,22 +409,18 @@ pub async fn batch_thb_refund_handler(
                 .await
                 .unwrap_or_default();
 
-        let updates: Vec<(usize, String)> = attendees
+        let rows: Vec<usize> = attendees
             .iter()
-            .filter_map(|a| {
-                if refunded_attendee_ids.contains(&a.api_id) {
-                    Some((a.row_index, "refunded".to_string()))
-                } else {
-                    None
-                }
-            })
+            .filter(|a| refunded_attendee_ids.contains(&a.api_id))
+            .map(|a| a.row_index)
             .collect();
 
-        if !updates.is_empty() {
+        if !rows.is_empty() {
             if let Some(ctx) = &state.worker_ctx {
-                ctx.wait_until(crate::sheets::bg_sync::write_refund_status_batch(
+                ctx.wait_until(crate::sheets::bg_sync::write_refund_batch(
                     state.clone(),
-                    updates,
+                    rows,
+                    refund_proof_url.clone(),
                     mapping,
                     event.sheet_id.clone(),
                     event.sheet_name.clone(),
@@ -389,8 +428,10 @@ pub async fn batch_thb_refund_handler(
                 ));
             } else {
                 // Fallback: blocking batch write when worker_ctx unavailable (tests)
-                if let Err(e) = crate::sheets::write::write_refund_status_batch(
-                    &updates,
+                if let Err(e) = crate::sheets::write::write_refund_batch(
+                    &rows,
+                    "refunded",
+                    &refund_proof_url,
                     &mapping,
                     &state,
                     &event.sheet_id,
@@ -401,7 +442,7 @@ pub async fn batch_thb_refund_handler(
                 {
                     tracing::warn!(
                         error = %e,
-                        "failed to write batch refund_status to sheet (non-blocking)"
+                        "failed to write batch refund to sheet (non-blocking)"
                     );
                 }
             }

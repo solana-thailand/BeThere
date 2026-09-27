@@ -10,6 +10,7 @@ pub mod models;
 pub mod money;
 pub mod onchain;
 pub mod pr_pack;
+pub mod slip_proposal;
 pub mod slip_verify;
 
 #[cfg(feature = "qr")]

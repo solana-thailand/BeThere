@@ -244,6 +244,9 @@ pub struct ConfirmEscrowInitResponse {
     pub on_chain_event_id: u64,
     /// Confirmed escrow status.
     pub escrow_status: EscrowStatus,
+    /// Non-fatal warnings for the admin, e.g. a failed D1 dual-write
+    /// (`D1Sync::warnings`). Empty when the state was already persisted.
+    pub warnings: Vec<&'static str>,
 }
 
 // ---------------------------------------------------------------------------

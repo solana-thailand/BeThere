@@ -72,10 +72,35 @@ can't come are moved to online and refunded later.
 
 - [ ] 2. Attendees answer on their own ticket page ("can't come" switches
   them to online and lists them for a refund).
-- [ ] A failed D1 dual-write on event save (`sync_event_to_d1`) should reach
+- [x] A failed D1 dual-write on event save (`sync_event_to_d1`) should reach
   the admin who saved, not only a log line (`.issues/152`, "Not done").
-- [ ] "Batch THB refund" (cancel page) refunds every verified deposit with no
-  proof and skips D1 `attendees.mark_refund`. Guard it or retire it.
+  Done on develop 2026-09-26 as a response `warnings` entry and warning toast,
+  then extended to the poster, escrow confirm-init and duplicate paths;
+  not deployed.
+- [x] "Batch THB refund" (cancel page) refunded every verified deposit with no
+  proof and skipped D1 `attendees.mark_refund`. Guarded on develop 2026-09-26:
+  the worker requires a receipt (same validator as the single refund) and
+  writes D1 attendees per refund; the page needs the receipt link and a
+  confirm. Guard: `worker/tests/refund_proof_link_guard.rs`. Not deployed.
+  The batch now also writes refund_link to the Sheet (`c323440b`).
+- Staging, 2026-09-27 (deploy `a941d6bb`, git `c323440b`, session
+  `event-checkin-2e`):
+  - cancel page in headless Chrome (`flow-test-event`): the batch button is
+    disabled with an empty field and with a `javascript:` link, enabled for
+    an https link; the confirm shows the pending count and the link;
+    dismissing it refunds nothing;
+  - API: batch with no proof → "refund_proof_url is required", with a
+    `javascript:` proof → the https error;
+  - create → `warnings: []`; duplicate keeps its sheet warning; archive and
+    restore return `name`. Probe events deleted.
+  - Not exercised: a real failed D1 write (no way to force one), and the
+    toasts themselves (the chrome-devtools profile was held by a peer).
+  - Found: duplicating an event with no Sheet ID returns 500 "internal error".
+    `create_event` rejects it ("google sheet_id is required"), and the
+    duplicate and create handlers map every error except "already exists" to
+    Internal. Predates this work. Fixed on develop 2026-09-27: `create_event`
+    returns `EventWriteError` (Invalid → 400 with the reason, Storage → 500);
+    test `worker/tests/event_create_errors.rs`. Not deployed.
 
 - [x] Participation switch (`PATCH /attendee/{id}/participation-type`) returned
   500 when the event's Sheet could not be read. Fixed in `.issues/153`
@@ -91,7 +116,17 @@ Apply migrations 0052 and 0053 before the code. Build the frontend. Then
 - Staging done 2026-09-26: migrations 0052 and 0053 applied, deploy
   `20260926T101341Z` = git `3fa0eb4d`, Content-Type, security headers and
   write smoke all green.
+- Prod done 2026-09-26 (session `event-checkin-3f`, owner go in session):
+  D1 backup `backup-prod-20260926-1821.sql` (gitignored), migrations 0052 and
+  0053 applied and read back, prod `f3b32edf`, git `70a36f3e`, deploy tag `20260926T122155Z`.
+  Content-Type and security headers green; `postponed_note` is in
+  `/api/public/events`. Preflight bypassed with `--force` (fixtures missing,
+  `.issues/084`/141). The write smoke on prod is owed (no `SMOKE_TOKEN`).
 - Frontend first load is +36213 B over the baseline: above the 25600 warn
   line, under the fail line.
 - Worker is 51.75% of the 3 MiB free-plan ceiling (+53819 B since
   2026-09-22).
+- Staging 2026-09-27 (session `event-checkin-d9`): version `33a0775e` = git
+  `4ddb6439`, which carries the Later items and `a22f749d`. Verified: a
+  create refused for an empty Sheet ID or a backwards date returns 400 with
+  the reason (`validation error: google sheet_id is required`). Not on prod.

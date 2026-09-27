@@ -696,9 +696,13 @@ pub async fn get_onchain_events(event_id: &str) -> Result<OnchainEventsResponse,
 
 // ===== Cancellation Workflow API =====
 
-/// POST /api/refund/batch-thb — batch refund all THB deposits for an event
-pub async fn batch_thb_refund(event_id: &str) -> Result<BatchThbRefundResponse, ApiError> {
-    let body = serde_json::json!({ "event_id": event_id });
+/// POST /api/refund/batch-thb — batch refund all THB deposits for an event.
+/// `refund_proof_url` is the bulk-transfer receipt; the worker requires it.
+pub async fn batch_thb_refund(
+    event_id: &str,
+    refund_proof_url: &str,
+) -> Result<BatchThbRefundResponse, ApiError> {
+    let body = serde_json::json!({ "event_id": event_id, "refund_proof_url": refund_proof_url });
     api_post_json("/refund/batch-thb", &body).await
 }
 

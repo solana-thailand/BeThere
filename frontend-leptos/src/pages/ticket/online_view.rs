@@ -53,7 +53,7 @@ pub fn OnlineView(
         calendar_subscribe_url,
         ticket_note,
         event_start_ms: _,
-        event_name: _,
+        event_name,
         event_id,
         ..
     } = view_data;
@@ -132,6 +132,7 @@ pub fn OnlineView(
             // Event context
             <EventContext
                 nft_image_url=nft_image_url.clone()
+                name=event_name.clone()
                 tagline=event_tagline.clone()
                 location=event_location.clone()
                 location_map_url=event_location_map_url.clone()

@@ -36,6 +36,24 @@ export function loadQrLibraries() {
 }
 
 /**
+ * Load jsQR even where a native BarcodeDetector exists.
+ *
+ * The slip reader (slip_qr.js) falls back to jsQR when BarcodeDetector finds
+ * nothing, so unlike the scanner it may need jsQR on any browser.
+ *
+ * @returns {Promise<void>}
+ */
+export function loadJsQr() {
+  if (typeof jsQR === "function") {
+    return Promise.resolve();
+  }
+  if (!window.__jsQrPromise) {
+    window.__jsQrPromise = _loadScript(JSQR_URL, JSQR_INTEGRITY);
+  }
+  return window.__jsQrPromise;
+}
+
+/**
  * Internal load implementation.
  * Injects the jsQR <script> only when there is no native BarcodeDetector.
  *

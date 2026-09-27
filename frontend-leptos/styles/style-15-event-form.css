@@ -514,6 +514,20 @@
     font-size: 0.8rem;
     line-height: 1.35;
 }
+/* The slip agent's advisory line (.plans/033 W1). Quiet by default: it is a
+   proposal, not a decision, and must not look like the Approve button's state. */
+.admin-dep-proposal {
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: var(--text-muted);
+}
+.admin-dep-proposal-pass {
+    color: var(--success);
+}
+.admin-dep-proposal-fail {
+    color: var(--danger);
+}
 .admin-dep-bank-section {
     margin-top: 0.5rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);

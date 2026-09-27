@@ -272,49 +272,67 @@ pub async fn write_refund_status(
     Ok(())
 }
 
-/// Write refund_status (column AB) for multiple attendees in a single batch update.
-/// Takes pre-resolved `(row_index, status)` pairs to avoid N attendee lookups.
-/// Used by batch refund operations.
-pub async fn write_refund_status_batch(
-    updates: &[(usize, String)],
+/// The refund_status and refund_link cells for every row a batch refund
+/// settled. Shared by this blocking writer and `bg_sync::write_refund_batch`,
+/// so the batch mirrors the same two columns as the single refund.
+pub fn refund_batch_ranges(
+    sheet_name: &str,
+    mapping: &ColumnMapping,
+    rows: &[usize],
+    status: &str,
+    link: &str,
+) -> Vec<ValueRange> {
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+    let sheet_ref = a1::sheet_ref(sheet_name);
+    let status_col = mapping.column_letter(CK::RefundStatus);
+    let link_col = mapping.column_letter(CK::RefundLink);
+    rows.iter()
+        .flat_map(|row| {
+            [
+                ValueRange {
+                    range: format!("{sheet_ref}!{status_col}{row}"),
+                    values: vec![vec![status.to_string()]],
+                },
+                ValueRange {
+                    range: format!("{sheet_ref}!{link_col}{row}"),
+                    values: vec![vec![link.to_string()]],
+                },
+            ]
+        })
+        .collect()
+}
+
+/// Write refund_status and refund_link for multiple attendees in a single
+/// batch update. Takes pre-resolved row indexes to avoid N attendee lookups.
+/// Used by the batch THB refund.
+#[allow(clippy::too_many_arguments)]
+pub async fn write_refund_batch(
+    rows: &[usize],
+    status: &str,
+    link: &str,
     mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<(), String> {
-    let sheet_ref = a1::sheet_ref(sheet_name);
-    if updates.is_empty() {
+    if rows.is_empty() {
         return Ok(());
     }
 
     let access_token = get_cached_access_token(state, kv).await?;
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-    let col = mapping.column_letter(CK::RefundStatus);
-
-    let data: Vec<ValueRange> = updates
-        .iter()
-        .map(|(row_index, status)| ValueRange {
-            range: format!("{sheet_ref}!{col}{row_index}"),
-            values: vec![vec![status.clone()]],
-        })
-        .collect();
-
     let url =
         format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
 
     let body = BatchUpdateRequest {
-        data,
+        data: refund_batch_ranges(sheet_name, mapping, rows, status, link),
         value_input_option: "USER_ENTERED".to_string(),
     };
 
     batch_update_sheet(&url, &body, &access_token).await?;
 
-    tracing::info!(
-        count = updates.len(),
-        "wrote batch refund_status to google sheet"
-    );
+    tracing::info!(count = rows.len(), "wrote batch refund to google sheet");
 
     Ok(())
 }

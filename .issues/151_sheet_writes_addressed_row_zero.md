@@ -101,7 +101,7 @@ investigating it.
   in D1. A D1 → sheet backfill is a separate change.
 - **`sync-sheet` still reads D1-first**, so it cannot refresh anything. It
   matters less now that nothing addresses rows by a stored number.
-- ~~**Attendee list paging.**~~ Fixed on develop 2026-09-26, not deployed.
+- ~~**Attendee list paging.**~~ Deployed 2026-09-26 (prod `f3b32edf`, git `70a36f3e`).
   `handlers/attendee/list.rs` paged by `row_index`, which is 0 for every
   D1-read attendee: page 2 came back empty. The admin roster also never asked
   for page 2, so an event with more than 200 approved attendees lost everyone
@@ -109,7 +109,7 @@ investigating it.
   read-only). Now `domain::models::attendee::roster_page` pages by offset
   over `(row_index, api_id)` (tests `domain/tests/roster_page.rs`), and the
   admin page walks every page (`api::get_all_attendees`).
-- ~~**Hardcoded PDPA columns.**~~ Fixed on develop 2026-09-26, not deployed.
+- ~~**Hardcoded PDPA columns.**~~ Deployed 2026-09-26 (prod `f3b32edf`, git `70a36f3e`).
   `clear_sheet_pii` now takes its letters from the sheet's header row
   (`ColumnMapping::pii_column_letters`, key list `PII_COLUMNS`). A recognised
   header row is trusted, so a missing PII header blanks nothing in its old

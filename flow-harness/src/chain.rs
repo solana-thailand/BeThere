@@ -31,16 +31,14 @@ use std::str::FromStr;
 use base64::Engine as _;
 use serde_json::{json, Value};
 use solana_sdk::{
-    pubkey::Pubkey,
-    signature::Signature,
-    signer::keypair::Keypair,
-    transaction::Transaction,
+    pubkey::Pubkey, signature::Signature, signer::keypair::Keypair, transaction::Transaction,
 };
 
 use crate::context::StagingContext;
 use crate::error::{EscrowCode, HarnessError, HarnessResult, WorkerError};
 
-const B64: base64::engine::general_purpose::GeneralPurpose = base64::engine::general_purpose::STANDARD;
+const B64: base64::engine::general_purpose::GeneralPurpose =
+    base64::engine::general_purpose::STANDARD;
 
 /// How many times to poll `getSignatureStatuses` before giving up (≈ the
 /// blockhash validity window at ~1s between polls).
@@ -75,8 +73,8 @@ pub fn sign_worker_tx(tx_b64: &str, payer: &Keypair) -> HarnessResult<(String, S
             "sign failed (is ctx.payer the required signer / fee payer?): {e}"
         ))
     })?;
-    let signed = bincode::serialize(&tx)
-        .map_err(|e| HarnessError::Solana(format!("tx serialize: {e}")))?;
+    let signed =
+        bincode::serialize(&tx).map_err(|e| HarnessError::Solana(format!("tx serialize: {e}")))?;
     let sig = tx
         .signatures
         .first()
@@ -209,11 +207,22 @@ pub fn decode_attendee_deposit(data: &[u8]) -> HarnessResult<AttendeeDepositView
 /// program revert surfaces as `HarnessError::Worker` with the parsed
 /// [`EscrowCode`]; RPC/transport problems surface as [`HarnessError::Solana`].
 pub async fn submit_tx(ctx: &StagingContext, tx_b64: &str) -> HarnessResult<Signature> {
-    let (signed_b64, sig) = sign_worker_tx(tx_b64, &ctx.payer)?;
+    submit_signed_by(ctx.rpc_url.as_str(), &ctx.payer, tx_b64).await
+}
+
+/// [`submit_tx`] without a fixture context: sign with `payer`, send to
+/// `rpc_url`, and wait for confirmation. Used by callers that are not the
+/// harness (the `bethere-mcp` agent wallet) so the signing path stays single.
+pub async fn submit_signed_by(
+    rpc_url: &str,
+    payer: &Keypair,
+    tx_b64: &str,
+) -> HarnessResult<Signature> {
+    let (signed_b64, sig) = sign_worker_tx(tx_b64, payer)?;
     let http = rpc_client()?;
     let resp = rpc_call(
         &http,
-        ctx.rpc_url.as_str(),
+        rpc_url,
         "sendTransaction",
         json!([
             signed_b64,
@@ -224,8 +233,26 @@ pub async fn submit_tx(ctx: &StagingContext, tx_b64: &str) -> HarnessResult<Sign
     if let Some(err) = resp.get("error") {
         return Err(parse_rpc_error(err));
     }
-    confirm_signature(&http, ctx.rpc_url.as_str(), &sig).await?;
+    confirm_signature(&http, rpc_url, &sig).await?;
     Ok(sig)
+}
+
+/// `getBalance` in lamports for `pubkey` at `confirmed` commitment.
+pub async fn sol_balance_lamports(rpc_url: &str, pubkey: &Pubkey) -> HarnessResult<u64> {
+    let http = rpc_client()?;
+    let resp = rpc_call(
+        &http,
+        rpc_url,
+        "getBalance",
+        json!([pubkey.to_string(), { "commitment": "confirmed" }]),
+    )
+    .await?;
+    if let Some(err) = resp.get("error") {
+        return Err(parse_rpc_error(err));
+    }
+    resp["result"]["value"]
+        .as_u64()
+        .ok_or_else(|| HarnessError::Solana("getBalance: missing result.value".to_string()))
 }
 
 /// Read an on-chain account. `Ok(None)` if it does not exist (or was closed).
@@ -468,7 +495,12 @@ mod tests {
         let view = decode_attendee_deposit(&data).unwrap();
         assert_eq!(
             view,
-            AttendeeDepositView { version: 1, amount: 15_000_000, checked_in: false, refunded: true }
+            AttendeeDepositView {
+                version: 1,
+                amount: 15_000_000,
+                checked_in: false,
+                refunded: true
+            }
         );
     }
 
@@ -482,7 +514,12 @@ mod tests {
             .unwrap();
         assert_eq!(
             decode_attendee_deposit(&data).unwrap(),
-            AttendeeDepositView { version: 1, amount: 1_000_000, checked_in: true, refunded: false }
+            AttendeeDepositView {
+                version: 1,
+                amount: 1_000_000,
+                checked_in: true,
+                refunded: false
+            }
         );
     }
 

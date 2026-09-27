@@ -160,7 +160,7 @@ pub fn Landing() -> impl IntoView {
                 <div class="landing-stat-stubs">
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value stub-green">"100%"</div>
-                        <div class="landing-stat-stub-label">"Refund Guarantee"</div>
+                        <div class="landing-stat-stub-label">"Back When You Attend"</div>
                     </div>
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value stub-poppy">"฿0"</div>
@@ -168,7 +168,7 @@ pub fn Landing() -> impl IntoView {
                     </div>
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value">"< 1s"</div>
-                        <div class="landing-stat-stub-label">"Smart Contract Check-In"</div>
+                        <div class="landing-stat-stub-label">"QR Check-In"</div>
                     </div>
                 </div>
 
@@ -325,8 +325,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Coin class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Keep no-show deposits"</div>
-                                    <div class="landing-timeline-desc">"Unclaimed deposits from no-shows are automatically transferred to your organizer ledger. Attendees who showed up get refunded."</div>
+                                    <div class="landing-timeline-title">"Settle deposits in one place"</div>
+                                    <div class="landing-timeline-desc">"A payout queue lists every deposit to return, and anything kept as credit stays on the attendee's balance for your next event."</div>
                                 </div>
                             </div>
                         </div>
@@ -356,8 +356,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Chain class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Instant on-chain ledger confirmation"</div>
-                                    <div class="landing-timeline-desc">"Every check-in is recorded on Solana. Manual search fallback available for lost QR codes."</div>
+                                    <div class="landing-timeline-title">"Badge on Solana"</div>
+                                    <div class="landing-timeline-desc">"Checked-in attendees can claim a compressed NFT badge on Solana. Manual search fallback available for lost QR codes."</div>
                                 </div>
                             </div>
                         </div>
@@ -383,7 +383,7 @@ pub fn Landing() -> impl IntoView {
                             "What is BeThere?"
                         </h3>
                         <p class="landing-faq-a">
-                            "A deposit-backed event check-in platform on Solana. Attendees lock a deposit, show up, get scanned, and receive a full refund plus a compressed NFT badge. No-shows forfeit their deposit to the organizer."
+                            "A deposit-backed event check-in platform. Attendees put down a deposit, show up, get scanned, and get the whole deposit back, plus a compressed NFT badge on Solana."
                         </p>
                     </div>
 
@@ -392,7 +392,7 @@ pub fn Landing() -> impl IntoView {
                             "Do attendees need a crypto wallet?"
                         </h3>
                         <p class="landing-faq-a">
-                            "Not to check in! QR scanning works on any phone. A wallet is only needed when claiming the NFT badge and deposit refund afterward."
+                            "No. Checking in and paying by PromptPay work on any phone. A wallet is only needed to pay a USDC deposit or to claim the NFT badge."
                         </p>
                     </div>
 
@@ -401,7 +401,7 @@ pub fn Landing() -> impl IntoView {
                             "How does the deposit work?"
                         </h3>
                         <p class="landing-faq-a">
-                            "Organizers set a deposit amount (e.g., 500 THB / ~$15). After check-in, the deposit is refunded on-chain. No-shows forfeit to the organizer."
+                            "Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back after the event, or you keep it as credit for your next event. USDC deposits sit in a Solana escrow and you claim them back after the event ends."
                         </p>
                     </div>
 

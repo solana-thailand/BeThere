@@ -85,6 +85,13 @@ pub fn make_upload_slip(
                 }
             };
 
+            // Only an uploaded image can carry a QR we can read; a pasted URL
+            // is someone else's host and is not fetched.
+            let slip_qr = match slip_url.starts_with("data:image/") {
+                true => js_interop::decode_slip_qr(&slip_url).await,
+                false => None,
+            };
+
             let body = ThbSlipUploadRequest {
                 event_id: event_id.unwrap_or_default(),
                 attendee_id,
@@ -101,6 +108,7 @@ pub fn make_upload_slip(
                     let v = account_name_input_for_upload.trim().to_string();
                     if v.is_empty() { None } else { Some(v) }
                 },
+                slip_qr,
             };
             match api::upload_thb_slip(&body).await {
                 Ok(_resp) => {

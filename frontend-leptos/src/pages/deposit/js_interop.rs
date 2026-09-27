@@ -71,6 +71,32 @@ pub fn download_data_url(data_url: &str, filename: &str) {
     download_data_url_js(data_url, filename);
 }
 
+#[wasm_bindgen(module = "/js/slip_qr.js")]
+extern "C" {
+    /// Decode a slip's mini-QR from an image data URL. Never rejects.
+    #[wasm_bindgen(js_name = "decodeSlipQr")]
+    fn decode_slip_qr_js_raw(data_url: &str) -> js_sys::Promise;
+}
+
+/// The slip's mini-QR text, if the image has a readable one (`.plans/033` W1).
+///
+/// Only a payload the shared `domain` parser accepts is returned: a payment QR
+/// photographed by mistake, or a blurry misread, is dropped here rather than
+/// sent. The server parses it again either way.
+pub async fn decode_slip_qr(data_url: &str) -> Option<String> {
+    let raw = wasm_bindgen_futures::JsFuture::from(decode_slip_qr_js_raw(data_url))
+        .await
+        .ok()?
+        .as_string()?;
+    match event_checkin_domain::slip_verify::parse_slip_verify(raw.trim()) {
+        Ok(_) => Some(raw.trim().to_string()),
+        Err(e) => {
+            log::info!("[deposit] slip QR not used: {e}");
+            None
+        }
+    }
+}
+
 pub async fn read_file_as_data_url(input_element: &JsValue) -> Option<String> {
     match wasm_bindgen_futures::JsFuture::from(read_file_as_data_url_js_raw(input_element)).await {
         Ok(val) => val.as_string(),

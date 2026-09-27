@@ -826,13 +826,13 @@ pub fn EventFormComponent(
                                             "[event-form] failed to save escrow fields: {e}"
                                         );
                                     }
-                                    components::show_toast(
+                                    components::show_mutation_toast(
                                         &set_toast,
                                         &format!(
                                             "Event '{}' created + escrow initialized",
                                             created.name
                                         ),
-                                        components::ToastType::Success,
+                                        &created.warnings,
                                     );
                                 }
                                 crate::wallet_error::WalletResult::Error(e) => {
@@ -877,10 +877,10 @@ pub fn EventFormComponent(
                         }
                     }
                 } else {
-                    components::show_toast(
+                    components::show_mutation_toast(
                         &set_toast,
                         &format!("Event '{}' created", created.name),
-                        components::ToastType::Success,
+                        &created.warnings,
                     );
                 }
 
@@ -994,10 +994,10 @@ pub fn EventFormComponent(
             leptos::task::spawn_local(async move {
                 match api::update_event(&eid, &body).await {
                     Ok(data) => {
-                        components::show_toast(
+                        components::show_mutation_toast(
                             &set_toast,
                             &format!("Event '{}' updated", data.name),
-                            components::ToastType::Success,
+                            &data.warnings,
                         );
                         on_done();
                     }
@@ -1442,7 +1442,7 @@ pub fn EventFormComponent(
                                                     Ok(res) => {
                                                         let url = res.poster_url.clone();
                                                         set_form.update(|f| f.poster_url = url.clone());
-                                                        components::show_toast(&set_toast, "Poster uploaded", components::ToastType::Success);
+                                                        components::show_mutation_toast(&set_toast, "Poster uploaded", &res.warnings);
                                                     }
                                                     Err(e) => {
                                                         log::error!("[event-form] poster upload failed: {e}");
@@ -1490,9 +1490,9 @@ pub fn EventFormComponent(
                                             set_poster_busy.set(true);
                                             leptos::task::spawn_local(async move {
                                                 match api::delete_poster(&eid).await {
-                                                    Ok(_) => {
+                                                    Ok(res) => {
                                                         set_form.update(|f| f.poster_url = String::new());
-                                                        components::show_toast(&set_toast, "Poster removed", components::ToastType::Success);
+                                                        components::show_mutation_toast(&set_toast, "Poster removed", &res.warnings);
                                                     }
                                                     Err(e) => {
                                                         log::error!("[event-form] poster delete failed: {e}");
@@ -2608,10 +2608,10 @@ pub fn EventFormComponent(
                                 leptos::task::spawn_local(async move {
                                     match api::archive_event(&aid).await {
                                         Ok(data) => {
-                                            components::show_toast(
+                                            components::show_mutation_toast(
                                                 &set_toast,
                                                 &format!("Event '{}' archived", data.name),
-                                                components::ToastType::Success,
+                                                &data.warnings,
                                             );
                                             on_done_ref();
                                         }

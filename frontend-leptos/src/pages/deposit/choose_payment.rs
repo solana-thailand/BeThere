@@ -211,6 +211,13 @@ pub fn choose_payment_view(
                                                     {format!("{} USDC", usdc_formatted)}
                                                 </div>
                                                 <div class="dep2-method-label">"via Solana"</div>
+                                                <button class="dep2-method-cta"
+                                                    on:click=move |ev| {
+                                                        ev.stop_propagation();
+                                                        set_payment_choice.set(Some(PaymentChoice::Usdc));
+                                                    }>
+                                                    "Pay with USDC →"
+                                                </button>
                                             </div>
                                         }.into_any()
                                     } else {

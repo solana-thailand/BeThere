@@ -72,6 +72,11 @@ pub struct AdminSlipUploadRequest {
     /// attendee endpoint) — the admin must verify via `/deposit/thb/verify`.
     #[serde(default = "default_auto_verify")]
     pub auto_verify: bool,
+    /// The slip's mini-QR text, decoded in the admin's browser
+    /// (`.plans/033` W1). Re-parsed server-side; absent or unreadable means
+    /// the vision fallback, when it is on.
+    #[serde(default)]
+    pub slip_qr: Option<String>,
 }
 
 fn default_auto_verify() -> bool {
@@ -319,6 +324,19 @@ pub async fn admin_upload_thb_slip_handler(
     event_store::save_thb_deposit(kv, &thb_deposit, d1)
         .await
         .map_err(AppError::Internal)?;
+
+    // Slip agent, shadow mode, same as the attendee upload. With auto_verify
+    // the organizer has already decided, so the proposal is a free agreement
+    // sample. Cannot fail the upload.
+    super::slip_agent::propose_after_upload(
+        &state,
+        &event,
+        &body.attendee_id,
+        attendee.registration_date.as_deref(),
+        body.slip_qr.as_deref(),
+        &body.slip_url,
+    )
+    .await;
 
     // 9. Write bank info to Google Sheet for organizer refund reference.
     if let Ok(mapping) =

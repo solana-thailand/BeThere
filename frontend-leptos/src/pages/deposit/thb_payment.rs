@@ -14,6 +14,11 @@ use crate::components::LightboxImage;
 // THB payment form (ChoosePayment → Thb)
 // ---------------------------------------------------------------------------
 
+/// Shown above the file picker only while the worker's vision fallback is on
+/// (`.plans/033` §4 Q3): the attendee learns before submitting that a slip
+/// without a readable QR leaves our storage for the Claude API.
+const SLIP_VISION_PRIVACY_LINE: &str = "Privacy: if the QR code on your slip can't be read, the slip image is sent to Anthropic's Claude API to read the amount and reference. The organizer still reviews every slip.";
+
 /// Renders the full THB payment form: instructions, PromptPay QR, slip upload,
 /// bank account info, and submit button.
 #[allow(clippy::too_many_arguments)]
@@ -39,6 +44,7 @@ pub fn thb_payment_form_view(
     let pp_amount = data.deposit_amount_thb as f64;
     let pp_reference = data.event_name.clone();
     let has_promptpay = !data.promptpay_id.is_empty() && data.deposit_amount_thb > 0;
+    let slip_vision_enabled = data.slip_vision_enabled;
 
     log::trace!(
         "[thb_payment] promptpay_id='{}' amount={} has_promptpay={}",
@@ -130,6 +136,11 @@ pub fn thb_payment_form_view(
                 <p class="thb-slip-hint">
                     "Take a screenshot or photo of your transfer confirmation. Max 3MB (JPEG, PNG, WebP)."
                 </p>
+                {slip_vision_enabled.then(|| view! {
+                    <p class="thb-slip-hint">
+                        {SLIP_VISION_PRIVACY_LINE}
+                    </p>
+                })}
                 <input
                     type="file"
                     accept="image/jpeg,image/png,image/webp"

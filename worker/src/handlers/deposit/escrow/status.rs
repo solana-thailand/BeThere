@@ -215,7 +215,7 @@ pub async fn confirm_escrow_init_handler(
         .into());
     }
 
-    if !already_persisted {
+    let warnings = if !already_persisted {
         let update_req = UpdateEventRequest {
             // None = leave the waived-email list alone; this path only moves
             // escrow state.
@@ -279,7 +279,7 @@ pub async fn confirm_escrow_init_handler(
             location_map_url: None,
         };
 
-        event_store::update_event(kv, d1, &event.id, &update_req, &claims.email)
+        let saved = event_store::update_event(kv, d1, &event.id, &update_req, &claims.email)
             .await
             .map_err(|e| AppError::Internal(format!("failed to persist escrow state: {e}")))?;
 
@@ -298,17 +298,20 @@ pub async fn confirm_escrow_init_handler(
             )
             .await;
         }
+        saved.d1_sync.warnings()
     } else {
         tracing::debug!(
             event_id = %event.id,
             "escrow already persisted with matching address — skipping update"
         );
-    }
+        Vec::new()
+    };
 
     Ok(ApiOk::new(ConfirmEscrowInitResponse {
         escrow_address,
         on_chain_event_id,
         escrow_status: EscrowStatus::Initialized,
+        warnings,
     }))
 }
 

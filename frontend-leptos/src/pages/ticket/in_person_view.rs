@@ -1,5 +1,6 @@
 //! In-person attendee view — hero, QR, info, deposit, status badges.
 
+use event_checkin_domain::models::attendee::ParticipationType;
 use leptos::prelude::*;
 use leptos_router::components::A;
 use wasm_bindgen::prelude::*;
@@ -64,6 +65,7 @@ pub fn InPersonView(
         escrow_closed,
         has_video,
         video_url,
+        event_name,
         event_tagline,
         event_location,
         event_location_map_url,
@@ -164,6 +166,7 @@ pub fn InPersonView(
             // ── Event context ──
             <EventContext
                 nft_image_url=nft_image_url.clone()
+                name=event_name.clone()
                 tagline=event_tagline.clone()
                 location=event_location.clone()
                 location_map_url=event_location_map_url.clone()
@@ -222,12 +225,12 @@ pub fn InPersonView(
                     view! { <div></div> }.into_any()
                 }}
                 {if !participation.is_empty() {
-                    let pt = participation;
+                    let pt = ParticipationType::parse(&participation).display();
                     view! {
                         <div class="ticket-info-row">
                             <span class="ticket-info-label">"Type"</span>
                             <span class="ticket-info-value">
-                                {utils::escape_html(&pt)}
+                                {pt}
                             </span>
                         </div>
                     }.into_any()

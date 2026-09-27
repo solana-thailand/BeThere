@@ -40,7 +40,7 @@ pub async fn seed_event(
         })?;
 
     // D1 dual-write (non-fatal)
-    crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
+    let d1_sync = crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
     tracing::info!(
         event_id = %config.id,
@@ -54,6 +54,7 @@ pub async fn seed_event(
         "name": config.name,
         "slug": config.slug,
         "status": config.status.as_str(),
+        "warnings": d1_sync.warnings(),
     })))
 }
 
