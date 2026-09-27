@@ -1,6 +1,6 @@
 # 097 — Online attendees could never be asked, and the form they land on staircased
 
-**Status:** fixed 2026-09-14; migration 0037 + backfill **not applied to prod**
+**Status:** fixed 2026-09-14 in `6d1b2573`; migration 0037 + backfill **not applied to prod**
 **Found:** 2026-09-14, from the organizer's screenshot of the live page
 **Severity:** high for the gate (335 people unreachable), medium for the layout
 

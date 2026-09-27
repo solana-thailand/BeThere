@@ -1,6 +1,6 @@
 # 076 — e2e shell helpers are copy-pasted across scripts, with no shared library
 
-**Status:** fixed 2026-09-13 (devnet runs still outstanding — see Verification)
+**Status:** fixed 2026-09-13 in `18ef80ab` (devnet runs still outstanding — see Verification)
 **Found:** 2026-09-13, while validating the #072 ownership assertion
 **Severity:** low (maintenance / correctness-drift risk, not a live defect)
 

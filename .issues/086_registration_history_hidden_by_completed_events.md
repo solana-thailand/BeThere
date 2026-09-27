@@ -1,6 +1,6 @@
 # 086 — Marking an event completed erases every attendee's registration history
 
-**Status:** fixed 2026-09-13, **not yet deployed to production**
+**Status:** fixed 2026-09-13 in `2988e778`; deployed (in prod tag `deploy/production/20260924T124456Z`, re-checked 2026-09-28)
 **Found:** 2026-09-13, by the repo owner noticing their own profile said they
 had never registered for anything
 **Severity:** high, user-facing — no data loss, but it is indistinguishable

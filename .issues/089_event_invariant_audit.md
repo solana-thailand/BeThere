@@ -1,6 +1,6 @@
 # 089 — An audit for event states that should never coexist
 
-**Status:** implemented 2026-09-13
+**Status:** implemented 2026-09-13 in `3c888e87`
 **Asked for by:** the repo owner — *"มีวิธีพัฒนาเพื่อไม่ให้เกิด wrong flow ได้ไหม"*
 **Severity:** preventative
 

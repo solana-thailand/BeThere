@@ -1,6 +1,6 @@
 # 064 — Remove claim-token capability values from logs
 
-Status: implemented locally — pending full release validation
+Status: deployed — the helper, the fingerprint fields and `worker/tests/claim_token_log_guard.rs` landed in `afc631b4`, which is in every prod tag since the first (`deploy/production/20260924T124456Z`; re-checked 2026-09-28). The "pending release validation" note below is from 2026-09-10.
 
 The 2026-09-10 core-service log scan found direct `claim_token = %token` fields
 across claim locking, mint lookup/execution, quiz, check-in, adventure, and

@@ -1,6 +1,6 @@
 # 055: Duplicate Event (Server-Side Copy to Draft)
 
-## Status: ✅ Done — shipped on `feature/solana_mobile_demo` (commit `f376fc4`)
+## Status: ✅ Done — shipped on feature/solana_mobile_demo, since merged and deleted, (commit `f376fc4`)
 
 > **Updated 2026-06-24:** Verified against code — backend handler
 > (`worker/src/handlers/events/duplicate.rs`), domain types

@@ -3,7 +3,7 @@
 ## Summary
 Security audit identified a critical rug pull vector: the organizer controls check-in, which gates refunds. If the organizer refuses to check in attendees, they can claim all deposits as forfeited. This issue tracks all security fixes from the audit.
 
-## Status: RESOLVED
+## Status: RESOLVED — Phases 1–4 landed in `bf1875aa`, `70a0908d`, `db32659a` and `cd3bb2f5`
 
 All 11 findings addressed: 9 fixed (Phases 1–4), 2 confirmed safe.
 

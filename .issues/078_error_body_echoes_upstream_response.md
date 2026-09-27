@@ -1,6 +1,6 @@
 # 078 — API error bodies echo raw upstream responses to unauthenticated callers
 
-**Status:** fixed 2026-09-13 (verified locally; not yet deployed)
+**Status:** fixed 2026-09-13 in `7136dbf6`; deployed (in prod tag `deploy/production/20260924T124456Z`, re-checked 2026-09-28)
 **Found:** 2026-09-13, while validating Issue 071 against staging
 **Severity:** medium (information disclosure; no auth bypass, no data loss)
 

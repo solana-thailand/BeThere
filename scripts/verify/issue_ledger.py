@@ -48,6 +48,9 @@ ROOT = Path(__file__).resolve().parents[2]
 ISSUES = ROOT / ".issues"
 
 STATUS_RE = re.compile(r"^\W*status\W*:?", re.IGNORECASE)
+# The next header field (`**Found:**`, `> Prerequisite:`) ends the Status block;
+# its words ("shipped", "DEPLOYED") describe something else.
+FIELD_RE = re.compile(r"^[>\s]*(?:\*\*)?[A-Z][\w ]{1,40}(?:\*\*)?\s*:")
 SHA_RE = re.compile(r"`([0-9a-f]{7,40})`")
 BRANCH_RE = re.compile(r"`((?:feature|hotfix|release|fix)/[\w./-]+)`")
 # How commit messages name an issue: `.issues/138`, `#138`, `docs(138)`, `issue 138`.
@@ -135,7 +138,7 @@ def status_block(text: str) -> str:
         if STATUS_RE.match(line):
             block = [line]
             for nxt in lines[i + 1 : i + 12]:
-                if not nxt.strip() or nxt.startswith("#"):
+                if not nxt.strip() or nxt.startswith("#") or FIELD_RE.match(nxt):
                     break
                 block.append(nxt)
             return "\n".join(block)
@@ -164,7 +167,7 @@ def vocab_flags(path: Path, block: str) -> list[Flag]:
 
 
 def classify(block: str) -> Claim:
-    low = block.lower()
+    low = " ".join(block.lower().split())
     match low:
         case "":
             return Claim.NONE
@@ -172,7 +175,7 @@ def classify(block: str) -> Claim:
             return Claim.FIXED_UNDEPLOYED
         case _ if "deployed" in low:
             return Claim.DEPLOYED
-        case _ if re.search(r"\b(fixed|implemented|resolved|shipped|built|closed)\b", low):
+        case _ if re.search(r"\b(fixed|implemented|resolved|shipped|built|closed|completed)\b", low):
             return Claim.FIXED
         case _ if "open" in low:
             return Claim.OPEN
@@ -251,7 +254,21 @@ def self_test() -> int:
         failures += not ok
         print(f"{'✅' if ok else '❌'} {label}: {[f.name for f in got]}")
     print(f"\n{'❌' if failures else '✅'} {len(cases) - failures}/{len(cases)} vocabulary cases behaved as expected.")
-    return 1 if failures else 0
+
+    # The Status block ends at the next header field; its words are not the claim.
+    blocks: list[tuple[str, str, Claim]] = [
+        ("wrapped status line", "**Status:** fixed 2026-09-13, not\ndeployed yet.", Claim.FIXED_UNDEPLOYED),
+        ("bold field ends it", "**Status:** open.\n**Severity:** high (prod cannot be deployed)", Claim.OPEN),
+        ("quoted field ends it", "> **Status**: in progress\n> Prerequisite: #046 ✅ DEPLOYED", Claim.OTHER),
+    ]
+    block_failures = 0
+    for label, text, want in blocks:
+        got = classify(status_block(text))
+        ok = got == want
+        block_failures += not ok
+        print(f"{'✅' if ok else '❌'} {label}: {got.name}")
+    print(f"{'❌' if block_failures else '✅'} {len(blocks) - block_failures}/{len(blocks)} status-block cases behaved as expected.")
+    return 1 if failures or block_failures else 0
 
 
 def main() -> int:
