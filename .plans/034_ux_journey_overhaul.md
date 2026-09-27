@@ -3,7 +3,7 @@
 **Status:** open. Proposed 2026-09-27 by `event-checkin-89` at the owner's request.
 **Supersedes** `docs/ux_roadmap.md` (audit dated 2025-05-10; stale).
 **Timing:** Part A is small, on-camera fixes inside the plan 033 window.
-Part B starts **Mon 13 Oct**, after both submissions. Plan 033 §1 still
+Part B starts **Tue 13 Oct**, after both submissions. Plan 033 §1 still
 holds: spending the window on UI polish loses.
 
 ## 0. Evidence
@@ -119,4 +119,4 @@ The smoke test's fixture cleanup returned 400 once; a manual archive + delete
 right after returned 200. Not yet explained.
 
 Not on prod. A1 is the one that matters before judges read the site; it
-ships with the Fri 3 Oct deploy (owner go).
+ships with the Sat 3 Oct deploy (owner go).

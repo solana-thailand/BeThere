@@ -3,7 +3,7 @@
 **Ask (owner, 2026-09-23):** improve system performance in every respect.
 **Constraint that ranks everything:** the Cloudflare **free plan** — 10 ms CPU
 per request ([[free-plan-cpu-cap-is-binding]]), **1,000 KV writes/day**,
-100k KV reads/day, 50 subrequests/request. RTM#6 is 2026-09-27; prod deploys
+100k KV reads/day, 50 subrequests/request. RTM#6 is 2026-10-04 per plans 033 and 034 (this plan earlier said 2026-09-27); prod deploys
 are owner-gated, so everything here lands on `develop` + staging first.
 
 Sources: two read-only audits (worker hot paths, frontend runtime) run this
@@ -78,7 +78,7 @@ Two audit recommendations were **rejected after measurement** — see §4.
 
 ## 5. Not doing before RTM#6
 
-W3, W4, W5 (schema/semantics changes on paths RTM#6 exercises) — after 2026-09-27, each with a staging rehearsal.
+W3, W4, W5 (schema/semantics changes on paths RTM#6 exercises) — after 2026-10-04, each with a staging rehearsal.
 
 ## Deploy record
 
