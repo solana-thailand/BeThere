@@ -1,6 +1,6 @@
 # 099 — `/discover` bounced every signed-out visitor to the login page
 
-**Status:** fixed 2026-09-14, **not deployed**
+**Status:** deployed — `07da6f92` is an ancestor of `deploy/production/20260927T155700Z` (checked 2026-09-28). Originally: fixed 2026-09-14.
 **Found:** 2026-09-14, opening the deployed page instead of trusting the compile
 **Severity:** high — the page exists to be the first thing people see, and it
 was unreachable for anyone not already signed in
