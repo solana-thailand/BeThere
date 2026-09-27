@@ -117,36 +117,12 @@ pub(crate) async fn check_in_person_capacity(
         return true;
     }
 
-    // Count in-person attendees from sheet
-    let attendees = match crate::sheets::get_attendees_for_event(
-        state,
-        &event.sheet_id,
-        &event.sheet_name,
-        kv,
-        &event.id,
-    )
-    .await
-    {
-        Ok(a) => a,
+    // Walk-ins included (.issues/157). Assume full when the count is unknown.
+    match crate::handlers::capacity::count_tracks(state, event, kv).await {
+        Ok(counts) => event.has_in_person_capacity(counts.in_person),
         Err(e) => {
-            tracing::warn!(error = %e, "reclaim capacity: failed to get attendees");
-            return false; // Assume full on error
-        }
-    };
-
-    let in_person_count = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
-
-    // Count walk-in attendees from D1
-    let mut walkin_count: u32 = 0;
-    if let Some(db) = state.d1.as_deref() {
-        match crate::db::attendees::count_walkin_attendees(db, &event.id).await {
-            Ok(count) => walkin_count = count,
-            Err(e) => {
-                tracing::warn!(error = %e, "reclaim capacity: failed to count D1 walkins");
-            }
+            tracing::warn!(error = %e, "reclaim capacity: failed to count attendees");
+            false
         }
     }
-
-    let total = in_person_count + walkin_count;
-    event.has_in_person_capacity(total)
 }

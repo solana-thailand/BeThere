@@ -512,53 +512,20 @@ fn public_learning_resources(
         .collect()
 }
 
-/// Count attendees by track from sheet data.
-/// Returns (in_person_count, online_count).
+/// Count attendees by track for the capacity display.
+/// Returns (in_person_count, online_count); an unknown count shows as (0, 0).
 async fn count_attendees_by_track(
     state: &AppState,
     config: &event_checkin_domain::models::event::EventConfig,
     kv: Option<&worker::kv::KvStore>,
 ) -> (u32, u32) {
-    let attendees = match crate::sheets::get_attendees_for_event(
-        state,
-        &config.sheet_id,
-        &config.sheet_name,
-        kv,
-        &config.id,
-    )
-    .await
-    {
-        Ok(a) => a,
+    match crate::handlers::capacity::count_tracks(state, config, kv).await {
+        Ok(counts) => (counts.in_person, counts.online),
         Err(e) => {
             tracing::warn!(error = %e, "failed to count attendees for capacity");
-            return (0, 0);
-        }
-    };
-
-    let mut in_person_count: u32 = 0;
-    let mut online_count: u32 = 0;
-
-    for attendee in &attendees {
-        if attendee.is_in_person() {
-            in_person_count += 1;
-        } else if attendee.counts_toward_online_track() {
-            online_count += 1;
+            (0, 0)
         }
     }
-
-    // Count walk-in attendees as in-person from D1.
-    if let Some(db) = state.d1.as_deref() {
-        match crate::db::attendees::count_walkin_attendees(db, &config.id).await {
-            Ok(count) => {
-                in_person_count += count;
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "D1 walkin count for public stats failed, skipping");
-            }
-        }
-    }
-
-    (in_person_count, online_count)
 }
 
 /// Check whether online registration is currently open based on `OnlineOpenMode`.

@@ -257,16 +257,11 @@ pub async fn get_public_ticket(
             // Check capacity
             let cap = event.in_person_capacity;
             let available = if let Some(cap) = cap {
-                let count = sheets::get_attendees_for_event(
-                    &state,
-                    &event.sheet_id,
-                    &event.sheet_name,
-                    kv,
-                    &event.id,
-                )
-                .await
-                .map(|a| a.iter().filter(|a| a.is_in_person()).count() as u32)
-                .unwrap_or(u32::MAX);
+                // Walk-ins included; an unknown count reads as full (.issues/157).
+                let count = crate::handlers::capacity::count_tracks(&state, &event, kv)
+                    .await
+                    .map(|c| c.in_person)
+                    .unwrap_or(u32::MAX);
                 count < cap
             } else {
                 true

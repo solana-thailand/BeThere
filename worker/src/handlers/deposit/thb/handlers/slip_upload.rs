@@ -260,16 +260,12 @@ pub async fn upload_thb_slip_handler(
             // Deadline passed — check if reclaim is possible
             let capacity_available = if let Some(cap) = event.in_person_capacity {
                 // Quick capacity check (sheet only — walk-ins less likely for THB)
-                let in_person_count = crate::sheets::get_attendees_for_event(
-                    &state,
-                    &event.sheet_id,
-                    &event.sheet_name,
-                    Some(kv),
-                    &event.id,
-                )
-                .await
-                .map(|a| a.iter().filter(|a| a.is_in_person()).count() as u32)
-                .unwrap_or(u32::MAX);
+                // Walk-ins included; an unknown count reads as full (.issues/157).
+                let in_person_count =
+                    crate::handlers::capacity::count_tracks(&state, &event, Some(kv))
+                        .await
+                        .map(|c| c.in_person)
+                        .unwrap_or(u32::MAX);
                 in_person_count < cap
             } else {
                 true // No capacity limit = always available
