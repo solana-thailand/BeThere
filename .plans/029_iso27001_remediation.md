@@ -120,7 +120,7 @@
 - [ ] Scheduled, encrypted D1 export with an offsite copy and a restore drill. **Blocker (2026-09-28): owner decision + credentials.** An offsite destination and credentials for it do not exist yet.
       Covers R2 and KV too (5.30, 8.13).
 - [ ] CSP: remove `script-src 'unsafe-inline'` (8.23). **Implemented on branch `feature/csp-no-unsafe-inline` (`c4710201`, 2026-09-28), deliberately not merged:** `develop` ships to prod on 3 Oct and this changes how every page boots. Blocker: the RTM #6 hold; merge after 2026-10-04, then soak on staging. Evidence is in that commit's copy of this plan.
-- [ ] A separate log-fingerprint key, instead of reusing `JWT_SECRET` (8.11). **Blocker (2026-09-28): credentials.** A new secret has to be provisioned on staging and prod; the code change is small once it exists.
+- [ ] A separate log-fingerprint key, instead of reusing `JWT_SECRET` (8.11). **Blocker (2026-09-28): credentials.** A new secret has to be provisioned on staging and prod; the code change is small once it exists. **Code done on branch `feature/029-log-fingerprint-key` (`e0504c38`, 2026-09-28), not merged:** `AppConfig::log_fingerprint_key` is `LOG_FINGERPRINT_KEY`, or `JWT_SECRET` when that is unset, so nothing changes until the secret exists. Guard: `worker/tests/log_fingerprint_key_guard.rs`. Remaining owner steps: `wrangler secret put LOG_FINGERPRINT_KEY` on staging and prod, then merge. Every fingerprint changes once at that switch.
       Move capability tokens out of URL paths (`.issues/071`).
 
 ## 4. Owner decisions (gated)
