@@ -100,7 +100,6 @@ pub async fn deposit_usdc_tx_handler(
     // Build the deposit transaction
     let tx = crate::solana_escrow::build_deposit_transaction(
         &rpc_url,
-        kv,
         organizer_pubkey,
         on_chain_event_id,
         &query.wallet,

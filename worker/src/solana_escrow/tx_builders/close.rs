@@ -1,5 +1,4 @@
 use event_checkin_domain::onchain::EventIx;
-use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
 use super::super::{
@@ -16,7 +15,6 @@ use super::{EscrowCtx, acct_r, acct_sw, acct_w, finalize_tx};
 ///
 /// # Arguments
 /// * `rpc_url` — Solana RPC URL (with API key if needed)
-/// * `kv` — Optional KV store for blockhash caching
 /// * `organizer_pubkey` — Organizer's wallet address (base58), must be signer
 /// * `event_id` — Numeric event ID used for PDA derivation
 ///
@@ -28,7 +26,6 @@ use super::{EscrowCtx, acct_r, acct_sw, acct_w, finalize_tx};
 ///   1. event_escrow (writable, PDA)
 pub async fn build_deactivate_event_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
 ) -> Result<DeactivateEventTransaction, EscrowError> {
@@ -40,7 +37,6 @@ pub async fn build_deactivate_event_transaction(
 
     let tx_b64 = finalize_tx(
         rpc_url,
-        kv,
         &ctx,
         instruction_accounts,
         ctx.ix_data(EventIx::DeactivateEvent),
@@ -62,7 +58,6 @@ pub async fn build_deactivate_event_transaction(
 ///
 /// # Arguments
 /// * `rpc_url` — Solana RPC URL (with API key if needed)
-/// * `kv` — Optional KV store for blockhash caching
 /// * `organizer_pubkey` — Organizer's wallet address (base58), must be signer
 /// * `event_id` — Numeric event ID used for PDA derivation
 ///
@@ -76,7 +71,6 @@ pub async fn build_deactivate_event_transaction(
 ///   3. token_program (readonly)
 pub async fn build_close_event_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
 ) -> Result<CloseEventTransaction, EscrowError> {
@@ -93,7 +87,6 @@ pub async fn build_close_event_transaction(
 
     let tx_b64 = finalize_tx(
         rpc_url,
-        kv,
         &ctx,
         instruction_accounts,
         ctx.ix_data(EventIx::CloseEvent),
@@ -114,7 +107,6 @@ pub async fn build_close_event_transaction(
 ///
 /// # Arguments
 /// * `rpc_url` — Solana RPC URL (with API key if needed)
-/// * `kv` — Optional KV store for blockhash caching
 /// * `organizer_pubkey` — Organizer's wallet address (base58), must be signer
 /// * `attendee_pubkey` — Attendee's wallet address (base58) for deposit derivation
 /// * `event_id` — Numeric event ID used for PDA derivation
@@ -135,7 +127,6 @@ pub async fn build_close_event_transaction(
 #[allow(dead_code)]
 pub async fn build_claim_forfeited_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     attendee_pubkey: &str,
     event_id: u64,
@@ -166,7 +157,6 @@ pub async fn build_claim_forfeited_transaction(
 
     let tx_b64 = finalize_tx(
         rpc_url,
-        kv,
         &ctx,
         instruction_accounts,
         ctx.ix_data(EventIx::ClaimForfeited),
@@ -187,7 +177,6 @@ pub async fn build_claim_forfeited_transaction(
 ///
 /// # Arguments
 /// * `rpc_url` — Solana RPC URL (with API key if needed)
-/// * `kv` — Optional KV store for blockhash caching
 /// * `organizer_pubkey` — Organizer's wallet address (base58), used for PDA derivation
 /// * `event_id` — Numeric event ID used for PDA derivation
 /// * `attendee_pubkey` — Attendee's wallet address (base58), must be signer
@@ -202,7 +191,6 @@ pub async fn build_claim_forfeited_transaction(
 ///   3. system_program (readonly)
 pub async fn build_close_deposit_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     attendee_pubkey: &str,
@@ -222,7 +210,6 @@ pub async fn build_close_deposit_transaction(
 
     let tx_b64 = finalize_tx(
         rpc_url,
-        kv,
         &ctx,
         instruction_accounts,
         ctx.ix_data(EventIx::CloseDeposit),

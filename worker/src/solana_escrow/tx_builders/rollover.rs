@@ -1,5 +1,4 @@
 use event_checkin_domain::onchain::EscrowIxData;
-use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
 use super::super::{EscrowError, RolloverDepositTransaction};
@@ -13,13 +12,11 @@ use super::{EscrowCtx, acct_r, acct_sw, acct_w, finalize_tx};
 ///
 /// # Arguments
 /// * `rpc_url` — Solana RPC URL (with API key)
-/// * `kv` — Optional KV store for blockhash caching
 /// * `organizer_pubkey` — Organizer's wallet address (base58)
 /// * `event_id` — On-chain event ID for PDA derivation
 /// * `attendee_pubkey` — Attendee's wallet address (base58)
 pub async fn build_rollover_deposit_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     source_event_id: u64,
     target_event_id: u64,
@@ -60,15 +57,7 @@ pub async fn build_rollover_deposit_transaction(
     // ATA program for CPI init of target_deposit
     let extra = vec![acct_r(target_ctx.ata_program)];
 
-    let tx_b64 = finalize_tx(
-        rpc_url,
-        kv,
-        &source_ctx,
-        instruction_accounts,
-        ix_data,
-        &extra,
-    )
-    .await?;
+    let tx_b64 = finalize_tx(rpc_url, &source_ctx, instruction_accounts, ix_data, &extra).await?;
 
     Ok(RolloverDepositTransaction {
         transaction_b64: tx_b64,

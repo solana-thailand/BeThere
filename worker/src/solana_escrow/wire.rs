@@ -1,7 +1,5 @@
 //! Wire format serialization, blockhash management, and on-chain verification.
 
-use worker::KvStore;
-
 use super::crypto::{find_program_address, pubkey_from_base58, pubkey_to_base58};
 use super::{EscrowError, PubkeyBytes, escrow_program_id};
 
@@ -12,16 +10,27 @@ use super::{EscrowError, PubkeyBytes, escrow_program_id};
 use futures_util::future::join_all;
 
 // ---------------------------------------------------------------------------
-// Blockhash cache constants
+// Blockhash cache
 // ---------------------------------------------------------------------------
 
-/// KV key for caching the latest Solana blockhash.
-const BLOCKHASH_CACHE_KEY: &str = "cache:blockhash";
+/// How long one isolate reuses a fetched blockhash.
+///
+/// A blockhash is valid for 150 slots (roughly 60–90 s), and the wallet still
+/// has to sign after we hand the transaction over, so the copy we serve must be
+/// young. This used to be a 30 s KV entry, but KV rejects `expiration_ttl`
+/// below 60, so every put failed and every build went to the RPC (.issues/156).
+/// KV would be the wrong tier even at 60 s: an edge read can lag a write by up
+/// to 60 s, so a served hash could be two minutes old.
+const BLOCKHASH_CACHE_TTL_MS: f64 = 20_000.0;
 
-/// TTL for the cached blockhash in seconds (30s).
-/// Solana blockhashes expire after ~60s on mainnet; 30s gives a good
-/// trade-off between RPC call reduction and freshness.
-const BLOCKHASH_CACHE_TTL_SECS: u64 = 30;
+type BlockhashIsolateCache =
+    crate::isolate_cache::BoundedCache<String, crate::isolate_cache::Expiring<String>>;
+
+thread_local! {
+    /// The last blockhash per RPC URL, for this isolate only.
+    static BLOCKHASH_IN_ISOLATE: std::cell::RefCell<BlockhashIsolateCache> =
+        const { std::cell::RefCell::new(crate::isolate_cache::BoundedCache::new(2)) };
+}
 
 // ---------------------------------------------------------------------------
 // RPC helpers
@@ -33,47 +42,21 @@ pub(crate) struct RecentBlockhash {
     pub(crate) value: String,
 }
 
-/// Fetch the latest blockhash, using KV cache when available.
-///
-/// If `kv` is `Some`, checks KV for a cached blockhash. If present and
-/// younger than [`BLOCKHASH_CACHE_TTL_SECS`], returns the cached value.
-/// Otherwise fetches from RPC, stores in KV with the configured TTL,
-/// and returns the fresh value.
-pub(crate) async fn get_latest_blockhash(
-    rpc_url: &str,
-    kv: Option<&KvStore>,
-) -> Result<RecentBlockhash, EscrowError> {
-    // Try KV cache first
-    if let Some(kv) = kv {
-        let cached: Option<String> = kv
-            .get(BLOCKHASH_CACHE_KEY)
-            .text()
-            .await
-            .map_err(|e| {
-                tracing::warn!("blockhash cache read failed: {e:?}");
-                e
-            })
-            .ok()
-            .flatten();
-
-        if let Some(blockhash) = cached
-            && !blockhash.is_empty()
-        {
-            tracing::debug!("using cached blockhash");
-            return Ok(RecentBlockhash { value: blockhash });
-        }
+/// Fetch the latest blockhash, reusing this isolate's copy while it is younger
+/// than [`BLOCKHASH_CACHE_TTL_MS`].
+pub(crate) async fn get_latest_blockhash(rpc_url: &str) -> Result<RecentBlockhash, EscrowError> {
+    let now_ms = js_sys::Date::now();
+    let cached = BLOCKHASH_IN_ISOLATE
+        .with_borrow(|cache| cache.get(rpc_url).and_then(|entry| entry.get(now_ms)));
+    if let Some(value) = cached {
+        tracing::debug!("using cached blockhash");
+        return Ok(RecentBlockhash { value });
     }
 
-    // Cache miss or no KV — fetch from RPC
     let blockhash = fetch_blockhash_from_rpc(rpc_url).await?;
-
-    // Store in KV cache (best-effort — don't fail the tx build on cache write errors)
-    if let Some(kv) = kv
-        && let Err(e) = cache_blockhash(kv, &blockhash.value).await
-    {
-        tracing::warn!("blockhash cache write failed: {e:?}");
-    }
-
+    let expires_at_ms = now_ms + BLOCKHASH_CACHE_TTL_MS;
+    let entry = crate::isolate_cache::Expiring::new(blockhash.value.clone(), expires_at_ms);
+    BLOCKHASH_IN_ISOLATE.with_borrow_mut(|cache| cache.insert(rpc_url.to_string(), entry));
     Ok(blockhash)
 }
 
@@ -128,17 +111,6 @@ async fn fetch_blockhash_from_rpc(rpc_url: &str) -> Result<RecentBlockhash, Escr
     Ok(RecentBlockhash {
         value: blockhash.to_string(),
     })
-}
-
-/// Store a blockhash in KV with the configured TTL.
-async fn cache_blockhash(kv: &KvStore, blockhash: &str) -> Result<(), EscrowError> {
-    kv.put(BLOCKHASH_CACHE_KEY, blockhash)
-        .map_err(|e| EscrowError::RpcFailed(format!("blockhash cache put: {e:?}")))?
-        .expiration_ttl(BLOCKHASH_CACHE_TTL_SECS)
-        .execute()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("blockhash cache execute: {e:?}")))?;
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------

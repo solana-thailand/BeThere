@@ -1,5 +1,4 @@
 use event_checkin_domain::onchain::EventIx;
-use worker::KvStore;
 
 use super::super::crypto::pubkey_from_base58;
 use super::super::{EscrowError, MarkCheckedInTransaction};
@@ -17,7 +16,6 @@ use super::{EscrowCtx, acct_sw, acct_w, finalize_tx};
 /// * `attendee_pubkey` — Attendee's wallet address (base58)
 pub async fn build_mark_checked_in_transaction(
     rpc_url: &str,
-    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     attendee_pubkey: &str,
@@ -36,7 +34,6 @@ pub async fn build_mark_checked_in_transaction(
 
     let tx_b64 = finalize_tx(
         rpc_url,
-        kv,
         &ctx,
         instruction_accounts,
         ctx.ix_data(EventIx::MarkCheckedIn),
