@@ -1,7 +1,9 @@
 # Plan 035: slip OCR in the organizer's browser (W1 0 THB path)
 
-**Status:** open. Measured 28 Sep 2026 by `event-checkin-4d`; no product code
-has been written yet. This carries out the `.plans/033` §4 note "The 0 THB path: OCR in
+**Status:** parked 28 Sep 2026 (owner: OCR is not a differentiator; see §7).
+Reopen trigger: after the 12 Oct submission, or if prod still has no Claude
+key for the vision fallback by then. Step 1 (the `domain` parser) and the
+bench stay in the tree. Measured 28 Sep 2026 by `event-checkin-4d`. This carries out the `.plans/033` §4 note "The 0 THB path: OCR in
 the browser".
 **Numbers:** `.benchmarks/001` (tesseract.js 7, 24 synthetic slips × 6 cells,
 payload at brotli q4). Bench: `scripts/ocr_bench/`.
@@ -151,3 +153,14 @@ Steps, in order. Each step is its own commit.
   - any lead-group length accepted;
   - a time taken from another line.
 - Nothing calls the parser yet. §3.2 waits for §4 (see §5).
+
+## 7. Parked, 28 Sep 2026
+
+The owner judged that OCR alone looks ordinary, and it is. Thai slip-check
+services already exist and verify against bank data, which a pixel reader
+cannot. In this design OCR is only the 0 THB fallback for the vision path.
+It is plumbing, not the pitch. Steps 2–5 are not built before the 9 Oct
+freeze. The §4 real-slip homework (due 8 Oct) is withdrawn, so the owner's
+time goes to RTM #6 footage and the W3 story instead. What stays: the
+`slip_ocr` parser and its 13 tests (no runtime cost), `scripts/ocr_bench/`
+and `.benchmarks/001`. If the plan reopens, restart at §4.

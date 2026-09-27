@@ -67,6 +67,12 @@ instruction. So W3 is a thin MCP wrapper over existing code, not new chain work.
 - Rejected: writing slip verdicts or hashes on chain. That is Solana as
   decoration, which §1 says loses.
 
+**28 Sep:** the browser-OCR 0 THB path (`.plans/035`) is parked, not
+built. The owner found that OCR looks ordinary, and it is commodity. W1's AI
+claim rests on the QR path plus the "proposes / disposes" split and its
+shadow-mode numbers from RTM #6. The slip reader gets one line in the pitch;
+W3 leads.
+
 **What would lose** (from plan 026 §5, still true): AI as decoration;
 a demo that needs narration to excuse a manual step; claiming the escrow holds
 real money when it does not; spending the window on UI polish.
