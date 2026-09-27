@@ -1,7 +1,18 @@
 {
+  "bethere-mcp": {
+    "bethere_mcp src/lib.rs": 0,
+    "bethere_mcp src/main.rs": 0,
+    "doc-tests bethere_mcp": 0,
+    "protocol tests/protocol.rs": 11
+  },
   "domain-alloc-count": {
     "alloc_count tests/alloc_count.rs": 11,
     "alloc_count_checkin tests/alloc_count_checkin.rs": 5
+  },
+  "flow-harness": {
+    "doc-tests flow_harness": 0,
+    "flow_harness src/lib.rs": 132,
+    "flow_harness src/main.rs": 0
   },
   "frontend": {
     "admin_slip_request tests/admin_slip_request.rs": 2,

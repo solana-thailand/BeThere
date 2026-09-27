@@ -372,6 +372,53 @@ jobs:
         if: failure()
         run: cat /tmp/wrangler-dev.log
 
+  native-tools:
+    name: ${{ matrix.crate }} fmt + clippy + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # flow-harness and bethere-mcp are standalone cargo projects (their native
+    # Solana deps must never reach the worker's wasm32 graph), so build-test never
+    # touches them. flow-harness had drifted out of rustfmt unnoticed by 2026-09-27;
+    # bethere-mcp is the W3 agent demo and path-depends on flow-harness, so a
+    # harness change can break it too. Host target only: neither ships to wasm32.
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: [flow-harness, bethere-mcp]
+    defaults:
+      run:
+        working-directory: ${{ matrix.crate }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: ${{ matrix.crate }}
+
+      - name: cargo fmt --check
+        run: cargo fmt --check
+
+      - name: cargo clippy (-D warnings)
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: cargo test
+        # No test here touches the network: the live flows run only via the
+        # binaries against staging, never under `cargo test`.
+        run: |
+          set -o pipefail
+          cargo test --locked 2>&1 | tee "$RUNNER_TEMP/test-native.log"
+
+      - name: Test-count floors
+        # Plan 030 green-zero guard; see the workspace step in build-test.
+        run: python3 ../scripts/verify/test_count_floor.py --suite "${{ matrix.crate }}" "$RUNNER_TEMP/test-native.log"
+
   escrow-tests:
     name: escrow SVM tests (quasar)
     runs-on: ubuntu-latest
