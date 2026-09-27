@@ -19,6 +19,8 @@ fn storage_is_passed_through_before_the_network_only_branch() {
 
 #[test]
 fn other_api_calls_stay_network_only() {
-    let api = SW.find("if (url.pathname.startsWith(\"/api/\")) {").unwrap();
+    let api = SW
+        .find("if (url.pathname.startsWith(\"/api/\")) {")
+        .unwrap();
     assert!(SW[api..].contains("event.respondWith(networkOnly(req));"));
 }

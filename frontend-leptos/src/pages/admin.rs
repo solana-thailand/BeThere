@@ -59,8 +59,8 @@ impl DashboardTab {
     /// Whether an attendee belongs to this tab.
     fn matches(&self, participation_type: &str) -> bool {
         match self {
-            DashboardTab::InPerson => utils::is_in_person(participation_type),
-            DashboardTab::Online => !utils::is_in_person(participation_type),
+            DashboardTab::InPerson => utils::is_on_site_roster(participation_type),
+            DashboardTab::Online => !utils::is_on_site_roster(participation_type),
         }
     }
 }
