@@ -300,7 +300,7 @@ pub(crate) struct LogRedactor<'a> {
 }
 
 impl<'a> LogRedactor<'a> {
-    /// Build a redactor from the deployment secret (`config.jwt_secret`).
+    /// Build a redactor from the log-fingerprint key (`config.log_fingerprint_key`).
     pub(crate) fn new(secret: &'a str) -> Self {
         Self { secret }
     }

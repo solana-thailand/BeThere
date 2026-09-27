@@ -232,6 +232,10 @@ pub struct AppConfig {
     pub service_account: GoogleServiceAccountConfig,
     pub sheets: SheetsConfig,
     pub jwt_secret: String,
+    /// Key for the one-way fingerprints that stand in for personal identifiers
+    /// in logs (plan 029, ISO 27001 8.11). `LOG_FINGERPRINT_KEY` when set,
+    /// otherwise `jwt_secret`, which is what every fingerprint used before it.
+    pub log_fingerprint_key: String,
     pub staff_emails: HashSet<String>,
     pub super_admin_emails: HashSet<String>,
     pub server: ServerConfig,
@@ -276,6 +280,7 @@ impl fmt::Debug for AppConfig {
             .field("service_account", &self.service_account)
             .field("sheets", &self.sheets)
             .field("jwt_secret", &"***REDACTED***")
+            .field("log_fingerprint_key", &"***REDACTED***")
             .field("staff_emails", &self.staff_emails)
             .field("super_admin_emails", &self.super_admin_emails)
             .field("server", &self.server)

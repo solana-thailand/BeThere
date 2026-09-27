@@ -51,7 +51,7 @@ pub(crate) async fn recover_and_verify_deposit(
     // Issue 070: `attendee_id` is an internal identifier and stays readable;
     // wallet addresses and TX signatures are durable person-linking values and
     // are reduced to keyed fingerprints before they reach the log stream.
-    let redactor = crate::crypto::LogRedactor::new(&state.config.jwt_secret);
+    let redactor = state.log_redactor();
 
     // ── Phase 1: discover tx_signature on-chain if missing ──
     if status.tx_signature.as_deref().is_none_or(|s| s.is_empty()) {
