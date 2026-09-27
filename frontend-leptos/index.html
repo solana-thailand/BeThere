@@ -87,9 +87,10 @@
              stale shell can't reference purged, content-hashed JS/WASM (the
              blank-page-after-deploy bug). Hashed assets cache forever. -->
         <link data-trunk rel="copy-file" href="_headers" />
-        <!-- Inline SW registration is allowed here (no eval, just a register()
-             call). Project CSP (handover 007) restricts eval(), not inline
-             <script> registration calls. -->
+        <!-- Written inline for readability, but it does not ship inline: the
+             CSP has no script-src 'unsafe-inline', so build.sh
+             (externalize_inline_scripts.py) moves it and Trunk's loader into
+             hashed, SRI-pinned /inline-*.js files. -->
         <script>
             if ("serviceWorker" in navigator) {
                 window.addEventListener("load", function () {

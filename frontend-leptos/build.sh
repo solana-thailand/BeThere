@@ -118,6 +118,9 @@ build() {
     fi
 
     cleanup_html
+    # CSP has no script-src 'unsafe-inline' (plan 029 8.23): move the inline
+    # scripts into hashed, SRI-pinned files. Fails the build if one remains.
+    python3 externalize_inline_scripts.py dist
     bump_sw_version
     precompress_assets
 }

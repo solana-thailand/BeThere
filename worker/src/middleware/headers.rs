@@ -38,7 +38,7 @@ pub const SECURITY_HEADERS: [(&str, &str); 9] = [
     (
         "content-security-policy",
         "default-src 'self'; \
-         script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://telegram.org; \
+         script-src 'self' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://telegram.org; \
          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
          img-src 'self' data: blob: https:; \
          media-src 'self' blob:; \
