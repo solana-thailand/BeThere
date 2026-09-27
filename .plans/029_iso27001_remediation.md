@@ -85,6 +85,12 @@
       - Not precompressed: that needs a `run_worker_first` entry, which is the
         trap in `.issues/144`. Cloudflare's on-the-fly brotli is enough for a
         lazy iOS-only file.
+        **Superseded 2026-09-28 (plan 028 F10, `b15192f9`, on `develop`):** it is now
+        precompressed (53.4 → 33.2 KB). The `.issues/144` trap was the array
+        form dropping `/api/*`; the new `/jsqr-*.js` entry keeps `/api/*` first, and
+        `worker/tests/precompressed_asset.rs::table_routes_and_build_list_agree`
+        pins the list to the served table. On a local `wrangler dev`, `/api/health`
+        still answered JSON and the SRI pin still matched.
       - **The CSP keeps `cdn.jsdelivr.net`.** The plan assumed jsQR was its
         only user, but `js/solana_wallet.js` falls back to jsdelivr when
         `@solana/web3.js` fails from unpkg. Dropping it means self-hosting
@@ -93,8 +99,8 @@
 
 ## 3. After RTM#6
 
-- [ ] `.issues/143` Part B: browser-bound OAuth state (login CSRF).
-- [ ] Dependency bumps that need a coordinated toolchain move:
+- [ ] `.issues/143` Part B: browser-bound OAuth state (login CSRF). **Blocker (2026-09-28):** verifying it needs a real Google sign-in round trip on staging (owner's browser; no agent can do Google login), and it changes the login path RTM #6 depends on. Held until after 2026-10-04.
+- [ ] Dependency bumps that need a coordinated toolchain move: **Blocker (2026-09-28):** the plan's own gate is a staging soak, i.e. a staging deploy, which this session was told not to do. Held until after RTM #6.
   - `wasm-bindgen` 0.2.118 → 0.2.128 (with `js-sys`/`web-sys` 0.3.105) needs
     the CI `wasm-bindgen-cli@0.2.118` pins (`ci.yml` lines 120 and 229) and
     the local CLI moved together, because `deploy.sh` refuses a mismatch;
@@ -104,17 +110,17 @@
 
   Run `cargo update` per lockfile, then the full gates, then a staging soak.
   Majors to evaluate: `base64` 0.23 and `gloo-timers` 0.4.
-- [ ] `wrangler` 4.99.0 → 4.137.0 (`worker/package.json`). This is the deploy
+- [ ] `wrangler` 4.99.0 → 4.137.0 (`worker/package.json`). This is the deploy **Blocker (2026-09-28):** it can only be proven by deploying with it. Owner-gated deploy.
       tool, so bump it on a quiet day and re-check the 10013/PUT fallback
       path first.
-- [ ] Retention: a purge or anonymise policy for D1 `attendees`/`contacts`,
+- [ ] Retention: a purge or anonymise policy for D1 `attendees`/`contacts`, **Blocker (2026-09-28): owner decision.** The retention periods per table and for slips are a PDPA policy choice, not a code default.
       and an R2 lifecycle rule for slips (8.10; `.issues/126`).
-- [ ] Field-level encryption for bank account/name. Include a classification
+- [ ] Field-level encryption for bank account/name. Include a classification **Blocker (2026-09-28): owner decision + credentials.** It needs a key-management choice (where the data key lives, and rotation) and a new secret provisioned on staging and prod.
       scheme (5.12, 8.24).
-- [ ] Scheduled, encrypted D1 export with an offsite copy and a restore drill.
+- [ ] Scheduled, encrypted D1 export with an offsite copy and a restore drill. **Blocker (2026-09-28): owner decision + credentials.** An offsite destination and credentials for it do not exist yet.
       Covers R2 and KV too (5.30, 8.13).
 - [ ] CSP: remove `script-src 'unsafe-inline'` (8.23).
-- [ ] A separate log-fingerprint key, instead of reusing `JWT_SECRET` (8.11).
+- [ ] A separate log-fingerprint key, instead of reusing `JWT_SECRET` (8.11). **Blocker (2026-09-28): credentials.** A new secret has to be provisioned on staging and prod; the code change is small once it exists.
       Move capability tokens out of URL paths (`.issues/071`).
 
 ## 4. Owner decisions (gated)
