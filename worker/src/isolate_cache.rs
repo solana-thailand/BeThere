@@ -54,3 +54,31 @@ impl<K: PartialEq, V: Clone> BoundedCache<K, V> {
         self.entries.is_empty()
     }
 }
+
+/// One value that stops being served at a fixed wall-clock instant.
+///
+/// For data that must not outlive its source's TTL: set `expires_at_ms` from
+/// when the source was read, not from when this isolate first saw it, so a
+/// copy picked up late expires as early as the original.
+#[derive(Clone)]
+pub struct Expiring<V> {
+    value: V,
+    expires_at_ms: f64,
+}
+
+impl<V: Clone> Expiring<V> {
+    pub const fn new(value: V, expires_at_ms: f64) -> Self {
+        Self {
+            value,
+            expires_at_ms,
+        }
+    }
+
+    /// The value, if `now_ms` is strictly before the expiry.
+    pub fn get(&self, now_ms: f64) -> Option<V> {
+        match now_ms < self.expires_at_ms {
+            true => Some(self.value.clone()),
+            false => None,
+        }
+    }
+}

@@ -48,3 +48,22 @@ fn string_keys_are_found_by_str() {
     assert_eq!(cache.get("rtm-6"), Some("evt-1".to_string()));
     assert_eq!(cache.get("rtm-7"), None);
 }
+
+mod expiring {
+    use event_checkin_worker::isolate_cache::Expiring;
+
+    #[test]
+    fn serves_before_expiry_only() {
+        let entry = Expiring::new("a", 1_000.0);
+        assert_eq!(entry.get(0.0), Some("a"));
+        assert_eq!(entry.get(999.9), Some("a"));
+        assert_eq!(entry.get(1_000.0), None);
+        assert_eq!(entry.get(5_000.0), None);
+    }
+
+    #[test]
+    fn an_already_expired_entry_serves_nothing() {
+        let entry = Expiring::new("a", -1.0);
+        assert_eq!(entry.get(0.0), None);
+    }
+}
