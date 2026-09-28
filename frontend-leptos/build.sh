@@ -39,6 +39,17 @@ html = re.sub(
 html = html.replace("{{__TRUNK_ADDRESS__}}", "")
 html = html.replace("{{__TRUNK_WS_BASE__}}", "")
 
+# Trunk emits the modulepreload tags in a different order on every build, so
+# index.html (and the SW CACHE_VERSION hashed from it) churned on rebuilds that
+# changed nothing (plan 028 F1). Sort them: main bundle first, then by href.
+def sort_preloads(run):
+    tags = re.findall(r'<link rel="modulepreload"[^>]*>', run.group(0))
+    href = lambda t: re.search(r'href="([^"]*)"', t).group(1)
+    tags.sort(key=lambda t: (href(t).startswith("/snippets/"), href(t)))
+    return "".join(tags)
+
+html = re.sub(r'<link rel="modulepreload"[^>]*>(?:\s*<link rel="modulepreload"[^>]*>)*', sort_preloads, html)
+
 with open("dist/index.html", "w") as f:
     f.write(html)
 
