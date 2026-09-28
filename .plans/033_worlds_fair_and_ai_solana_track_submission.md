@@ -494,3 +494,7 @@ Every caption was checked against what the recording shows:
   the slip".
 
 **Still owed:** the founder-on-camera presentation video (owner).
+
+### W5 log, 28 Sep: submission text follows the deposit decisions
+
+The owner decided the deposit rules (D1–D5, `docs/deposit-commitment-model.md` §5). `docs/submission/colosseum_listing.md` said the deposit comes back "at the door", which is true on no rail. It now says "after the event (within 7 days for PromptPay)". The claims table carries D3/D4 as promises to re-check against RTM #6 refund dates, and "at the door" and fees are on the words-not-to-use list. The DevRel draft has the same wording: told in `solana-thailand-devrel-helper/reports/phase-2/BETHERE-REPLY-3.md` (new file, left uncommitted in their repo, which is mid-branch). Their `scripts/slides` had none of the stale claims. All four clips already exist (`~/Movies/bethere/`, 27 Sep), so the only video still owed is the founder-on-camera presentation (owner). Next for W4: after RTM #6, read the prod `slip_proposals` against the organizer's decisions (agreement, false accepts must be 0).
