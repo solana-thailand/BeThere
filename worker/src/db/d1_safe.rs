@@ -67,7 +67,6 @@ pub async fn safe_all_rows(stmt: &D1PreparedStatement) -> Result<Vec<serde_json:
 }
 
 /// Convenience: prepare + bind + safe_all_rows for a single-text-parameter query.
-#[allow(dead_code)]
 pub async fn query_rows_by_text(
     db: &worker::D1Database,
     sql: &str,

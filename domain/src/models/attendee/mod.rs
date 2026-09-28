@@ -11,6 +11,7 @@ mod sheet_backfill;
 mod sheet_row;
 mod status;
 mod ticket_name;
+mod track_counts;
 mod walkin;
 
 #[cfg(test)]
@@ -29,4 +30,5 @@ pub use status::{CheckInStatus, ParticipationType};
 pub use ticket_name::{
     SYSTEM_TICKET_NAMES, TICKET_NAME_SELF_REGISTERED, TICKET_NAME_WALK_IN, is_system_ticket_name,
 };
+pub use track_counts::{PARTICIPATION_WALK_IN, TrackCounts};
 pub use walkin::WalkinAttendee;
