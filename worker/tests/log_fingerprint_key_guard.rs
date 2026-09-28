@@ -81,7 +81,8 @@ fn the_state_helpers_use_the_log_key() {
         "the dedicated secret must be read"
     );
     assert!(
-        state.contains("log_fingerprint_key: log_fingerprint_key(env)"),
+        state.contains("let log_fingerprint_key = log_fingerprint_key(env);")
+            && state.lines().any(|l| l.trim() == "log_fingerprint_key,"),
         "AppConfig must take the resolved key"
     );
 }

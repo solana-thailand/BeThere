@@ -269,6 +269,7 @@ impl AppState {
                 .unwrap_or_else(|| "dev@localhost".to_string())
         });
 
+        let log_fingerprint_key = log_fingerprint_key(env);
         if dev_mode {
             // Refuse DEV_MODE on live production domain only
             let is_live_production = google_oauth
@@ -282,13 +283,10 @@ impl AppState {
                 );
             }
             // The impersonated account is a fingerprint like every other
-            // identifier in the log stream (Issue 070). `build_config` runs
-            // before `AppConfig` exists, so the key is resolved here with the
-            // same function `AppConfig` uses below, so the value still
-            // correlates with the rest of the stream.
-            let log_secret = log_fingerprint_key(env);
+            // identifier in the log stream (Issue 070), keyed with the same
+            // key `AppConfig` stores below so the value still correlates.
             tracing::warn!(
-                identity_fingerprint = %crate::crypto::identity_fingerprint(&dev_email, &log_secret),
+                identity_fingerprint = %crate::crypto::identity_fingerprint(&dev_email, &log_fingerprint_key),
                 "⚠️  DEV_MODE enabled — JWT verification bypassed, accepting \"dev-token\" as valid"
             );
         }
@@ -298,7 +296,7 @@ impl AppState {
             service_account,
             sheets,
             jwt_secret: jwt_secret(env),
-            log_fingerprint_key: log_fingerprint_key(env),
+            log_fingerprint_key,
             staff_emails,
             super_admin_emails,
             server,
