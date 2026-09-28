@@ -143,3 +143,10 @@
       certification at all. An external audit is L effort and cost.
       **Decided 2026-09-28: no certification.** Write the PDPA minimum: a
       record of processing (RoPA) and a breach procedure.
+      **Drafted 2026-09-28:** `docs/pdpa_ropa.md` and `docs/pdpa_breach_procedure.md`.
+      Owner to fill in: controller name and contact, backup contact, the PDPC
+      reporting channel, and a private location for the breach log (the repo is
+      public). The RoPA's "owner to confirm" items are lawful bases and the
+      controller/processor role. Gaps found while writing it: `.issues/158`
+      (the privacy page promises things the code does not do), `.issues/159`
+      (Slack alerts carry raw paths) and `.issues/160` (deletion leaves data behind).
