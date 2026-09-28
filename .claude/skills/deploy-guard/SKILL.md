@@ -93,8 +93,10 @@ Never `d1 execute` an `events` row (KV masks it).
 worker/deploy.sh staging      # or: worker/deploy.sh   (prod, owner go only)
 ```
 
-The prod path runs the §3.5 preflight gate (green flow-harness within the
-hour). `--force --reason "..."` bypasses it and writes
+The prod path runs the staging-parity gate
+(`scripts/verify/staging_parity.sh`): prod only gets a tree that staging is
+running now, so deploy staging from a clean tree first (a `+dirty` staging
+deploy never passes). `--force --reason "..."` bypasses it and writes
 `worker/scripts/.preflight-bypass.log`, which is never committed. Needing
 `--force` is itself something to tell the owner.
 

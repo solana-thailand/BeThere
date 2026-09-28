@@ -95,7 +95,7 @@ they are kept, or how they are disposed of.
 | 8.24 Cryptography | WebCrypto HMAC/RSA; secrets via `wrangler secret` | No key-rotation runbook. Bank fields are not encrypted at field level. | M |
 | 8.25–8.29 Secure SDLC | See the summary | No SAST or secret scanning. No CODEOWNERS or required review. Kani proofs are not in CI. | S |
 | 8.31 Environments | Separate staging resources | Staging and prod share `PLATFORM_SHEET_ID` and the super-admin identities. | S |
-| 8.32 Change management | Gitflow; `deploy.sh` gates (size, content type, preflight with audited bypass, deploy tags) | Deploys run from a laptop, not CI. The preflight gate has not been satisfiable (`.issues/084`, `141`). | M |
+| 8.32 Change management | Gitflow; `deploy.sh` gates (size, content type, staging parity with audited bypass, deploy tags) | Deploys run from a laptop, not CI (owner decided 2026-09-28: move to CI off `main`, plan 029 §4). The old flow-harness preflight could never pass (`.issues/084`, `141`); since 2026-09-28 the gate is staging parity (`scripts/verify/staging_parity.sh`), which prod deploys can actually satisfy. | M |
 | 8.33 Test data | Synthetic fixtures | `worker/scripts/seed_dev.sh` uses a real operator email. | S |
 
 ## Top gaps, ranked
