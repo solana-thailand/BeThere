@@ -1,8 +1,8 @@
 //! Live event dashboard API.
 //!
 //! Provides real-time aggregate metrics for the in-room demo dashboard.
-//! Powers `GET /api/dashboard/live`, which is polled every 2.5s by the
-//! `/dashboard/live` Leptos page during the live check-in demo.
+//! Powers `GET /api/dashboard/live`, which the `/dashboard/live` Leptos page
+//! polls every 2.5s while the event is on and every 15s otherwise.
 //!
 //! All endpoints require staff auth (registered under the `protected` route
 //! group in `handlers::routes`).
@@ -51,6 +51,8 @@ pub struct EventDashboardMeta {
     /// frontend's `format_usdc()` converts to human-readable for display.
     pub deposit_amount_usdc: i64,
     pub event_start_ms: i64,
+    /// Lets the page poll fast only while the event is on.
+    pub event_end_ms: i64,
 }
 
 /// Aggregate counts for the dashboard's headline tiles.
@@ -165,6 +167,7 @@ pub async fn live_dashboard(
         in_person_capacity: event.in_person_capacity.map(i64::from),
         deposit_amount_usdc: i64::try_from(event.deposit_amount_usdc).unwrap_or(i64::MAX),
         event_start_ms: event.event_start_ms,
+        event_end_ms: event.event_end_ms,
     };
 
     let totals = DashboardTotals {
