@@ -1,6 +1,6 @@
 # 158: The /privacy page promises things the code does not do
 
-**Status:** open (2026-09-28). Found while writing `docs/pdpa_ropa.md` (§16); each point re-checked in source by session `event-checkin-af`. Fixing the page text is a public legal statement, so the wording is the owner's call.
+**Status:** deployed 2026-09-28 — `/privacy` rewritten to match the code in `34a430d7`, on prod as version `3ce6d82c` (`main` `dbdf03b3`) and read back from the live page (session `event-checkin-af`). The owner approved "match the code now". The promised 90-day Sheet clearing is still not built; it waits on the retention decision (plan 029 §3). The consent bundling found while fixing this is `.issues/161`.
 
 ## What the page says vs what the code does
 

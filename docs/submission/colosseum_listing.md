@@ -20,7 +20,7 @@ Get your deposit back by showing up.
 ## Description — short
 
 ```
-BeThere holds a refundable deposit and returns it at the door. Across 16 events in Bangkok: 51 deposits, 25,000 THB, in-person turnout from 37% to 86%, and no deposit ever forfeited. Built this month: an AI agent that registers and pays the deposit into a Solana escrow from its own wallet, the full deposit, check-in and refund loop running on devnet, and a slip checker that proposes while the organizer decides.
+BeThere holds a refundable deposit and returns it after the event. Across 16 events in Bangkok: 51 deposits, 25,000 THB, in-person turnout from 37% to 86%, and no deposit ever forfeited. Built this month: an AI agent that registers and pays the deposit into a Solana escrow from its own wallet, the full deposit, check-in and refund loop running on devnet, and a slip checker that proposes while the organizer decides.
 ```
 
 If the form refuses its length, cut the last clause (the slip checker)
@@ -33,7 +33,8 @@ them.
 > exclude the people you most want in the room; charge nothing and 42 of 67
 > booked seats stay empty, which is what happened at our first meetup.
 >
-> BeThere takes a small refundable deposit and gives it back at the door.
+> BeThere takes a small refundable deposit and gives it back after the event
+> (within 7 days for PromptPay).
 > Across 16 events in Bangkok: 51 deposits, 25,000 THB of other people's
 > money, and in-person turnout went from 37% to 86%. **No deposit has ever
 > been forfeited**: the point is attendance, not revenue. A no-show can carry
@@ -71,11 +72,15 @@ them.
 | Agent pays from its own wallet | `bethere-mcp`; Claude run, tx `v9H1A84w…` finalized; the agent's keypair never leaves the machine | — |
 | Slip QR read in the browser; reused reference refused by the database | `frontend-leptos/js/slip_qr.js`; migration `0054` (`bank_ref UNIQUE`); prod shadow mode since 27 Sep | — |
 | "The organizer still decides" | shadow mode: `slip_agent` writes proposals only (guards in `worker/tests/slip_duplicate_guards.rs`) | — |
+| THB back within 7 days; no fee today | Owner decisions D3 and D4, 2026-09-28 (`docs/deposit-commitment-model.md` §5). A promise, not history: RTM #5 had 9 cash deposits unrefunded 25 days on, so it holds only if refunds are paid on time from RTM #6 on | check RTM #6 refund dates before submitting |
 | No real deposit through the escrow yet | deposits are THB/PromptPay; the escrow is on devnet, not mainnet | — |
 
 ## Words not to use
 
 - **"instantly"**: THB refunds are manual.
+- **"at the door" / "at check-in"** about the refund: the deposit comes back
+  after the event on every rail.
+- **fees**: there is none today (D4).
 - **"supports restaurants"**: that is the vision, not a feature.
 - **"AI verifies payments"**: the checks are deterministic, and the
   organizer decides.

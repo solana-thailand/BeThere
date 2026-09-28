@@ -20,6 +20,7 @@ mod escrow_indexer;
 // the worker compiles to a cdylib (WASM) with no downstream Rust consumer
 // other than integration tests. The `event_store` module's own items were
 // already `pub`; only the module declaration was private.
+pub mod alert_path;
 pub mod event_store;
 mod handlers;
 mod http;

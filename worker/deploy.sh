@@ -8,9 +8,9 @@
 #   ./deploy.sh dev          # Start dev server with remote KV (production data)
 #   ./deploy.sh dev --local  # Start dev server with local SQLite KV (empty)
 #
-# §3.5 preflight gate (DEFAULT-ON, production-only):
-#   Production requires a green flow-harness run within the last hour. The gate
-#   reads the .last-green sentinel mtime (see worker/scripts/preflight.sh).
+# Production gate (DEFAULT-ON, production-only): staging parity.
+#   Production only deploys a tree staging is running now
+#   (scripts/verify/staging_parity.sh).
 #   ./deploy.sh --force --reason "hotfix X"   # Bypass the gate (logs an audit entry)
 #
 # Staging note: the PUT API fallback below is PRODUCTION-ONLY. It reads the
@@ -46,10 +46,10 @@ PNP_BACKUP="$HOME/.pnp.cjs.bak"
 MOVED=false
 
 # ── Argument parsing ─────────────────────────────────────────────────────────
-# Backward-compatible positional env (production | staging | dev) plus §3.5
-# flags: --force (bypass the preflight gate, logs an audit entry) and
-# --reason "..." (required for every bypass). The preflight gate always runs
-# when deploy targets production.
+# Backward-compatible positional env (production | staging | dev) plus the
+# flags --force (bypass the production gate, logs an audit entry) and
+# --reason "..." (required for every bypass). The production gate (staging
+# parity) always runs when deploy targets production.
 DEPLOY_ENV="production"
 DEPLOY_DEV_LOCAL=false
 DEPLOY_FORCE=false
@@ -337,13 +337,14 @@ record_deploy_tag() {
   fi
 }
 
-# ── §3.5 Preflight gate (opt-in, production-only) ────────────────────────────
-# Production deploys require a green flow-harness run within the last hour
-# (PREFLIGHT_MAX_AGE_SECONDS). --force --reason bypasses the gate and appends a
-# mandatory audit entry to worker/scripts/.preflight-bypass.log. Staging/dev
-# deploys skip the gate.
+# ── Production gate: staging parity (production-only) ────────────────────────
+# Production only gets a tree that staging is running right now
+# (scripts/verify/staging_parity.sh). It replaced the flow-harness preflight,
+# which could never pass (.issues/141), so every prod deploy used --force.
+# --force --reason still bypasses it and appends a mandatory audit entry to
+# worker/scripts/.preflight-bypass.log. Staging/dev deploys skip the gate.
+# worker/scripts/preflight.sh still runs the harness by hand; it no longer gates.
 SCRIPTS_DIR="$SCRIPT_DIR/scripts"
-PREFLIGHT_SCRIPT="$SCRIPTS_DIR/preflight.sh"
 PREFLIGHT_AUDIT_LOG="$SCRIPTS_DIR/.preflight-bypass.log"
 
 # Append a structured audit entry when --force bypasses the gate.
@@ -379,25 +380,20 @@ run_preflight_gate() {
     return 0
   fi
 
-  if [ ! -f "$PREFLIGHT_SCRIPT" ]; then
-    echo "❌ Production preflight gate is required but preflight.sh was not found:" >&2
-    echo "   $PREFLIGHT_SCRIPT" >&2
+  local parity_script message
+  parity_script="$SCRIPT_DIR/../scripts/verify/staging_parity.sh"
+  echo "🔍 Production gate: is this exact tree running on staging?"
+  if ! message=$(npx wrangler deployments status --env staging --json 2>/dev/null \
+      | python3 -c 'import json,sys; print(json.load(sys.stdin)["annotations"]["workers/message"])' 2>/dev/null); then
+    echo "❌ Could not read staging's current deployment (wrangler deployments status --env staging)." >&2
     return 1
   fi
-
-  echo "🔍 Running required preflight gate (env=production)..."
-  if bash "$PREFLIGHT_SCRIPT"; then
-    echo "✅ Preflight gate passed — proceeding with production deploy."
+  if bash "$parity_script" "$message"; then
     return 0
-  else
-    local rc=$?
-    echo "" >&2
-    echo "❌ Preflight gate FAILED (exit $rc) — production deploy blocked." >&2
-    echo "   Remediation:" >&2
-    echo "     1. Run a green harness:  bash worker/scripts/preflight.sh run" >&2
-    echo "     2. Or bypass with audit: bash worker/deploy.sh --force --reason \"<why>\"" >&2
-    return 1
   fi
+  echo "   Remediation: bash worker/deploy.sh staging, check it, then deploy prod from the same tree." >&2
+  echo "   Emergency only: bash worker/deploy.sh --force --reason \"<why>\"" >&2
+  return 1
 }
 
 # Guard the wasm-bindgen CLI/crate match before any build work (dev, staging,
@@ -405,7 +401,7 @@ run_preflight_gate() {
 # instead of a cryptic schema error minutes into the build.
 check_wasm_bindgen_version || { echo "Aborting: fix the wasm-bindgen CLI version above, then re-run."; exit 1; }
 
-# Run the gate before any deploy work (fail fast, before touching ~/.pnp.cjs).
+# Run the production gate before any deploy work (fail fast, before touching ~/.pnp.cjs).
 run_preflight_gate || { echo "Aborting production deploy."; exit 1; }
 
 move_pnp

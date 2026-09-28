@@ -113,6 +113,7 @@ that cannot fail is not a gate.
 | `event_invariants_audit.py` | contradictory D1 columns (`--db` for real data) |
 | `pii_log_probe.sh` | PII in logs: leak → 1, missing log → 2 |
 | `post_deploy_smoke.sh` | status **and** Content-Type after a deploy |
+| `staging_parity.sh` | the prod deploy gate: prod only gets a tree staging runs now (`deploy.sh` calls it) |
 | `golden_vectors_check.sh` | escrow PDA/ATA fixture vs. the Solana CLI |
 | `wasm_leak_scan.sh` | build-host paths (report-only) and secrets in shipped wasm/js |
 | `domain_import_fence.py` | `domain`'s wasm32 graph reaching app/platform crates; JS bridge pinned both ways |

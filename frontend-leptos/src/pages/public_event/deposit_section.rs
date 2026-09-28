@@ -1,5 +1,6 @@
 use super::types::*;
 use crate::icons::{Icon, IconName};
+use crate::utils::deposit_copy::{NEVER_FORFEITED, THB_REFUND_WINDOW};
 use leptos::prelude::*;
 
 pub fn deposit_section(data: &PublicEventData) -> AnyView {
@@ -117,7 +118,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>
                             <span class="pe-refund-text">
-                                "Can't make it? Your deposit is never forfeited. Tell the organizer, and it's refunded or kept as credit for your next event."
+                                {format!("Can't make it? {NEVER_FORFEITED} Tell the organizer, and it's refunded or kept as credit for your next event.")}
                             </span>
                         </div>
                     }.into_any()
@@ -142,7 +143,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>
                             <span class="pe-refund-text">
-                                "PromptPay: the organizer transfers it back within 7 days after the event, or you keep it as credit for your next event."
+                                {format!("PromptPay: the organizer transfers it back {THB_REFUND_WINDOW}, or you keep it as credit for your next event.")}
                             </span>
                         </div>
                     }.into_any()

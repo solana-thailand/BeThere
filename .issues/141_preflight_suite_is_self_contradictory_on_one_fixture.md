@@ -1,6 +1,8 @@
 # 141 — The 6-flow preflight suite contradicts itself on one fixture
 
-**Status:** open, verdict only (2026-09-23). No harness change yet. This supersedes
+**Status:** closed 2026-09-28 (session `event-checkin-af`) as a deploy-gate problem: the gate no longer runs the harness. `deploy.sh` now gates prod on staging parity (`scripts/verify/staging_parity.sh`), which can pass. Every prod deploy had used `--force` against the harness. The fixture contradiction below is still in the harness; reopen if the harness is made a gate again. The original verdict (2026-09-23) follows.
+
+**Status before 2026-09-28:** open, verdict only (2026-09-23). No harness change. This supersedes
 the "short-window fixture" next step in [084](084_preflight_gate_has_never_been_satisfiable.md):
 that step cannot produce a 6/6 green run on its own.
 **Severity:** high for the deploy gate's meaning (every prod deploy uses `--force`),

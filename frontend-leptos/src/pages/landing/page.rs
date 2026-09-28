@@ -1,5 +1,6 @@
 //! The landing page component itself.
 
+use crate::utils::deposit_copy::{NEVER_FORFEITED, THB_REFUND_WINDOW};
 use leptos::prelude::*;
 use leptos_router::components::A;
 
@@ -401,7 +402,7 @@ pub fn Landing() -> impl IntoView {
                             "How does the deposit work?"
                         </h3>
                         <p class="landing-faq-a">
-                            "Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back within 7 days after the event, or you keep it as credit for your next event. A deposit is never forfeited: if you can't make it, tell the organizer. USDC deposits sit in a Solana escrow and you claim them back after the event ends."
+                            {format!("Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back {THB_REFUND_WINDOW}, or you keep it as credit for your next event. {NEVER_FORFEITED} If you can't make it, tell the organizer. USDC deposits sit in a Solana escrow and you claim them back after the event ends.")}
                         </p>
                     </div>
 
