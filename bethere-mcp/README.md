@@ -75,6 +75,12 @@ In order, it:
   duplicate check, and the fixture's placeholder `sheet_id` 404s there;
 - initializes the devnet escrow (`/api/escrow/init`, organizer signs, `/api/escrow/confirm-init`).
 
+The event starts in 48 h and lasts 3 h. For a filmed scan-then-refund take,
+set `BETHERE_DEMO_END_MIN=<n>` (n >= 2): the event ends n minutes from now and
+starts one minute earlier. Registration closes at the start and
+`mark_checked_in` needs `clock <= event_end`, so register, pay and scan inside
+that window; `refund` opens once the event ends (`.issues/164`).
+
 ## Verified run (2026-09-27, staging, devnet)
 
 - Event `agent-demo-meetup-1790455251`; agent wallet `54GKocGxYkGbcbAnLAq43toZj9oYyNSmgaqZmarxX3Yi`.

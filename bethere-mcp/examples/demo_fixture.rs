@@ -14,6 +14,12 @@
 //! BETHERE_ORGANIZER_KEYPAIR=~/.config/solana/id.json \
 //!   cargo run --example demo_fixture
 //! ```
+//!
+//! By default the event starts in 48 h and lasts 3 h. For a filmed
+//! scan-then-refund take, set `BETHERE_DEMO_END_MIN=<n>` (n >= 2): the event
+//! ends n minutes from now and starts one minute earlier. Registration closes
+//! at the start and `mark_checked_in` needs `clock <= event_end`, so register,
+//! pay and scan inside that window; `refund` opens once it ends (.issues/164).
 //! Staging only (`dev-token` admin auth); the config guard refuses prod.
 
 use bethere_mcp::api::unwrap_envelope;
@@ -25,6 +31,8 @@ use solana_sdk::signer::Signer;
 const ADMIN_TOKEN: &str = "dev-token";
 const DEPOSIT_USDC: u64 = 1_000_000;
 const HOUR_MS: i64 = 3_600_000;
+const MINUTE_MS: i64 = 60_000;
+const END_MIN_VAR: &str = "BETHERE_DEMO_END_MIN";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .duration_since(std::time::UNIX_EPOCH)?
         .as_millis() as i64;
     let stamp = now_ms / 1000;
-    let start_ms = now_ms + 48 * HOUR_MS;
+    let (start_ms, end_ms) = event_window(now_ms)?;
     let event = json!({
         "id": format!("agent-demo-{stamp}"),
         "name": format!("Agent Demo Meetup {stamp}"),
@@ -55,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "deposit_amount_thb": 0,
         "organizer_wallet": organizer.pubkey().to_string(),
         "event_start_ms": start_ms,
-        "event_end_ms": start_ms + 3 * HOUR_MS,
+        "event_end_ms": end_ms,
         "refund_deadline_hours": 168,
         // Required by the API; not a real sheet (the post-deploy smoke fixture
         // does the same). Attendee reads are D1-first.
@@ -128,6 +136,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
     );
     Ok(())
+}
+
+/// `(event_start_ms, event_end_ms)`: 48 h out for 3 h, or a short event
+/// ending `BETHERE_DEMO_END_MIN` minutes from now when that is set.
+fn event_window(now_ms: i64) -> Result<(i64, i64), Box<dyn std::error::Error>> {
+    let Some(raw) = std::env::var_os(END_MIN_VAR) else {
+        let start_ms = now_ms + 48 * HOUR_MS;
+        return Ok((start_ms, start_ms + 3 * HOUR_MS));
+    };
+    let minutes = match raw.to_str().map(str::parse::<u32>) {
+        Some(Ok(n)) if n >= 2 => i64::from(n),
+        _ => return Err(format!("{END_MIN_VAR} must be a whole number of minutes >= 2").into()),
+    };
+    let end_ms = now_ms + minutes * MINUTE_MS;
+    Ok((end_ms - MINUTE_MS, end_ms))
 }
 
 async fn admin_send(
