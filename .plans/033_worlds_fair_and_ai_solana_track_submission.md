@@ -506,3 +506,15 @@ The owner decided the deposit rules (D1–D5, `docs/deposit-commitment-model.md`
 ### D3 check, 28 Sep: the 7-day refund promise has a report
 
 `python3 scripts/verify/refund_window_report.py [--detail]` lists every THB deposit still owed (the admin refund queue's own definition) with its age after the event, and exits 1 on any refund past 7 days for an event that ended on or after 28 Sep. `--self-test` covers refunded, held-as-credit, legacy credit/comp and unverified rows (dropping the held-as-credit condition fails it). Prod today: RTM #4 4 owed (฿2,000, 71 days after), RTM #5 4 owed (฿2,000, 36 days), both backlog from before the promise; **RTM #6: 16 owed (฿8,000), due by 11 Oct**, the day before the submission, so the listing's "within 7 days" is true only if they are paid by then. Event ids are kept when an event is copied (RTM #6's id ends `-5-bangkok-copy`), so the report prints slugs.
+
+### W2 log, 28 Sep: devnet rehearsals #1 and #2 on staging
+
+Session `event-checkin-cf`. Staging only, on version `814738a8` = git `a3d4e7a9`. No prod deploy and no code change. Ran `scripts/e2e_devnet_test.sh --skip-setup --non-interactive` with the solders venv and the `/tmp/bethere-e2e` keypair symlinks (memory `devnet-e2e-run-recipe`).
+
+- [x] `solana transfer` against devnet works again: 0.001 SOL, organizer → `7ABX…`, tx `QeGA2rCq…` finalized. `spl-token transfer` of 0.01 devnet USDC also works (tx `5jGrUicp…`). The 27 Sep "error sending request" did not reproduce, so the solders workaround is no longer needed.
+- [x] Rehearsal #1, event `e2e-test-event-1790605944`, all steps passed. Escrow `HGgA6QjW…` initialized (tx `5Rpo6cQS…`), deposit of 1 USDC (tx `3rTH7Sqa…`), webhook verified on retry 2 (H8, as expected), `mark_checked_in` (tx `4bWi9bDc…`), then refund after the 2-minute end. The attendee went from 5.989980 to 6.989980 USDC, and the vault is at 0 with the PDA closed.
+- [x] Rehearsal #2, event `e2e-test-event-1790606122`, all steps passed, with the same USDC round trip. Init tx `4scKxPTP…`, deposit tx `BGhrCQGK…`.
+- [x] Cost: the organizer went from 3.734 to 3.727 devnet SOL for both runs plus the transfer test. The two runs leave two `e2e-test-event-*` events on staging.
+- [ ] The **door-scan** step in a browser: scanner Flow 10, signed with the organizer wallet in Phantom. It has never been run. Owner step, `.issues/164` gap 1.
+- [ ] A scannable fixture that ends about 10 minutes after check-in. `demo_fixture` hardcodes 3 h, see `.issues/164` gap 2.
+- [ ] The final take (Thu 8 Oct), filmed with the explorer open. The badge clip is filmed on prod.
