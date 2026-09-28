@@ -56,7 +56,26 @@ Wave 1 (`.plans/037`).
 
 ## P1: cut
 
-- [ ] **P1-1:** landing rebuild, one screen = one decision.
+- [x] **P1-1:** landing rebuild, one screen = one decision. Measured at 390×844,
+  headless Chrome, with the P0-3 fixture plus two probe events:
+
+  | | Before | After |
+  |---|---|---|
+  | Page height | 4,235 px | 3,211 px |
+  | Above the fold | brand eyebrow, 3 audience tabs, headline, paragraph, Solana pill, 3 stat cards, 2 CTAs | headline, one value line, **one** CTA, 2 event cards, "See all" |
+  | First event card | below the fold | 2nd card ends at 781 px, "See all" at 834 px (EN and TH) |
+
+  - Signed-in visitors see "My registrations" directly under the hero.
+  - How it works is three icons on one line.
+  - Organizers reach the existing "host events" link and the waitlist.
+  - Copy deviates from the brief: "0 บาทล่วงหน้า" is false for deposit
+    events, and "never forfeited" is THB-only (the guard
+    `deposit_promise_has_one_home` caught it). So the value line is
+    "Deposit to reserve · show up · get 100% back".
+  - 21 dead CSS classes were removed (the class audit enforces it).
+  - First load −7,055 B br4.
+  - Before/after evidence is these numbers plus local screenshots (not
+    committed: public repo, and Mac-only renders).
 - [ ] **P1-2:** attendee flow audit (fold in LM-2 / LM-3).
 
 ## P2: add

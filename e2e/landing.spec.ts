@@ -4,7 +4,9 @@ test.describe("Landing page", () => {
   test("loads and shows hero content", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveTitle(/BeThere/);
-    await expect(page.locator(".landing-hero-brand")).toBeVisible();
+    // One headline, one primary CTA (.plans/038 P1-1).
+    await expect(page.locator(".landing-hero h1")).toBeVisible();
+    await expect(page.locator(".landing-ctas .btn-primary")).toHaveCount(1);
   });
 
   test("navigates to login page", async ({ page }) => {

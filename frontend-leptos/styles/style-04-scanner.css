@@ -675,27 +675,6 @@
     color: var(--text-heading);
 }
 
-.solana-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.3rem 0.85rem;
-    border-radius: 9999px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: var(--solana);
-    background: rgba(153, 69, 255, 0.08);
-    border: 1px solid rgba(153, 69, 255, 0.2);
-    margin-bottom: 1.5rem;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-}
-
-.solana-pill svg {
-    width: 14px;
-    height: 14px;
-}
-
 /* ===== Admin Page — Phase B ===== */
 
 .filter-pills {

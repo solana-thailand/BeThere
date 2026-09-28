@@ -638,13 +638,6 @@
     letter-spacing: 0.06em;
 }
 
-.landing-hero-brand {
-    font-size: 1.1rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    margin-bottom: 0.75rem;
-}
-
 .landing-footer-brand-name {
     font-weight: 800;
     font-size: 1.1rem;
@@ -729,15 +722,16 @@
     background-clip: text;
 }
 
-.landing-hero-desc {
-    font-size: 1.05rem;
-    color: var(--text-secondary);
-    max-width: 500px;
-    margin: 0 auto 2.5rem;
-    line-height: 1.6;
-}
-
 /* ── Landing CTAs ─────────────────────────────────────────────────── */
+
+/* One line of value under the headline (.plans/038 P1-1). */
+.landing-hero-value {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    max-width: 34rem;
+    margin: 0 auto 1.5rem;
+}
 
 .landing-ctas {
     display: flex;
@@ -750,33 +744,5 @@
     padding: 0.85rem 2rem;
     font-size: 1rem;
     text-decoration: none;
-}
-
-/* ── Persona Toggle ──────────────────────────────────────────────── */
-
-.landing-persona-toggle {
-    display: flex;
-    justify-content: center;
-    gap: 0;
-    margin-bottom: 1.5rem;
-}
-
-.landing-persona-btn {
-    padding: 0.45rem 1.25rem;
-    font-size: 0.8rem;
-    font-weight: 600;
-    background: transparent;
-    color: var(--text-secondary);
-    border: 1px solid var(--border);
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.landing-persona-btn:first-child {
-    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-}
-
-.landing-persona-btn:last-child {
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 }
 

@@ -5,10 +5,10 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 
 use crate::components::is_admin_role;
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 
-use super::auth::{AuthState, trigger_landing_oauth};
+use super::auth::AuthState;
 use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
 use super::upcoming::UpcomingEvents;
@@ -21,16 +21,6 @@ pub fn Landing() -> impl IntoView {
     // Auth state for nav bar
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (user_role, set_user_role) = signal(String::new());
-
-    // Persona toggle: 0 = Attendees, 1 = Organizers
-    // The page's one role switcher: 0 = Attendee, 1 = Organizer, 2 = Staff.
-    //
-    // There used to be two — this pill and a separate tab row in "How it works"
-    // — on the same axis, with their own signals and a one-way sync between
-    // them, and they did not agree on how many roles exist (two against three).
-    // A reader who chose a side at the top had to choose again 800px later
-    // (`.issues/105`).
-    let (persona, set_persona) = signal(0u8);
 
     // Check auth on mount
     Effect::new(move |_| {
@@ -76,296 +66,72 @@ pub fn Landing() -> impl IntoView {
             <SiteHeader auth_state=auth_state user_role=user_role />
 
             // ===== Hero =====
+            // One screen, one decision (.plans/038 P1-1, after lu.ma): a
+            // headline, one line of value, one button. The audience tabs,
+            // stat cards, brand eyebrow and Solana pill are gone: organizers
+            // get the host link above the waitlist, Solana is in the footer.
             <section class="landing-hero">
-
-
-                // BeThere name + tagline
-                <div class="landing-hero-brand landing-brand-gradient">
-                    "BeThere"
-                </div>
-
-                // Persona toggle
-                <div class="landing-persona-toggle">
-                    <button
-                        class="landing-persona-btn"
-                        class:landing-persona-btn--active=move || persona.get() == 0
-                        on:click=move |_| set_persona.set(0)
-                    >
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.persona.attendees))}
-                    </button>
-                    <button
-                        class="landing-persona-btn"
-                        class:landing-persona-btn--active=move || persona.get() == 1
-                        on:click=move |_| set_persona.set(1)
-                    >
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.persona.organizers))}
-                    </button>
-                    // Staff used to exist only in the "How it works" tabs, which
-                    // meant the page carried two switchers for one axis that did
-                    // not even agree on how many roles there are (`.issues/105`).
-                    <button
-                        class="landing-persona-btn"
-                        class:landing-persona-btn--active=move || persona.get() == 2
-                        on:click=move |_| set_persona.set(2)
-                    >
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.persona.staff))}
-                    </button>
-                </div>
-
                 <h1 class="landing-hero-h1">
-                    {move || match persona.get() {
-                        0 => view! {
-                            <>
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.attendee_line1))}
-                                <br />
-                                <span class="landing-hero-gradient">
-                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.attendee_line2))}
-                                </span>
-                            </>
-                        }.into_any(),
-                        1 => view! {
-                            <>
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.organizer_line1))}
-                                <br />
-                                <span class="landing-hero-gradient">
-                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.organizer_line2))}
-                                </span>
-                            </>
-                        }.into_any(),
-                        // Staff had no hero of its own before, because it was
-                        // not a hero option. Falling through to the organizer
-                        // pitch would sell a door scanner on payouts.
-                        _ => view! {
-                            <>
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.staff_line1))}
-                                <br />
-                                <span class="landing-hero-gradient">
-                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.staff_line2))}
-                                </span>
-                            </>
-                        }.into_any(),
-                    }}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.headline_1))}
+                    <br />
+                    <span class="landing-hero-gradient">
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.headline_2))}
+                    </span>
                 </h1>
-                <p class="landing-hero-desc">
-                    {move || match persona.get() {
-                        0 => t_string!(i18n, landing.hero.attendee_desc),
-                        1 => t_string!(i18n, landing.hero.organizer_desc),
-                        _ => t_string!(i18n, landing.hero.staff_desc),
-                    }}
+                <p class="landing-hero-value">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.value))}
                 </p>
-                // Solana pill badge
-                <div class="solana-pill">
-                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.built_on_solana))}
-                    <Icon icon=IconName::Solana />
-                </div>
-
-                // Platform stats — paper ticket stubs on the night ground
-                <div class="landing-stat-stubs">
-                    <div class="landing-stat-stub">
-                        <div class="landing-stat-stub-value stub-green">"100%"</div>
-                        <div class="landing-stat-stub-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.stats.back))}</div>
-                    </div>
-                    <div class="landing-stat-stub">
-                        <div class="landing-stat-stub-value stub-poppy">"฿0"</div>
-                        <div class="landing-stat-stub-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.stats.cost))}</div>
-                    </div>
-                    <div class="landing-stat-stub">
-                        <div class="landing-stat-stub-value">"< 1s"</div>
-                        <div class="landing-stat-stub-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.stats.qr))}</div>
-                    </div>
-                </div>
-
                 <div class="landing-ctas">
                     {move || {
-                        let state = auth_state.get();
                         let role = user_role.get();
-                        let p = persona.get();
-                        match &state {
-                            AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
-                                view! {
-                                    <A href="/admin" attr:class="btn btn-primary landing-cta-link">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.dashboard))}
-                                    </A>
-                                }.into_any()
-                            }
-                            AuthState::SignedIn(_) if role == "staff" => {
-                                view! {
-                                    <A href="/staff" attr:class="btn btn-primary landing-cta-link">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.scanner))}
-                                    </A>
-                                }.into_any()
-                            }
-                            AuthState::SignedIn(_) => {
-                                view! {
-                                    <a href="#events" class="btn btn-primary landing-cta-link">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.find_events))}
-                                    </a>
-                                }.into_any()
-                            }
-                            _ if p == 1 => {
-                                // Organizer persona — primary = create event
-                                view! {
-                                    <button
-                                        class="btn btn-primary landing-cta-link"
-                                        on:click=move |_| trigger_landing_oauth()
-                                    >
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.create_event))}
-                                    </button>
-                                }.into_any()
-                            }
-                            _ => {
-                                // Attendee persona — primary = find events, secondary = create event
-                                view! {
-                                    <a href="#events" class="btn btn-primary landing-cta-link">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.find_events))}
-                                    </a>
-                                    <button
-                                        class="btn btn-outline landing-cta-link"
-                                        on:click=move |_| trigger_landing_oauth()
-                                    >
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.create_event))}
-                                    </button>
-                                }.into_any()
-                            }
+                        match auth_state.get() {
+                            AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => view! {
+                                <A href="/admin" attr:class="btn btn-primary landing-cta-link">
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.dashboard))}
+                                </A>
+                            }.into_any(),
+                            AuthState::SignedIn(_) if role == "staff" => view! {
+                                <A href="/staff" attr:class="btn btn-primary landing-cta-link">
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.scanner))}
+                                </A>
+                            }.into_any(),
+                            _ => view! {
+                                <a href="#events" class="btn btn-primary landing-cta-link">
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.find_events))}
+                                </a>
+                            }.into_any(),
                         }
                     }}
                 </div>
             </section>
 
-            // ===== Upcoming Events =====
-            <UpcomingEvents />
-
-            // ===== My Registrations (visible when signed in) =====
+            // ===== My Registrations (signed in) — straight under the hero =====
             <MyRegistrations />
 
-            // ===== How It Works =====
+            // ===== Upcoming Events (two cards + see all) =====
+            <UpcomingEvents />
+
+            // ===== How It Works — three steps on one line =====
             <section id="how-it-works" class="landing-section">
                 <div class="landing-section-header">
                     <h2 class="landing-h2">
                         {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.title))}
                     </h2>
-                    <p class="landing-subtitle">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.subtitle))}
-                    </p>
                 </div>
-
-                // No tab row here any more. The hero pill is the page's one
-                // role switcher; this section follows it (`.issues/105`).
-
-                // Tab content — vertical timelines
-                {move || match persona.get() {
-                    0 => view! {
-                        <div class="landing-feature-timeline">
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--green">
-                                    <Icon icon=IconName::Ticket class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s1_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s1_desc))}</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::QrCode class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s2_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s2_desc))}</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--indigo">
-                                    <Icon icon=IconName::Puzzle class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s3_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s3_desc))}</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--green">
-                                    <Icon icon=IconName::Recycle class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s4_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s4_desc))}</div>
-                                </div>
-                            </div>
-                        </div>
-                    }.into_any(),
-                    1 => view! {
-                        <div class="landing-feature-timeline">
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--indigo">
-                                    <Icon icon=IconName::Target class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s1_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s1_desc))}</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--indigo">
-                                    <Icon icon=IconName::Chart class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s2_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s2_desc))}</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::Camera class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s3_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s3_desc))}</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--green">
-                                    <Icon icon=IconName::Coin class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s4_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s4_desc))}</div>
-                                </div>
-                            </div>
-                        </div>
-                    }.into_any(),
-                    _ => view! {
-                        <div class="landing-feature-timeline">
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::Camera class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s1_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s1_desc))}</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::QrCode class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s2_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s2_desc))}</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::Chain class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s3_title))}</div>
-                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s3_desc))}</div>
-                                </div>
-                            </div>
-                        </div>
-                    }.into_any(),
-                }}
+                <ol class="landing-how-row">
+                    <li class="landing-how-step">
+                        <Icon icon=IconName::Ticket class="icon-md"/>
+                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s1_title))}</span>
+                    </li>
+                    <li class="landing-how-step">
+                        <Icon icon=IconName::QrCode class="icon-md"/>
+                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s2_title))}</span>
+                    </li>
+                    <li class="landing-how-step">
+                        <Icon icon=IconName::Recycle class="icon-md"/>
+                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s4_title))}</span>
+                    </li>
+                </ol>
             </section>
 
             // ===== FAQ =====

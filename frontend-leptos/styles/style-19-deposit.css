@@ -365,53 +365,6 @@
     }
 }
 
-/* ============================================================
-   Night Edition — landing stat stubs (paper tickets on night)
-   ============================================================ */
-.landing-stat-stubs {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-    width: 100%;
-    max-width: 720px;
-    margin: 28px auto 0;
-}
-
-.landing-stat-stub {
-    background: var(--paper);
-    color: var(--paper-ink);
-    border-radius: 6px;
-    padding: 14px 16px 12px;
-    text-align: center;
-    box-shadow: 3px 3px 0 rgba(11, 13, 28, 0.6);
-}
-
-.landing-stat-stub-value {
-    font-family: "SF Mono", "Fira Code", monospace;
-    font-variant-numeric: tabular-nums;
-    font-size: 1.25rem;
-    font-weight: 800;
-}
-
-.landing-stat-stub-value.stub-green {
-    color: var(--success-btn);
-}
-
-.landing-stat-stub-value.stub-poppy {
-    color: #d43f20;
-}
-
-.landing-stat-stub-label {
-    font-family: "SF Mono", "Fira Code", monospace;
-    font-size: 0.62rem;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #4c5178;
-    border-top: 1px dashed var(--paper-dim);
-    padding-top: 6px;
-    margin-top: 6px;
-}
-
 /* ── Public-event slug page: hero CTA + sticky mobile CTA (conversion) ── */
 .pe-hero-cta {
     margin-top: 0.85rem;

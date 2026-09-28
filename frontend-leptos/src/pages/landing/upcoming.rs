@@ -40,6 +40,9 @@ struct PublicEventsResponse {
     events: Vec<PublicEventItem>,
 }
 
+/// Event cards the landing shows before "See all".
+const LANDING_EVENT_CARDS: usize = 2;
+
 /// Upcoming Events section — fetches active events and displays them.
 #[component]
 pub(super) fn UpcomingEvents() -> impl IntoView {
@@ -94,9 +97,6 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                     <h2 class="landing-h2">
                         <Icon icon=IconName::Party class="icon-sm"/>" "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.title))}
                     </h2>
-                    <p class="landing-subtitle">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.subtitle))}
-                    </p>
                 </div>
             };
             if !is_loaded {
@@ -137,7 +137,9 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                     <section id="events" class="landing-section-sm">
                         {heading}
                         <div class="landing-events-grid">
-                            {evts.into_iter().map(|evt| {
+                            // Two cards keep the first screen to one decision
+                            // (.plans/038 P1-1); the rest are one tap away.
+                            {evts.into_iter().take(LANDING_EVENT_CARDS).map(|evt| {
                                 let event_url = format!("/e/{}", evt.slug);
                                 // A closure so the date and "TBA" follow a
                                 // language switch.
@@ -227,6 +229,9 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                                 }
                             }).collect::<Vec<_>>()}
                         </div>
+                        <p class="landing-see-all">
+                            <a href="/discover">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.see_all))}</a>
+                        </p>
                     </section>
                 }.into_any()
             }
