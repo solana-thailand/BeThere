@@ -30,6 +30,7 @@ pub struct WaitlistRequest {
 #[worker::send]
 pub async fn join_waitlist(
     State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<WaitlistRequest>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     let email = body.email.trim().to_lowercase();
@@ -39,6 +40,9 @@ pub async fn join_waitlist(
     if !event_checkin_domain::validation::is_plausible_email(&email) {
         return Err(AppError::Validation("Invalid email address".into()).into());
     }
+    // Anonymous write to a sheet: the bot check comes before the sheet read
+    // (.issues/170).
+    crate::turnstile::require_human(&state, &headers, "waitlist").await?;
 
     // Duplicate check — fetch existing emails from the sheet
     match get_existing_waitlist_emails(&state).await {

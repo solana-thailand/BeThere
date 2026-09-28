@@ -1,6 +1,6 @@
 //! `register_attendee` — the public self-registration handler.
 
-use axum::{Extension, Json, extract::State};
+use axum::{Extension, Json, extract::State, http::HeaderMap};
 use uuid::Uuid;
 
 use event_checkin_domain::models::attendee::{ParticipationType, TrackCounts};
@@ -26,6 +26,7 @@ use super::types::{DeveloperData, NextStep, RegisterRequest, RegisterResponse};
 pub async fn register_attendee(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
+    headers: HeaderMap,
     Json(body): Json<RegisterRequest>,
 ) -> Result<ApiOk<RegisterResponse>, crate::error::WorkerError> {
     // 1. Validate input
@@ -33,6 +34,9 @@ pub async fn register_attendee(
     if name.is_empty() || name.len() > 100 {
         return Err(AppError::Validation("name is required (max 100 chars)".to_string()).into());
     }
+    // Bot check before any sheet or D1 work (.issues/170). After the name
+    // check, because siteverify spends the token.
+    crate::turnstile::require_human(&state, &headers, "public-register").await?;
 
     // Identity resolution (Plan 017 — wallet↔email convergence).
     // Google sessions: email comes from the verified JWT. Wallet-only sessions

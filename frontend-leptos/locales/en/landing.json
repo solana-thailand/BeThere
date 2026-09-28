@@ -95,7 +95,8 @@
     "on_list": "You're on the list!",
     "reach_out": "We'll reach out when we're ready to onboard new events.",
     "joining": "Joining...",
-    "join": "Join Waitlist"
+    "join": "Join Waitlist",
+    "bot_check_failed": "The human check failed or expired. Please try again."
   },
   "footer": {
     "tagline": "Show up. Get refunded.",

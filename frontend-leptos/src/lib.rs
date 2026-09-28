@@ -2,6 +2,7 @@
 
 pub mod api;
 pub mod auth;
+pub mod bot_check;
 pub mod components;
 pub mod icons;
 pub mod locale;

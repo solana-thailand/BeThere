@@ -2,6 +2,7 @@ pub mod admin_person_emails;
 pub mod adventure;
 pub mod attendee;
 pub mod auth;
+pub mod bot_check;
 pub mod campaigns;
 pub mod capacity;
 pub mod checkin;
@@ -163,6 +164,8 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // Waitlist signup (public)
         .route("/waitlist", post(waitlist::join_waitlist))
+        // Turnstile widget config for the waitlist and register forms (.issues/170).
+        .route("/public/turnstile/config", get(bot_check::turnstile_config))
         // Deposit TX details (public — returns Solana Pay URL for wallet)
         .route("/deposit/usdc/tx", get(deposit::deposit_usdc_tx_handler))
         // Deposit webhook with Bearer auth (VULN-001 fix — separate from attendee auth)

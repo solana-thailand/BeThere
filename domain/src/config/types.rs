@@ -261,6 +261,13 @@ pub struct AppConfig {
     /// Telegram bot username (without `@`) for rendering the Login Widget.
     /// Public value; empty disables the widget (falls back to manual handle input).
     pub telegram_bot_username: String,
+    // ---- Bot check (.issues/170) ----
+    /// Cloudflare Turnstile site key. Public; the frontend renders the widget
+    /// with it. Empty (or an empty secret) turns the check off.
+    pub turnstile_site_key: String,
+    /// Cloudflare Turnstile secret for siteverify. Set with
+    /// `wrangler secret put TURNSTILE_SECRET_KEY`.
+    pub turnstile_secret_key: String,
     // ---- Observability ----
     /// Slack incoming-webhook URL for server-error (5xx) alerts. Empty disables
     /// alerting (the middleware becomes a no-op). Best-effort, fire-and-forget.
@@ -293,6 +300,8 @@ impl fmt::Debug for AppConfig {
             .field("github_client_secret", &"***REDACTED***")
             .field("telegram_bot_token", &"***REDACTED***")
             .field("telegram_bot_username", &self.telegram_bot_username)
+            .field("turnstile_site_key", &self.turnstile_site_key)
+            .field("turnstile_secret_key", &"***REDACTED***")
             .finish()
     }
 }

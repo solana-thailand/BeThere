@@ -143,5 +143,6 @@
   "err_registration_failed": "Registration failed",
   "err_parse": "Parse error",
   "err_read": "Read error",
-  "err_network": "Network error"
+  "err_network": "Network error",
+  "err_bot_check": "The human check failed or expired. Please try again."
 }

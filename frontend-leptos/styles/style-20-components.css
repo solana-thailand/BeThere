@@ -353,3 +353,10 @@
     border: 1px solid rgba(59, 130, 246, 0.4);
     color: #3b82f6;
 }
+
+/* Turnstile bot check (.issues/170). No space until the widget renders, so a
+   deployment without Turnstile has no layout shift. */
+.bot-check-slot.is-on {
+    min-height: 65px;
+    margin: 12px 0;
+}

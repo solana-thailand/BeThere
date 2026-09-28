@@ -66,6 +66,10 @@ pub fn registration_form(
     // Pre-fill email from JWT — but NOT for wallet-only sessions, where
     // locked_email is a synthetic `wallet:<address>` and the user must type a
     // real one.
+    // Bot check (.issues/170): only signed-in visitors who can register see
+    // this form, so it starts on render rather than on first touch.
+    let bot_check = crate::bot_check::BotCheck::new();
+    bot_check.activate();
     if !wallet_only {
         set_reg_email.set(locked_email.clone());
     }
@@ -463,6 +467,7 @@ pub fn registration_form(
                                         <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.marketing_consent))}</span>
                                     </label>
                                 </div>
+                                <crate::bot_check::BotCheckSlot check=bot_check />
                                 // Submit button
                                 {
                                     let slug = slug.clone();
@@ -471,6 +476,7 @@ pub fn registration_form(
                                     view! {
                                         <button
                                             class="pe-submit-btn"
+                                            disabled=move || !bot_check.ready()
                                             on:click=move |_| {
                                                 let name_val = reg_name.get();
                                                 let part_val = reg_participation.get();
@@ -577,7 +583,15 @@ pub fn registration_form(
                                                     let fail = |msg: &str| RegState::Error(msg.to_string());
                                                     let fail_with = |msg: &str, e: &dyn std::fmt::Display| RegState::Error(format!("{msg}: {e}"));
 
-                                                    match crate::api::fetch::post(&url, &[("Content-Type", "application/json")], Some(serde_json::to_string(&body).unwrap_or_default())).await
+                                                    let token_header = bot_check.header();
+                                                    let mut hdrs = vec![("Content-Type", "application/json")];
+                                                    if let Some((name, token)) = token_header.as_ref() {
+                                                        hdrs.push((name, token.as_str()));
+                                                    }
+                                                    let result = crate::api::fetch::post(&url, &hdrs, Some(serde_json::to_string(&body).unwrap_or_default())).await;
+                                                    // The token is spent whatever the answer was.
+                                                    bot_check.reset();
+                                                    match result
                                                     {
                                                         Ok(resp) => {
                                                             if resp.status() == 401 {
@@ -595,9 +609,13 @@ pub fn registration_form(
                                                                                     set_reg_state.set(fail(td_string!(locale, event.err_no_data)));
                                                                                 }
                                                                             } else {
-                                                                                set_reg_state.set(RegState::Error(
-                                                                                    api_resp.error.unwrap_or_else(|| td_string!(locale, event.err_registration_failed).to_string())
-                                                                                ));
+                                                                                set_reg_state.set(RegState::Error(match api_resp.error {
+                                                                                    Some(msg) if event_checkin_domain::turnstile::is_rejection(&msg) => {
+                                                                                        td_string!(locale, event.err_bot_check).to_string()
+                                                                                    }
+                                                                                    Some(msg) => msg,
+                                                                                    None => td_string!(locale, event.err_registration_failed).to_string(),
+                                                                                }));
                                                                             }
                                                                         }
                                                                         Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_parse), &e)),

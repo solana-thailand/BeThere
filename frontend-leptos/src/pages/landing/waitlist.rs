@@ -2,6 +2,7 @@
 
 use leptos::prelude::*;
 
+use crate::bot_check::{BotCheck, BotCheckSlot};
 use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 
@@ -15,6 +16,8 @@ enum WaitlistError {
     /// A non-2xx response whose body was not JSON.
     Retry,
     Network(String),
+    /// The Turnstile check failed or its token expired.
+    BotCheck,
     Server(String),
 }
 
@@ -27,6 +30,7 @@ pub(super) fn WaitlistForm() -> impl IntoView {
     let (error, set_error) = signal(None::<WaitlistError>);
     let (submitting, set_submitting) = signal(false);
     let (already_registered, set_already_registered) = signal(false);
+    let bot_check = BotCheck::new();
 
     let handle_submit = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
@@ -50,9 +54,16 @@ pub(super) fn WaitlistForm() -> impl IntoView {
 
             let body = serde_json::json!({ "email": email_val });
             let body_str = serde_json::to_string(&body).unwrap_or_default();
-            let hdrs = [("Content-Type", "application/json")];
+            let token_header = bot_check.header();
+            let mut hdrs = vec![("Content-Type", "application/json")];
+            if let Some((name, token)) = token_header.as_ref() {
+                hdrs.push((name, token.as_str()));
+            }
 
-            match crate::api::fetch::post(&url, &hdrs, Some(body_str)).await {
+            let result = crate::api::fetch::post(&url, &hdrs, Some(body_str)).await;
+            // The token is spent whatever the answer was.
+            bot_check.reset();
+            match result {
                 Ok(response) => {
                     // Parse JSON body regardless of HTTP status
                     let status = response.status();
@@ -66,6 +77,11 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                                 match error_msg {
                                     Some(msg) if msg.contains("already on the waitlist") => {
                                         set_already_registered.set(true);
+                                    }
+                                    Some(msg)
+                                        if event_checkin_domain::turnstile::is_rejection(msg) =>
+                                    {
+                                        set_error.set(Some(WaitlistError::BotCheck))
                                     }
                                     Some(msg) => {
                                         set_error.set(Some(WaitlistError::Server(msg.to_string())))
@@ -111,7 +127,11 @@ pub(super) fn WaitlistForm() -> impl IntoView {
             when=move || !submitted.get() && !already_registered.get()
             fallback=|| view! { <div></div> }
         >
-            <form on:submit=handle_submit class="landing-waitlist-form">
+            <form
+                on:submit=handle_submit
+                on:focusin=move |_| bot_check.activate()
+                class="landing-waitlist-form"
+            >
                 <input
                     type="email"
                     placeholder="your@email.com"
@@ -122,7 +142,9 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                 />
                 <button
                     type="submit"
-                    disabled=move || submitting.get() || email.get().trim().is_empty()
+                    disabled=move || {
+                        submitting.get() || email.get().trim().is_empty() || !bot_check.ready()
+                    }
                     class="btn btn-primary landing-waitlist-submit"
                 >
                     {move || match submitting.get() {
@@ -131,6 +153,7 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                     }}
                 </button>
             </form>
+            <BotCheckSlot check=bot_check />
             <Show
                 when=move || error.get().is_some()
                 fallback=|| view! { <div></div> }
@@ -141,6 +164,7 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                         Some(WaitlistError::Unspecified) => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.server_error)).into_any(),
                         Some(WaitlistError::Retry) => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.retry_error)).into_any(),
                         Some(WaitlistError::Network(error)) => t!(i18n, landing.waitlist.network_error, error).into_any(),
+                        Some(WaitlistError::BotCheck) => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.bot_check_failed)).into_any(),
                         Some(WaitlistError::Server(msg)) => msg.into_any(),
                         None => ().into_any(),
                     }}
