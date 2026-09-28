@@ -40,8 +40,8 @@ places that drifted.
 | S6 | `worker/scripts/preflight.sh` + flow-harness as a gate | no longer gates (`37bc4764`) | keep as a manual tool, or delete if unused by 31 Oct | after 12 Oct |
 | S7 | Consent: 4 signals behind 1 checkbox | 1 checkbox → 4 consents | 1 checkbox per consent | after 4 Oct (`.issues/161`) |
 | S8 | Unmerged branches waiting on one date | 5 (W3, W4, W5, log key, CSP) | 0 on 5 Oct; then branches live ≤ ~1 day | 5 Oct |
-| S9 | Issue ledger heuristics for legacy (≤144) free-text statuses | classifier word lists growing | freeze ≤144 as legacy, stop parsing them | any time (S) |
-| S10 | Plan 028 bullets of 300+ words | unreadable | status table + separate log | any time (S) |
+| S9 | ~~Issue ledger heuristics for legacy (≤144) free-text statuses~~ | — | **Declined 2026-09-28:** that parsing found a real stale claim the same day (#121 said "awaiting deploy" while in every prod tag). Removing a check that just caught something is not simplification. Keep it; stop only if it produces noise. | — |
+| S10 | Plan 028 bullets of 300+ words | — | **Done 2026-09-28:** a status-at-a-glance table on top; the detail stays below as the log. | — |
 
 Remote branches were 9 after `git fetch --prune` (an earlier "~70" count
 included stale refs), so branch cleanup is not a candidate.

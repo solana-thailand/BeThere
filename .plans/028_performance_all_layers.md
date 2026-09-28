@@ -10,6 +10,25 @@ Sources: two read-only audits (worker hot paths, frontend runtime) run this
 session, each finding re-checked against the code before it was acted on.
 Two audit recommendations were **rejected after measurement** — see §4.
 
+## Status at a glance (2026-09-28)
+
+One line per item; the detail and evidence stay in §2 below.
+
+| Item | State | Where / next |
+|---|---|---|
+| W1 staff cache | done, prod | in-isolate copy, 60 s revocation kept |
+| W2 staff N+1 | done, prod | D1 locator, KV confirms |
+| W3 counting | built, not merged | `feature/028-w3-track-counts`; fixes `.issues/157`; merge after RTM #6 |
+| W4 public GET | SQL half built, not merged | `feature/028-w4-public-list-filter`; Cache API waits on a staging probe (workers.dev) |
+| W5 credit release | built, not merged | `feature/028-w5-credit-release`; apply migration 0056 first |
+| W6, W7, W9–W12 | done, prod | — |
+| F1 | closed negative | premise false |
+| F2–F8, F10 | done, prod | — |
+| F9 CSS minify | parked (owner) | reopen when CSS matters on first load |
+| M1 CPU per path | partly measured | `.benchmarks/002–004`; rest after RTM #6 (staging-only limiter exemption, owner 2026-09-28) |
+
+Merge order after 2026-10-04: W4 → W3 → W5 (then the log-key and CSP branches). All five were rebased onto `develop` on 2026-09-28.
+
 ## 1. Done (on `develop`, verified on staging where observable)
 
 | # | Layer | Change | Evidence |
