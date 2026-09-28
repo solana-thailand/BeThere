@@ -59,9 +59,9 @@ with `npx wrangler secret list` on 2026-09-28 (values are never shown).
 | Organizers and staff | Attendee lists, exports, Sheets | §12 | On |
 
 **Cross-border transfer (s.28/29).** All the processors above are foreign
-companies. Where each stores data is **unverified** (the staging D1 comment says
-APAC, `worker/wrangler.toml`; prod D1 region is not recorded). The `/privacy`
-page says transfers are disclosed (`.issues/043` checklist) but names only
+companies. Prod D1 runs in **APAC** with no jurisdiction set (`npx wrangler d1 info
+bethere-db`, 2026-09-28); where the other processors store data is unverified.
+The `/privacy` page said transfers are disclosed (`.issues/043` checklist) but named only
 Google and Helius (`privacy.rs:86-88`). Basis for transfer: owner to confirm.
 
 ---
@@ -224,7 +224,7 @@ Google and Helius (`privacy.rs:86-88`). Basis for transfer: owner to confirm.
 | Data | Worker `tracing` lines with a correlation id, a **redacted** path (`worker/src/middleware/correlation.rs:44,104`) and keyed fingerprints instead of email, wallet, signature, name, GitHub/Telegram id and claim token (`.issues/070`; `AppState::log_fingerprint`, `worker/src/state.rs:470`). Cloudflare's own request log keeps the raw URL (`.issues/071`). |
 | Slack | 5xx and security-spike alerts carry method + path + correlation id (`worker/src/middleware/alert.rs:63-89`). **That path is the raw `req.uri().path()` (`alert.rs:44`), not the redacted one**, so a claim token or wallet in the path reaches Slack. `/api/admin/test-alert` sends the requesting super-admin's email (`worker/src/handlers/attendee/admin.rs:102`). Cron alerts carry counts and event ids only (`worker/src/cleanup.rs` `CleanupFailure`). |
 | Storage | Cloudflare Workers Logs / `wrangler tail`; Slack |
-| Retention | `wrangler.toml` has no `[observability]` block. Whether Workers Logs is enabled and how long it keeps data: **unverified**. The `/privacy` page states 72 hours (`privacy.rs:97`), also unverified. Slack retention: unverified (Slack workspace setting). |
+| Retention | If Workers Logs is on, the free plan keeps logs **3 days** (Cloudflare Workers Logs docs, read 2026-09-28). Whether it is on for `bethere` is **unverified**: `wrangler.toml` has no `[observability]` block, new Workers default to on, and no read-only wrangler command shows the setting (check the dashboard). The `/privacy` page no longer states a log retention (`.issues/158`). D1 Time Travel keeps **7 days** of history on the free plan (D1 docs), which is also how long a deleted row stays restorable. Slack retention: unverified (Slack workspace setting). |
 | Security | Guards: `worker/tests/log_pii_guard.rs` (8 tests), `error_body_guard.rs`; runtime probe `scripts/verify/pii_log_probe.sh`. Fingerprint key is `JWT_SECRET` until `LOG_FINGERPRINT_KEY` is provisioned (branch `feature/029-log-fingerprint-key`, plan 029 §3). |
 
 ## 14. Waitlist and backups

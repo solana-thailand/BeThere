@@ -68,8 +68,8 @@ chmod 600 backup-*.sql                   # never commit it; the repo is public
 - Screenshot or save the alert, report or log lines. Save them outside the repo.
 - Read-only D1 queries (`SELECT`) are fine for scoping. Do not `d1 execute`
   writes on `events` rows; the read path is KV-first (`CLAUDE.md`, Data rules).
-- Cloudflare Workers Logs retention is unverified (see RoPA §13). Save what you
-  need now; it may expire.
+- Cloudflare Workers Logs keep 3 days on the free plan, if they are on for
+  `bethere` (RoPA §13). Save what you need now; it expires.
 
 ### 2.2 Stop the leak: by scenario
 
@@ -89,9 +89,9 @@ openssl rand -hex 32 | npx wrangler secret put JWT_SECRET
 | Other provider keys | `HELIUS_API_KEY`, `CROSSMINT_API_KEY` (provider dashboards); `GITHUB_CLIENT_SECRET` (GitHub OAuth app); `TELEGRAM_BOT_TOKEN` (BotFather `/revoke`); `SLACK_WEBHOOK_URL` (regenerate the Slack webhook). Then `secret put` each. | That feature stops until the new key is in. |
 | A deploy leaks data or breaks access control | `npx wrangler deployments list`, then `npx wrangler rollback <version-id>` (example: `docs/deploy_20260923_runbook.md`). | Rollback changes code only. D1 migrations and data are **not** rolled back. PUT-fallback deploys have caveats (`docs/mainnet_canary_mitigation_runbook.md`). |
 | One route leaks data | There is **no per-route kill switch** in code. Ship a patch that returns 503 on that route, or roll back. Last resort: turn off the Worker's route in the Cloudflare dashboard (takes the whole site down). | — |
-| PII in logs or Slack | Fix the code path, then run `scripts/verify/pii_log_probe.sh`. Delete the Slack messages. Worker logs cannot be deleted by us; they expire (retention unverified). Known gap: Slack 5xx/spike alerts carry the raw path (RoPA §13). | — |
+| PII in logs or Slack | Fix the code path, then run `scripts/verify/pii_log_probe.sh`. Delete the Slack messages. Worker logs cannot be deleted by us; they expire after 3 days on the free plan, if on. Known gap: Slack 5xx/spike alerts carry the raw path (RoPA §13). | — |
 | Laptop lost, or a D1 dump exposed | Treat every dump on it as leaked. Rotate every secret in the table above (the deploy credentials were on it). Revoke the Cloudflare API token / `wrangler logout` sessions in the Cloudflare dashboard. Find out which dumps existed (plan 029 §4 keeps 7 days). | — |
-| R2 slip or refund images exposed | Slips are served only through authed `/api/storage/slips/...`. Check the bucket has no public access in the Cloudflare dashboard (unverified). | Slips contain bank names, account numbers and amounts: **high risk**. |
+| R2 slip or refund images exposed | Slips are served only through authed `/api/storage/slips/...`. Both buckets had public access off on 2026-09-28 (r2.dev URL disabled, no custom domain: `npx wrangler r2 bucket dev-url get` / `domain list`); re-check that first. | Slips contain bank names, account numbers and amounts: **high risk**. |
 
 ---
 
