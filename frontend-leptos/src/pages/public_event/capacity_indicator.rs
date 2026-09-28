@@ -1,3 +1,4 @@
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 
@@ -6,6 +7,7 @@ pub fn capacity_indicator(
     online_remaining: Option<u32>,
     in_person_remaining: Option<u32>,
 ) -> AnyView {
+    let i18n = use_i18n();
     let has_ip_cap = in_person_capacity.is_some();
     let has_on_cap = online_remaining.is_some();
 
@@ -16,15 +18,16 @@ pub fn capacity_indicator(
     view! {
         <div class="pe-card">
             <h2 class="pe-section-title">
-                <Icon icon=IconName::Ticket class="icon-md" />" Capacity"
+                <Icon icon=IconName::Ticket class="icon-md" />" "{t!(i18n, event.capacity_title)}
             </h2>
             <div class="pe-capacity-grid">
                 {if has_ip_cap {
                     let remaining = in_person_remaining.unwrap_or(0);
-                    let (color, label, is_full) = if remaining > 0 {
-                        ("#34d399", "In-Person Spots Remaining", false)
-                    } else {
-                        ("#f87171", "In-Person — FULL", true)
+                    let is_full = remaining == 0;
+                    let color = if is_full { "#f87171" } else { "#34d399" };
+                    let label = move || match is_full {
+                        false => t_string!(i18n, event.capacity_in_person_left),
+                        true => t_string!(i18n, event.capacity_in_person_full),
                     };
                     view! {
                         <div class="pe-capacity-tile">
@@ -37,10 +40,11 @@ pub fn capacity_indicator(
                 }}
                 {if has_on_cap {
                     let remaining = online_remaining.unwrap_or(0);
-                    let (color, label, is_full) = if remaining > 0 {
-                        ("#34d399", "Online Spots Remaining", false)
-                    } else {
-                        ("#f87171", "Online — FULL", true)
+                    let is_full = remaining == 0;
+                    let color = if is_full { "#f87171" } else { "#34d399" };
+                    let label = move || match is_full {
+                        false => t_string!(i18n, event.capacity_online_left),
+                        true => t_string!(i18n, event.capacity_online_full),
                     };
                     view! {
                         <div class="pe-capacity-tile">

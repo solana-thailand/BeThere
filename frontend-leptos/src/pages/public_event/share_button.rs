@@ -1,4 +1,5 @@
 use super::types::*;
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 
@@ -8,6 +9,7 @@ pub fn share_button(
     share_copied: ReadSignal<bool>,
     set_share_copied: WriteSignal<bool>,
 ) -> AnyView {
+    let i18n = use_i18n();
     let share_slug = current_slug.to_string();
     let share_name = event_name.to_string();
     let set_copied = set_share_copied;
@@ -38,7 +40,7 @@ pub fn share_button(
                     });
                 }
             >
-                <Icon icon=IconName::Link class="icon-sm" />" Share Event ↗"
+                <Icon icon=IconName::Link class="icon-sm" />" "{t!(i18n, event.share_event)}" ↗"
             </button>
             <a
                 href=google_cal_url
@@ -46,12 +48,12 @@ pub fn share_button(
                 rel="noopener noreferrer"
                 class="btn btn-outline btn-sm"
             >
-                "📅 Add to Calendar ↗"
+                {t!(i18n, event.add_to_calendar)}
             </a>
             {move || {
                 if share_copied.get() {
                     view! {
-                        <span class="pe-share-copied">"Link copied!"</span>
+                        <span class="pe-share-copied">{t!(i18n, event.link_copied)}</span>
                     }.into_any()
                 } else {
                     ().into_any()

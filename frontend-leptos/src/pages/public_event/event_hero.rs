@@ -1,4 +1,5 @@
 use crate::components::LightboxImage;
+use crate::i18n::{td_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 
@@ -13,12 +14,10 @@ use leptos::prelude::*;
 /// The rendered image is click-to-fullscreen via the shared `LightboxImage`
 /// component — attendees often need to read dense agenda text on the poster.
 pub fn event_hero(poster_url: &str, nft_image_url: &str) -> AnyView {
-    let (url, alt) = if !poster_url.is_empty() {
-        (poster_url, "Event poster")
-    } else if !nft_image_url.is_empty() {
-        (nft_image_url, "Event badge")
+    let (url, is_poster) = if !poster_url.is_empty() {
+        (poster_url, true)
     } else {
-        ("", "")
+        (nft_image_url, false)
     };
     if url.is_empty() {
         view! {
@@ -28,16 +27,17 @@ pub fn event_hero(poster_url: &str, nft_image_url: &str) -> AnyView {
         }
         .into_any()
     } else {
+        let i18n = use_i18n();
         let url = url.to_string();
-        view! {
-            <div class="pe-hero">
-                <LightboxImage
-                    src=url
-                    alt=alt
-                    thumb_class="pe-hero-img"
-                />
-            </div>
-        }
-        .into_any()
+        // `LightboxImage` takes a plain `String` alt, so re-render it on a
+        // language switch to keep the alt text in the reader's language.
+        let lightbox = move || {
+            let alt = match is_poster {
+                true => td_string!(i18n.get_locale(), event.hero_alt_poster),
+                false => td_string!(i18n.get_locale(), event.hero_alt_badge),
+            };
+            view! { <LightboxImage src=url.clone() alt=alt thumb_class="pe-hero-img" /> }
+        };
+        view! { <div class="pe-hero">{lightbox}</div> }.into_any()
     }
 }

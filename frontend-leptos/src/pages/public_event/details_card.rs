@@ -1,25 +1,46 @@
 use super::types::*;
+use crate::api::EventFormat;
+use crate::i18n::{Locale, t, td_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use event_checkin_domain::models::event::safe_map_url;
 use leptos::prelude::*;
+
+/// The format badge text. `EventFormat::label()` stays English for staff pages.
+fn format_label(locale: Locale, format: &EventFormat) -> &'static str {
+    match format {
+        EventFormat::InPerson => td_string!(locale, event.format_in_person),
+        EventFormat::Online => td_string!(locale, event.format_online),
+        EventFormat::Hybrid => td_string!(locale, event.format_hybrid),
+    }
+}
 
 pub fn details_card(
     data: &PublicEventData,
     countdown: ReadSignal<String>,
     event_completed: ReadSignal<bool>,
 ) -> AnyView {
+    let i18n = use_i18n();
     let has_location = !data.location.is_empty();
     let location = data.location.clone();
     // The Worker already filters to https; re-check since this becomes an href.
     let location_map_url = data.location_map_url.as_deref().and_then(safe_map_url);
-    let date_str = format_event_date(data.event_start_ms);
-    let time_str = if data.time_tba {
-        "Time TBA".to_string()
-    } else {
+    let (start_ms, end_ms, time_tba) = (data.event_start_ms, data.event_end_ms, data.time_tba);
+    // EN keeps its long weekday form; TH uses the shared Intl helper (Thai
+    // month names, Buddhist-era year). Closures, so both follow a switch.
+    let date_str = move || match i18n.get_locale() {
+        Locale::en => format_event_date(start_ms),
+        Locale::th => crate::utils::format_event_day(start_ms),
+    };
+    let time_str = move || {
+        let locale = i18n.get_locale();
+        if time_tba {
+            return td_string!(locale, event.time_tba).to_string();
+        }
         format!(
-            "{} — {}",
-            format_event_time(data.event_start_ms),
-            format_event_time(data.event_end_ms)
+            "{} — {}{}",
+            format_event_time(start_ms, locale),
+            format_event_time(end_ms, locale),
+            td_string!(locale, event.time_unit)
         )
     };
 
@@ -43,7 +64,8 @@ pub fn details_card(
             IconName::Pin,
         ),
     };
-    let fmt_label = data.event_format.label();
+    let event_format = data.event_format.clone();
+    let fmt_label = move || format_label(i18n.get_locale(), &event_format);
 
     view! {
         <div class="pe-card">
@@ -68,7 +90,7 @@ pub fn details_card(
                         rel="noopener noreferrer"
                         class="pe-map-link"
                     >
-                        "Open in Google Maps ↗"
+                        {t!(i18n, event.open_in_maps)}
                     </a>
                 });
                 view! {
@@ -102,7 +124,7 @@ pub fn details_card(
                     view! {
                         <div class="pe-detail-row">
                             <span><Icon icon=IconName::Party class="icon-sm icon-success" /></span>
-                            <span class="pe-text-success">"Event Completed"</span>
+                            <span class="pe-text-success">{t!(i18n, event.event_completed)}</span>
                         </div>
                     }.into_any()
                 } else {
@@ -112,7 +134,7 @@ pub fn details_card(
                         view! {
                             <div class="pe-detail-row">
                                 <span class="pe-emoji-icon">"🔴"</span>
-                                <span class="pe-text-accent-bold">"Happening now!"</span>
+                                <span class="pe-text-accent-bold">{t!(i18n, event.happening_now)}</span>
                             </div>
                         }.into_any()
                     } else {
@@ -120,7 +142,7 @@ pub fn details_card(
                             <div class="pe-detail-row">
                                 <span><Icon icon=IconName::Timer class="icon-sm icon-muted" /></span>
                                 <span class="pe-countdown-capsule">
-                                    "Starts in "{cd}
+                                    {t!(i18n, event.starts_in)}" "{cd}
                                 </span>
                             </div>
                         }.into_any()
