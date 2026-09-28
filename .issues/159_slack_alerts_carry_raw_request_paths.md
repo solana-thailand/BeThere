@@ -1,6 +1,6 @@
 # 159: Slack alerts carry the raw request path
 
-**Status:** fixed on develop 2026-09-28 (session `event-checkin-af`); not deployed to prod. Found while writing `docs/pdpa_ropa.md` (§16).
+**Status:** deployed 2026-09-28 — prod version `f54786e9` (`main` `c1406670`), shipping `ec0e1e98` (session `event-checkin-af`). Not observed live: staging has no Slack webhook, and the prod test alert needs a super-admin session. Found while writing `docs/pdpa_ropa.md` (§16).
 
 ## What happens
 
