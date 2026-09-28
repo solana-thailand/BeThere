@@ -1,6 +1,6 @@
 # 161: One registration checkbox also grants photo and marketing consent
 
-**Status:** in progress (2026-09-28). The form fix is on `feature/161-separate-consent`, to merge after RTM #6 (4 Oct). Clearing the marketing consent already recorded is the owner's call (see "Old consent records"). Found by session `event-checkin-af` while correcting `/privacy` for `.issues/158`.
+**Status:** fixed on develop — `0d230002`, merged via `604cd993` on 2026-09-29 (owner chose plan 028 option A) and on staging `53de706d`. Checked there (session `event-checkin-f6`, headless Chrome, `/e/slipdemo-1790494035` signed in): the form shows three separate boxes (privacy + deposit, photo, marketing email), all unticked. Prod ships with the next owner-gated deploy. Still the owner's call: clearing the marketing consent already recorded (see "Old consent records"). Found by session `event-checkin-af` while correcting `/privacy` for `.issues/158`. Seen alongside: `.issues/166`.
 
 ## What happens
 
