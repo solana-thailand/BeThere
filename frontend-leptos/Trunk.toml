@@ -5,6 +5,14 @@ release = true
 [[assets]]
 file = "_headers"
 
+# CSP has no script-src 'unsafe-inline' (plan 029 8.23). Every `trunk build`
+# and `trunk serve` moves the inline scripts into hashed, SRI-pinned files,
+# and fails if one remains.
+[[hooks]]
+stage = "post_build"
+command = "python3"
+command_arguments = ["externalize_inline_scripts.py"]
+
 [watch]
 ignore = ["../target"]
 
