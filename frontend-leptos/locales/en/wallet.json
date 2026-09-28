@@ -1,1 +1,19 @@
-{}
+{
+  "sign_in": "Sign in with Solana Wallet",
+  "connecting": "Connecting Solana Wallet...",
+  "modal_title": "Connect Wallet",
+  "modal_desc": "Select your Solana wallet to sign in securely with Sign-In With Solana (SIWS).",
+  "connect": "Connect →",
+  "get_extension": "Get Extension ↗",
+  "open_app": "Open App ↗",
+  "deep_link_caption": "Or open this page inside your wallet app and sign in from there:",
+  "no_wallet_mobile": "No Solana wallet found in this browser. Open this page from inside your wallet app's built-in browser to sign in.",
+  "no_wallet_desktop": "No Solana wallet detected. Install one and refresh the page.",
+  "mwa_label": "Solana Wallet App",
+  "mwa_hint": "Opens Phantom, Solflare or Seed Vault",
+  "err_sign": "Message signing was cancelled or failed.",
+  "err_verify": "Wallet verification failed.",
+  "err_nonce": "Failed to request wallet nonce.",
+  "err_connect_cancelled": "{{ wallet }} connection failed or cancelled.",
+  "err_connect": "Could not connect to {{ wallet }}. Please make sure it is installed."
+}
