@@ -6,7 +6,6 @@
 
 use event_checkin_domain::models::attendee::TrackCounts;
 use worker::D1Database;
-use worker::d1::D1Type;
 
 /// Track counts for `event_id`, and whether D1 holds any attendee row for it.
 ///
@@ -16,13 +15,13 @@ pub(crate) async fn count_tracks_by_event(
     db: &D1Database,
     event_id: &str,
 ) -> Result<Option<TrackCounts>, String> {
-    let stmt = db
-        .prepare(include_str!("../sql/attendee_counts_by_participation.sql"))
-        .bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 count_tracks_by_event bind: {e:?}"))?;
-    let rows = crate::db::d1_safe::safe_all_rows(&stmt)
-        .await
-        .map_err(|e| format!("D1 count_tracks_by_event execute: {e}"))?;
+    let rows = crate::db::d1_safe::query_rows_by_text(
+        db,
+        include_str!("../sql/attendee_counts_by_participation.sql"),
+        event_id,
+    )
+    .await
+    .map_err(|e| format!("D1 count_tracks_by_event: {e}"))?;
     if rows.is_empty() {
         return Ok(None);
     }

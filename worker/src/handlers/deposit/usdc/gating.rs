@@ -104,25 +104,3 @@ pub(crate) async fn check_and_switch_deadline(
 
     true
 }
-
-/// Check if in-person capacity is still available for the event.
-/// Returns `true` if spots are available (or unlimited), `false` if full.
-pub(crate) async fn check_in_person_capacity(
-    state: &AppState,
-    event: &EventConfig,
-    kv: Option<&worker::KvStore>,
-) -> bool {
-    // No capacity limit = always available (handled by has_in_person_capacity)
-    if event.in_person_capacity.is_none() {
-        return true;
-    }
-
-    // Walk-ins included (.issues/157). Assume full when the count is unknown.
-    match crate::handlers::capacity::count_tracks(state, event, kv).await {
-        Ok(counts) => event.has_in_person_capacity(counts.in_person),
-        Err(e) => {
-            tracing::warn!(error = %e, "reclaim capacity: failed to count attendees");
-            false
-        }
-    }
-}

@@ -5,9 +5,7 @@ use event_checkin_domain::models::deposit::DepositStatusResponse;
 
 use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
-use crate::handlers::deposit::usdc::{
-    check_and_switch_deadline, check_in_person_capacity, recover_and_verify_deposit,
-};
+use crate::handlers::deposit::usdc::{check_and_switch_deadline, recover_and_verify_deposit};
 use crate::handlers::ext::{EventIdQuery, get_attendee_for_public};
 use crate::state::AppState;
 
@@ -67,7 +65,8 @@ pub async fn get_deposit_status_handler(
 
             // Check if in-person capacity is still available (reclaim flow)
             if deadline_expired {
-                in_person_available = Some(check_in_person_capacity(&state, &event, kv).await);
+                in_person_available =
+                    Some(crate::handlers::capacity::has_in_person_room(&state, &event, kv).await);
             }
         }
     }

@@ -95,3 +95,24 @@ async fn sheet_counts(
         attendees.iter().map(|a| a.participation_type.as_str()),
     ))
 }
+
+/// Whether `event` has an in-person spot left, walk-ins included — the check
+/// behind the deadline reclaim paths. Uncapped events skip the count; an
+/// unknown count reads as full, so a reclaim never overfills the room.
+pub(crate) async fn has_in_person_room(
+    state: &AppState,
+    event: &EventConfig,
+    kv: Option<&KvStore>,
+) -> bool {
+    if event.in_person_capacity.is_none() {
+        return true;
+    }
+    match count_tracks(state, event, kv).await {
+        Ok(counts) => event.has_in_person_capacity(counts.in_person),
+        Err(e) => {
+            tracing::warn!(error = %e, event_id = %event.id,
+                "reclaim capacity: count unknown, treating the event as full");
+            false
+        }
+    }
+}

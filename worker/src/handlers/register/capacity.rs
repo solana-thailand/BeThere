@@ -1,6 +1,6 @@
 //! Capacity enforcement helper for registration.
 
-use event_checkin_domain::models::attendee::ParticipationType;
+use event_checkin_domain::models::attendee::{ParticipationType, TrackCounts};
 use event_checkin_domain::models::error::AppError;
 
 use crate::state::AppState;
@@ -26,9 +26,10 @@ pub(super) async fn enforce_capacity(
 
     // One count for both tracks, walk-ins included. Fails closed — see
     // `handlers::capacity`.
-    let counts = crate::handlers::capacity::count_tracks_for_cap(state, config, kv).await?;
-    let in_person_count = counts.in_person;
-    let online_count = counts.online;
+    let TrackCounts {
+        in_person: in_person_count,
+        online: online_count,
+    } = crate::handlers::capacity::count_tracks_for_cap(state, config, kv).await?;
 
     tracing::info!(
         event_id = %config.id,

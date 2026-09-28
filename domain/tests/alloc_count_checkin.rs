@@ -106,7 +106,12 @@ fn virtual_gate_accept_path_is_zero_alloc() {
 #[test]
 fn participation_parse_is_zero_alloc() {
     let a = attendee("Hybrid (Online + In-Person)");
-    let count = allocs_after_warmup(|| (a.is_in_person(), a.counts_toward_online_track()));
+    let count = allocs_after_warmup(|| {
+        (
+            a.is_in_person(),
+            a.participation_type_enum().counts_toward_online_track(),
+        )
+    });
     assert_eq!(count, 0, "participation parsing allocated {count} times");
 }
 

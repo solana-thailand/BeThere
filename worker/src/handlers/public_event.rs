@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 
 use crate::error::ApiOk;
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::TrackCounts;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{EventVisibility, safe_map_url};
 
@@ -171,8 +172,10 @@ pub async fn get_public_event(
     tracing::info!(slug = %slug, "public event fetched");
 
     // Count attendees for capacity display
-    let (in_person_count, online_count) =
-        count_attendees_by_track(&state, &config, state.events_kv.as_ref()).await;
+    let TrackCounts {
+        in_person: in_person_count,
+        online: online_count,
+    } = count_attendees_by_track(&state, &config, state.events_kv.as_ref()).await;
 
     let in_person_remaining = config
         .in_person_capacity
@@ -513,19 +516,18 @@ fn public_learning_resources(
 }
 
 /// Count attendees by track for the capacity display.
-/// Returns (in_person_count, online_count); an unknown count shows as (0, 0).
+/// An unknown count shows as zero in both tracks.
 async fn count_attendees_by_track(
     state: &AppState,
     config: &event_checkin_domain::models::event::EventConfig,
     kv: Option<&worker::kv::KvStore>,
-) -> (u32, u32) {
-    match crate::handlers::capacity::count_tracks(state, config, kv).await {
-        Ok(counts) => (counts.in_person, counts.online),
-        Err(e) => {
+) -> TrackCounts {
+    crate::handlers::capacity::count_tracks(state, config, kv)
+        .await
+        .unwrap_or_else(|e| {
             tracing::warn!(error = %e, "failed to count attendees for capacity");
-            (0, 0)
-        }
-    }
+            TrackCounts::default()
+        })
 }
 
 /// Check whether online registration is currently open based on `OnlineOpenMode`.

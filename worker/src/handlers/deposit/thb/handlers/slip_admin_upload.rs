@@ -173,17 +173,8 @@ pub async fn admin_upload_thb_slip_handler(
         let deadline = reg_time.with_timezone(&chrono::Utc)
             + chrono::Duration::hours(i64::from(deadline_hours));
         if chrono::Utc::now() > deadline {
-            let capacity_available = if let Some(cap) = event.in_person_capacity {
-                // Walk-ins included; an unknown count reads as full (.issues/157).
-                let in_person_count =
-                    crate::handlers::capacity::count_tracks(&state, &event, Some(kv))
-                        .await
-                        .map(|c| c.in_person)
-                        .unwrap_or(u32::MAX);
-                in_person_count < cap
-            } else {
-                true
-            };
+            let capacity_available =
+                crate::handlers::capacity::has_in_person_room(&state, &event, Some(kv)).await;
 
             if capacity_available {
                 if let Ok(mapping) = crate::sheets::get_column_mapping(

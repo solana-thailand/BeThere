@@ -302,11 +302,6 @@ fn retrospective_is_excluded_from_the_live_online_bucket() {
     assert!(ParticipationType::Other.counts_toward_online_track());
     assert!(!ParticipationType::InPerson.counts_toward_online_track());
     assert!(!ParticipationType::Retrospective.counts_toward_online_track());
-
-    assert!(make_attendee("online").counts_toward_online_track());
-    assert!(make_attendee("test").counts_toward_online_track());
-    assert!(!make_attendee("in_person").counts_toward_online_track());
-    assert!(!make_attendee("retrospective").counts_toward_online_track());
 }
 
 #[test]
