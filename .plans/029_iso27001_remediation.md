@@ -125,13 +125,21 @@
 
 ## 4. Owner decisions (gated)
 
-- [ ] Storage and disposal rule for the plaintext prod dumps on the
-      workstation: 11 files in `backups/` and `worker/backups/`, plus
-      `exports/`, all mode 644. Suggest `chmod 600` now and deleting anything
-      older than the rollback window. **Nothing has been deleted.**
-- [ ] Second approver for prod deploys, or deploys run from CI off `main` (5.3, 8.32).
+- [x] Storage and disposal rule for the plaintext prod dumps on the
+      workstation. **Decided and done 2026-09-28 (owner, `event-checkin-af`):**
+      keep 7 days, mode 600. All 25 dump files were set to 600. The 12 older
+      than 2026-09-21 (in `backups/`, `worker/backups/` and `exports/`) were
+      moved to the macOS Trash, not `rm`'d; emptying the Trash is the owner's
+      final step. Kept: 13 dumps from 2026-09-23 on. Rule going forward: every
+      new backup is `chmod 600` at creation (the deploy-guard backup step does
+      this) and is pruned past 7 days.
+- [ ] Second approver for prod deploys, or deploys run from CI off `main` (5.3, 8.32). **Decided 2026-09-28: CI deploys from `main`.** Needs a scoped `CLOUDFLARE_API_TOKEN` as a GitHub Actions secret (owner), and a workflow that runs `deploy.sh`'s checks (wasm-bindgen pin, size budgets, Content-Type, security headers). The 10013/PUT fallback and the preflight gate (`.issues/141`) have to work non-interactively first. After RTM #6.
 - [ ] MFA for super-admin (Cloudflare Access on `/admin`, or Google Workspace
-      2SV enforcement) (8.2).
+      2SV enforcement) (8.2). **Decided 2026-09-28: Google 2-Step Verification
+      first** (owner action in the Google account or Workspace admin); Cloudflare
+      Access on `/admin` later.
 - [ ] ISMS documents (policy, risk register, asset/supplier registers, PDPA
       incident and breach procedure, RoPA, DSAR export), and whether to pursue
       certification at all. An external audit is L effort and cost.
+      **Decided 2026-09-28: no certification.** Write the PDPA minimum: a
+      record of processing (RoPA) and a breach procedure.

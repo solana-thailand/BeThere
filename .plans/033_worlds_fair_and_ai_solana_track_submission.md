@@ -18,6 +18,9 @@ section still stand and are not repeated here).
   The dates were kept and the weekdays fixed, because the deadlines above are
   dated. If a plan meant the weekday (for example a Friday deploy, i.e. 2 Oct),
   the owner should move the date.
+- **Confirmed 2026-09-28 (owner, `event-checkin-af`):** our deadline stays
+  **Mon 12 Oct 18:00 ICT**. The prod deploy that had been labelled "Fri 3 Oct" went out on
+  28 Sep instead (`13b1b7eb`), so the weekday question is closed.
 
 ## 0. Where we stand (checked, not recalled)
 
@@ -186,6 +189,10 @@ first (keep live QR-path shadow numbers), then the deck polish. W1 QR path,
 W2, W3 and W5 are not cuttable. W3 moves up to Tue 29 – Wed 30 Sep.
 
 ## 4. Decisions only the owner can make
+
+**Deposit decisions for the pitch (owner, 2026-09-28; `docs/deposit-commitment-model.md` §5):**
+D1: nothing is forfeited today, and A′ (a no-show without notice covers only the per-head cost already spent) is the next step. D2: 100% back is the intent; the refundable cap only covers overflow seats. D3: THB refunds within 7 days. D4: no fee today. D5: lead with THB. The deck in `solana-thailand-devrel-helper/scripts/slides` and the Colosseum text must follow these. This repo's `scripts/make_pitch_deck.py` is older copy (USDC-first, "Skip → forfeit", 1–2% fees on forfeits); do not reuse its lines.
+
 
 **Answered 2026-09-27 (owner, session `event-checkin-40`):**
 1. **Solo.**

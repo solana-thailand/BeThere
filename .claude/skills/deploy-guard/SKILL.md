@@ -42,8 +42,10 @@ cd worker && npx wrangler d1 export <db> --remote [--env staging] \
   --output backup-<env>-$(date +%Y%m%d-%H%M).sql
 ```
 
-Stop if the file is empty or the command errors. The backup holds PII: it
-never enters git, and `git status` must not list it.
+Then `chmod 600` the file. Stop if the file is empty or the command errors.
+The backup holds PII: it never enters git, and `git status` must not list it.
+Keep 7 days of backups; move older ones to the Trash (owner rule 2026-09-28,
+plan 029 §4).
 
 ## 3. Build + size budgets
 

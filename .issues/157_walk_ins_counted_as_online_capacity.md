@@ -34,9 +34,9 @@ in-person. The sheet mirror writes walk-ins as `In-Person`
 (`sheets/write/append.rs::append_walkin_row`), so events whose count came from
 the sheet were not affected; only D1-served counts were.
 
-**Not measured:** how many prod events have walk-ins together with an online
-cap, i.e. whether any real online registration was closed early. That needs a
-read-only prod D1 query, not run.
+**Measured 2026-09-28 (read-only prod D1 query, owner-approved):** no event
+with `online_capacity > 0` has ever had a walk-in row, so no real online
+registration was closed early by this bug.
 
 **RTM #6 exposure checked 2026-09-28** (public API, no D1 query): the event is
 hybrid, in-person 25/40, online 32/100 (68 remaining), `online_open_mode =
