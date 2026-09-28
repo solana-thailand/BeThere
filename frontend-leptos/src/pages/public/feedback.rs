@@ -21,6 +21,7 @@ use leptos::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::api::{PostEventRegisterBody, register_post_event};
+use crate::i18n::{Locale, t, t_string, td_string, use_i18n};
 use crate::pages::landing::{AuthState, SiteHeader};
 
 /// The question set, transcribed from the two Google Forms DevRel has been
@@ -33,11 +34,15 @@ use crate::pages::landing::{AuthState, SiteHeader};
 ///
 /// The `post.` prefix routes every answer to `registration_responses` scoped to
 /// the event and skips the developer-profile upsert (`.issues/082`).
-const DIMENSIONS: [(&str, &str); 4] = [
-    ("post.satisfaction.content", "ด้านเนื้อหา"),
-    ("post.satisfaction.venue", "ด้านสถานที่"),
-    ("post.satisfaction.catering", "ด้านอาหารเครื่องดื่ม"),
-    ("post.satisfaction.promotion", "ด้านการประชาสัมพันธ์"),
+///
+/// The answer keys live here; the dimension names (the form's Thai wording,
+/// ด้านเนื้อหา / ด้านสถานที่ / ด้านอาหารเครื่องดื่ม / ด้านการประชาสัมพันธ์) are
+/// display labels in the catalog, see `dimension_label`.
+const DIMENSIONS: [&str; 4] = [
+    "post.satisfaction.content",
+    "post.satisfaction.venue",
+    "post.satisfaction.catering",
+    "post.satisfaction.promotion",
 ];
 
 /// The dimensions to ask about, by how the person took part.
@@ -91,6 +96,49 @@ const LATENT_SPACE_OPTIONS: [&str; 4] = [
     "เฉย ๆ",
     "ไม่เคยดู และไม่ทราบว่ามีซีรีส์นี้",
 ];
+
+/// Display labels for the option sets above, in the reader's language.
+///
+/// The consts hold the **stored** values: the Google Form's Thai wording, which
+/// the Phase 1 report compares against, so they never change with the UI
+/// language. Only what the reader sees is translated; the TH label is the
+/// stored value itself (`tests/feedback_labels_keep_values.rs`).
+fn dimension_label(locale: Locale, index: usize) -> &'static str {
+    match index {
+        0 => td_string!(locale, feedback.dim.content),
+        1 => td_string!(locale, feedback.dim.venue),
+        2 => td_string!(locale, feedback.dim.catering),
+        _ => td_string!(locale, feedback.dim.promotion),
+    }
+}
+
+fn scale_label(locale: Locale, index: usize) -> &'static str {
+    match index {
+        0 => td_string!(locale, feedback.scale.low),
+        1 => td_string!(locale, feedback.scale.mid),
+        _ => td_string!(locale, feedback.scale.high),
+    }
+}
+
+fn watched_label(locale: Locale, index: usize) -> &'static str {
+    match index {
+        0 => td_string!(locale, feedback.watched.live),
+        1 => td_string!(locale, feedback.watched.replay),
+        2 => td_string!(locale, feedback.watched.timing),
+        3 => td_string!(locale, feedback.watched.topic),
+        4 => td_string!(locale, feedback.watched.language),
+        _ => td_string!(locale, feedback.watched.unaware),
+    }
+}
+
+fn latent_label(locale: Locale, index: usize) -> &'static str {
+    match index {
+        0 => td_string!(locale, feedback.latent.join),
+        1 => td_string!(locale, feedback.latent.replay),
+        2 => td_string!(locale, feedback.latent.neutral),
+        _ => td_string!(locale, feedback.latent.unaware),
+    }
+}
 
 /// Where an in-progress form is kept between visits.
 ///
@@ -286,7 +334,7 @@ fn answers_for(block: &EventBlock) -> std::collections::HashMap<String, String> 
         let value = block.ratings[*index].get();
         let trimmed = value.trim();
         if !trimmed.is_empty() {
-            answers.insert(DIMENSIONS[*index].0.to_string(), trimmed.to_string());
+            answers.insert(DIMENSIONS[*index].to_string(), trimmed.to_string());
         }
     }
     let watched = block.watched.get();
@@ -546,6 +594,7 @@ pub fn Feedback() -> impl IntoView {
         });
     };
 
+    let i18n = use_i18n();
     view! {
         // The header sits outside the container. Inside it the nav is squeezed
         // into the page's reading width and its links wrap mid-word — "How it
@@ -553,29 +602,26 @@ pub fn Feedback() -> impl IntoView {
         <SiteHeader auth_state=auth_state.read_only() user_role=user_role />
         <div class="container fb-page">
             {move || match state.get() {
-                PageState::Loading => view! { <p class="card layout-col-center">"กำลังโหลด…"</p> }.into_any(),
+                PageState::Loading => view! { <p class="card layout-col-center">{t!(i18n, common.loading)}</p> }.into_any(),
                 PageState::NothingToDo => view! {
                     <div class="card fb-notice">
-                        <h1>"ไม่มีแบบสอบถามค้างอยู่"</h1>
-                        <p>"ขอบคุณครับ — ตอนนี้ไม่มีงานที่รอความเห็นจากคุณ"</p>
-                        <a class="btn btn-primary" href="/">"กลับหน้าหลัก"</a>
+                        <h1>{t!(i18n, feedback.nothing_title)}</h1>
+                        <p>{t!(i18n, feedback.nothing_body)}</p>
+                        <a class="btn btn-primary" href="/">{t!(i18n, feedback.back_home)}</a>
                     </div>
                 }.into_any(),
                 PageState::NeedsGoogle => view! {
                     <div class="card fb-notice">
-                        <h1>"ต้องเข้าสู่ระบบด้วย Google"</h1>
-                        <p>
-                            "แบบสอบถามผูกกับอีเมลที่คุณใช้ลงทะเบียนงาน "
-                            "การเข้าสู่ระบบด้วยกระเป๋าเงินจึงยังไม่พอ"
-                        </p>
+                        <h1>{t!(i18n, feedback.google_title)}</h1>
+                        <p>{t!(i18n, feedback.google_body)}</p>
                         <a class="btn btn-primary" href="/login?next=/feedback">
-                            "เข้าสู่ระบบด้วย Google"
+                            {t!(i18n, feedback.google_cta)}
                         </a>
                     </div>
                 }.into_any(),
                 PageState::Error(message) => view! {
                     <div class="card fb-notice">
-                        <h1>"ส่งไม่สำเร็จ"</h1>
+                        <h1>{t!(i18n, feedback.error_title)}</h1>
                         <p>{message}</p>
                     </div>
                 }.into_any(),
@@ -584,8 +630,8 @@ pub fn Feedback() -> impl IntoView {
                 // still unanswered (`.issues/107`).
                 PageState::Done(saved) => view! {
                     <div class="card fb-notice">
-                        <h1>"ขอบคุณครับ"</h1>
-                        <p>{format!("บันทึกความเห็นของคุณแล้ว {saved} งาน")}</p>
+                        <h1>{t!(i18n, feedback.done_title)}</h1>
+                        <p>{t!(i18n, feedback.done_saved, saved)}</p>
                         // Close the loop rather than the conversation. Someone
                         // who just did the programme a favour is the best
                         // audience the next event will get (`.issues/110`).
@@ -600,7 +646,7 @@ pub fn Feedback() -> impl IntoView {
                                     .join(" · ");
                                 view! {
                                     <a class="fb-next-event" href=format!("/e/{}", next.slug)>
-                                        <span class="fb-next-label">"งานถัดไป"</span>
+                                        <span class="fb-next-label">{t!(i18n, feedback.next_label)}</span>
                                         <span class="fb-next-name">{next.name.clone()}</span>
                                         <span class="fb-next-meta">{line}</span>
                                     </a>
@@ -622,9 +668,9 @@ pub fn Feedback() -> impl IntoView {
                                     }
                                 }
                             >
-                                "ให้ความเห็นงานอื่นต่อ"
+                                {t!(i18n, feedback.more)}
                             </button>
-                            <a class="btn btn-outline" href="/">"กลับหน้าหลัก"</a>
+                            <a class="btn btn-outline" href="/">{t!(i18n, feedback.back_home)}</a>
                         </div>
                     </div>
                 }.into_any(),
@@ -639,22 +685,18 @@ pub fn Feedback() -> impl IntoView {
                     };
                     view! {
                         <header class="card">
-                            <h1>"ขอความเห็นจากงานที่คุณเข้าร่วม"</h1>
+                            <h1>{t!(i18n, feedback.intro_title)}</h1>
                             // The stake, which lived only in the covering email.
                             // Whoever clicks the link loses it, and this page
                             // then asks a favour without saying what the favour
                             // buys — the single cheapest thing that moves a
                             // response rate (`.issues/110`).
-                            <p class="fb-stake">
-                                "เรากำลังสรุปว่าจะจัดอะไรต่อในไตรมาสหน้า "
-                                "และคำตอบของคุณคือสิ่งที่ใช้ตัดสิน"
-                            </p>
+                            <p class="fb-stake">{t!(i18n, feedback.stake)}</p>
                             <p>
                                 // "2 นาที" next to eleven sessions is a promise
                                 // the page cannot keep. Price the unit the
                                 // reader actually commits to — one event.
-                                "หนึ่งงานใช้เวลาไม่ถึงนาที ข้ามข้อไหนก็ได้ "
-                                "คำตอบไปที่ทีมงานโดยตรง ไม่เปิดเผยชื่อในรายงาน"
+                                {t!(i18n, feedback.effort)}
                             </p>
                             // Only shown to people with more than one session,
                             // which is 83 of 206. For the other 123 a counter
@@ -664,15 +706,16 @@ pub fn Feedback() -> impl IntoView {
                                 // reader sees answers they do not remember
                                 // giving and wonders what else the page decided
                                 // on their behalf (`.issues/111`).
-                                <p class="fb-restored">"กู้คำตอบที่คุณกรอกค้างไว้กลับมาแล้ว — ยังไม่ได้ส่ง"</p>
+                                <p class="fb-restored">{t!(i18n, feedback.restored)}</p>
                             </Show>
                             <Show when=move || { blocks.get().len() > 1 } fallback=|| ()>
                                 <p class="fb-progress">
-                                    {move || {
-                                        let all = blocks.get();
-                                        let done = all.iter().filter(|b| block_answered(b)).count();
-                                        format!("ตอบแล้ว {done} จาก {} งาน — ส่งได้เลยไม่ต้องครบ", all.len())
-                                    }}
+                                    {t!(
+                                        i18n,
+                                        feedback.progress,
+                                        done = move || blocks.get().iter().filter(|b| block_answered(b)).count(),
+                                        total = move || blocks.get().len()
+                                    )}
                                 </p>
                             </Show>
                         </header>
@@ -686,7 +729,7 @@ pub fn Feedback() -> impl IntoView {
 
                         <section class="card">
                             <label>
-                                "เนื้อหาที่ท่านสนใจหรืออยากให้มีในการจัดงานครั้งต่อไป"
+                                {t!(i18n, feedback.next_topics)}
                                 <textarea
                                     class="dev-profile-input"
                                     rows="3"
@@ -696,9 +739,9 @@ pub fn Feedback() -> impl IntoView {
                             </label>
                             <fieldset class="fb-options">
                                 <legend class="dev-profile-label">
-                                    "ซีรีส์ Solana in Latent Space (ออนไลน์ Part 1–6) — อยากให้จัดต่อในไตรมาสหน้าไหม?"
+                                    {t!(i18n, feedback.latent_q)}
                                 </legend>
-                                {LATENT_SPACE_OPTIONS.iter().map(|option| {
+                                {LATENT_SPACE_OPTIONS.iter().enumerate().map(|(index, option)| {
                                     let value = (*option).to_string();
                                     let selected = value.clone();
                                     let set_to = value.clone();
@@ -712,7 +755,7 @@ pub fn Feedback() -> impl IntoView {
                                             aria-pressed=move || (latent_space.get() == value).to_string()
                                             on:click=move |_| latent_space.set(set_to.clone())
                                         >
-                                            {*option}
+                                            {move || latent_label(i18n.get_locale(), index)}
                                         </button>
                                     }
                                 }).collect_view()}
@@ -743,8 +786,8 @@ pub fn Feedback() -> impl IntoView {
                                 on:click=submit
                             >
                                 {move || match busy {
-                                    true => "กำลังส่ง…",
-                                    false => "ส่งความเห็น",
+                                    true => t_string!(i18n, feedback.sending),
+                                    false => t_string!(i18n, feedback.submit),
                                 }}
                             </button>
                             <Show
@@ -755,7 +798,7 @@ pub fn Feedback() -> impl IntoView {
                             >
                                 // Says what is missing rather than leaving a
                                 // greyed-out button to be interpreted.
-                                <p class="fb-submit-hint">"เลือกความพึงพอใจอย่างน้อยหนึ่งงานก่อนส่ง"</p>
+                                <p class="fb-submit-hint">{t!(i18n, feedback.submit_hint)}</p>
                             </Show>
                         </div>
                     }.into_any()
@@ -770,6 +813,7 @@ pub fn Feedback() -> impl IntoView {
 fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
     // Signals are `Copy`; the rest of the block is not. Clone once per closure
     // that needs the data rather than threading references through the view.
+    let i18n = use_i18n();
     let open = block.open;
     let answered = block.clone();
     view! {
@@ -822,12 +866,15 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                     <h2>{block.name.clone()}</h2>
                                     <p class="subtitle">
                                         {
-                                            let when = crate::utils::format_event_day(block.event_start_ms);
-                                            [when, block.location.clone()]
-                                                .into_iter()
-                                                .filter(|part| !part.is_empty())
-                                                .collect::<Vec<_>>()
-                                                .join(" · ")
+                                            let (start_ms, location) = (block.event_start_ms, block.location.clone());
+                                            move || {
+                                                let when = crate::utils::format_event_day(start_ms);
+                                                [when, location.clone()]
+                                                    .into_iter()
+                                                    .filter(|part| !part.is_empty())
+                                                    .collect::<Vec<_>>()
+                                                    .join(" · ")
+                                            }
                                         }
                                     </p>
                                 </div>
@@ -838,7 +885,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                 // stored — otherwise someone who typed and left
                                 // would be told their answer was saved.
                                 {move || match (!open.get(), answered.already, block_answered(&answered)) {
-                                    (true, true, _) => view! { <span class="fb-badge">"ตอบแล้ว"</span> }.into_any(),
+                                    (true, true, _) => view! { <span class="fb-badge">{t!(i18n, feedback.answered)}</span> }.into_any(),
                                     (true, false, true) => view! { <span class="fb-tick">"✓"</span> }.into_any(),
                                     (true, false, false) => view! { <span class="fb-chevron">"+"</span> }.into_any(),
                                     _ => view! { <div></div> }.into_any(),
@@ -866,7 +913,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                     target="_blank"
                                     rel="noopener"
                                 >
-                                    "จำงานนี้ไม่ได้? เปิดตั๋วของคุณเพื่อดูวิดีโอย้อนหลังและรายละเอียดงาน"
+                                    {t!(i18n, feedback.recall)}
                                 </a>
                             // Online only, and first: for someone who did
                             // not watch, this is the only question they can
@@ -879,9 +926,9 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                     true => view! {
                                         <fieldset class="fb-options">
                                             <legend class="dev-profile-label">
-                                                "คุณได้ดูงานนี้ไหม"
+                                                {t!(i18n, feedback.watched_q)}
                                             </legend>
-                                            {WATCHED_OPTIONS.iter().map(|option| {
+                                            {WATCHED_OPTIONS.iter().enumerate().map(|(index, option)| {
                                                 let value = (*option).to_string();
                                                 let selected = value.clone();
                                                 let set_to = value.clone();
@@ -895,7 +942,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                                         aria-pressed=move || (watched.get() == value).to_string()
                                                         on:click=move |_| watched.set(set_to.clone())
                                                     >
-                                                        {*option}
+                                                        {move || watched_label(i18n.get_locale(), index)}
                                                     </button>
                                                 }
                                             }).collect_view()}
@@ -906,7 +953,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
 
                             {dimensions_for(&block.participation_type).iter().map(|index| {
                                 let index = *index;
-                                let label = DIMENSIONS[index].1;
+                                let label = move || dimension_label(i18n.get_locale(), index);
                                 let rating = block.ratings[index];
                                 view! {
                                     // One row per dimension: label left, three
@@ -916,7 +963,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                     <div class="fb-row">
                                         <span class="fb-row-label">{label}</span>
                                         <div class="fb-scale" role="group" aria-label=label>
-                                            {SCALE.iter().map(|option| {
+                                            {SCALE.iter().enumerate().map(|(scale_index, option)| {
                                                 let value = (*option).to_string();
                                                 let selected = value.clone();
                                                 let set_to = value.clone();
@@ -930,7 +977,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                                         aria-pressed=move || (rating.get() == value).to_string()
                                                         on:click=move |_| rating.set(set_to.clone())
                                                     >
-                                                        {*option}
+                                                        {move || scale_label(i18n.get_locale(), scale_index)}
                                                     </button>
                                                 }
                                             }).collect_view()}
@@ -949,14 +996,14 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                             class="fb-add-comment"
                                             on:click=move |_| open.set(true)
                                         >
-                                            "+ เพิ่มข้อเสนอแนะ"
+                                            {t!(i18n, feedback.add_comment)}
                                         </button>
                                     }.into_any(),
                                     true => view! {
                                         <textarea
                                             class="dev-profile-input"
                                             rows="3"
-                                            placeholder="ข้อเสนอแนะ (ไม่บังคับ)"
+                                            placeholder=move || t_string!(i18n, feedback.comment_placeholder)
                                             prop:value=move || comment.get()
                                             on:input=move |ev| comment.set(event_target_value(&ev))
                                         />

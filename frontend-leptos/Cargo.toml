@@ -4,6 +4,14 @@ version = "0.2.0"
 edition = "2024"
 publish = false
 
+# EN + TH catalog for `leptos_i18n::load_locales!()` (`src/lib.rs`), read from
+# `locales/{en,th}.json`. The macro path, not a `build.rs` with
+# `leptos_i18n_build`: that crate always pulls ICU datagen with networking
+# (ureq, rustls, webpki-roots), whose ISC / CDLA licences `deny.toml` rejects.
+[package.metadata.leptos-i18n]
+default = "en"
+locales = ["en", "th"]
+
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
 
@@ -21,6 +29,11 @@ release_no_log = ["log/max_level_off"]
 leptos = { version = "0.8", features = ["csr"] }
 leptos_meta = { version = "0.8" }
 leptos_router = { version = "0.8" }
+# EN + TH for attendee pages (.plans/037 §2). Compile-time-checked keys; `csr`
+# only, no ICU formatting data (dates go through the browser's Intl instead),
+# no cookie (the choice persists in localStorage, see `src/locale.rs`).
+# Configured by `[package.metadata.leptos-i18n]` above.
+leptos_i18n = { version = "0.6.2", default-features = false, features = ["csr"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"

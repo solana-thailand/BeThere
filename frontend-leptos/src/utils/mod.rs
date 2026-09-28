@@ -360,6 +360,11 @@ pub fn is_retrospective(participation_type: &str) -> bool {
 /// renders the browser's default: `9/27/2026, 1:00:00 PM`. Seconds are noise on
 /// an event date, and `9/27` is ambiguous to the Thai-majority audience this is
 /// written for — `en-GB` puts the day first and names the month.
+///
+/// These three helpers format in the attendee's language
+/// (`crate::locale::current_date_tag`): `en-GB`, or `th-TH` with Thai month
+/// names and the Buddhist-era year. Read inside a view closure, they follow a
+/// language switch.
 pub fn format_event_datetime(ms: i64) -> String {
     if ms <= 0 {
         return String::new();
@@ -377,7 +382,7 @@ pub fn format_event_datetime(ms: i64) -> String {
         let _ = js_sys::Reflect::set(&opts, &key.into(), &value.into());
     }
     let _ = js_sys::Reflect::set(&opts, &"hour12".into(), &false.into());
-    d.to_locale_string("en-GB", &opts)
+    d.to_locale_string(crate::locale::current_date_tag(), &opts)
         .as_string()
         .unwrap_or_default()
 }
@@ -397,7 +402,7 @@ pub fn format_event_day_parts(ms: i64) -> (String, String) {
     let opts = js_sys::Object::new();
     let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
     let month = d
-        .to_locale_string("en-GB", &opts)
+        .to_locale_string(crate::locale::current_date_tag(), &opts)
         .as_string()
         .unwrap_or_default();
     (d.get_date().to_string(), month.to_uppercase())
@@ -413,7 +418,7 @@ pub fn format_event_day(ms: i64) -> String {
     let _ = js_sys::Reflect::set(&opts, &"year".into(), &"numeric".into());
     let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
     let _ = js_sys::Reflect::set(&opts, &"day".into(), &"numeric".into());
-    d.to_locale_string("en-GB", &opts)
+    d.to_locale_string(crate::locale::current_date_tag(), &opts)
         .as_string()
         .unwrap_or_default()
 }

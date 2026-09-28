@@ -13,6 +13,7 @@ use leptos_router::hooks::{use_navigate, use_query_map};
 
 use crate::api;
 use crate::auth::get_url_error;
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Google SVG icon markup.
@@ -121,6 +122,8 @@ pub fn Login() -> impl IntoView {
         });
     });
 
+    let i18n = use_i18n();
+
     // Handle Google login button click
     let handle_login = move |_| {
         set_loading.set(true);
@@ -137,9 +140,7 @@ pub fn Login() -> impl IntoView {
                 Err(err) => {
                     log::error!("[login] failed to get auth URL: {err}");
                     set_loading.set(false);
-                    set_error_msg.set(Some(
-                        "Failed to connect to the server. Please try again.".to_string(),
-                    ));
+                    set_error_msg.set(Some(t_string!(i18n, login.connect_failed).to_string()));
                 }
             }
         });
@@ -153,7 +154,7 @@ pub fn Login() -> impl IntoView {
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
 
                 // Title
-                <h1 class="claim-title">"Sign In"</h1>
+                <h1 class="claim-title">{t!(i18n, login.title)}</h1>
 
                 // Subtitle
                 <p class="subtitle">
@@ -164,15 +165,15 @@ pub fn Login() -> impl IntoView {
                         // survey link who picks wallet first reached a dead end
                         // (`.issues/106`). Say which one works before they
                         // choose, rather than explaining afterwards.
-                        true => "ใช้ Google ด้วยอีเมลที่คุณลงทะเบียนงานไว้ — แบบสอบถามผูกกับอีเมลนั้น",
-                        false => "Choose your sign-in method to access BeThere Protocol.",
+                        true => t_string!(i18n, login.subtitle_feedback),
+                        false => t_string!(i18n, login.subtitle),
                     }}
                 </p>
 
                 // Powered by Solana badge
                 <div class="powered-badge">
                     <span class="sol-dot"></span>
-                    "Powered by Solana"
+                    {t!(i18n, login.powered_by)}
                 </div>
 
                 // Sign-in Buttons Stack
@@ -184,14 +185,14 @@ pub fn Login() -> impl IntoView {
                             view! {
                                 <div class="loading visible">
                                     <span class="spinner"></span>
-                                    " Redirecting to Google..."
+                                    {t!(i18n, login.redirecting)}
                                 </div>
                             }
                         }
                     >
                         <button class="btn-google" on:click=handle_login>
                             <span inner_html=google_icon()></span>
-                            "Sign in with Google"
+                            {t!(i18n, login.google)}
                         </button>
                     </Show>
 
@@ -203,7 +204,7 @@ pub fn Login() -> impl IntoView {
                     // cheaper than the dead end it prevents (`.issues/106`).
                     <Show when=move || wants_feedback.get() fallback=|| ()>
                         <p class="login-method-note">
-                            "กระเป๋าเงินใช้ตอบแบบสอบถามไม่ได้ เพราะแบบสอบถามผูกกับอีเมลที่ลงทะเบียนงานไว้"
+                            {t!(i18n, login.wallet_note_feedback)}
                         </p>
                     </Show>
                 </div>
@@ -222,7 +223,7 @@ pub fn Login() -> impl IntoView {
 
                 // Back to landing
                 <a href="/" class="login-back-link" style="margin-top: 24px;">
-                    "← Back to home"
+                    {t!(i18n, login.back_home)}
                 </a>
 
                 // Footer

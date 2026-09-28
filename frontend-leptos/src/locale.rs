@@ -1,0 +1,151 @@
+//! Attendee-page language: EN + TH (.plans/037 §2).
+//!
+//! The catalog is `locales/{en,th}.json`, compiled into `crate::i18n` by
+//! `leptos_i18n::load_locales!()`; keys are checked at compile time by `t!`.
+//!
+//! Choice order: the attendee's explicit pick (localStorage) → the browser's
+//! `navigator.languages` (`th*` → TH, anything else → EN, done by
+//! `leptos_i18n`) → EN. Only an explicit pick is stored, so a visitor who
+//! never touches the switch keeps following their browser.
+//!
+//! Staff, admin and scanner pages stay English and do not render the switch.
+
+use leptos::prelude::*;
+
+use crate::i18n::{Locale, t, t_string, use_i18n};
+
+/// localStorage key for an explicit language pick.
+const STORAGE_KEY: &str = "bethere.lang";
+
+fn storage() -> Option<web_sys::Storage> {
+    web_sys::window()?.local_storage().ok()?
+}
+
+/// The stored pick, if the attendee ever made one.
+fn saved_locale() -> Option<Locale> {
+    let value = storage()?.get_item(STORAGE_KEY).ok()??;
+    parse_locale(&value)
+}
+
+/// `"th"` / `"en"` → `Locale`; anything else is not a pick.
+pub fn parse_locale(value: &str) -> Option<Locale> {
+    match value {
+        "th" => Some(Locale::th),
+        "en" => Some(Locale::en),
+        _ => None,
+    }
+}
+
+/// Apply the stored pick. Rendered once, inside `I18nContextProvider` and
+/// before the routes.
+///
+/// An Effect, not a plain call: the provider seeds its locale from
+/// `navigator.languages` in its own Effect, which runs after component bodies
+/// and overwrote a pick set here directly (a reload came back in EN with `th`
+/// stored). This Effect is created after the provider's, so it runs after it
+/// in the same flush, before the browser paints.
+#[component]
+pub fn RestoreSavedLocale() -> impl IntoView {
+    let i18n = use_i18n();
+    Effect::new(move |_| {
+        if let Some(locale) = saved_locale()
+            && locale != i18n.get_locale_untracked()
+        {
+            i18n.set_locale(locale);
+        }
+    });
+}
+
+/// Routes that are attendee-facing and therefore bilingual. Everything else
+/// (admin, staff, dashboards) is English-only for now and shows no switch.
+const ATTENDEE_PREFIXES: [&str; 7] = [
+    "/e/",
+    "/deposit/",
+    "/ticket/",
+    "/claim/",
+    "/discover",
+    "/feedback",
+    "/privacy",
+];
+
+/// Whether `path` is a bilingual attendee page (`/` and `/login` included).
+pub fn is_attendee_path(path: &str) -> bool {
+    matches!(path, "/" | "/login") || ATTENDEE_PREFIXES.iter().any(|p| path.starts_with(p))
+}
+
+/// The switch, on attendee pages only.
+#[component]
+pub fn AttendeeLanguageSwitch() -> impl IntoView {
+    let location = leptos_router::hooks::use_location();
+    view! {
+        <Show when=move || is_attendee_path(&location.pathname.get()) fallback=|| ()>
+            <div class="lang-bar">
+                <LanguageSwitch />
+            </div>
+        </Show>
+    }
+}
+
+/// BCP 47 tag for `Intl` date formatting in `locale`.
+///
+/// EN keeps `en-GB` (day first, named month; `.issues/104`). TH uses `th-TH`,
+/// which renders Thai month names and the Buddhist-era year Thai readers expect.
+pub fn date_tag(locale: Locale) -> &'static str {
+    match locale {
+        Locale::en => "en-GB",
+        Locale::th => "th-TH",
+    }
+}
+
+/// The date tag for the current attendee language. Reactive: read inside a
+/// view closure and the date re-renders when the language switches. Outside
+/// the i18n provider (tests, staff pages) it is EN.
+pub fn current_date_tag() -> &'static str {
+    use_context::<leptos_i18n::I18nContext<Locale>>()
+        .map(|i18n| date_tag(i18n.get_locale()))
+        .unwrap_or("en-GB")
+}
+
+/// A registration status code from `/api/my-registrations` (or `"postponed"`)
+/// in the current language. Unknown codes pass through unchanged, so a new
+/// server-side status shows up as its code rather than disappearing.
+pub fn status_label(code: &str) -> String {
+    let i18n = use_i18n();
+    let label = match code {
+        "postponed" => t_string!(i18n, status.postponed),
+        "registered" => t_string!(i18n, status.registered),
+        "deposit pending" => t_string!(i18n, status.deposit_pending),
+        "deposit confirmed" => t_string!(i18n, status.deposit_confirmed),
+        "checked in" => t_string!(i18n, status.checked_in),
+        "nft claimed" => t_string!(i18n, status.nft_claimed),
+        other => return other.to_string(),
+    };
+    label.to_string()
+}
+
+/// EN ⇄ TH switch. Labelled in the language it switches TO, so a reader who
+/// cannot read the current page can still find it.
+#[component]
+pub fn LanguageSwitch() -> impl IntoView {
+    let i18n = use_i18n();
+    let toggle = move |_| {
+        let next = match i18n.get_locale_untracked() {
+            Locale::en => Locale::th,
+            Locale::th => Locale::en,
+        };
+        i18n.set_locale(next);
+        if let Some(store) = storage() {
+            let _ = store.set_item(STORAGE_KEY, leptos_i18n::Locale::as_str(next));
+        }
+    };
+    view! {
+        <button
+            type="button"
+            class="lang-switch"
+            on:click=toggle
+            aria-label=move || t_string!(i18n, lang.switch_aria)
+        >
+            {t!(i18n, lang.switch_label)}
+        </button>
+    }
+}

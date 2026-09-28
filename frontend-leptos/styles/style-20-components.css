@@ -285,3 +285,30 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
+
+/* EN ⇄ TH switch on attendee pages (.plans/037 §2). In the flow above the
+   page, not fixed: every fixed corner is taken by a sticky CTA, submit bar or
+   nav on some attendee page. */
+.lang-bar {
+    display: flex;
+    justify-content: flex-end;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 12px;
+}
+
+.lang-switch {
+    min-height: 44px;
+    padding: 0 12px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--text-sm);
+    cursor: pointer;
+}
+
+.lang-switch:hover,
+.lang-switch:focus-visible {
+    color: var(--accent);
+}

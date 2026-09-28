@@ -4,6 +4,7 @@ pub mod api;
 pub mod auth;
 pub mod components;
 pub mod icons;
+pub mod locale;
 pub mod pages;
 pub mod utils;
 pub mod wallet;
@@ -14,6 +15,18 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
+
+// `crate::i18n`: the EN/TH catalog, generated from `locales/` at compile time.
+//
+// Deprecated upstream in favour of a `build.rs` with `leptos_i18n_build`, which
+// always pulls ICU datagen networking (ureq/rustls/webpki-roots) under ISC and
+// CDLA-Permissive-2.0 licences that `deny.toml` rejects. Moving over needs an
+// owner decision on those exceptions (.plans/037 §2).
+#[allow(deprecated)]
+mod i18n_catalog {
+    leptos_i18n::load_locales!();
+}
+pub use i18n_catalog::i18n;
 
 use crate::components::ProtectedRoute;
 use crate::icons::{Icon, IconName};
@@ -80,8 +93,11 @@ pub fn App() -> impl IntoView {
     });
 
     view! {
+        <i18n::I18nContextProvider>
+        <locale::RestoreSavedLocale />
         <Router>
             <Title text="BeThere — Event Check-In" />
+            <locale::AttendeeLanguageSwitch />
             <main>
                 <Routes fallback=|| {
                     view! {
@@ -128,6 +144,7 @@ pub fn App() -> impl IntoView {
                 </Routes>
             </main>
         </Router>
+        </i18n::I18nContextProvider>
     }
 }
 
