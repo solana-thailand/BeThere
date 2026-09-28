@@ -3,6 +3,15 @@
 use leptos::prelude::*;
 
 use super::state::*;
+use crate::i18n::{t_string, use_i18n};
+
+/// One stepper label. Display only; the step itself is `ClaimState`.
+#[derive(Clone, Copy)]
+enum StepLabel {
+    Verified,
+    Quiz,
+    Claim,
+}
 
 // ---------------------------------------------------------------------------
 // Progress Stepper
@@ -38,10 +47,15 @@ pub(super) fn claim_step(state: &ClaimState) -> (usize, usize) {
 pub(super) fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> impl IntoView {
     // Build step labels based on whether quiz is shown
     let _ = total; // used for context, steps are hardcoded
-    let steps: Vec<(&'static str, &'static str, usize)> = if show_quiz {
-        vec![("✓", "Verified", 1), ("?", "Quiz", 2), ("", "Claim", 3)]
+    let i18n = use_i18n();
+    let steps: Vec<(&'static str, StepLabel, usize)> = if show_quiz {
+        vec![
+            ("✓", StepLabel::Verified, 1),
+            ("?", StepLabel::Quiz, 2),
+            ("", StepLabel::Claim, 3),
+        ]
     } else {
-        vec![("✓", "Verified", 1), ("", "Claim", 2)]
+        vec![("✓", StepLabel::Verified, 1), ("", StepLabel::Claim, 2)]
     };
 
     view! {
@@ -71,7 +85,11 @@ pub(super) fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> imp
                                 }}
                             </div>
                             <span class=if is_current || is_completed { "claim-step-label active" } else { "claim-step-label" }>
-                                {label}
+                                {move || match label {
+                                    StepLabel::Verified => t_string!(i18n, claim.step.verified),
+                                    StepLabel::Quiz => t_string!(i18n, claim.step.quiz),
+                                    StepLabel::Claim => t_string!(i18n, claim.step.claim),
+                                }}
                             </span>
                         </div>
                     }

@@ -23,12 +23,22 @@ pub(super) struct ClaimParams {
 // ---------------------------------------------------------------------------
 
 /// Top-level state machine for the claim page flow.
+/// Why the claim could not be looked up. Rendered in the reader's language;
+/// the server's error text is passed through.
+#[derive(Clone, Debug)]
+pub(super) enum ClaimNotFound {
+    /// The URL carries no claim token.
+    MissingToken,
+    /// The lookup failed (server error text).
+    LookupFailed(String),
+}
+
 #[derive(Clone, Debug)]
 pub(super) enum ClaimState {
     /// Loading claim info from backend.
     Loading,
     /// Claim token not found or lookup failed.
-    NotFound(String),
+    NotFound(ClaimNotFound),
     /// Attendee found, has not yet claimed. Ready for wallet input.
     Ready(ClaimLookupData),
     /// Attendee found but NFT minting is not configured yet.

@@ -1,22 +1,29 @@
 //! Small formatting and step-computation helpers.
 
-use crate::utils::format_timestamp;
+use leptos::prelude::*;
+
+use crate::i18n::{Locale, t, td_string, use_i18n};
+use crate::pages::ticket::view_data::format_check_in_time;
 
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
 
-/// Format seconds into "Xh Xm Xs" or "Xm Xs" or "Xs".
-pub(super) fn format_duration(secs: i64) -> String {
+/// Format seconds into "Xh Xm Xs" or "Xm Xs" or "Xs", with the unit words of
+/// `locale`.
+pub(super) fn format_duration(secs: i64, locale: Locale) -> String {
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
     let s = secs % 60;
+    let uh = td_string!(locale, claim.unit.h);
+    let um = td_string!(locale, claim.unit.m);
+    let us = td_string!(locale, claim.unit.s);
     if h > 0 {
-        format!("{h}h {m}m {s}s")
+        format!("{h}{uh} {m}{um} {s}{us}")
     } else if m > 0 {
-        format!("{m}m {s}s")
+        format!("{m}{um} {s}{us}")
     } else {
-        format!("{s}s")
+        format!("{s}{us}")
     }
 }
 
@@ -35,16 +42,19 @@ pub(super) fn is_online_participant(participation_type: &str) -> bool {
     lower.contains("online")
 }
 
-/// Build the appropriate label for check-in status.
+/// The check-in status line, in the attendee's language.
 /// For online attendees without check-in: "Registered".
 /// For checked-in attendees: "Checked in {timestamp}".
 /// For others without check-in: "Not yet checked in".
-pub(super) fn checked_in_label(checked_in_at: &str, participation_type: &str) -> String {
+pub(super) fn checked_in_label(checked_in_at: &str, participation_type: &str) -> AnyView {
+    let i18n = use_i18n();
     if checked_in_at.is_empty() || checked_in_at == "N/A" {
         if is_online_participant(participation_type) {
-            return "Registered".to_string();
+            return t!(i18n, claim.registered).into_any();
         }
-        return "Not yet checked in".to_string();
+        return t!(i18n, claim.not_checked_in).into_any();
     }
-    format!("Checked in {}", format_timestamp(checked_in_at))
+    let iso = checked_in_at.to_string();
+    let time = move || format_check_in_time(&iso);
+    t!(i18n, claim.checked_in_at, time).into_any()
 }
