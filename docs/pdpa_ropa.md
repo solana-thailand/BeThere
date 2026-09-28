@@ -90,7 +90,7 @@ Google and Helius (`privacy.rs:86-88`). Basis for transfer: owner to confirm.
 | Subjects | Attendees, walk-ins |
 | Data (D1 `attendees`) | `email`, `name`, `ticket_name`, `participation_type`, `approval_status`, `registration_phase`, `contact_channel`, `contact_handle`, `checked_in_at`, `checked_in_by`, `claim_token`, `qr_url`, `consent_marketing`, `consent_marketing_at` (migrations 0002, 0005, 0020, 0050). Walk-in phone goes in `contact_channel` (`worker/src/db/attendees/walkin.rs:57`). |
 | Data (other) | `registration_responses` (`developer_email`, `field_key`, `field_value`), including `consent_given` and `photo_consent_given` (`worker/src/handlers/register/contact.rs:164-170`). `attendance_answers` (`answer`, `updated_by`) for the RTM#6 re-ask (0052). KV `qr:{attendee_id}`. |
-| Photo consent | Consent. **When an event sets `require_photo_consent`, registration is refused without it** (`signup.rs:174`). The `/privacy` page says the opposite: "You may decline photo consent without affecting your registration" (`privacy.rs:77`). Owner to decide which is right. |
+| Photo and marketing consent | Consent, each in its own unticked checkbox on the registration form (`.issues/161`, `registration_form.rs`). Photo is optional unless the event sets `require_photo_consent`; then registration is refused without it (`signup.rs:174`) and the box says so. Marketing is always optional. Before `.issues/161` one required box set both, so `consent_marketing` recorded before that fix is not valid consent. |
 | Storage | D1; the event's Google Sheet (row incl. consent columns, `worker/src/sheets/bg_sync.rs:395-415`) |
 | Recipients | Google Sheets; organizers/staff of that event |
 | Retention | **No retention limit in code today. Owner decision pending (plan 029 §3).** The cron does not touch `attendees`, `registration_responses` or any Sheet. The `/privacy` page promises "event conclusion plus 90 days ... PII fields are cleared" (`privacy.rs:97`); no code does this except a data-subject request (§15). |
@@ -252,7 +252,7 @@ Google and Helius (`privacy.rs:86-88`). Basis for transfer: owner to confirm.
 ## 16. Known gaps (found while writing this record; not fixed here)
 
 1. `/privacy` says Sheet PII is cleared at event end + 90 days; no code does it (`privacy.rs:97`, §3).
-2. `/privacy` says photo consent is optional; the Worker makes it mandatory when the event requires it (`signup.rs:174` vs `privacy.rs:77`).
+2. Fixed on `feature/161-separate-consent`: photo and marketing consent have their own boxes. Marketing consent recorded by the old single box still needs clearing (`.issues/161`).
 3. `/privacy` lists only Google and Helius as recipients; Crossmint, GitHub, Telegram, Slack and Cloudflare are missing (`privacy.rs:86-88`).
 4. Slack 5xx and spike alerts send the raw request path (`middleware/alert.rs:44`).
 5. No retention limit for most D1 tables, all Sheets, and R2 slips (plan 029 §3, `.issues/126`).

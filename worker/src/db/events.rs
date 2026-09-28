@@ -1013,15 +1013,31 @@ fn public_event_json(r: &PublicEventRow) -> serde_json::Value {
     })
 }
 
-/// List public events from D1 using raw JSON deserialization.
-/// Bypasses `results::<T>()` to avoid workers-rs serde panics on nullable columns.
-pub async fn list_public_events_raw(db: &D1Database) -> Result<Vec<serde_json::Value>, String> {
-    let sql = format!("SELECT {PUBLIC_EVENT_COLUMNS} FROM events ORDER BY created_at DESC");
+/// List the events that have not ended by `now_ms`, from D1 using raw JSON
+/// deserialization. Bypasses `results::<T>()` to avoid workers-rs serde panics
+/// on nullable columns.
+///
+/// Plan 028 W4: only the end-time half of the landing page's filter runs in
+/// SQL, so past events (most rows, and growing) are never read or parsed. It
+/// keeps exactly the rows the caller's `end_ms > now_ms` check keeps, since
+/// `event_end_ms` is `INTEGER NOT NULL`. Status and visibility stay in the
+/// caller, where they are compared after `parse_enum_column` normalises them.
+pub async fn list_public_events_raw(
+    db: &D1Database,
+    now_ms: i64,
+) -> Result<Vec<serde_json::Value>, String> {
+    let sql = format!(
+        "SELECT {PUBLIC_EVENT_COLUMNS} FROM events WHERE event_end_ms > ?1 ORDER BY created_at DESC"
+    );
 
     // Bypass workers-rs D1Result::results() which uses serde_wasm_bindgen::from_value
     // with .unwrap() — panics on nullable columns or type mismatches.
     // Instead, use .all() on the inner JsValue, then stringify and parse via serde_json.
-    let stmt = db.prepare(&sql);
+    // `as f64`: D1 binds JS numbers; epoch milliseconds are exact in an f64.
+    let stmt = db
+        .prepare(&sql)
+        .bind_refs(&[D1Type::Real(now_ms as f64)])
+        .map_err(|e| format!("D1 list_public_events_raw bind: {e:?}"))?;
     let raw_result = JsFuture::from(
         stmt.inner()
             .all()

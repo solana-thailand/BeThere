@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 
 use crate::error::ApiOk;
 use crate::state::AppState;
+use event_checkin_domain::models::attendee::TrackCounts;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{EventVisibility, safe_map_url};
 
@@ -25,7 +26,7 @@ pub async fn list_public_events(
 
     let mut public_events: Vec<Value> = if let Some(d1) = &state.d1 {
         // D1-first: use raw JSON deserialization to avoid workers-rs serde panics
-        crate::db::events::list_public_events_raw(d1)
+        crate::db::events::list_public_events_raw(d1, now_ms)
             .await
             .map_err(AppError::Internal)?
     } else if let Some(kv) = &state.events_kv {
@@ -171,8 +172,10 @@ pub async fn get_public_event(
     tracing::info!(slug = %slug, "public event fetched");
 
     // Count attendees for capacity display
-    let (in_person_count, online_count) =
-        count_attendees_by_track(&state, &config, state.events_kv.as_ref()).await;
+    let TrackCounts {
+        in_person: in_person_count,
+        online: online_count,
+    } = count_attendees_by_track(&state, &config, state.events_kv.as_ref()).await;
 
     let in_person_remaining = config
         .in_person_capacity
@@ -512,53 +515,19 @@ fn public_learning_resources(
         .collect()
 }
 
-/// Count attendees by track from sheet data.
-/// Returns (in_person_count, online_count).
+/// Count attendees by track for the capacity display.
+/// An unknown count shows as zero in both tracks.
 async fn count_attendees_by_track(
     state: &AppState,
     config: &event_checkin_domain::models::event::EventConfig,
     kv: Option<&worker::kv::KvStore>,
-) -> (u32, u32) {
-    let attendees = match crate::sheets::get_attendees_for_event(
-        state,
-        &config.sheet_id,
-        &config.sheet_name,
-        kv,
-        &config.id,
-    )
-    .await
-    {
-        Ok(a) => a,
-        Err(e) => {
+) -> TrackCounts {
+    crate::handlers::capacity::count_tracks(state, config, kv)
+        .await
+        .unwrap_or_else(|e| {
             tracing::warn!(error = %e, "failed to count attendees for capacity");
-            return (0, 0);
-        }
-    };
-
-    let mut in_person_count: u32 = 0;
-    let mut online_count: u32 = 0;
-
-    for attendee in &attendees {
-        if attendee.is_in_person() {
-            in_person_count += 1;
-        } else if attendee.counts_toward_online_track() {
-            online_count += 1;
-        }
-    }
-
-    // Count walk-in attendees as in-person from D1.
-    if let Some(db) = state.d1.as_deref() {
-        match crate::db::attendees::count_walkin_attendees(db, &config.id).await {
-            Ok(count) => {
-                in_person_count += count;
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, "D1 walkin count for public stats failed, skipping");
-            }
-        }
-    }
-
-    (in_person_count, online_count)
+            TrackCounts::default()
+        })
 }
 
 /// Check whether online registration is currently open based on `OnlineOpenMode`.

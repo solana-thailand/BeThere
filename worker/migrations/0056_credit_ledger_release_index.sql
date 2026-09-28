@@ -1,0 +1,21 @@
+-- 0056_credit_ledger_release_index.sql — plan 028 W5.
+--
+-- `release_ended_applies` runs before every credit balance read (and inside
+-- the apply batch). Without this index it scans the whole ledger to find
+-- `reason = 'apply'` rows, and its NOT EXISTS probe for an existing `return`
+-- can only narrow by email. With it, the outer query searches on `reason` and
+-- the probe is a covering-index lookup on (reason, event_id, email).
+--
+-- Measured on migrated SQLite, steady state (every release already written),
+-- SQLite VM steps per release: 300 ledger rows 2603 → 1309; 3000 rows
+-- 43340 → 9339 (.plans/028 W5).
+--
+-- Not added: (organization_id, currency), the plan's second candidate. It only
+-- removes a temp B-tree from the admin-only `liability` query, which still
+-- scans every row, so it would cost a write on every ledger insert for nothing
+-- on a hot path.
+--
+-- A plain (non-unique) index: no existing writer can fail on it
+-- (memory: migration-constraints-break-existing-writers).
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_reason_event_email
+    ON credit_ledger (reason, event_id, email);

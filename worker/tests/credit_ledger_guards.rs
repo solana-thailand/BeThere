@@ -120,10 +120,11 @@ fn balance_read_is_org_scoped() {
     let src = ledger_src();
     assert!(
         src.contains(
-            "person_emails_of!(\"?1\"),\n        \" AND organization_id = ?2 AND currency = ?3\""
+            "person_emails_of!(\"?1\"),\n        \" AND organization_id = ?2 GROUP BY currency\""
         ),
-        "balance() must be scoped by (person, organization_id, currency) — dropping \
-         organization_id would let one org's credit cover another org's deposit (Issue #029)"
+        "balances() must be scoped by (person, organization_id) and split by currency — \
+         dropping organization_id would let one org's credit cover another org's deposit \
+         (Issue #029)"
     );
 }
 
@@ -135,7 +136,7 @@ fn balance_read_is_org_scoped() {
 #[test]
 fn credit_reads_and_spends_resolve_the_person() {
     let ledger = ledger_src();
-    for fn_name in ["try_spend", "balance", "positive_balances"] {
+    for fn_name in ["try_spend", "balances", "positive_balances"] {
         let start = ledger
             .find(&format!("pub async fn {fn_name}("))
             .unwrap_or_else(|| panic!("{fn_name} exists"));

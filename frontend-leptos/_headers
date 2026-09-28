@@ -24,7 +24,7 @@
   X-Frame-Options: DENY
   X-XSS-Protection: 0
   Referrer-Policy: strict-origin-when-cross-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://telegram.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' blob:; object-src 'none'; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://oauth.telegram.org; connect-src 'self' https: wss:; font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://telegram.org; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; media-src 'self' blob:; object-src 'none'; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://oauth.telegram.org; connect-src 'self' https: wss:; font-src 'self' https://fonts.gstatic.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
   Permissions-Policy: camera=(self), microphone=(), geolocation=(), payment=()
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Resource-Policy: same-origin
@@ -58,6 +58,11 @@
   Cache-Control: no-cache, must-revalidate
 
 /style-*.css
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html's inline scripts, moved out by externalize_inline_scripts.py;
+# the name is the content hash.
+/inline-*.js
   Cache-Control: public, max-age=31536000, immutable
 
 # Vendored libraries carry their version in the filename (vendor/jsqr-1.4.0.js).

@@ -1,6 +1,6 @@
 # 161: One registration checkbox also grants photo and marketing consent
 
-**Status:** open (2026-09-28). Found by session `event-checkin-af` while correcting `/privacy` for `.issues/158`. Changing the consent flow is the owner's call and touches the RTM #6 registration path, so nothing is changed yet.
+**Status:** in progress (2026-09-28). The form fix is on `feature/161-separate-consent`, to merge after RTM #6 (4 Oct). Clearing the marketing consent already recorded is the owner's call (see "Old consent records"). Found by session `event-checkin-af` while correcting `/privacy` for `.issues/158`.
 
 ## What happens
 
@@ -30,3 +30,41 @@ optional unless the event sets `require_photo_consent`, and then labelled as
 required. Re-check `signup.rs:174` and the contacts and Sheet consent columns.
 Decide what to do with the marketing consent already recorded (treat it as not
 given until re-asked). After RTM #6, with a staging rehearsal.
+
+## Done on `feature/161-separate-consent` (session `event-checkin-0d`)
+
+- `registration_form.rs`: the required box now sets only `consent_given` and
+  `deposit_agreed`. Photo and marketing each get their own unticked box.
+  Photo is labelled "(required by this event)" and blocks submit when the
+  event sets `require_photo_consent`, else "(optional)". Marketing is always
+  optional. `signup.rs:174` already enforced the photo rule server-side.
+- `/privacy` sections 2, 3 and 6 describe the separate boxes and the
+  opt-in email purpose. `docs/pdpa_ropa.md` §3 and §16 item 2 updated.
+- Verified by opening the page (local `wrangler dev`, no Google credentials,
+  POST intercepted so nothing was written):
+  - required event: three unticked boxes; ticking the main box leaves the
+    other two unticked; submit is blocked with "This event requires photo
+    consent"; with both ticked the body carries `photo_consent_given: true,
+    consent_marketing: true`.
+  - optional event: submit goes through with only the main box; body has no
+    `photo_consent_given` and `consent_marketing: false`.
+- Frontend clippy (wasm32, `-D warnings`) and all 25 test binaries pass.
+
+## Old consent records (owner decision)
+
+`consent_marketing = 1` on `attendees` rows written before this fix is not
+valid consent. The same form also wrote `developer_profiles.consent_outreach`
+(`register/contact.rs:127`), but that column is also set by the profile page
+(`handlers/profile.rs:205`), where the opt-in is real. So a blanket reset would
+erase valid consent. Options:
+
+1. Reset `attendees.consent_marketing` to NULL for rows with
+   `consent_marketing_at` before the deploy of this fix, and leave
+   `consent_outreach` alone (profile opt-ins survive; form-only opt-ins stay
+   wrong).
+2. Also reset `consent_outreach` to 0 where it was never saved from the
+   profile page. There is no column that says which path wrote it, so this
+   means resetting everyone and re-asking.
+
+Nothing sends on either column today (`NOTIFICATIONS_ENABLED = "0"`), so this
+can wait for the merge. It must be settled before email sending is turned on.

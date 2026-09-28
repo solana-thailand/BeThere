@@ -8,7 +8,7 @@ use event_checkin_domain::models::deposit::{
 
 use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
-use crate::handlers::deposit::usdc::check_in_person_capacity;
+use crate::handlers::capacity::has_in_person_room;
 use crate::state::AppState;
 use event_checkin_domain::models::attendee::SheetRow;
 
@@ -79,7 +79,7 @@ pub async fn deposit_usdc_handler(
             reg_time.with_timezone(&Utc) + chrono::Duration::hours(i64::from(deadline_hours));
         if Utc::now() > deadline {
             // Deadline passed — check if reclaim is possible
-            if check_in_person_capacity(&state, &event, kv).await {
+            if has_in_person_room(&state, &event, kv).await {
                 // Reclaim: switch back to In-Person so the deposit proceeds
                 if let Ok(mapping) = crate::sheets::get_column_mapping(
                     &state,

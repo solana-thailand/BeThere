@@ -202,29 +202,59 @@ pub async fn balance(
     organization_id: &str,
     currency: &str,
 ) -> Result<i64, String> {
+    let both = balances(db, email, organization_id).await?;
+    Ok(match currency.to_lowercase().as_str() {
+        CURRENCY_THB => both.thb,
+        CURRENCY_USDC => both.usdc,
+        _ => 0,
+    })
+}
+
+const CURRENCY_THB: &str = "thb";
+const CURRENCY_USDC: &str = "usdc";
+
+/// One person's credit in one organization, per currency.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct OrgBalances {
+    pub thb: i64,
+    pub usdc: i64,
+}
+
+/// Both currencies' balances with one release and one read (plan 028 W5).
+///
+/// Registration and the hold page need THB and USDC together. Two
+/// [`balance`] calls ran [`release_ended_applies`] (a D1 write) twice and read
+/// the ledger twice; this is one of each. Same rules as [`balance`]: the
+/// person's linked emails count, and errors bubble up so callers fail closed.
+pub async fn balances(
+    db: &D1Database,
+    email: &str,
+    organization_id: &str,
+) -> Result<OrgBalances, String> {
     release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
-    let currency_lc = currency.to_lowercase();
     let sql = concat!(
-        "SELECT COALESCE(SUM(delta), 0) AS bal FROM credit_ledger WHERE email IN ",
+        "SELECT currency, COALESCE(SUM(delta), 0) AS bal FROM credit_ledger WHERE email IN ",
         person_emails_of!("?1"),
-        " AND organization_id = ?2 AND currency = ?3"
+        " AND organization_id = ?2 GROUP BY currency"
     );
     let stmt = db
         .prepare(sql)
-        .bind_refs(&[
-            D1Type::Text(&email_lc),
-            D1Type::Text(organization_id),
-            D1Type::Text(&currency_lc),
-        ])
-        .map_err(|e| format!("D1 credit_ledger balance bind: {e:?}"))?;
-    let rows = safe_all_rows(&stmt).await?;
-    let bal = rows
-        .into_iter()
-        .next()
-        .and_then(|v| v.get("bal").and_then(serde_json::Value::as_i64))
-        .unwrap_or(0);
-    Ok(bal)
+        .bind_refs(&[D1Type::Text(&email_lc), D1Type::Text(organization_id)])
+        .map_err(|e| format!("D1 credit_ledger balances bind: {e:?}"))?;
+    let mut out = OrgBalances::default();
+    for row in safe_all_rows(&stmt).await? {
+        let bal = row
+            .get("bal")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or(0);
+        match row.get("currency").and_then(serde_json::Value::as_str) {
+            Some(CURRENCY_THB) => out.thb = bal,
+            Some(CURRENCY_USDC) => out.usdc = bal,
+            _ => {}
+        }
+    }
+    Ok(out)
 }
 
 /// One `(organization_id, currency)` bucket of a single email's credit.

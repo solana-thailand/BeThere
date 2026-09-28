@@ -255,23 +255,8 @@ pub async fn get_public_ticket(
         if chrono::Utc::now() > deadline {
             deadline_expired = true;
             // Check capacity
-            let cap = event.in_person_capacity;
-            let available = if let Some(cap) = cap {
-                let count = sheets::get_attendees_for_event(
-                    &state,
-                    &event.sheet_id,
-                    &event.sheet_name,
-                    kv,
-                    &event.id,
-                )
-                .await
-                .map(|a| a.iter().filter(|a| a.is_in_person()).count() as u32)
-                .unwrap_or(u32::MAX);
-                count < cap
-            } else {
-                true
-            };
-            in_person_available = Some(available);
+            in_person_available =
+                Some(crate::handlers::capacity::has_in_person_room(&state, &event, kv).await);
         }
     }
 

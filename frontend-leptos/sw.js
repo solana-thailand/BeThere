@@ -132,6 +132,7 @@ self.addEventListener("fetch", function (event) {
   if (
     url.pathname.startsWith("/event-checkin-frontend-") ||
     url.pathname.startsWith("/style-") ||
+    url.pathname.startsWith("/inline-") ||
     url.pathname.endsWith(".wasm") ||
     url.pathname.endsWith(".css")
   ) {

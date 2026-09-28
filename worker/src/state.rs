@@ -269,6 +269,7 @@ impl AppState {
                 .unwrap_or_else(|| "dev@localhost".to_string())
         });
 
+        let log_fingerprint_key = log_fingerprint_key(env);
         if dev_mode {
             // Refuse DEV_MODE on live production domain only
             let is_live_production = google_oauth
@@ -282,14 +283,10 @@ impl AppState {
                 );
             }
             // The impersonated account is a fingerprint like every other
-            // identifier in the log stream (Issue 070). `build_config` runs
-            // before `AppConfig` exists, so the secret is read directly here;
-            // the fallback matches the one `jwt_secret` itself uses below, so
-            // the value still correlates with the rest of the stream.
-            let log_secret = get_secret(env, "JWT_SECRET")
-                .unwrap_or_else(|_| "bethere_dev_jwt_secret_2026".to_string());
+            // identifier in the log stream (Issue 070), keyed with the same
+            // key `AppConfig` stores below so the value still correlates.
             tracing::warn!(
-                identity_fingerprint = %crate::crypto::identity_fingerprint(&dev_email, &log_secret),
+                identity_fingerprint = %crate::crypto::identity_fingerprint(&dev_email, &log_fingerprint_key),
                 "⚠️  DEV_MODE enabled — JWT verification bypassed, accepting \"dev-token\" as valid"
             );
         }
@@ -298,8 +295,8 @@ impl AppState {
             google_oauth,
             service_account,
             sheets,
-            jwt_secret: get_secret(env, "JWT_SECRET")
-                .unwrap_or_else(|_| "bethere_dev_jwt_secret_2026".to_string()),
+            jwt_secret: jwt_secret(env),
+            log_fingerprint_key,
             staff_emails,
             super_admin_emails,
             server,
@@ -466,9 +463,9 @@ impl AppState {
     /// Use this for every email, wallet address, or transaction signature that
     /// would otherwise be written into the Worker log stream. Handlers hold
     /// `AppState`, so this keeps the deployment secret at a single call site
-    /// instead of spelling out `config.jwt_secret` at each `tracing!` field.
+    /// instead of spelling out the key at each `tracing!` field.
     pub(crate) fn log_fingerprint(&self, identifier: &str) -> String {
-        crate::crypto::identity_fingerprint(identifier, &self.config.jwt_secret)
+        crate::crypto::identity_fingerprint(identifier, &self.config.log_fingerprint_key)
     }
 
     /// Borrow a [`LogRedactor`] to hand down into stateless helpers.
@@ -477,7 +474,25 @@ impl AppState {
     /// pure parsers and background tasks that must emit correlatable log fields
     /// but have no reason to hold `AppState` — or the raw secret — themselves.
     pub(crate) fn log_redactor(&self) -> crate::crypto::LogRedactor<'_> {
-        crate::crypto::LogRedactor::new(&self.config.jwt_secret)
+        crate::crypto::LogRedactor::new(&self.config.log_fingerprint_key)
+    }
+}
+
+/// The session-signing secret, with the local-dev fallback.
+fn jwt_secret(env: &Env) -> String {
+    get_secret(env, "JWT_SECRET").unwrap_or_else(|_| "bethere_dev_jwt_secret_2026".to_string())
+}
+
+/// The log-fingerprint key (plan 029, ISO 27001 8.11): its own secret, so a
+/// leaked log fingerprint cannot be brute-forced with, and does not rotate
+/// with, the key that signs sessions. Until `LOG_FINGERPRINT_KEY` is
+/// provisioned it is `JWT_SECRET`, i.e. every fingerprint stays what it was.
+/// Setting it changes every fingerprint once: logs from before and after the
+/// switch no longer correlate.
+fn log_fingerprint_key(env: &Env) -> String {
+    match get_secret(env, "LOG_FINGERPRINT_KEY") {
+        Ok(key) if !key.trim().is_empty() => key,
+        _ => jwt_secret(env),
     }
 }
 

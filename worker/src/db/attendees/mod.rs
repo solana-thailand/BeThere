@@ -7,6 +7,7 @@
 //! (Issue #052). The split is a pure, behavior-preserving relocation: every
 //! item stays `pub(crate)` and reachable as `attendees::NAME`.
 
+mod counts;
 mod deposit;
 mod management;
 mod reads;
@@ -15,6 +16,7 @@ mod writes;
 
 // The deposit-status helpers are all `#[allow(dead_code)]` (no live callers yet);
 // keep them reachable as `attendees::NAME` without tripping unused-import lint.
+pub(crate) use counts::*;
 #[allow(unused_imports)]
 pub(crate) use deposit::*;
 pub(crate) use management::*;
