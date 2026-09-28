@@ -35,6 +35,9 @@ pub async fn health_check(State(state): State<AppState>) -> Json<Value> {
         "service": "event-checkin",
         "runtime": "cloudflare-workers",
         "version": env!("CARGO_PKG_VERSION"),
+        // `git:<sha>[+dirty]` from deploy.sh; any other build is "unstamped",
+        // so a curl tells which commit is live without wrangler auth.
+        "build": option_env!("BETHERE_BUILD").unwrap_or("unstamped"),
         // Backward compatibility for wallet signing and explorer links. This
         // must describe the escrow network, where user transactions are sent.
         "cluster": networks.escrow_cluster.clone(),
