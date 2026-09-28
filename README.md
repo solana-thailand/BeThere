@@ -614,10 +614,11 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 
 | Feature | BeThere | Luma | Eventbrite | POAP | Kickback* |
 |---------|---------|------|------------|------|-----------|
-| On-chain deposits | ✅ USDC escrow | ❌ | ❌ | ❌ | ✅ ETH (defunct) |
+| Deposits (live) | ✅ THB via PromptPay | ❌ | ❌ | ❌ | ❌ |
+| On-chain deposits | ✅ USDC escrow (devnet) | ❌ | ❌ | ❌ | ✅ ETH (defunct) |
 | Attendance NFTs | ✅ cNFT | ❌ | ❌ | ✅ (Gnosis) | ❌ |
-| Deposit refund | ✅ Auto | ❌ | Manual | ❌ | ✅ Payout pool |
-| No-show penalty | ✅ Forfeit to org | ❌ | ❌ | ❌ | ✅ Pool split |
+| Deposit refund | ✅ THB within 7 days, or kept as credit; USDC claimed from escrow | ❌ | Manual | ❌ | ✅ Payout pool |
+| No-show penalty | None: a deposit is never forfeited (next step: a no-show without notice covers only the per-head cost already spent) | ❌ | ❌ | ❌ | ✅ Pool split |
 | Quiz/Adventure gating | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
 | Cost per NFT | **$0.001** | N/A | N/A | ~$0.05–0.20 | N/A |
 | Stablecoin deposits | ✅ USDC | ❌ | ❌ | ❌ | ❌ (volatile ETH) |
@@ -634,7 +635,7 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | **8–9** | USDC escrow + security hardening | ✅ Done (devnet deployed) |
 | **10** | **Mainnet deployment** | 📋 Next (~1.5 SOL cost) |
 | **10.5** | **PDPA Compliance** — consent checkbox + photo consent + privacy policy + deletion API | 📋 Pre-mainnet ([Issue 043](.issues/043_pdpa_consent_data_collection.md)) |
-| **11** | Platform fees (1-2% on forfeited deposits) | 📋 Planned |
+| **11** | Platform fees: none today (owner decision 2026-09-28) | 🔮 Undecided |
 | **12** | Multi-organizer SaaS | 📋 Planned |
 | **13** | **Solana Mobile** — MWA Web + PWA + dApp Store listing (Android) | 📋 Planned ([Issue 042](.issues/042_solana_mobile_support.md)) |
 | **14** | Learning & Credentials — reposition adventure + quiz + cNFT as micro-credential system; add credit tracking, stackable certificates | 🔮 Future |

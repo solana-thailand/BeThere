@@ -401,7 +401,7 @@ pub fn Landing() -> impl IntoView {
                             "How does the deposit work?"
                         </h3>
                         <p class="landing-faq-a">
-                            "Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back after the event, or you keep it as credit for your next event. USDC deposits sit in a Solana escrow and you claim them back after the event ends."
+                            "Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back within 7 days after the event, or you keep it as credit for your next event. A deposit is never forfeited: if you can't make it, tell the organizer. USDC deposits sit in a Solana escrow and you claim them back after the event ends."
                         </p>
                     </div>
 
