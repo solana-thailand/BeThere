@@ -36,6 +36,7 @@ pub fn Privacy() -> impl IntoView {
                         <li>"Deposit payment information (transaction signature on Solana or PromptPay slip)"</li>
                         <li>"Wallet address for NFT issuance and refunds"</li>
                         <li>"Photo/video consent status (when the event collects this)"</li>
+                        <li>"Whether you want emails about future events (optional)"</li>
                     </ul>
 
                     // Purpose
@@ -49,6 +50,7 @@ pub fn Privacy() -> impl IntoView {
                         <li>"NFT badge issuance (commemorative proof of attendance)"</li>
                         <li>"Deposit commitment and refund processing"</li>
                         <li>"Staff follow-up for event logistics"</li>
+                        <li>"Emails about future events, only if you tick the optional box for them"</li>
                     </ul>
 
                     // Legal Basis
@@ -74,7 +76,7 @@ pub fn Privacy() -> impl IntoView {
                     // Photo/Media
                     <h2 class="pe-section-title" style="font-size: 1.1rem; margin-top: 1.25rem;">"6. Photo & Media Consent"</h2>
                     <p class="pe-detail-secondary">
-                        "Some events may photograph or record attendees. The consent checkbox you tick when registering includes consent to this, and an event can make it a condition of registering. If you do not want to appear in photos, tell the event staff at check-in."
+                        "Some events may photograph or record attendees. The registration form asks for this in its own checkbox, separate from the privacy consent. It is optional unless the event marks it as required. If you do not want to appear in photos, tell the event staff at check-in."
                     </p>
 
                     // Data Sharing
