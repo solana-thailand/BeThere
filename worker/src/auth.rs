@@ -706,6 +706,7 @@ mod tests {
                 platform_sheet_id: String::new(),
             },
             jwt_secret: "test-jwt-secret".to_string(),
+            log_fingerprint_key: "test-log-key".to_string(),
             github_client_id: String::new(),
             github_client_secret: String::new(),
             github_redirect_uri: String::new(),

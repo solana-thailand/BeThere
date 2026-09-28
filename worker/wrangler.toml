@@ -186,6 +186,7 @@ EVENT_END_MS = "1777183200000"
 
 # Secrets (set via `npx wrangler secret put <NAME>`):
 # - JWT_SECRET
+# - LOG_FINGERPRINT_KEY         (optional; keys log fingerprints, falls back to JWT_SECRET — plan 029, 8.11)
 # - GOOGLE_CLIENT_ID
 # - GOOGLE_CLIENT_SECRET
 # - GOOGLE_REDIRECT_URI
