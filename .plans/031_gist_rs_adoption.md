@@ -112,6 +112,12 @@ reflex-site has no license, so its code is a pattern only.
     cfg now lives in the build command, and the config file is gone.
   - [ ] Merge after RTM #6, then open the staging page (owner-gated deploy).
 - [ ] Toolchain pin (`.plans/030` §3): declare `components` and `targets`.
+  **Built on branch `feature/030-toolchain-pin` (2026-09-28, session
+  `event-checkin-00`), not committed or merged** (RTM #6 hold). Details and
+  the open size A/B are in `.plans/030` §3.
+  - [x] `components = ["clippy", "rustfmt"]` and
+    `targets = ["wasm32-unknown-unknown"]` declared in `rust-toolchain.toml`.
+  - [ ] Merge after RTM #6, after the remap and build-stamp branches.
 - [ ] Build stamp on `/api/health`: git sha, `BUILD_TAG`, and "stale" when
   built outside `deploy.sh`.
   **Built on branch `feature/031-health-build-stamp` (`2bc919f0`, 2026-09-28,
