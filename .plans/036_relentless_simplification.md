@@ -33,7 +33,7 @@ places that drifted.
 | # | Candidate | Measure now | Target | When |
 |---|---|---|---|---|
 | S1 | Attendees: D1 is the only store; the Sheet becomes a one-way export, never read back | 2 sources (`sheets::get_attendees_inner` falls back to Sheets on an empty D1) | 1 | after 12 Oct (L) |
-| S2 | Hide the USDC rail in the UI while escrow is devnet-only and off for every event | `show_usdc` / `escrow_closed` branches on the event page, registration and landing | 0 USDC branches on THB-only events | after 4 Oct (S–M) |
+| S2 | Hide the USDC rail in the UI while escrow is devnet-only and off for every event | `show_usdc` / `escrow_closed` branches on the event page, registration and landing | 0 USDC branches on THB-only events | **after 12 Oct** (S–M). Moved 2026-09-28 (`event-checkin-cf`): the W2 on-chain demo take (8 Oct) films the USDC rail, so no edits to it before the submission |
 | S3 | `notifications::dispatch` (email sending): wire it or delete it | defined in `worker/src/notifications/mod.rs:71`, 0 callers; sending off (`NOTIFICATIONS_ENABLED = "0"`) | 0 dead entry points | after 12 Oct, owner call (email is a product decision) |
 | S4 | `slip_vision.rs` (Anthropic vision), dormant under the 0-THB running-cost rule | off in prod and staging (no `ANTHROPIC_API_KEY`) | keep dormant with a test, or delete | owner call; not before the submission (the AI story names it) |
 | S5 | `scripts/make_pitch_deck.py`, legacy deck copy that contradicts D1/D4/D5 | stale | deleted, or aligned | before 12 Oct only if the submission uses it; else after |
