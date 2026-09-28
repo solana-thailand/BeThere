@@ -1,5 +1,6 @@
 //! Event context badge — shows event image, tagline, location, and link.
 
+use crate::i18n::{t, t_string, use_i18n};
 use crate::utils;
 use event_checkin_domain::models::event::safe_map_url;
 use leptos::prelude::*;
@@ -39,7 +40,11 @@ pub fn EventContext(
         return view! { <div></div> }.into_any();
     }
 
-    let link_label = event_link_text.unwrap_or_else(|| "📅 Sessions & Slides ↗".to_string());
+    let i18n = use_i18n();
+    let link_label = move || match &event_link_text {
+        Some(text) => text.clone(),
+        None => t_string!(i18n, ticket.context.sessions_link).to_string(),
+    };
 
     view! {
         <div class="ticket-event-context">
@@ -48,7 +53,7 @@ pub fn EventContext(
                 view! {
                     <img
                         src=img
-                        alt="Event badge"
+                        alt=move || t_string!(i18n, ticket.context.badge_alt)
                         class="ticket-event-badge-img"
                     />
                 }.into_any()
@@ -85,7 +90,7 @@ pub fn EventContext(
                         rel="noopener noreferrer"
                         class="ticket-event-link"
                     >
-                        "Map ↗"
+                        {t!(i18n, ticket.context.map)}
                     </a>
                 });
                 view! {

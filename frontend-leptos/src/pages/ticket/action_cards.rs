@@ -2,6 +2,7 @@
 
 use crate::api::{self, DepositMethod, HoldDepositRequest, RolloverDepositRequest};
 use crate::components::{self, ToastType};
+use crate::i18n::{t, t_string, td_string, use_i18n};
 use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils;
 use crate::wallet_error;
@@ -32,14 +33,17 @@ pub fn DepositActionCard(
 ) -> impl IntoView {
     let show_usdc = amount_usdc > 0 && !escrow_closed;
     let show_thb = amount_thb > 0;
+    let i18n = use_i18n();
 
     // Build primary label
-    let primary_label = if show_thb {
-        format!("{amount_thb} THB")
-    } else if show_usdc {
-        format!("${:.2} USDC", amount_usdc as f64 / 1_000_000.0)
-    } else {
-        "Deposit Required".to_string()
+    let amount = move || {
+        if show_thb {
+            format!("{amount_thb} THB")
+        } else if show_usdc {
+            format!("${:.2} USDC", amount_usdc as f64 / 1_000_000.0)
+        } else {
+            t_string!(i18n, ticket.action.deposit_required).to_string()
+        }
     };
 
     view! {
@@ -49,15 +53,15 @@ pub fn DepositActionCard(
             </div>
             <div>
                 <div class="ticket-action-title">
-                    {format!("Deposit Required: {primary_label}")}
+                    {t!(i18n, ticket.action.deposit_required_amount, amount)}
                 </div>
                 // Show secondary payment method when both are available
                 {if show_thb && show_usdc {
-                    let usdc_str = format!("${:.2} USDC", amount_usdc as f64 / 1_000_000.0);
+                    let usdc = format!("${:.2} USDC", amount_usdc as f64 / 1_000_000.0);
                     view! {
                         <div class="ticket-action-desc ticket-action-alt-desc">
                             <span class="ticket-action-alt-text">
-                                "Also payable as "{usdc_str}" via Solana"
+                                {t!(i18n, ticket.action.also_payable, usdc)}
                             </span>
                         </div>
                     }.into_any()
@@ -65,7 +69,7 @@ pub fn DepositActionCard(
                     view! {
                         <div class="ticket-action-desc ticket-action-alt-desc">
                             <span class="ticket-action-alt-text">
-                                "USDC deposit is no longer available (escrow closed)"
+                                {t!(i18n, ticket.action.usdc_closed)}
                             </span>
                         </div>
                     }.into_any()
@@ -73,15 +77,14 @@ pub fn DepositActionCard(
                     view! { <div></div> }.into_any()
                 }}
                 <div class="ticket-action-desc">
-                    {if let Some(hours) = deadline_hours {
-                        format!("Complete your deposit within {hours} hours of registration to keep your in-person spot.")
-                    } else {
-                        "Complete your deposit to secure your in-person spot.".to_string()
+                    {match deadline_hours {
+                        Some(hours) => t!(i18n, ticket.action.deadline_hours, hours).into_any(),
+                        None => t!(i18n, ticket.action.deadline_none).into_any(),
                     }}
                 </div>
                 <a href=deposit_href class="btn btn-primary btn-sm ticket-action-btn">
                     <Icon icon=IconName::CreditCard class="icon-sm" />
-                    " Pay Deposit Now"
+                    " "{t!(i18n, ticket.action.pay_now)}
                 </a>
             </div>
         </div>
@@ -91,16 +94,19 @@ pub fn DepositActionCard(
 /// Deposit verified notice — shown when deposit has been confirmed.
 #[component]
 pub fn DepositVerifiedCard() -> impl IntoView {
+    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--verified">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Check class="icon-sm" />
             </div>
             <div>
-                <crate::components::StatusBadge
-                    tone=crate::components::StatusTone::Confirmed
-                    label="Deposit verified"
-                />
+                {move || view! {
+                    <crate::components::StatusBadge
+                        tone=crate::components::StatusTone::Confirmed
+                        label=t_string!(i18n, ticket.action.deposit_verified)
+                    />
+                }}
             </div>
         </div>
     }
@@ -112,19 +118,20 @@ pub fn DepositPendingCard(
     /// Deposit method — controls the messaging
     method: DepositMethod,
 ) -> impl IntoView {
-    let (label, desc) = match method {
-        DepositMethod::Thb => (
-            "Payment Slip: Pending Verification",
-            "Your payment slip has been submitted. We'll verify it shortly — check back in a few minutes.",
-        ),
-        DepositMethod::Usdc => (
-            "Deposit: Pending Confirmation",
-            "Your deposit is being confirmed on-chain.",
-        ),
-        DepositMethod::CreditThb | DepositMethod::CreditUsdc => (
-            "Credit Deposit: Pending",
-            "Your credit deposit is being processed.",
-        ),
+    let i18n = use_i18n();
+    let label = move || match method {
+        DepositMethod::Thb => t_string!(i18n, ticket.action.pending_thb_title),
+        DepositMethod::Usdc => t_string!(i18n, ticket.action.pending_usdc_title),
+        DepositMethod::CreditThb | DepositMethod::CreditUsdc => {
+            t_string!(i18n, ticket.action.pending_credit_title)
+        }
+    };
+    let desc = move || match method {
+        DepositMethod::Thb => t_string!(i18n, ticket.action.pending_thb_desc),
+        DepositMethod::Usdc => t_string!(i18n, ticket.action.pending_usdc_desc),
+        DepositMethod::CreditThb | DepositMethod::CreditUsdc => {
+            t_string!(i18n, ticket.action.pending_credit_desc)
+        }
     };
 
     view! {
@@ -133,10 +140,12 @@ pub fn DepositPendingCard(
                 <Icon icon=IconName::Hourglass class="icon-sm" />
             </div>
             <div>
-                <crate::components::StatusBadge
-                    tone=crate::components::StatusTone::Pending
-                    label="Pending"
-                />
+                {move || view! {
+                    <crate::components::StatusBadge
+                        tone=crate::components::StatusTone::Pending
+                        label=t_string!(i18n, ticket.action.pending)
+                    />
+                }}
                 <div class="ticket-action-title">{label}</div>
                 <div class="ticket-action-desc">{desc}</div>
             </div>
@@ -155,13 +164,14 @@ pub fn RefundCard(
     let url = event_checkin_domain::validation::safe_document_link(&refund_proof_url)
         .unwrap_or_default()
         .to_string();
+    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--refund">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Recycle class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">"RSVP Deposit Returned ✓"</div>
+                <div class="ticket-action-title">{t!(i18n, ticket.action.refund_returned)}</div>
                 {if !url.is_empty() {
                     view! {
                         <a
@@ -170,7 +180,7 @@ pub fn RefundCard(
                             rel="noopener noreferrer"
                             class="ticket-action-link"
                         >
-                            "View Refund Receipt →"
+                            {t!(i18n, ticket.action.refund_receipt)}
                         </a>
                     }.into_any()
                 } else {
@@ -188,16 +198,17 @@ pub fn ClaimActionCard(
     #[prop(into)]
     claim_href: String,
 ) -> impl IntoView {
+    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--claim">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Gift class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">"You're checked in!"</div>
+                <div class="ticket-action-title">{t!(i18n, ticket.action.claim_title)}</div>
                 <a href=claim_href class="btn btn-primary btn-sm ticket-action-btn">
                     <Icon icon=IconName::Gift class="icon-sm" />
-                    " Claim Your NFT Badge →"
+                    " "{t!(i18n, ticket.action.claim_cta)}
                 </a>
             </div>
         </div>
@@ -211,20 +222,20 @@ pub fn ReclaimActionCard(
     #[prop(into)]
     reclaim_href: String,
 ) -> impl IntoView {
+    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--reclaim">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Warning class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">"Deadline Passed — Reclaim Your Spot"</div>
+                <div class="ticket-action-title">{t!(i18n, ticket.action.reclaim_title)}</div>
                 <div class="ticket-action-desc">
-                    "Your deposit deadline has passed and you've been moved to the online track. \
-                     However, in-person spots are still available!"
+                    {t!(i18n, ticket.action.reclaim_desc)}
                 </div>
                 <a href=reclaim_href class="btn btn-success btn-sm ticket-action-btn">
                     <Icon icon=IconName::CreditCard class="icon-sm" />
-                    " Deposit Now to Reclaim"
+                    " "{t!(i18n, ticket.action.reclaim_cta)}
                 </a>
             </div>
         </div>
@@ -234,17 +245,16 @@ pub fn ReclaimActionCard(
 /// Moved to online track notice — shown when deposit deadline passed and no in-person spots.
 #[component]
 pub fn MovedOnlineCard() -> impl IntoView {
+    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--moved-online">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Warning class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">"Moved to Online Track"</div>
+                <div class="ticket-action-title">{t!(i18n, ticket.action.moved_online_title)}</div>
                 <div class="ticket-action-desc">
-                    "Your deposit deadline has passed. In-person spots are now full, \
-                     so you've been automatically moved to the online track. \
-                     You can still claim your NFT after the event."
+                    {t!(i18n, ticket.action.moved_online_desc)}
                 </div>
             </div>
         </div>
@@ -266,7 +276,23 @@ enum RolloverState {
     /// TX confirmed on-chain.
     Confirmed(String), // (tx_signature)
     /// Error state.
-    Error(String),
+    Error(RolloverError),
+}
+
+/// Why a rollover failed. Our own wording is rendered in the reader's
+/// language; text from the server or the wallet is passed through.
+#[derive(Clone)]
+enum RolloverError {
+    /// Building the transaction failed (server error text).
+    Build(String),
+    /// The server returned an empty transaction.
+    Empty,
+    /// Simulation says the transaction would fail (simulator text, if any).
+    WouldFail(Option<String>),
+    /// The wallet failed without a usable reason.
+    Failed,
+    /// A message that is already written for the reader (wallet / cluster check).
+    Message(String),
 }
 
 /// Rollover deposit card — self-contained wallet signing flow.
@@ -297,6 +323,7 @@ pub fn RolloverActionCard(
     let source_eid = StoredValue::new(source_event_id);
     let target_eid = StoredValue::new(target_event_id);
     let aid_stored = StoredValue::new(attendee_id);
+    let i18n = use_i18n();
 
     // Detect wallets on mount
     let (detected_wallets, _) = signal({
@@ -328,7 +355,10 @@ pub fn RolloverActionCard(
                 wallet_error::WalletResult::UnknownFailure => {
                     components::show_toast(
                         &set_toast,
-                        "Failed to connect wallet. Please try again.",
+                        td_string!(
+                            i18n.get_locale_untracked(),
+                            ticket.action.wallet_connect_failed
+                        ),
                         ToastType::Error,
                     );
                 }
@@ -344,34 +374,33 @@ pub fn RolloverActionCard(
             <div>
                 {move || match state.get() {
                     RolloverState::Ready => view! {
-                        <div class="ticket-action-title">"Roll Deposit to Next Event"</div>
+                        <div class="ticket-action-title">{t!(i18n, ticket.action.rollover_title)}</div>
                         <div class="ticket-action-desc">
-                            {format!(
-                                "Your deposit is ready to roll over to {}. \
-                                 No extra payment needed — your USDC transfers atomically.",
-                                target_event_name
-                            )}
+                            {
+                                let target = target_event_name.clone();
+                                t!(i18n, ticket.action.rollover_desc, target)
+                            }
                         </div>
                         <button
                             class="btn btn-primary btn-sm ticket-action-btn"
                             on:click=move |_| set_state.set(RolloverState::ChooseWallet)
                         >
                             <Icon icon=IconName::Refresh class="icon-sm" />
-                            " Roll to Next Event"
+                            " "{t!(i18n, ticket.action.rollover_cta)}
                         </button>
                     }.into_any(),
 
                     RolloverState::ChooseWallet => {
                         let wallets = detected_wallets.get();
                         view! {
-                            <div class="ticket-action-title">"Connect Wallet to Rollover"</div>
+                            <div class="ticket-action-title">{t!(i18n, ticket.action.rollover_connect_title)}</div>
                             <div class="ticket-action-desc">
-                                "Connect the wallet you used for the original deposit."
+                                {t!(i18n, ticket.action.rollover_connect_desc)}
                             </div>
                             {if wallets.is_empty() {
                                 view! {
                                     <p class="ticket-action-desc ticket-action-alt-text">
-                                        "No wallet detected. Install Phantom/Backpack/Solflare and refresh."
+                                        {t!(i18n, ticket.action.no_wallet)}
                                     </p>
                                 }.into_any()
                             } else {
@@ -395,7 +424,7 @@ pub fn RolloverActionCard(
                                 class="btn btn-outline btn-xs ticket-action-cancel"
                                 on:click=move |_| set_state.set(RolloverState::Ready)
                             >
-                                "Cancel"
+                                {t!(i18n, ticket.action.cancel)}
                             </button>
                         }.into_any()
                     },
@@ -414,16 +443,29 @@ pub fn RolloverActionCard(
                         let ss = set_state;
                         view! {
                             <div class="ticket-action-title">
-                                {format!("Connected via {}", wn_display)}
+                                {t!(i18n, ticket.action.connected_via, wallet = wn_display)}
                             </div>
-                            {crate::pages::deposit::components::transaction_review(vec![
-                                ("You authorize", format!("Move {amount} USDC to {target_event_name}")),
-                                ("Network", network),
-                                ("Extra payment", "None".to_string()),
-                                ("Network fee", "Paid in SOL by this connected wallet".to_string()),
-                            ])}
+                            {
+                                let move_word = t_string!(i18n, ticket.action.review_move);
+                                let to_word = t_string!(i18n, ticket.action.review_to);
+                                crate::pages::deposit::components::transaction_review(vec![
+                                    (
+                                        t_string!(i18n, ticket.action.review_authorize),
+                                        format!("{move_word} {amount} USDC {to_word} {target_event_name}"),
+                                    ),
+                                    (t_string!(i18n, ticket.action.review_network), network),
+                                    (
+                                        t_string!(i18n, ticket.action.review_extra_payment),
+                                        t_string!(i18n, ticket.action.review_none).to_string(),
+                                    ),
+                                    (
+                                        t_string!(i18n, ticket.action.review_fee),
+                                        t_string!(i18n, ticket.action.review_fee_value).to_string(),
+                                    ),
+                                ])
+                            }
                             <div class="ticket-action-desc">
-                                "Review these details, then approve in your wallet."
+                                {t!(i18n, ticket.action.review_hint)}
                             </div>
                             <button
                                 class="btn btn-success btn-sm ticket-action-btn"
@@ -445,13 +487,13 @@ pub fn RolloverActionCard(
                                             Ok(r) => r,
                                             Err(e) => {
                                                 log::error!("[rollover] TX build failed: {e}");
-                                                ss.set(RolloverState::Error(format!("Failed to build transaction: {e}")));
+                                                ss.set(RolloverState::Error(RolloverError::Build(e.to_string())));
                                                 return;
                                             }
                                         };
                                         let tx_b64 = resp.transaction;
                                         if tx_b64.is_empty() {
-                                            ss.set(RolloverState::Error("Transaction was empty.".to_string()));
+                                            ss.set(RolloverState::Error(RolloverError::Empty));
                                             return;
                                         }
                                         let expected_cluster = crate::utils::get_cluster();
@@ -459,15 +501,14 @@ pub fn RolloverActionCard(
                                             crate::pages::escrow_init::check_wallet_cluster(&wn_c, &expected_cluster).await
                                         {
                                             log::error!("[rollover] cluster mismatch: {cluster_err}");
-                                            ss.set(RolloverState::Error(cluster_err));
+                                            ss.set(RolloverState::Error(RolloverError::Message(cluster_err)));
                                             return;
                                         }
                                         match crate::pages::escrow_init::simulate_transaction_js(&wn_c, &tx_b64).await {
                                             Ok(sim) if sim.ok => {}
                                             Ok(sim) => {
-                                                let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
-                                                log::error!("[rollover] simulation failed: {err_msg}");
-                                                ss.set(RolloverState::Error(format!("Transaction would fail: {err_msg}")));
+                                                log::error!("[rollover] simulation failed: {:?}", sim.error);
+                                                ss.set(RolloverState::Error(RolloverError::WouldFail(sim.error)));
                                                 return;
                                             }
                                             Err(e) => {
@@ -481,36 +522,34 @@ pub fn RolloverActionCard(
                                             }
                                             wallet_error::WalletResult::Error(e) => {
                                                 log::error!("[rollover] sign+send error: {:?}", e.code);
-                                                ss.set(RolloverState::Error(
+                                                ss.set(RolloverState::Error(RolloverError::Message(
                                                     wallet_error::user_friendly_message(&e),
-                                                ));
+                                                )));
                                             }
                                             wallet_error::WalletResult::UnknownFailure => {
-                                                ss.set(RolloverState::Error(
-                                                    "Transaction failed. Please try again.".to_string(),
-                                                ));
+                                                ss.set(RolloverState::Error(RolloverError::Failed));
                                             }
                                         }
                                     });
                                 }
                             >
                                 <Icon icon=IconName::Refresh class="icon-sm" />
-                                " Sign & Send Rollover"
+                                " "{t!(i18n, ticket.action.rollover_sign)}
                             </button>
                             <button
                                 class="btn btn-outline btn-xs ticket-action-cancel-xs"
                                 on:click=move |_| set_state.set(RolloverState::Ready)
                             >
-                                "Cancel"
+                                {t!(i18n, ticket.action.cancel)}
                             </button>
                         }.into_any()
                     },
 
                     RolloverState::Signing(_, _) => view! {
-                        <div class="ticket-action-title">"Processing Rollover..."</div>
+                        <div class="ticket-action-title">{t!(i18n, ticket.action.rollover_processing)}</div>
                         <div class="ticket-action-desc ticket-action-signing-row">
                             <span class="spinner spinner-sm"></span>
-                            "Please approve the transaction in your wallet..."
+                            {t!(i18n, ticket.action.approve_in_wallet)}
                         </div>
                     }.into_any(),
 
@@ -523,13 +562,13 @@ pub fn RolloverActionCard(
                         };
                         view! {
                             <div class="ticket-action-title ticket-action-title-success">
-                                "Deposit Rolled Over ✓"
+                                {t!(i18n, ticket.action.rollover_done)}
                             </div>
                             <div class="ticket-action-desc">
-                                {format!(
-                                    "Your deposit has been moved to {}. TX: {}",
-                                    target_event_name, sig_short
-                                )}
+                                {
+                                    let target = target_event_name.clone();
+                                    t!(i18n, ticket.action.rollover_done_desc, target, tx = sig_short)
+                                }
                             </div>
                             <a
                                 href=solscan
@@ -537,21 +576,35 @@ pub fn RolloverActionCard(
                                 rel="noopener noreferrer"
                                 class="ticket-action-link"
                             >
-                                "View on Solscan →"
+                                {t!(i18n, ticket.action.view_solscan)}
                             </a>
                         }.into_any()
                     },
 
-                    RolloverState::Error(msg) => view! {
+                    RolloverState::Error(err) => view! {
                         <div class="ticket-action-title ticket-action-title-danger">
-                            "Rollover Failed"
+                            {t!(i18n, ticket.action.rollover_failed)}
                         </div>
-                        <div class="ticket-action-desc">{msg.clone()}</div>
+                        <div class="ticket-action-desc">{match err {
+                            RolloverError::Build(error) => {
+                                t!(i18n, ticket.action.err_build, error).into_any()
+                            }
+                            RolloverError::Empty => t!(i18n, ticket.action.err_empty).into_any(),
+                            RolloverError::WouldFail(Some(error)) => {
+                                t!(i18n, ticket.action.err_would_fail, error).into_any()
+                            }
+                            RolloverError::WouldFail(None) => {
+                                let error = move || t_string!(i18n, ticket.action.err_simulation);
+                                t!(i18n, ticket.action.err_would_fail, error).into_any()
+                            }
+                            RolloverError::Failed => t!(i18n, ticket.action.err_failed).into_any(),
+                            RolloverError::Message(msg) => msg.into_any(),
+                        }}</div>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel-xs"
                             on:click=move |_| set_state.set(RolloverState::Ready)
                         >
-                            "Try Again"
+                            {t!(i18n, ticket.action.try_again)}
                         </button>
                     }.into_any(),
                 }}
@@ -615,6 +668,7 @@ pub fn HoldDepositCard(
     let eid = StoredValue::new(event_id);
     let aid = StoredValue::new(attendee_id);
     let amount = deposit_amount_thb;
+    let i18n = use_i18n();
 
     view! {
         <div class="ticket-action-card ticket-action-card--hold">
@@ -624,29 +678,23 @@ pub fn HoldDepositCard(
             <div>
                 {move || match state.get() {
                     HoldDepositState::Ready => view! {
-                        <div class="ticket-action-title">"Hold Deposit for Next Event"</div>
+                        <div class="ticket-action-title">{t!(i18n, ticket.action.hold_title)}</div>
                         <div class="ticket-action-desc">
-                            "Keep your deposit as credit and we'll auto-apply it to your next event. \
-                             No need to pay again — just RSVP."
+                            {t!(i18n, ticket.action.hold_desc)}
                         </div>
                         <button
                             class="btn btn-outline btn-sm ticket-action-btn"
                             on:click=move |_| set_state.set(HoldDepositState::Confirm)
                         >
                             <Icon icon=IconName::Save class="icon-sm" />
-                            " Hold Deposit"
+                            " "{t!(i18n, ticket.action.hold_cta)}
                         </button>
                     }.into_any(),
 
                     HoldDepositState::Confirm => view! {
-                        <div class="ticket-action-title">"Confirm: Hold "{amount}" THB"</div>
+                        <div class="ticket-action-title">{t!(i18n, ticket.action.hold_confirm_title, amount)}</div>
                         <div class="ticket-action-desc">
-                            {format!(
-                                "We'll keep your {} THB deposit on file. It will be applied \
-                                 automatically when you register for your next event. \
-                                 You can request its return at any time.",
-                                amount
-                            )}
+                            {t!(i18n, ticket.action.hold_confirm_desc, amount)}
                         </div>
                         <button
                             class="btn btn-success btn-sm ticket-action-btn"
@@ -680,21 +728,21 @@ pub fn HoldDepositCard(
                             }
                         >
                             <Icon icon=IconName::Check class="icon-sm" />
-                            " Confirm & Hold"
+                            " "{t!(i18n, ticket.action.hold_confirm_cta)}
                         </button>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel"
                             on:click=move |_| set_state.set(HoldDepositState::Ready)
                         >
-                            "Cancel"
+                            {t!(i18n, ticket.action.cancel)}
                         </button>
                     }.into_any(),
 
                     HoldDepositState::Holding => view! {
-                        <div class="ticket-action-title">"Holding Deposit..."</div>
+                        <div class="ticket-action-title">{t!(i18n, ticket.action.holding)}</div>
                         <div class="ticket-action-desc ticket-action-signing-row">
                             <span class="spinner spinner-sm"></span>
-                            "Processing your request..."
+                            {t!(i18n, ticket.action.processing_request)}
                         </div>
                     }.into_any(),
 
@@ -704,46 +752,38 @@ pub fn HoldDepositCard(
                         // Falls back to the amount just held if the server reports a
                         // zero balance — impossible right after a hold, but it keeps
                         // the sentence well-formed rather than emitting "Total credit: .".
-                        let balance_str =
+                        let balance =
                             super::credit_chip::credit_balance_label(credit_thb, credit_usdc)
                                 .unwrap_or_else(|| format!("{amount} THB"));
                         view! {
                             <div class="ticket-action-title ticket-action-title-success">
-                                "Deposit Held as Credit ✓"
+                                {t!(i18n, ticket.action.held_title)}
                             </div>
                             <div class="ticket-action-desc">
-                                {format!(
-                                    "Your {} THB is now rolling credit. Total credit: {}. \
-                                     We'll auto-apply it to your next registration.",
-                                    amount, balance_str
-                                )}
+                                {t!(i18n, ticket.action.held_desc, amount, balance)}
                             </div>
                         }.into_any()
                     },
 
                     HoldDepositState::AlreadyHeld => view! {
                         <div class="ticket-action-title ticket-action-title-success">
-                            "Deposit Held as Credit ✓"
+                            {t!(i18n, ticket.action.held_title)}
                         </div>
                         <div class="ticket-action-desc">
-                            {format!(
-                                "Your {} THB deposit is held as rolling credit and will be \
-                                 auto-applied to your next event registration.",
-                                amount
-                            )}
+                            {t!(i18n, ticket.action.already_held_desc, amount)}
                         </div>
                     }.into_any(),
 
                     HoldDepositState::Error(msg) => view! {
                         <div class="ticket-action-title ticket-action-title-danger">
-                            "Hold Failed"
+                            {t!(i18n, ticket.action.hold_failed)}
                         </div>
                         <div class="ticket-action-desc">{msg.clone()}</div>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel-xs"
                             on:click=move |_| set_state.set(HoldDepositState::Ready)
                         >
-                            "Try Again"
+                            {t!(i18n, ticket.action.try_again)}
                         </button>
                     }.into_any(),
                 }}
@@ -797,6 +837,7 @@ enum RequestCreditRefundState {
 #[component]
 pub fn RequestCreditRefundCard() -> impl IntoView {
     let (state, set_state) = signal(RequestCreditRefundState::Loading);
+    let i18n = use_i18n();
 
     // On mount: fetch the attendee's own flag state. If already requested,
     // mount in `AlreadyRequested` (mirrors the `held_as_credit` UX pattern —
@@ -826,33 +867,30 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
             <div>
                 {move || match state.get() {
                     RequestCreditRefundState::Loading => view! {
-                        <div class="ticket-action-title">"Checking your request status..."</div>
+                        <div class="ticket-action-title">{t!(i18n, ticket.action.return_checking)}</div>
                         <div class="ticket-action-desc ticket-action-signing-row">
                             <span class="spinner spinner-sm"></span>
                         </div>
                     }.into_any(),
 
                     RequestCreditRefundState::Ready => view! {
-                        <div class="ticket-action-title">"Request Return of Held Credit"</div>
+                        <div class="ticket-action-title">{t!(i18n, ticket.action.return_title)}</div>
                         <div class="ticket-action-desc">
-                            "Need your deposit back? We'll let the organizer know to process your \
-                             refund. They'll handle it through their usual refund channel."
+                            {t!(i18n, ticket.action.return_desc)}
                         </div>
                         <button
                             class="btn btn-outline btn-sm ticket-action-btn"
                             on:click=move |_| set_state.set(RequestCreditRefundState::Confirm)
                         >
                             <Icon icon=IconName::Check class="icon-sm" />
-                            " Request Return"
+                            " "{t!(i18n, ticket.action.return_cta)}
                         </button>
                     }.into_any(),
 
                     RequestCreditRefundState::Confirm => view! {
-                        <div class="ticket-action-title">"Confirm: Request Return"</div>
+                        <div class="ticket-action-title">{t!(i18n, ticket.action.return_confirm_title)}</div>
                         <div class="ticket-action-desc">
-                            "The organizer will be notified that you want your held credit refunded. \
-                             They'll process it through their standard refund channel — this just \
-                             signals your request, it does not trigger an automatic payout."
+                            {t!(i18n, ticket.action.return_confirm_desc)}
                         </div>
                         <button
                             class="btn btn-primary btn-sm ticket-action-btn"
@@ -875,52 +913,50 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
                             }
                         >
                             <Icon icon=IconName::Check class="icon-sm" />
-                            " Confirm Request"
+                            " "{t!(i18n, ticket.action.return_confirm_cta)}
                         </button>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel"
                             on:click=move |_| set_state.set(RequestCreditRefundState::Ready)
                         >
-                            "Cancel"
+                            {t!(i18n, ticket.action.cancel)}
                         </button>
                     }.into_any(),
 
                     RequestCreditRefundState::Requesting => view! {
-                        <div class="ticket-action-title">"Submitting Request..."</div>
+                        <div class="ticket-action-title">{t!(i18n, ticket.action.return_submitting)}</div>
                         <div class="ticket-action-desc ticket-action-signing-row">
                             <span class="spinner spinner-sm"></span>
-                            "Processing your request..."
+                            {t!(i18n, ticket.action.processing_request)}
                         </div>
                     }.into_any(),
 
                     RequestCreditRefundState::AlreadyRequested => view! {
                         <div class="ticket-action-title ticket-action-title-success">
-                            "Refund Requested ✓"
+                            {t!(i18n, ticket.action.return_requested)}
                         </div>
                         <div class="ticket-action-desc">
-                            "You've already requested a return of your held credit. The organizer \
-                             has been notified and will process it through their standard refund \
-                             channel."
+                            {t!(i18n, ticket.action.return_requested_desc)}
                         </div>
                     }.into_any(),
 
                     RequestCreditRefundState::Requested { message } => view! {
                         <div class="ticket-action-title ticket-action-title-success">
-                            "Request Submitted ✓"
+                            {t!(i18n, ticket.action.return_submitted)}
                         </div>
                         <div class="ticket-action-desc">{message.clone()}</div>
                     }.into_any(),
 
                     RequestCreditRefundState::Error(msg) => view! {
                         <div class="ticket-action-title ticket-action-title-danger">
-                            "Request Failed"
+                            {t!(i18n, ticket.action.return_failed)}
                         </div>
                         <div class="ticket-action-desc">{msg.clone()}</div>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel-xs"
                             on:click=move |_| set_state.set(RequestCreditRefundState::Ready)
                         >
-                            "Try Again"
+                            {t!(i18n, ticket.action.try_again)}
                         </button>
                     }.into_any(),
                 }}

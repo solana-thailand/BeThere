@@ -5,6 +5,7 @@ use wasm_bindgen::prelude::*;
 
 use super::view_data::TicketViewData;
 use crate::components::{ImageLightbox, LightboxSizing};
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Pulsing indicator that the backend is actively checking.
@@ -14,14 +15,24 @@ pub fn ReassuranceTicker(
     /// Deposit method — controls the messaging.
     method: Option<crate::api::DepositMethod>,
 ) -> impl IntoView {
-    let (received_label, verifying_label) = match method {
+    let i18n = use_i18n();
+    let received_label = move || match method {
         Some(crate::api::DepositMethod::Thb) | Some(crate::api::DepositMethod::CreditThb) => {
-            ("Slip received", "Verifying payment")
+            t_string!(i18n, ticket.qr.slip_received)
         }
         Some(crate::api::DepositMethod::Usdc) | Some(crate::api::DepositMethod::CreditUsdc) => {
-            ("Transaction sent", "Confirming on-chain")
+            t_string!(i18n, ticket.qr.tx_sent)
         }
-        _ => ("Received", "Verifying"),
+        None => t_string!(i18n, ticket.qr.received),
+    };
+    let verifying_label = move || match method {
+        Some(crate::api::DepositMethod::Thb) | Some(crate::api::DepositMethod::CreditThb) => {
+            t_string!(i18n, ticket.qr.verifying_payment)
+        }
+        Some(crate::api::DepositMethod::Usdc) | Some(crate::api::DepositMethod::CreditUsdc) => {
+            t_string!(i18n, ticket.qr.confirming_onchain)
+        }
+        None => t_string!(i18n, ticket.qr.verifying),
     };
 
     view! {
@@ -61,6 +72,7 @@ pub fn QrSection(
     let name = view_data.name.clone();
     let is_checked_in = view_data.is_checked_in;
     let deposit_method = view_data.deposit_info.as_ref().map(|d| d.method);
+    let i18n = use_i18n();
 
     if is_checked_in {
         // Collapsible QR after check-in
@@ -71,9 +83,9 @@ pub fn QrSection(
                     on:click=move |_| set_show_qr.set(!show_qr.get())
                 >
                     {move || if show_qr.get() {
-                        "▲ Hide QR Code"
+                        t_string!(i18n, ticket.qr.hide)
                     } else {
-                        "▼ Show QR Code"
+                        t_string!(i18n, ticket.qr.show)
                     }}
                 </button>
                 <Show
@@ -85,7 +97,7 @@ pub fn QrSection(
                             <div class="ticket-qr-wrapper">
                                 <img
                                     src=qr_image.clone().unwrap_or_default()
-                                    alt="Check-in QR Code"
+                                    alt=move || t_string!(i18n, ticket.qr.alt)
                                     class="ticket-qr-img"
                                 />
                             </div>
@@ -95,7 +107,7 @@ pub fn QrSection(
                                     on:click=move |_| set_fullscreen_qr.set(true)
                                 >
                                     <Icon icon=IconName::Expand class="icon-sm" />
-                                    " Full Screen"
+                                    " "{t!(i18n, ticket.qr.full_screen)}
                                 </button>
                             </div>
                         }.into_any()
@@ -115,7 +127,7 @@ pub fn QrSection(
                         <div class="ticket-qr-wrapper">
                             <img
                                 src=qr_image.clone().unwrap_or_default()
-                                alt="Check-in QR Code"
+                                alt=move || t_string!(i18n, ticket.qr.alt)
                                 class="ticket-qr-img"
                             />
                         </div>
@@ -125,7 +137,7 @@ pub fn QrSection(
                                 on:click=move |_| set_fullscreen_qr.set(true)
                             >
                                 <Icon icon=IconName::Expand class="icon-sm" />
-                                " Full Screen"
+                                " "{t!(i18n, ticket.qr.full_screen)}
                             </button>
                             <button
                                 class="btn btn-outline btn-sm"
@@ -144,7 +156,7 @@ pub fn QrSection(
                                 }
                             >
                                 <Icon icon=IconName::Save class="icon-sm" />
-                                " Save QR Code"
+                                " "{t!(i18n, ticket.qr.save)}
                             </button>
                         </div>
                     }.into_any()
@@ -172,10 +184,10 @@ pub fn QrSection(
                                 </svg>
                             </div>
                             <p class="ticket-qr-placeholder-text">
-                                "Your ticket is being prepared"
+                                {t!(i18n, ticket.qr.preparing)}
                             </p>
                             <p class="ticket-qr-placeholder-hint">
-                                "QR code will appear here once your deposit is verified"
+                                {t!(i18n, ticket.qr.preparing_hint)}
                             </p>
                             <ReassuranceTicker method=deposit_method />
                         </div>
@@ -204,15 +216,20 @@ pub fn FullscreenQrOverlay(
     // caption prop. With `#[prop(optional, into)]`, the call site passes the
     // inner `Signal<String>` (the macro wraps it in `Some`).
     let caption_signal: Signal<String> = get_name.into();
+    let i18n = use_i18n();
+    // `alt` and `hint` are plain strings on the lightbox, so rebuild it when
+    // the language switches.
     view! {
-        <ImageLightbox
-            visible=fullscreen_qr
-            set_visible=set_fullscreen_qr
-            src=get_qr_image
-            alt="QR Code".to_string()
-            caption=caption_signal
-            hint="Show this code to staff".to_string()
-            sizing=LightboxSizing::Square
-        />
+        {move || view! {
+            <ImageLightbox
+                visible=fullscreen_qr
+                set_visible=set_fullscreen_qr
+                src=get_qr_image
+                alt=t_string!(i18n, ticket.qr.lightbox_alt).to_string()
+                caption=caption_signal
+                hint=t_string!(i18n, ticket.qr.lightbox_hint).to_string()
+                sizing=LightboxSizing::Square
+            />
+        }}
     }
 }

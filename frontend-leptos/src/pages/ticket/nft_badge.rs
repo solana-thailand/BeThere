@@ -1,5 +1,6 @@
 //! NFT claimed badge — shows success card with asset ID and explorer link.
 
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 
@@ -22,11 +23,12 @@ pub fn NftClaimedBadge(
     };
     let asset_id_full = asset_id.clone();
     let orb_url = orb_link.clone().unwrap_or_default();
+    let i18n = use_i18n();
 
     view! {
         <div class="ticket-nft-claimed">
             <div class="ticket-nft-claimed-title">
-                "✓ NFT Badge Claimed!"
+                {t!(i18n, ticket.nft.claimed)}
             </div>
             {if !asset_id_short.is_empty() {
                 let full = asset_id_full.clone();
@@ -35,7 +37,7 @@ pub fn NftClaimedBadge(
                         <code>{asset_id_short.clone()}</code>
                         <button
                             class="ticket-nft-copy-btn"
-                            title="Copy Asset ID"
+                            title=move || t_string!(i18n, ticket.nft.copy_asset_id)
                             on:click=move |_| {
                                 let _ = on_copy(&full);
                             }
@@ -55,7 +57,7 @@ pub fn NftClaimedBadge(
                         rel="noopener noreferrer"
                         class="btn btn-primary ticket-nft-view-btn"
                     >
-                        "View NFT on Orb ↗"
+                        {t!(i18n, ticket.nft.view_on_orb)}
                     </a>
                 }.into_any()
             } else {

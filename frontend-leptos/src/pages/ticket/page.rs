@@ -16,6 +16,7 @@ use leptos_router::params::Params;
 use wasm_bindgen::prelude::*;
 
 use crate::api::{self, cache_invalidate};
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use crate::utils;
 
@@ -63,8 +64,20 @@ struct TicketParams {
 enum TicketState {
     Loading,
     Found(Box<api::AttendeeData>),
-    NotFound(String),
-    Error(String),
+    NotFound,
+    Error(TicketError),
+}
+
+/// Why the ticket could not be shown. Rendered in the reader's language; the
+/// server's own error text is passed through untranslated.
+#[derive(Clone)]
+enum TicketError {
+    /// The URL carries no attendee id.
+    InvalidLink,
+    /// The first load failed.
+    Load(String),
+    /// A manual refresh failed.
+    Refresh(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -128,17 +141,13 @@ pub fn Ticket() -> impl IntoView {
         let attendee_id = match params.get() {
             Ok(p) => p.attendee_id.unwrap_or_default(),
             Err(_) => {
-                set_state.set(TicketState::Error(
-                    "Invalid ticket link — missing attendee ID.".to_string(),
-                ));
+                set_state.set(TicketState::Error(TicketError::InvalidLink));
                 return;
             }
         };
 
         if attendee_id.is_empty() {
-            set_state.set(TicketState::Error(
-                "Invalid ticket link — missing attendee ID.".to_string(),
-            ));
+            set_state.set(TicketState::Error(TicketError::InvalidLink));
             return;
         }
 
@@ -168,11 +177,9 @@ pub fn Ticket() -> impl IntoView {
                     log::error!("[ticket] failed to load: {e}");
                     let msg = e.message.to_lowercase();
                     if msg.contains("not found") {
-                        set_state.set(TicketState::NotFound(
-                            "Attendee not found. Check your ticket link and try again.".to_string(),
-                        ));
+                        set_state.set(TicketState::NotFound);
                     } else {
-                        set_state.set(TicketState::Error(format!("Failed to load ticket: {e}")));
+                        set_state.set(TicketState::Error(TicketError::Load(e.to_string())));
                     }
                 }
             }
@@ -359,7 +366,7 @@ pub fn Ticket() -> impl IntoView {
                     }
                 }
                 Err(e) => {
-                    set_state.set(TicketState::Error(format!("Failed to refresh: {e}")));
+                    set_state.set(TicketState::Error(TicketError::Refresh(e.to_string())));
                 }
             }
         });
@@ -375,8 +382,9 @@ pub fn Ticket() -> impl IntoView {
         _ => String::new(),
     });
 
+    let i18n = use_i18n();
     view! {
-        <Title text="Your Ticket — BeThere" />
+        <Title text=move || t_string!(i18n, ticket.page_title) />
 
         <div class="ticket-page">
             <div class="ticket-page-inner">
@@ -385,7 +393,7 @@ pub fn Ticket() -> impl IntoView {
                     TicketState::Loading => view! {
                         <div class="page-loading">
                             <span class="spinner spinner-lg"></span>
-                            " Loading your ticket..."
+                            " "{t!(i18n, ticket.loading)}
                         </div>
                     }.into_any(),
 
@@ -415,24 +423,34 @@ pub fn Ticket() -> impl IntoView {
                         }
                     },
 
-                    TicketState::NotFound(msg) => view! {
+                    TicketState::NotFound => view! {
                         <div class="center-page">
                             <div class="container layout-col-center">
                                 <Icon icon=IconName::Search class="icon-xl" />
-                                <h1>"Ticket Not Found"</h1>
-                                <p class="subtitle">{msg}</p>
-                                <a href="/" class="btn btn-primary">"Go Home"</a>
+                                <h1>{t!(i18n, ticket.not_found_title)}</h1>
+                                <p class="subtitle">{t!(i18n, ticket.not_found_body)}</p>
+                                <a href="/" class="btn btn-primary">{t!(i18n, ticket.go_home)}</a>
                             </div>
                         </div>
                     }.into_any(),
 
-                    TicketState::Error(msg) => view! {
+                    TicketState::Error(err) => view! {
                         <div class="center-page">
                             <div class="container layout-col-center">
                                 <Icon icon=IconName::AlertTriangle class="icon-xl" />
-                                <h1>"Something Went Wrong"</h1>
-                                <p class="subtitle">{utils::escape_html(&msg)}</p>
-                                <a href="/" class="btn btn-primary">"Go Home"</a>
+                                <h1>{t!(i18n, ticket.error_title)}</h1>
+                                <p class="subtitle">{match err {
+                                    TicketError::InvalidLink => t!(i18n, ticket.invalid_link).into_any(),
+                                    TicketError::Load(e) => {
+                                        let error = utils::escape_html(&e);
+                                        t!(i18n, ticket.load_failed, error).into_any()
+                                    }
+                                    TicketError::Refresh(e) => {
+                                        let error = utils::escape_html(&e);
+                                        t!(i18n, ticket.refresh_failed, error).into_any()
+                                    }
+                                }}</p>
+                                <a href="/" class="btn btn-primary">{t!(i18n, ticket.go_home)}</a>
                             </div>
                         </div>
                     }.into_any(),
@@ -447,14 +465,14 @@ pub fn Ticket() -> impl IntoView {
                         {move || match &state.get() {
                             TicketState::Found(data) => match polling_tier(data) {
                                 Some(PollingTier::AwaitingDeposit) => {
-                                    "Checking for deposit verification...".into_any()
+                                    t!(i18n, ticket.poll_deposit).into_any()
                                 }
                                 Some(PollingTier::AwaitingCheckIn) => {
-                                    "Waiting for check-in at venue...".into_any()
+                                    t!(i18n, ticket.poll_checkin).into_any()
                                 }
                                 None => view! { <div></div> }.into_any(),
                             },
-                            _ => "Checking for updates...".into_any(),
+                            _ => t!(i18n, ticket.poll_updates).into_any(),
                         }}
                     </div>
                 </Show>
@@ -473,7 +491,7 @@ pub fn Ticket() -> impl IntoView {
                         on:click=move |_| on_manual_refresh()
                     >
                         <Icon icon=IconName::Refresh class="icon-sm" />
-                        " Refresh Status"
+                        " "{t!(i18n, ticket.refresh_status)}
                     </button>
                 </Show>
             </div>

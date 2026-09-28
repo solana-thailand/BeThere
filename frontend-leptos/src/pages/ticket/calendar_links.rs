@@ -1,5 +1,6 @@
 //! Organization calendar subscribe link.
 
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 
@@ -16,6 +17,7 @@ pub fn CalendarLinks(
     }
 
     let url = subscribe_url.clone();
+    let i18n = use_i18n();
 
     view! {
         <div class="ticket-calendar-links">
@@ -26,7 +28,7 @@ pub fn CalendarLinks(
                 class="ticket-calendar-link"
             >
                 <Icon icon=IconName::Calendar class="icon-sm" />
-                "📅 Our Event Calendar"
+                {t!(i18n, ticket.calendar)}
             </a>
         </div>
     }

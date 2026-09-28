@@ -2,6 +2,8 @@
 
 use leptos::prelude::*;
 
+use crate::i18n::{t, t_string, use_i18n};
+
 /// Extract YouTube embed URL from various YouTube link formats.
 ///
 /// Supports: watch?v=, youtu.be/, /live/, /shorts/, /embed/
@@ -64,10 +66,11 @@ pub fn VideoSection(
         "ticket-video-section"
     };
 
+    let i18n = use_i18n();
     view! {
         <div class=wrapper_class>
             <h3 class="ticket-video-heading">
-                "📺 Livestream / Recording"
+                {t!(i18n, ticket.video.heading)}
             </h3>
             {if has_embed {
                 let link = video_url.clone();
@@ -78,7 +81,7 @@ pub fn VideoSection(
                             class="ticket-video-iframe"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                             allowfullscreen=true
-                            title="Event video"
+                            title=move || t_string!(i18n, ticket.video.iframe_title)
                         />
                     </div>
                     <a
@@ -87,7 +90,7 @@ pub fn VideoSection(
                         rel="noopener noreferrer"
                         class="btn btn-outline btn-sm ticket-video-link"
                     >
-                        "Watch on YouTube →"
+                        {t!(i18n, ticket.video.watch_youtube)}
                     </a>
                 }.into_any()
             } else {
@@ -98,7 +101,7 @@ pub fn VideoSection(
                         rel="noopener noreferrer"
                         class="btn btn-outline btn-sm ticket-video-link"
                     >
-                        "Watch Video →"
+                        {t!(i18n, ticket.video.watch)}
                     </a>
                 }.into_any()
             }}

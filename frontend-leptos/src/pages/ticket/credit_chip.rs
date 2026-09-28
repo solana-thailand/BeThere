@@ -23,6 +23,7 @@ use leptos::prelude::*;
 
 use crate::api;
 use crate::api::{CreditBalanceResponse, LockedCredit};
+use crate::i18n::{Locale, t, td_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use crate::pages::ticket::action_cards::RequestCreditRefundCard;
 
@@ -60,16 +61,18 @@ pub fn locked_amount_label(locked: &LockedCredit) -> String {
     }
 }
 
-/// "500 THB is covering RTM #6" — one line per event still holding credit.
+/// "500 THB is covering RTM #6" — one line per event still holding credit,
+/// in `locale` (amount, connecting words, event: the same order in EN and TH).
 ///
 /// The event name comes from the D1 mirror and can be missing; the id is a
 /// slug, so it still reads as something the attendee can recognise.
-pub fn locked_credit_label(locked: &LockedCredit) -> String {
+pub fn locked_credit_label(locked: &LockedCredit, locale: Locale) -> String {
     let event = match locked.event_name.is_empty() {
         true => locked.event_id.as_str(),
         false => locked.event_name.as_str(),
     };
-    format!("{} is covering {event}", locked_amount_label(locked))
+    let covering = td_string!(locale, ticket.credit.covering);
+    format!("{} {covering} {event}", locked_amount_label(locked))
 }
 
 /// The chip markup for a loaded balance, or `None` when there is nothing to
@@ -84,16 +87,22 @@ fn chip_view(balance: &CreditBalanceResponse) -> Option<AnyView> {
     if label.is_none() && balance.locked.is_empty() {
         return None;
     }
-    let locked: Vec<String> = balance.locked.iter().map(locked_credit_label).collect();
+    let i18n = use_i18n();
+    let locale = i18n.get_locale();
+    let locked: Vec<String> = balance
+        .locked
+        .iter()
+        .map(|l| locked_credit_label(l, locale))
+        .collect();
     Some(
         view! {
             <div class="ticket-credit-chip">
                 <Icon icon=IconName::MoneyWings class="icon-sm" />
-                <span class="ticket-credit-chip-label">"Deposit Credit"</span>
+                <span class="ticket-credit-chip-label">{t!(i18n, ticket.credit.label)}</span>
                 {label.map(|text| view! {
                     <span class="ticket-credit-chip-value">{text}</span>
                     <span class="ticket-credit-chip-hint">
-                        "Auto-applied to your next registration"
+                        {t!(i18n, ticket.credit.auto_applied)}
                     </span>
                 })}
                 {(!locked.is_empty()).then(|| view! {
@@ -102,7 +111,7 @@ fn chip_view(balance: &CreditBalanceResponse) -> Option<AnyView> {
                             <li class="ticket-credit-chip-locked-item">
                                 {line}
                                 <span class="ticket-credit-chip-hint">
-                                    " — it returns when that event ends"
+                                    {t!(i18n, ticket.credit.returns_at_end)}
                                 </span>
                             </li>
                         }).collect::<Vec<_>>()}
@@ -174,6 +183,7 @@ pub fn CreditWallet() -> impl IntoView {
 mod tests {
     use super::{credit_balance_label, locked_amount_label, locked_credit_label};
     use crate::api::LockedCredit;
+    use crate::i18n::Locale;
 
     #[test]
     fn no_credit_renders_nothing() {
@@ -202,7 +212,10 @@ mod tests {
             amount: 500,
             event_end_ms: 0,
         };
-        assert_eq!(locked_credit_label(&locked), "500 THB is covering RTM #6");
+        assert_eq!(
+            locked_credit_label(&locked, Locale::en),
+            "500 THB is covering RTM #6"
+        );
     }
 
     #[test]
@@ -215,7 +228,10 @@ mod tests {
             amount: 500,
             ..Default::default()
         };
-        assert_eq!(locked_credit_label(&locked), "500 THB is covering rtm-6");
+        assert_eq!(
+            locked_credit_label(&locked, Locale::en),
+            "500 THB is covering rtm-6"
+        );
     }
 
     #[test]
