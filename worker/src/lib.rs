@@ -51,6 +51,8 @@ pub use durable_objects::EventDurableObject;
 pub use middleware::headers::SECURITY_HEADERS;
 // Public so `tests/public_cache_policy.rs` can drive the public-cache rule (.plans/028 W4).
 pub use middleware::cache::{CACHE_PRIVATE_NO_STORE, with_public_cache};
+// Public so `tests/edge_cache_policy.rs` can drive the edge-cache rules (.plans/028 W4).
+pub use middleware::edge_cache::{edge_cache_key, is_edge_storable};
 
 use std::sync::OnceLock;
 

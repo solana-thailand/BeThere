@@ -43,7 +43,14 @@ pub fn routes(state: AppState) -> Router<()> {
     // Cache-Control layers — applied per route group via sub-routers.
     // Public event list: 60s cache (changes infrequently)
     let public_events_list = Router::new()
-        .route("/public/events", get(public_event::list_public_events))
+        // Anonymous GETs also go through the 30s edge cache (.plans/028 W4).
+        .route(
+            "/public/events",
+            get(public_event::list_public_events).layer(middleware::from_fn_with_state(
+                state.clone(),
+                crate::middleware::edge_cache_layer,
+            )),
+        )
         // Past events feed (Plan 008 — Phase 2): completed events with a
         // published recap. Same 60s cache — recaps are author-published and
         // rarely change once live.
@@ -54,7 +61,13 @@ pub fn routes(state: AppState) -> Router<()> {
 
     // Public event detail: 120s cache (individual events rarely change)
     let public_events_detail = Router::new()
-        .route("/public/event/{slug}", get(public_event::get_public_event))
+        .route(
+            "/public/event/{slug}",
+            get(public_event::get_public_event).layer(middleware::from_fn_with_state(
+                state.clone(),
+                crate::middleware::edge_cache_layer,
+            )),
+        )
         // Public recap for a completed event (Plan 008 — Phase 2). Shares the
         // 120s cache — recaps are immutable once published; unpublishing is
         // rare and a short stale window is acceptable.
