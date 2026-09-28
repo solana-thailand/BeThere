@@ -114,6 +114,23 @@ reflex-site has no license, so its code is a pattern only.
 - [ ] Toolchain pin (`.plans/030` §3): declare `components` and `targets`.
 - [ ] Build stamp on `/api/health`: git sha, `BUILD_TAG`, and "stale" when
   built outside `deploy.sh`.
+  **Built on branch `feature/031-health-build-stamp` (`2bc919f0`, 2026-09-28,
+  session `event-checkin-82`), not merged** (RTM #6 hold).
+  - [x] `deploy.sh` exports `BETHERE_BUILD` as its existing provenance string
+    (`git:<sha>[+dirty]`, the same one the Version message carries), and
+    `/api/health` returns it as `build`. Any other build returns `"unstamped"`,
+    which covers the "stale" case.
+  - [x] Checked with `wrangler dev --local`: set → `"git:test-sha-1"`, unset →
+    `"unstamped"`. Cargo rebuilt the worker on each change (`option_env!` is
+    tracked), so no `build.rs` is needed.
+  - [x] Guard in `worker/tests/public_health_no_counts.rs`; a mutant on the
+    fallback string turns it red. Workspace clippy is clean, 103 binaries pass,
+    and the floor went up by 1.
+  - Not done: `BUILD_TAG`. It is a frontend constant, and the stamp's git sha
+    already identifies the tree it came from. Also not done: a
+    `post_deploy_smoke.sh` assertion on the stamp, because prod is unstamped
+    until the first deploy that carries this change.
+  - [ ] Merge after RTM #6; the first deploy then shows the stamp on prod.
 
 ### reflex, after 12 Oct (research only)
 
