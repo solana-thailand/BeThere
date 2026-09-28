@@ -15,6 +15,7 @@ use leptos_meta::Title;
 use leptos_router::components::A;
 
 use crate::api::{self, PastEventItem, PastEventsResponse};
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Coarse load state for the feed. Once we have any data we keep it on screen,
@@ -31,6 +32,7 @@ enum PastEventsLoadState {
 #[component]
 #[allow(non_snake_case)]
 pub fn PastEvents() -> impl IntoView {
+    let i18n = use_i18n();
     let (events, set_events) = signal(Vec::<PastEventItem>::new());
     let (load_state, set_load_state) = signal(PastEventsLoadState::Loading);
 
@@ -61,12 +63,12 @@ pub fn PastEvents() -> impl IntoView {
         move || matches!(load_state.get(), PastEventsLoadState::Loaded) && events.get().is_empty();
 
     view! {
-        <Title text="Past Events — BeThere" />
+        <Title text=move || t_string!(i18n, recap.past.page_title) />
         <div class="center-page">
             <div class="container layout-col-center">
                 // ---------- Header ----------
                 <div class="flex-row-gap events-flex-wrap-center" style="margin-bottom:2rem;width:100%;">
-                    <h1 style="margin:0;">"Past Events"</h1>
+                    <h1 style="margin:0;">{t!(i18n, recap.past.title)}</h1>
                     <span class="badge badge-info-xs">
                         {move || events.get().len().to_string()}
                     </span>
@@ -76,21 +78,21 @@ pub fn PastEvents() -> impl IntoView {
                 <Show when=move || is_loading() fallback=|| view! { <div></div> }>
                     <div class="page-loading">
                         <span class="spinner spinner-lg"></span>
-                        "Loading past events..."
+                        {t!(i18n, recap.past.loading)}
                     </div>
                 </Show>
 
                 // ---------- Hard failure ----------
                 <Show when=move || is_hard_failure() fallback=|| view! { <div></div> }>
                     <div class="card">
-                        <h2>"Failed to load"</h2>
+                        <h2>{t!(i18n, recap.past.failed)}</h2>
                         <p class="subtitle">
                             {move || match load_state.get() {
                                 PastEventsLoadState::Failed(msg) => msg,
                                 _ => String::new(),
                             }}
                         </p>
-                        <a href="/past-events" class="btn btn-primary">"Try again"</a>
+                        <a href="/past-events" class="btn btn-primary">{t!(i18n, recap.past.try_again)}</a>
                     </div>
                 </Show>
 
@@ -100,9 +102,9 @@ pub fn PastEvents() -> impl IntoView {
                         <span style="margin-bottom:1rem;opacity:0.6;">
                             <Icon icon=IconName::Calendar class="icon-2xl" />
                         </span>
-                        <h2 style="margin:0 0 0.5rem;">"No past events yet"</h2>
+                        <h2 style="margin:0 0 0.5rem;">{t!(i18n, recap.past.empty_title)}</h2>
                         <p class="subtitle" style="margin:0;">
-                            "Recaps from completed events will appear here once published."
+                            {t!(i18n, recap.past.empty_body)}
                         </p>
                     </div>
                 </Show>
@@ -122,7 +124,7 @@ pub fn PastEvents() -> impl IntoView {
 
                 // ---------- Back to landing ----------
                 <div class="flex-row-gap" style="margin-top:2rem;">
-                    <A href="/" attr:class="btn btn-outline btn-sm">"← Back to home"</A>
+                    <A href="/" attr:class="btn btn-outline btn-sm">{t!(i18n, recap.past.back_home)}</A>
                 </div>
             </div>
         </div>
@@ -133,12 +135,15 @@ pub fn PastEvents() -> impl IntoView {
 /// `poster_url`, falling back to the NFT badge image, then to a Ticket icon
 /// empty-state — mirroring the dedicated event-page hero logic.
 fn past_event_card(ev: PastEventItem) -> impl IntoView {
+    let i18n = use_i18n();
     let image_url = if !ev.poster_url.is_empty() {
         ev.poster_url.clone()
     } else {
         ev.nft_image_url.clone()
     };
-    let date_str = format_event_date(ev.event_start_ms);
+    // A closure so the date follows a language switch.
+    let start_ms = ev.event_start_ms;
+    let date_str = move || format_event_date(start_ms);
     let slug = ev.slug.clone();
 
     view! {
@@ -193,7 +198,7 @@ fn past_event_card(ev: PastEventItem) -> impl IntoView {
 
                     // CTA.
                     <div class="event-card-cta">
-                        <span class="btn btn-outline btn-sm">"Read recap →"</span>
+                        <span class="btn btn-outline btn-sm">{t!(i18n, recap.past.read_recap)}</span>
                     </div>
                 </div>
             </div>
@@ -201,11 +206,12 @@ fn past_event_card(ev: PastEventItem) -> impl IntoView {
     }
 }
 
-/// Format a millisecond timestamp as a human-readable date string.
+/// Format a millisecond timestamp as a date in the reader's language.
 ///
-/// Mirrors `crate::pages::public_event::types::format_event_date` but kept
-/// local so this page has no cross-module coupling. Falls back to the raw
-/// timestamp when the JS `Date` can't parse the value (e.g. 0 / NaN).
+/// The shared `utils::format_event_day` (Intl, `locale::current_date_tag()`),
+/// so it must be called inside a reactive closure to follow a language
+/// switch. Falls back to the raw timestamp when the JS `Date` can't parse the
+/// value (NaN); empty for an unset (non-positive) one.
 fn format_event_date(ms: i64) -> String {
     if ms <= 0 {
         return String::new();
@@ -214,8 +220,5 @@ fn format_event_date(ms: i64) -> String {
     if date.get_time().is_nan() {
         return ms.to_string();
     }
-    let year = date.get_full_year();
-    let month = date.get_month() + 1; // 0-indexed
-    let day = date.get_date();
-    format!("{year:04}-{month:02}-{day:02}")
+    crate::utils::format_event_day(ms)
 }

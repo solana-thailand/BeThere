@@ -24,6 +24,7 @@ use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
 use crate::api::{self, PublicRecapData};
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Route parameters for `/events/:slug/recap`.
@@ -46,6 +47,7 @@ enum RecapLoadState {
 #[component]
 #[allow(non_snake_case)]
 pub fn EventRecap() -> impl IntoView {
+    let i18n = use_i18n();
     let params = use_params::<EventRecapParams>();
 
     let slug_val: String = match params.get() {
@@ -94,7 +96,7 @@ pub fn EventRecap() -> impl IntoView {
         move || matches!(load_state.get(), RecapLoadState::Failed(_)) && data.get().is_none();
 
     view! {
-        <Title text="Event Recap — BeThere" />
+        <Title text=move || t_string!(i18n, recap.page_title) />
         <Meta name="robots" content="index,follow" />
         <div class="center-page">
             <div class="container layout-col-center">
@@ -102,7 +104,7 @@ pub fn EventRecap() -> impl IntoView {
                 <Show when=move || is_loading() fallback=|| view! { <div></div> }>
                     <div class="page-loading">
                         <span class="spinner spinner-lg"></span>
-                        "Loading recap..."
+                        {t!(i18n, recap.loading)}
                     </div>
                 </Show>
 
@@ -112,25 +114,25 @@ pub fn EventRecap() -> impl IntoView {
                         <span style="margin-bottom:1rem;opacity:0.6;">
                             <Icon icon=IconName::Calendar class="icon-2xl" />
                         </span>
-                        <h2 style="margin:0 0 0.5rem;">"No recap available"</h2>
+                        <h2 style="margin:0 0 0.5rem;">{t!(i18n, recap.none_title)}</h2>
                         <p class="subtitle" style="margin:0 0 1rem;text-align:center;">
-                            "This event hasn't published a recap yet — check back later."
+                            {t!(i18n, recap.none_body)}
                         </p>
-                        <A href="/past-events" attr:class="btn btn-outline btn-sm">"← All past events"</A>
+                        <A href="/past-events" attr:class="btn btn-outline btn-sm">{t!(i18n, recap.all_past)}</A>
                     </div>
                 </Show>
 
                 // ---------- Hard failure ----------
                 <Show when=move || is_hard_failure() fallback=|| view! { <div></div> }>
                     <div class="card">
-                        <h2>"Failed to load recap"</h2>
+                        <h2>{t!(i18n, recap.failed_title)}</h2>
                         <p class="subtitle">
                             {move || match load_state.get() {
                                 RecapLoadState::Failed(msg) => msg,
                                 _ => String::new(),
                             }}
                         </p>
-                        <A href="/past-events" attr:class="btn btn-primary">"Back to past events"</A>
+                        <A href="/past-events" attr:class="btn btn-primary">{t!(i18n, recap.back_past)}</A>
                     </div>
                 </Show>
 
@@ -148,6 +150,7 @@ pub fn EventRecap() -> impl IntoView {
 
 /// Render the full recap view from the loaded payload.
 fn render_recap(payload: PublicRecapData) -> impl IntoView {
+    let i18n = use_i18n();
     let event = payload.event.clone();
     let image_url = if !payload.recap_image_url.is_empty() {
         payload.recap_image_url.clone()
@@ -156,26 +159,20 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
     } else {
         event.nft_image_url.clone()
     };
-    let date_str = format_event_date_range(event.event_start_ms, event.event_end_ms);
+    let (start_ms, end_ms) = (event.event_start_ms, event.event_end_ms);
     let funnel = payload.funnel.clone();
     let markdown = payload.recap_markdown.clone();
     let video_url = event.video_url.clone();
     let learning_resources = event.learning_resources.clone();
-    let published_str = payload
-        .recap_published_at
-        .as_deref()
-        .map(format_iso)
-        .unwrap_or_default();
-    let frozen_str = payload
-        .frozen_at
-        .as_deref()
-        .map(format_iso)
-        .unwrap_or_default();
+    // Dates are formatted inside closures below so they follow a language
+    // switch.
+    let published_at = payload.recap_published_at.clone().unwrap_or_default();
+    let frozen_at = payload.frozen_at.clone().unwrap_or_default();
 
     view! {
         // ── Back link ──
         <div class="flex-row-gap" style="margin-bottom:1rem;width:100%;justify-content:flex-start;">
-            <A href="/past-events" attr:class="btn btn-outline btn-sm">"← All past events"</A>
+            <A href="/past-events" attr:class="btn btn-outline btn-sm">{t!(i18n, recap.all_past)}</A>
         </div>
 
         // ── Hero image ──
@@ -212,7 +209,7 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
 
             <div class="flex-row-gap events-flex-wrap-center" style="margin-bottom:0.5rem;">
                 {move || {
-                    let date = date_str.clone();
+                    let date = format_event_date_range(start_ms, end_ms);
                     if date.is_empty() {
                         view! { <div></div> }.into_any()
                     } else {
@@ -241,36 +238,41 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
                 }}
                 <span class="badge badge-success-xs">
                     <Icon icon=IconName::Check class="icon-sm" />
-                    {format!(" Published {published_str}")}
+                    " "
+                    {t!(i18n, recap.published, date = move || format_iso(&published_at))}
                 </span>
             </div>
         </div>
 
         // ── Headline funnel ──
         <div class="card" style="width:100%;margin-bottom:1.5rem;">
-            <h2 style="margin:0 0 1rem;font-size:1.125rem;">"By the numbers"</h2>
+            <h2 style="margin:0 0 1rem;font-size:1.125rem;">{t!(i18n, recap.by_numbers)}</h2>
             <div class="events-grid events-grid-3">
                 <div class="stat-tile">
                     <div class="stat-tile-value">{funnel.registered_count}</div>
-                    <div class="stat-tile-label">"Registered"</div>
+                    <div class="stat-tile-label">{t!(i18n, recap.registered)}</div>
                 </div>
                 <div class="stat-tile">
                     <div class="stat-tile-value">{funnel.checked_in_count}</div>
-                    <div class="stat-tile-label">"Checked in"</div>
+                    <div class="stat-tile-label">{t!(i18n, recap.checked_in)}</div>
                 </div>
                 <div class="stat-tile">
                     <div class="stat-tile-value">{funnel.claimed_count}</div>
-                    <div class="stat-tile-label">"Badges claimed"</div>
+                    <div class="stat-tile-label">{t!(i18n, recap.claimed)}</div>
                 </div>
             </div>
             {move || {
-                if frozen_str.is_empty() {
+                if frozen_at.is_empty() {
                     view! { <div></div> }.into_any()
                 } else {
                     view! {
                         <div class="hint-info" style="margin-top:0.75rem;">
                             <Icon icon=IconName::Lock class="icon-sm" />
-                            {format!(" Snapshot frozen {frozen_str} — later activity isn't reflected.")}
+                            " "
+                            {
+                                let frozen_at = frozen_at.clone();
+                                t!(i18n, recap.frozen, date = move || format_iso(&frozen_at))
+                            }
                         </div>
                     }
                         .into_any()
@@ -330,15 +332,15 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
                             <Icon icon=IconName::Lightbulb class="icon-lg" />
                         </span>
                         <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">
-                            "Missed this event?"
+                            {t!(i18n, recap.missed_title)}
                         </h2>
                         <p class="subtitle" style="margin:0 0 1rem;">
-                            "Join the community — we'll notify you about the next one."
+                            {t!(i18n, recap.missed_body)}
                         </p>
                         <A href=format!("/events/{slug}/post-event-register")
                             attr:class="btn btn-primary"
                         >
-                            "Join the community"
+                            {t!(i18n, recap.join_cta)}
                         </A>
                     </div>
                 }
@@ -353,20 +355,26 @@ fn render_learning_resources(links: Vec<crate::api::CommunityLink>) -> AnyView {
         return ().into_any();
     }
 
+    let i18n = use_i18n();
     let items = links
         .into_iter()
         .enumerate()
         .map(|(index, link)| {
-            let kind = match link.platform.as_str() {
-                "slides" => "Slides",
-                "source" => "Source code",
-                "download" => "Download",
-                _ => "Resource",
-            };
-            let display_label = if link.label.trim().is_empty() {
-                kind.to_string()
-            } else {
-                format!("{} · {kind}", link.label)
+            // `platform` is a stored code; only the label is translated. The
+            // organizer's own label is shown as written.
+            let platform = link.platform.clone();
+            let label = link.label.clone();
+            let display_label = move || {
+                let kind = match platform.as_str() {
+                    "slides" => t_string!(i18n, recap.kind.slides),
+                    "source" => t_string!(i18n, recap.kind.source),
+                    "download" => t_string!(i18n, recap.kind.download),
+                    _ => t_string!(i18n, recap.kind.resource),
+                };
+                match label.trim().is_empty() {
+                    true => kind.to_string(),
+                    false => format!("{label} · {kind}"),
+                }
             };
             view! {
                 <a
@@ -385,9 +393,9 @@ fn render_learning_resources(links: Vec<crate::api::CommunityLink>) -> AnyView {
 
     view! {
         <div class="card" style="width:100%;margin-bottom:1.5rem;">
-            <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">"Learning resources"</h2>
+            <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">{t!(i18n, recap.resources_title)}</h2>
             <p class="subtitle" style="margin:0 0 1rem;">
-                "Continue with the organizer's slides, code, and supporting materials."
+                {t!(i18n, recap.resources_body)}
             </p>
             <div class="pe-community-links-list">{items}</div>
         </div>
@@ -399,8 +407,9 @@ fn render_learning_resources(links: Vec<crate::api::CommunityLink>) -> AnyView {
 // Local formatting helpers
 // ---------------------------------------------------------------------------
 
-/// Format a millisecond timestamp as `YYYY-MM-DD`. Returns an empty string
-/// when the timestamp is non-positive (unknown / unset).
+/// Format a start/end pair as a date range in the reader's language. Returns
+/// an empty string when the start is non-positive (unknown / unset). Call it
+/// inside a reactive closure so it follows a language switch.
 fn format_event_date_range(start_ms: i64, end_ms: i64) -> String {
     let start = format_event_date(start_ms);
     if start.is_empty() {
@@ -414,7 +423,8 @@ fn format_event_date_range(start_ms: i64, end_ms: i64) -> String {
     format!("{start} – {end}")
 }
 
-/// Format a millisecond timestamp as `YYYY-MM-DD`.
+/// Format a millisecond timestamp as a date in the reader's language
+/// (`utils::format_event_day`, `locale::current_date_tag()`).
 fn format_event_date(ms: i64) -> String {
     if ms <= 0 {
         return String::new();
@@ -423,21 +433,15 @@ fn format_event_date(ms: i64) -> String {
     if date.get_time().is_nan() {
         return ms.to_string();
     }
-    let year = date.get_full_year();
-    let month = date.get_month() + 1; // 0-indexed
-    let day = date.get_date();
-    format!("{year:04}-{month:02}-{day:02}")
+    crate::utils::format_event_day(ms)
 }
 
-/// Format an ISO 8601 timestamp for display. Mirrors the pattern in
-/// `event_summary.rs::format_iso` (no `chrono` dependency).
+/// Format an ISO 8601 timestamp as a date in the reader's language (no
+/// `chrono` dependency). An unparseable value is shown as sent.
 fn format_iso(iso: &str) -> String {
     let parsed = js_sys::Date::new(&wasm_bindgen::JsValue::from_str(iso));
-    if parsed.get_time().is_nan() {
-        return iso.to_string();
+    match parsed.get_time() {
+        ms if ms.is_nan() => iso.to_string(),
+        ms => crate::utils::format_event_day(ms as i64),
     }
-    let year = parsed.get_full_year();
-    let month = parsed.get_month() + 1; // 0-indexed
-    let day = parsed.get_date();
-    format!("{year:04}-{month:02}-{day:02}")
 }
