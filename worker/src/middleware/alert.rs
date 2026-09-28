@@ -42,6 +42,8 @@ pub async fn slack_alert_layer(
 ) -> Response {
     let method = req.method().as_str().to_string();
     let path = req.uri().path().to_string();
+    // What Slack may see: route words only, identifiers as `{id}` (.issues/159).
+    let shown_path = crate::alert_path::alert_path(&path);
     let had_credentials = crate::auth::extract_token_from_headers(req.headers()).is_some();
 
     let response = next.run(req).await;
@@ -59,10 +61,10 @@ pub async fn slack_alert_layer(
             "security spike detected"
         );
         let webhook = state.config.slack_webhook_url.clone();
-        // Path only: never the IP, token or query string (PII / secrets).
+        // Redacted path only: never the IP, a token, an id or the query string.
         let text = format!(
             "⚠️ *BeThere security spike*: {count}× {label} within {window}s on one isolate \
-             (edge-wide total is at least this). Latest: `{method} {path}`. \
+             (edge-wide total is at least this). Latest: `{method} {shown_path}`. \
              Next alert for this signal in ≥{cooldown} min.",
             label = signal.label(),
             window = rule.window_ms / 1000,
@@ -86,7 +88,7 @@ pub async fn slack_alert_layer(
             .to_string();
         let webhook = state.config.slack_webhook_url.clone();
         let text = format!(
-            "🚨 *BeThere server error* `{code}`\n`{method} {path}`\ncorrelation_id: `{correlation_id}`"
+            "🚨 *BeThere server error* `{code}`\n`{method} {shown_path}`\ncorrelation_id: `{correlation_id}`"
         );
         // Fire-and-forget: detached from the response so a slow/failed Slack call
         // never affects the user. Requires the worker ctx (present during a real

@@ -1,6 +1,6 @@
 # 159: Slack alerts carry the raw request path
 
-**Status:** open (2026-09-28). Found while writing `docs/pdpa_ropa.md` (§16); re-checked in source by session `event-checkin-af`.
+**Status:** fixed on develop 2026-09-28 (session `event-checkin-af`); not deployed to prod. Found while writing `docs/pdpa_ropa.md` (§16).
 
 ## What happens
 
@@ -19,3 +19,11 @@ Send the matched route template (e.g. `/api/claim/{token}`) or the redacted
 path, not the raw one, and fingerprint the email in the test alert
 (`state.log_fingerprint`). Add a guard test in `worker/tests/` that the alert
 text is built from the template.
+
+## Fix (on develop)
+
+`worker/src/alert_path.rs::alert_path` keeps route words (short, lowercase,
+`-`/`_`) and turns every other segment into `{id}`. Both the 5xx and the spike
+alert format it; `classify` still sees the real path. The test alert names the
+requester by `state.log_fingerprint`. `worker/tests/alert_path.rs` pins both
+(formatting the raw `{path}` again fails it).

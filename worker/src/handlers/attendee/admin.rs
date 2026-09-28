@@ -99,7 +99,9 @@ pub async fn test_alert(
         })));
     }
 
-    let text = format!("✅ BeThere test alert — requested by {}", claims.email);
+    // A fingerprint, not the email: the alert leaves for Slack (.issues/159).
+    let requester = state.log_fingerprint(&claims.email);
+    let text = format!("✅ BeThere test alert — requested by {requester}");
     match crate::middleware::alert::post_slack(&webhook, &text).await {
         Ok(()) => Ok(ApiOk::new(json!({ "sent": true }))),
         Err(e) => Ok(ApiOk::new(json!({ "sent": false, "error": e }))),
