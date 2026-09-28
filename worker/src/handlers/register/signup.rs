@@ -390,14 +390,11 @@ pub async fn register_attendee(
         // event's organization_id so Org A's credit can't cover Org B's deposit.
         if let Some(db) = state.d1.as_deref() {
             let org = &config.organization_id;
-            let credit_thb = crate::db::credit_ledger::balance(db, &email, org, "thb")
+            let credit = crate::db::credit_ledger::balances(db, &email, org)
                 .await
-                .unwrap_or(0)
-                .max(0) as u64;
-            let credit_usdc = crate::db::credit_ledger::balance(db, &email, org, "usdc")
-                .await
-                .unwrap_or(0)
-                .max(0) as u64;
+                .unwrap_or_default();
+            let credit_thb = credit.thb.max(0) as u64;
+            let credit_usdc = credit.usdc.max(0) as u64;
             let required_thb = config.deposit_amount_thb;
             let required_usdc = config.deposit_amount_usdc;
             if required_thb > 0 && credit_thb >= required_thb {

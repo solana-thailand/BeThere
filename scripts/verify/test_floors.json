@@ -62,7 +62,7 @@
     "comp_emails_guards tests/comp_emails_guards.rs": 5,
     "comp_reason_guard tests/comp_reason_guard.rs": 3,
     "credit_ledger_guards tests/credit_ledger_guards.rs": 16,
-    "credit_release_and_staff_comp tests/credit_release_and_staff_comp.rs": 6,
+    "credit_release_and_staff_comp tests/credit_release_and_staff_comp.rs": 7,
     "d1_int_bind_exactness tests/d1_int_bind_exactness.rs": 4,
     "d1_sync_warning tests/d1_sync_warning.rs": 4,
     "dashboard_event_read tests/dashboard_event_read.rs": 2,

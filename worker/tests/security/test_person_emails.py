@@ -119,7 +119,7 @@ UNLINK_MEMBER_SQL = const_sql("UNLINK_MEMBER_SQL")
 UNLINK_SQL = concat_after("db/person.rs", "const UNLINK_SQL: &str = ")
 UNLINK_DROP_SINGLETON_SQL = const_sql("UNLINK_DROP_SINGLETON_SQL")
 UNLINK_PROMOTE_SQL = const_sql("UNLINK_PROMOTE_SQL")
-BALANCE_SQL = concat_after("db/credit_ledger.rs", "pub async fn balance(")
+BALANCE_SQL = concat_after("db/credit_ledger.rs", "pub async fn balances(")
 POSITIVE_SQL = concat_after("db/credit_ledger.rs", "pub async fn positive_balances(")
 TRY_SPEND_SQL = concat_after("db/credit_ledger.rs", "pub async fn try_spend(")
 THB_BALANCES_SQL = plain_after(
@@ -212,7 +212,8 @@ class CreditFixture(unittest.TestCase):
         )
 
     def balance(self, email):
-        return self.db.execute(BALANCE_SQL, (email, "", "thb")).fetchone()["bal"]
+        rows = self.db.execute(BALANCE_SQL, (email, "")).fetchall()
+        return next((r["bal"] for r in rows if r["currency"] == "thb"), 0)
 
     def person_of(self, email):
         row = self.db.execute(
