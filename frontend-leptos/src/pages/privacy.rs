@@ -15,7 +15,7 @@ pub fn Privacy() -> impl IntoView {
                         <Icon icon=IconName::Lock class="icon-md" />" Privacy Policy"
                     </h1>
                     <p class="pe-detail-secondary" style="margin-bottom: 1.5rem;">
-                        "Last updated: June 2026"
+                        "Last updated: September 2026"
                     </p>
 
                     // Data Controller
@@ -74,7 +74,7 @@ pub fn Privacy() -> impl IntoView {
                     // Photo/Media
                     <h2 class="pe-section-title" style="font-size: 1.1rem; margin-top: 1.25rem;">"6. Photo & Media Consent"</h2>
                     <p class="pe-detail-secondary">
-                        "Some events may photograph or record attendees. When this applies, a separate photo consent checkbox will appear during registration. You may decline photo consent without affecting your registration."
+                        "Some events may photograph or record attendees. The consent checkbox you tick when registering includes consent to this, and an event can make it a condition of registering. If you do not want to appear in photos, tell the event staff at check-in."
                     </p>
 
                     // Data Sharing
@@ -83,18 +83,22 @@ pub fn Privacy() -> impl IntoView {
                         "Your data is shared with:"
                     </p>
                     <ul class="pe-detail-secondary" style="padding-left: 1.5rem; list-style: disc;">
-                        <li>"Event organizers (via Google Sheets) — for event management"</li>
-                        <li>"Google (Sheets storage, OAuth authentication)"</li>
-                        <li>"Solana RPC providers (Helius) — for blockchain transactions"</li>
+                        <li>"Event organizers and their staff (the event's Google Sheet and the admin pages) — for event management"</li>
+                        <li>"Cloudflare — hosting, the database and file storage, and page-view analytics"</li>
+                        <li>"Google — sign-in (OAuth) and Google Sheets storage"</li>
+                        <li>"Helius (Solana RPC) — wallet addresses and transactions"</li>
+                        <li>"Crossmint — your wallet address, to mint your NFT badge (no name or email)"</li>
+                        <li>"GitHub or Telegram — only if you link that account"</li>
+                        <li>"Slack — our internal error alerts"</li>
                     </ul>
                     <p class="pe-detail-secondary">
-                        "We do not sell your personal data to third parties."
+                        "These providers are based outside Thailand, so your data may be processed abroad. Your browser also loads fonts from Google Fonts and a Solana library from public CDNs (unpkg, jsDelivr). We do not sell your personal data to third parties."
                     </p>
 
                     // Data Retention
                     <h2 class="pe-section-title" style="font-size: 1.1rem; margin-top: 1.25rem;">"8. Data Retention"</h2>
                     <p class="pe-detail-secondary">
-                        "Personal data in Google Sheets is retained until event conclusion plus 90 days for refund processing and dispute resolution. After this period, PII fields (name, email, phone, contact) are cleared. On-chain data cannot be deleted. Cloudflare logs auto-expire after 72 hours."
+                        "Deposit records are deleted 90 days after the event's refund deadline; the deposit amounts are kept for accounting. Quiz and adventure progress is deleted 30 days after the event. Other personal data, such as your registration, contact details, bank details for refunds, the event's Google Sheet and uploaded slip images, has no fixed deletion date yet: it is kept until you ask us to delete it (see Your Rights). On-chain data cannot be deleted."
                     </p>
 
                     // Your Rights
