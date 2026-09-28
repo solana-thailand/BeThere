@@ -54,12 +54,7 @@ pub async fn append_attendee_row(
     let row_len = mapping.total_columns.max(31);
     let mut row = vec![String::new(); row_len];
 
-    let set = |row: &mut Vec<String>, key: CK, val: String| {
-        let idx = mapping.get_or_default(key);
-        if idx < row.len() {
-            row[idx] = val;
-        }
-    };
+    let set = |row: &mut Vec<String>, key: CK, val: String| mapping.put(row, key, val);
 
     set(&mut row, CK::ApiId, api_id.to_string());
     set(&mut row, CK::Name, name.to_string());
@@ -149,12 +144,7 @@ pub async fn append_walkin_row(
     let row_len = mapping.total_columns.max(28);
     let mut row = vec![String::new(); row_len];
 
-    let set = |row: &mut Vec<String>, key: CK, val: String| {
-        let idx = mapping.get_or_default(key);
-        if idx < row.len() {
-            row[idx] = val;
-        }
-    };
+    let set = |row: &mut Vec<String>, key: CK, val: String| mapping.put(row, key, val);
 
     set(&mut row, CK::ApiId, api_id.to_string());
     set(&mut row, CK::Name, name.to_string());
@@ -304,12 +294,17 @@ pub async fn update_participation_type(
     let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
-    let col = mapping.column_letter(CK::ParticipationType);
 
-    let data = vec![ValueRange {
-        range: format!("{sheet_ref}!{col}{row_index}"),
-        values: vec![vec![new_value.to_string()]],
-    }];
+    let data: Vec<ValueRange> = [a1::cell(
+        &sheet_ref,
+        mapping,
+        CK::ParticipationType,
+        row_index,
+        new_value.to_string(),
+    )]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let url =
         format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");

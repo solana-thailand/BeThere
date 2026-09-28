@@ -36,6 +36,8 @@ pub struct BackfillPlan {
     pub row_missing: usize,
     /// The api_id is in column A more than once.
     pub row_duplicated: usize,
+    /// The sheet has no column for the value (`ColumnMapping::resolve`).
+    pub column_missing: usize,
 }
 
 /// `sheet` is the tab read from `A1`, header row first, rows as returned by
@@ -58,7 +60,10 @@ pub fn plan_backfill(
                 continue;
             }
         };
-        let column = mapping.get_or_default(want.column);
+        let Some(column) = mapping.resolve(want.column) else {
+            plan.column_missing += 1;
+            continue;
+        };
         let current = sheet
             .get(row - 1)
             .and_then(|cells| cells.get(column))

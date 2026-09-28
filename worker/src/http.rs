@@ -238,6 +238,10 @@ pub async fn batch_update_sheet(
     body: &BatchUpdateRequest,
     access_token: &str,
 ) -> Result<(), String> {
+    // Every cell was skipped (the sheet has none of the columns): nothing to send.
+    if body.data.is_empty() {
+        return Ok(());
+    }
     // Google Sheets batchUpdate returns JSON but we just need success/failure
     let json_body = serde_json::to_string(body)
         .map_err(|e| format!("failed to serialize batch update: {e}"))?;

@@ -446,15 +446,15 @@ fn test_column_mapping_partial_headers() {
 }
 
 #[test]
-fn test_column_mapping_get_or_default_fallback() {
+fn test_column_mapping_resolve_trusts_a_recognised_header_row() {
     // Mapping with only 2 columns mapped
     let headers: Vec<String> = vec!["api_id".into(), "email".into()];
     let mapping = ColumnMapping::from_headers(&headers);
-    // Unmapped keys fall back to hardcoded
-    assert_eq!(mapping.get_or_default(ColumnKey::ApiId), 0);
-    assert_eq!(mapping.get_or_default(ColumnKey::Email), 1);
-    assert_eq!(mapping.get_or_default(ColumnKey::CheckedInAt), 17); // hardcoded fallback
-    assert_eq!(mapping.get_or_default(ColumnKey::ParticipationType), 8); // hardcoded fallback
+    assert_eq!(mapping.resolve(ColumnKey::ApiId), Some(0));
+    assert_eq!(mapping.resolve(ColumnKey::Email), Some(1));
+    // No header, no column: never the standard-layout slot (.issues/167)
+    assert_eq!(mapping.resolve(ColumnKey::CheckedInAt), None);
+    assert_eq!(mapping.resolve(ColumnKey::ParticipationType), None);
 }
 
 #[test]
@@ -471,11 +471,28 @@ fn test_index_to_column_letter() {
 #[test]
 fn test_column_letter_via_mapping() {
     let mapping = ColumnMapping::hardcoded();
-    assert_eq!(mapping.column_letter(ColumnKey::ApiId), "A");
-    assert_eq!(mapping.column_letter(ColumnKey::ParticipationType), "I");
-    assert_eq!(mapping.column_letter(ColumnKey::CheckedInAt), "R");
-    assert_eq!(mapping.column_letter(ColumnKey::SolanaAddress), "T");
-    assert_eq!(mapping.column_letter(ColumnKey::ClaimToken), "V");
+    assert_eq!(
+        mapping.column_letter(ColumnKey::ApiId).as_deref(),
+        Some("A")
+    );
+    assert_eq!(
+        mapping
+            .column_letter(ColumnKey::ParticipationType)
+            .as_deref(),
+        Some("I")
+    );
+    assert_eq!(
+        mapping.column_letter(ColumnKey::CheckedInAt).as_deref(),
+        Some("R")
+    );
+    assert_eq!(
+        mapping.column_letter(ColumnKey::SolanaAddress).as_deref(),
+        Some("T")
+    );
+    assert_eq!(
+        mapping.column_letter(ColumnKey::ClaimToken).as_deref(),
+        Some("V")
+    );
 }
 
 #[test]
@@ -636,10 +653,10 @@ fn blank_and_whitespace_only_cells_become_none_not_some_empty() {
 
     for blank in ["", " ", "   ", "\t", " \t "] {
         let mut row: Vec<String> = vec!["".into(); 24];
-        row[mapping.get_or_default(ColumnKey::ApiId)] = "att-1".into();
-        row[mapping.get_or_default(ColumnKey::ApprovalStatus)] = "approved".into();
-        row[mapping.get_or_default(ColumnKey::CheckedInAt)] = blank.into();
-        row[mapping.get_or_default(ColumnKey::ClaimedAt)] = blank.into();
+        row[mapping.resolve(ColumnKey::ApiId).unwrap()] = "att-1".into();
+        row[mapping.resolve(ColumnKey::ApprovalStatus).unwrap()] = "approved".into();
+        row[mapping.resolve(ColumnKey::CheckedInAt).unwrap()] = blank.into();
+        row[mapping.resolve(ColumnKey::ClaimedAt).unwrap()] = blank.into();
 
         // `from_sheet_values` indexes `values[row_index - 2]`, so row 2 (the
         // first data row) is `values[0]` — the slice excludes the header.
@@ -665,9 +682,9 @@ fn blank_and_whitespace_only_cells_become_none_not_some_empty() {
 fn a_real_timestamp_survives_parsing() {
     let mapping = ColumnMapping::hardcoded();
     let mut row: Vec<String> = vec!["".into(); 24];
-    row[mapping.get_or_default(ColumnKey::ApiId)] = "att-1".into();
-    row[mapping.get_or_default(ColumnKey::ApprovalStatus)] = "approved".into();
-    row[mapping.get_or_default(ColumnKey::CheckedInAt)] = "  2026-06-01T10:00:00Z  ".into();
+    row[mapping.resolve(ColumnKey::ApiId).unwrap()] = "att-1".into();
+    row[mapping.resolve(ColumnKey::ApprovalStatus).unwrap()] = "approved".into();
+    row[mapping.resolve(ColumnKey::CheckedInAt).unwrap()] = "  2026-06-01T10:00:00Z  ".into();
 
     let parsed =
         AttendeeRow::from_sheet_values(&[row], 2, &mapping).expect("a row with an api_id parses");

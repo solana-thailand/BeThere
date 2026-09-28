@@ -275,17 +275,34 @@ impl ColumnMapping {
         self.map.get(&key_name).copied()
     }
 
-    /// Get the column index, falling back to the hardcoded default.
-    pub fn get_or_default(&self, key: ColumnKey) -> usize {
-        self.get(key)
-            .unwrap_or_else(|| ColumnMapping::hardcoded().get(key).unwrap_or(0))
+    /// The column for `key` on this sheet, or `None` when it has none.
+    ///
+    /// A recognised header row (`is_valid`) is trusted as is: a key with no
+    /// header has no column. Borrowing its standard-layout index would alias
+    /// whatever unrelated column sits there — on a Luma-export sheet the
+    /// standard `contact_handle` slot (L) is `claim_token`, so a registration
+    /// overwrote its own claim token with the handle (.issues/167). A header
+    /// row we cannot recognise falls back to the standard layout.
+    pub fn resolve(&self, key: ColumnKey) -> Option<usize> {
+        match self.is_valid() {
+            true => self.get(key),
+            false => ColumnMapping::hardcoded().get(key),
+        }
     }
 
-    /// Get the column letter (A, B, ..., Z, AA, AB, ...) for a key.
+    /// Write `val` into `row` at `key`'s column; a no-op when the sheet has
+    /// no such column (see [`Self::resolve`]) or the row is too short.
+    pub fn put(&self, row: &mut [String], key: ColumnKey, val: String) {
+        if let Some(cell) = self.resolve(key).and_then(|idx| row.get_mut(idx)) {
+            *cell = val;
+        }
+    }
+
+    /// Get the column letter (A, B, ..., Z, AA, AB, ...) for a key, or `None`
+    /// when the sheet has no such column (see [`Self::resolve`]).
     /// Used for Google Sheets API range references like `"{sheet_name}!I{row}"`.
-    pub fn column_letter(&self, key: ColumnKey) -> String {
-        let idx = self.get_or_default(key);
-        index_to_column_letter(idx)
+    pub fn column_letter(&self, key: ColumnKey) -> Option<String> {
+        self.resolve(key).map(index_to_column_letter)
     }
 
     /// Number of recognized columns successfully mapped.
@@ -340,17 +357,9 @@ impl ColumnMapping {
     /// wipe whatever unrelated column sits there. A header row we cannot
     /// recognise falls back to the standard layout, as every writer does.
     pub fn pii_column_letters(&self) -> Vec<String> {
-        let hardcoded;
-        let mapping = match self.is_valid() {
-            true => self,
-            false => {
-                hardcoded = Self::hardcoded();
-                &hardcoded
-            }
-        };
         PII_COLUMNS
             .iter()
-            .filter_map(|&key| mapping.get(key))
+            .filter_map(|&key| self.resolve(key))
             .map(index_to_column_letter)
             .collect()
     }

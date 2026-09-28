@@ -63,15 +63,19 @@ impl AttendeeRow {
             return None;
         }
 
-        let get =
-            |idx: usize| -> String { row.get(idx).cloned().unwrap_or_default().trim().to_string() };
+        // A key the sheet has no column for reads as empty (`ColumnMapping::resolve`).
+        let get = |idx: Option<usize>| -> String {
+            idx.and_then(|i| row.get(i))
+                .map(|v| v.trim().to_string())
+                .unwrap_or_default()
+        };
 
-        let get_opt = |idx: usize| -> Option<String> {
+        let get_opt = |idx: Option<usize>| -> Option<String> {
             let val = get(idx);
             if val.is_empty() { None } else { Some(val) }
         };
 
-        let idx = |key: ColumnKey| -> usize { mapping.get_or_default(key) };
+        let idx = |key: ColumnKey| -> Option<usize> { mapping.resolve(key) };
 
         let api_id = get(idx(ColumnKey::ApiId));
         if api_id.is_empty() {

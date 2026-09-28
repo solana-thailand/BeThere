@@ -42,25 +42,31 @@ pub async fn write_bank_info(
     let mut data = Vec::new();
 
     if let Some(val) = bank_account {
-        let col = mapping.column_letter(CK::BankAccount);
-        data.push(ValueRange {
-            range: format!("{sheet_ref}!{col}{row_index}"),
-            values: vec![vec![val.to_string()]],
-        });
+        data.extend(a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::BankAccount,
+            row_index,
+            val.to_string(),
+        ));
     }
     if let Some(val) = bank_name {
-        let col = mapping.column_letter(CK::BankName);
-        data.push(ValueRange {
-            range: format!("{sheet_ref}!{col}{row_index}"),
-            values: vec![vec![val.to_string()]],
-        });
+        data.extend(a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::BankName,
+            row_index,
+            val.to_string(),
+        ));
     }
     if let Some(val) = account_name {
-        let col = mapping.column_letter(CK::AccountName);
-        data.push(ValueRange {
-            range: format!("{sheet_ref}!{col}{row_index}"),
-            values: vec![vec![val.to_string()]],
-        });
+        data.extend(a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::AccountName,
+            row_index,
+            val.to_string(),
+        ));
     }
 
     let url =
@@ -75,9 +81,9 @@ pub async fn write_bank_info(
 
     tracing::info!(
         row_index = row_index,
-        bank_account_col = mapping.column_letter(CK::BankAccount).as_str(),
-        bank_name_col = mapping.column_letter(CK::BankName).as_str(),
-        account_name_col = mapping.column_letter(CK::AccountName).as_str(),
+        bank_account_col = ?mapping.column_letter(CK::BankAccount),
+        bank_name_col = ?mapping.column_letter(CK::BankName),
+        account_name_col = ?mapping.column_letter(CK::AccountName),
         bank_account_val = ?bank_account,
         bank_name_val = ?bank_name,
         account_name_val = ?account_name,
@@ -101,38 +107,41 @@ pub async fn write_deposit_verification(
     ctx: &SheetContext<'_>,
 ) -> Result<(), String> {
     let access_token = get_cached_access_token(ctx.state, ctx.kv).await?;
-    let row_index = resolve_row(
-        &row,
-        ctx.sheet_id,
-        &a1::sheet_ref(ctx.sheet_name),
-        &access_token,
-    )
-    .await?;
+    let sheet_ref = a1::sheet_ref(ctx.sheet_name);
+    let row_index = resolve_row(&row, ctx.sheet_id, &sheet_ref, &access_token).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
-    let col_method = ctx.mapping.column_letter(CK::DepositMethod);
-    let col_amount = ctx.mapping.column_letter(CK::DepositAmount);
-    let col_verified = ctx.mapping.column_letter(CK::DepositVerified);
-
-    let data = vec![
-        ValueRange {
-            range: format!("{}!{}{}", ctx.sheet_name, col_method, row_index),
-            values: vec![vec![deposit_method.to_string()]],
-        },
-        ValueRange {
-            range: format!("{}!{}{}", ctx.sheet_name, col_amount, row_index),
-            values: vec![vec![deposit_amount.to_string()]],
-        },
-        ValueRange {
-            range: format!("{}!{}{}", ctx.sheet_name, col_verified, row_index),
-            values: vec![vec![if verified {
+    let data: Vec<ValueRange> = [
+        a1::cell(
+            &sheet_ref,
+            ctx.mapping,
+            CK::DepositMethod,
+            row_index,
+            deposit_method.to_string(),
+        ),
+        a1::cell(
+            &sheet_ref,
+            ctx.mapping,
+            CK::DepositAmount,
+            row_index,
+            deposit_amount.to_string(),
+        ),
+        a1::cell(
+            &sheet_ref,
+            ctx.mapping,
+            CK::DepositVerified,
+            row_index,
+            if verified {
                 "Yes".to_string()
             } else {
                 "No".to_string()
-            }]],
-        },
-    ];
+            },
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchUpdate",
@@ -183,12 +192,17 @@ pub async fn update_deposit_method(
         .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
-    let col = mapping.column_letter(CK::DepositMethod);
 
-    let data = vec![ValueRange {
-        range: format!("{sheet_ref}!{col}{row_index}"),
-        values: vec![vec![method.to_string()]],
-    }];
+    let data: Vec<ValueRange> = [a1::cell(
+        &sheet_ref,
+        &mapping,
+        CK::DepositMethod,
+        row_index,
+        method.to_string(),
+    )]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let url =
         format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
@@ -238,19 +252,24 @@ pub async fn write_refund_status(
         .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
-    let col = mapping.column_letter(CK::RefundStatus);
     tracing::info!(
         %attendee_api_id,
         row_index,
-        column = %col,
+        column = ?mapping.column_letter(CK::RefundStatus),
         total_columns = mapping.total_columns,
         "resolved refund_status column"
     );
 
-    let data = vec![ValueRange {
-        range: format!("{sheet_ref}!{col}{row_index}"),
-        values: vec![vec![status.to_string()]],
-    }];
+    let data: Vec<ValueRange> = [a1::cell(
+        &sheet_ref,
+        &mapping,
+        CK::RefundStatus,
+        row_index,
+        status.to_string(),
+    )]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let url =
         format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
@@ -284,21 +303,20 @@ pub fn refund_batch_ranges(
 ) -> Vec<ValueRange> {
     use event_checkin_domain::models::attendee::ColumnKey as CK;
     let sheet_ref = a1::sheet_ref(sheet_name);
-    let status_col = mapping.column_letter(CK::RefundStatus);
-    let link_col = mapping.column_letter(CK::RefundLink);
     rows.iter()
         .flat_map(|row| {
             [
-                ValueRange {
-                    range: format!("{sheet_ref}!{status_col}{row}"),
-                    values: vec![vec![status.to_string()]],
-                },
-                ValueRange {
-                    range: format!("{sheet_ref}!{link_col}{row}"),
-                    values: vec![vec![link.to_string()]],
-                },
+                a1::cell(
+                    &sheet_ref,
+                    mapping,
+                    CK::RefundStatus,
+                    *row,
+                    status.to_string(),
+                ),
+                a1::cell(&sheet_ref, mapping, CK::RefundLink, *row, link.to_string()),
             ]
         })
+        .flatten()
         .collect()
 }
 
@@ -365,19 +383,24 @@ pub async fn write_refund_link(
         .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
-    let col = mapping.column_letter(CK::RefundLink);
     tracing::info!(
         %attendee_api_id,
         row_index,
-        column = %col,
+        column = ?mapping.column_letter(CK::RefundLink),
         total_columns = mapping.total_columns,
         "resolved refund_link column"
     );
 
-    let data = vec![ValueRange {
-        range: format!("{sheet_ref}!{col}{row_index}"),
-        values: vec![vec![link.to_string()]],
-    }];
+    let data: Vec<ValueRange> = [a1::cell(
+        &sheet_ref,
+        &mapping,
+        CK::RefundLink,
+        row_index,
+        link.to_string(),
+    )]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let url =
         format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");

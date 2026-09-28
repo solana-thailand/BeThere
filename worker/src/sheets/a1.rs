@@ -19,6 +19,9 @@
 //! of a range before the `!`, and only there — a cache key, a gid lookup, or a
 //! comparison against a title returned by the API all want the raw name.
 
+use crate::http::ValueRange;
+use event_checkin_domain::models::attendee::{ColumnKey, ColumnMapping};
+
 /// Render a sheet name for use in an A1 range, quoting it when the grammar
 /// requires it.
 ///
@@ -36,6 +39,23 @@ pub fn sheet_ref(name: &str) -> String {
         false => name.to_string(),
         true => format!("'{}'", name.replace('\'', "''")),
     }
+}
+
+/// A one-cell write at `key`'s column on 1-based `row`, or `None` when the
+/// sheet has no column for `key`. Skipping beats writing the standard-layout
+/// letter, which on a custom sheet is somebody else's column (.issues/167).
+pub fn cell(
+    sheet_ref: &str,
+    mapping: &ColumnMapping,
+    key: ColumnKey,
+    row: usize,
+    value: String,
+) -> Option<ValueRange> {
+    let col = mapping.column_letter(key)?;
+    Some(ValueRange {
+        range: format!("{sheet_ref}!{col}{row}"),
+        values: vec![vec![value]],
+    })
 }
 
 /// Whether `name` must be single-quoted to appear before the `!` of a range.
