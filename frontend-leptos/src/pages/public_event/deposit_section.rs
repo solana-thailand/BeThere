@@ -1,7 +1,7 @@
 use super::types::*;
 use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
-use crate::utils::deposit_copy::{NEVER_FORFEITED, THB_REFUND_WINDOW};
+use crate::utils::deposit_copy::{never_forfeited, thb_refund_window};
 use leptos::prelude::*;
 
 pub fn deposit_section(data: &PublicEventData) -> AnyView {
@@ -116,10 +116,10 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                 </div>
                 // Deposit model D1 (owner, 2026-09-28): nothing is forfeited.
                 // Ask for notice, threaten nothing (docs/deposit-commitment-model.md §5).
-                // The promise itself stays in `utils::deposit_copy` (one home,
-                // English only for now); the catalog carries the words around it.
+                // The promise itself lives in `utils::deposit_copy` (one home,
+                // EN and TH); the catalog carries the words around it.
                 {if show_thb {
-                    let promise = NEVER_FORFEITED;
+                    let promise = move || never_forfeited(i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>
@@ -145,7 +145,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     view! { <div></div> }.into_any()
                 }}
                 {if show_thb {
-                    let window = THB_REFUND_WINDOW;
+                    let window = move || thb_refund_window(i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>

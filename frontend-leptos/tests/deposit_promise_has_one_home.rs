@@ -25,6 +25,32 @@ fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// The promises' tell-tale phrases, EN and TH (.plans/037 §2).
+const PROMISE_PHRASES: [&str; 4] = ["never forfeited", "within 7 days", "ไม่ถูกริบ", "ภายใน 7 วัน"];
+
+#[test]
+fn no_catalog_file_states_the_promises() {
+    let locales = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("locales");
+    let mut offenders = Vec::new();
+    for locale in std::fs::read_dir(&locales).expect("locales").flatten() {
+        for file in std::fs::read_dir(locale.path())
+            .expect("locale dir")
+            .flatten()
+        {
+            let text = std::fs::read_to_string(file.path()).expect("catalog file");
+            let lower = text.to_lowercase();
+            if PROMISE_PHRASES.iter().any(|p| lower.contains(p)) {
+                offenders.push(file.path().display().to_string());
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "the catalog carries the words around the promise, not the promise:\n{}",
+        offenders.join("\n")
+    );
+}
+
 #[test]
 fn only_deposit_copy_states_the_promises() {
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -45,7 +71,7 @@ fn only_deposit_copy_states_the_promises() {
                 continue;
             }
             let lower = line.to_lowercase();
-            if lower.contains("never forfeited") || lower.contains("within 7 days") {
+            if PROMISE_PHRASES.iter().any(|p| lower.contains(p)) {
                 offenders.push(format!("{}:{}", path.display(), n + 1));
             }
         }
@@ -65,4 +91,6 @@ fn the_home_states_the_current_decisions() {
     .expect("deposit_copy.rs");
     assert!(home.contains("\"within 7 days after the event\""));
     assert!(home.contains("\"Your deposit is never forfeited.\""));
+    assert!(home.contains("\"ภายใน 7 วันหลังจบงาน\""));
+    assert!(home.contains("\"เงินมัดจำของคุณจะไม่ถูกริบ\""));
 }

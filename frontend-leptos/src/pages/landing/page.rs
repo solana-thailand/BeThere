@@ -1,11 +1,11 @@
 //! The landing page component itself.
 
-use crate::utils::deposit_copy::{NEVER_FORFEITED, THB_REFUND_WINDOW};
+use crate::utils::deposit_copy::{never_forfeited, thb_refund_window};
 use leptos::prelude::*;
 use leptos_router::components::A;
 
 use crate::components::is_admin_role;
-use crate::i18n::{Locale, t, t_string, td_string, use_i18n};
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 use super::auth::{AuthState, trigger_landing_oauth};
@@ -13,23 +13,6 @@ use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
 use super::upcoming::UpcomingEvents;
 use super::waitlist::WaitlistForm;
-
-/// The THB refund window in `locale`. EN is `deposit_copy`, the promise's one
-/// home; TH is its catalog translation.
-fn refund_window(locale: Locale) -> &'static str {
-    match locale {
-        Locale::en => THB_REFUND_WINDOW,
-        Locale::th => td_string!(Locale::th, landing.promise.refund_window),
-    }
-}
-
-/// "Never forfeited" in `locale`; same split as [`refund_window`].
-fn never_forfeited(locale: Locale) -> &'static str {
-    match locale {
-        Locale::en => NEVER_FORFEITED,
-        Locale::th => td_string!(Locale::th, landing.promise.never_forfeited),
-    }
-}
 
 /// Landing page component.
 #[component]
@@ -424,7 +407,7 @@ pub fn Landing() -> impl IntoView {
                             {t!(
                                 i18n,
                                 landing.faq.deposit_a,
-                                refund_window = move || refund_window(i18n.get_locale()),
+                                refund_window = move || thb_refund_window(i18n.get_locale()),
                                 never_forfeited = move || never_forfeited(i18n.get_locale())
                             )}
                         </p>

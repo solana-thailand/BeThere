@@ -82,10 +82,6 @@
     "crypto_a": "It works for any event — meetups, workshops, conferences, hackathons. The blockchain part runs behind the scenes; attendees don't need to know anything about crypto.",
     "host_cta": "Want to host events? Learn more ↓"
   },
-  "promise": {
-    "refund_window": "within 7 days after the event",
-    "never_forfeited": "Your deposit is never forfeited."
-  },
   "waitlist": {
     "title": "Bring deposit-backed events to your community",
     "desc": "Stop losing seats to no-shows. Set a deposit, track check-ins live, and give attendees their deposit back when they show up.",
