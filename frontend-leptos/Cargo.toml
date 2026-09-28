@@ -5,12 +5,15 @@ edition = "2024"
 publish = false
 
 # EN + TH catalog for `leptos_i18n::load_locales!()` (`src/lib.rs`), read from
-# `locales/{en,th}.json`. The macro path, not a `build.rs` with
+# `locales/{en,th}/<namespace>.json`: one file per page group, so the key
+# `feedback.submit` lives in `locales/*/feedback.json`. Add a namespace here
+# and in both locale directories. The macro path, not a `build.rs` with
 # `leptos_i18n_build`: that crate always pulls ICU datagen with networking
 # (ureq, rustls, webpki-roots), whose ISC / CDLA licences `deny.toml` rejects.
 [package.metadata.leptos-i18n]
 default = "en"
 locales = ["en", "th"]
+namespaces = ["lang", "common", "discover", "login", "status", "series", "feedback"]
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false

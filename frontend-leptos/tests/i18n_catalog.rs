@@ -1,4 +1,4 @@
-//! The EN/TH catalog (`locales/`, .plans/037 §2).
+//! The EN/TH catalog (`locales/{en,th}/<namespace>.json`, .plans/037 §2).
 //!
 //! - Both locales carry the same keys. `leptos_i18n` falls back to EN for a
 //!   key missing from TH and only warns at build time, so a TH reader would
@@ -15,10 +15,58 @@ use std::path::PathBuf;
 use event_checkin_frontend::i18n::{Locale, td_string};
 use event_checkin_frontend::locale::{date_tag, is_attendee_path, parse_locale};
 
+/// Every namespace file of one locale, keyed by namespace, as one JSON object.
 fn catalog(locale: &str) -> serde_json::Value {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("locales/{locale}.json"));
-    let text = std::fs::read_to_string(&path).expect("locale file");
-    serde_json::from_str(&text).expect("locale JSON")
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("locales")
+        .join(locale);
+    let mut all = serde_json::Map::new();
+    for entry in std::fs::read_dir(&dir).expect("locale dir").flatten() {
+        let path = entry.path();
+        let ns = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .expect("file name");
+        let text = std::fs::read_to_string(&path).expect("namespace file");
+        all.insert(
+            ns.to_string(),
+            serde_json::from_str(&text).expect("namespace JSON"),
+        );
+    }
+    serde_json::Value::Object(all)
+}
+
+/// Namespaces registered in `[package.metadata.leptos-i18n]`.
+fn registered_namespaces() -> BTreeSet<String> {
+    let manifest =
+        std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
+            .expect("Cargo.toml");
+    let line = manifest
+        .lines()
+        .find(|l| l.starts_with("namespaces = "))
+        .expect("namespaces line");
+    line.split('"')
+        .skip(1)
+        .step_by(2)
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn every_namespace_file_is_registered_and_present_in_both_locales() {
+    let registered = registered_namespaces();
+    for locale in ["en", "th"] {
+        let on_disk: BTreeSet<String> = catalog(locale)
+            .as_object()
+            .expect("object")
+            .keys()
+            .cloned()
+            .collect();
+        assert_eq!(
+            on_disk, registered,
+            "locales/{locale}/ vs Cargo.toml namespaces"
+        );
+    }
 }
 
 fn keys(value: &serde_json::Value, prefix: &str, out: &mut BTreeSet<String>) {

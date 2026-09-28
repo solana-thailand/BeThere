@@ -30,7 +30,7 @@
     "doc-tests event_checkin_frontend": 0,
     "event_checkin_frontend src/lib.rs": 137,
     "event_checkin_frontend src/main.rs": 0,
-    "i18n_catalog tests/i18n_catalog.rs": 5,
+    "i18n_catalog tests/i18n_catalog.rs": 6,
     "listener_cleanup tests/listener_cleanup.rs": 4,
     "mirror_field_types tests/mirror_field_types.rs": 8,
     "public_ticket_page_never_redirects tests/public_ticket_page_never_redirects.rs": 3,
