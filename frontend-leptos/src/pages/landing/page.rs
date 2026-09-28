@@ -5,6 +5,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 
 use crate::components::is_admin_role;
+use crate::i18n::{Locale, t, t_string, td_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 use super::auth::{AuthState, trigger_landing_oauth};
@@ -13,9 +14,27 @@ use super::registrations::MyRegistrations;
 use super::upcoming::UpcomingEvents;
 use super::waitlist::WaitlistForm;
 
+/// The THB refund window in `locale`. EN is `deposit_copy`, the promise's one
+/// home; TH is its catalog translation.
+fn refund_window(locale: Locale) -> &'static str {
+    match locale {
+        Locale::en => THB_REFUND_WINDOW,
+        Locale::th => td_string!(Locale::th, landing.promise.refund_window),
+    }
+}
+
+/// "Never forfeited" in `locale`; same split as [`refund_window`].
+fn never_forfeited(locale: Locale) -> &'static str {
+    match locale {
+        Locale::en => NEVER_FORFEITED,
+        Locale::th => td_string!(Locale::th, landing.promise.never_forfeited),
+    }
+}
+
 /// Landing page component.
 #[component]
 pub fn Landing() -> impl IntoView {
+    let i18n = use_i18n();
     // Auth state for nav bar
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (user_role, set_user_role) = signal(String::new());
@@ -89,14 +108,14 @@ pub fn Landing() -> impl IntoView {
                         class:landing-persona-btn--active=move || persona.get() == 0
                         on:click=move |_| set_persona.set(0)
                     >
-                        "For Attendees"
+                        {t!(i18n, landing.persona.attendees)}
                     </button>
                     <button
                         class="landing-persona-btn"
                         class:landing-persona-btn--active=move || persona.get() == 1
                         on:click=move |_| set_persona.set(1)
                     >
-                        "For Organizers"
+                        {t!(i18n, landing.persona.organizers)}
                     </button>
                     // Staff used to exist only in the "How it works" tabs, which
                     // meant the page carried two switchers for one axis that did
@@ -106,7 +125,7 @@ pub fn Landing() -> impl IntoView {
                         class:landing-persona-btn--active=move || persona.get() == 2
                         on:click=move |_| set_persona.set(2)
                     >
-                        "For Event Staff"
+                        {t!(i18n, landing.persona.staff)}
                     </button>
                 </div>
 
@@ -114,19 +133,19 @@ pub fn Landing() -> impl IntoView {
                     {move || match persona.get() {
                         0 => view! {
                             <>
-                                "Commit. Show up."
+                                {t!(i18n, landing.hero.attendee_line1)}
                                 <br />
                                 <span class="landing-hero-gradient">
-                                    "Get your money back."
+                                    {t!(i18n, landing.hero.attendee_line2)}
                                 </span>
                             </>
                         }.into_any(),
                         1 => view! {
                             <>
-                                "No-shows cost you money."
+                                {t!(i18n, landing.hero.organizer_line1)}
                                 <br />
                                 <span class="landing-hero-gradient">
-                                    "Fix it with deposits."
+                                    {t!(i18n, landing.hero.organizer_line2)}
                                 </span>
                             </>
                         }.into_any(),
@@ -135,10 +154,10 @@ pub fn Landing() -> impl IntoView {
                         // pitch would sell a door scanner on payouts.
                         _ => view! {
                             <>
-                                "Scan. Check in."
+                                {t!(i18n, landing.hero.staff_line1)}
                                 <br />
                                 <span class="landing-hero-gradient">
-                                    "Under two seconds."
+                                    {t!(i18n, landing.hero.staff_line2)}
                                 </span>
                             </>
                         }.into_any(),
@@ -146,14 +165,14 @@ pub fn Landing() -> impl IntoView {
                 </h1>
                 <p class="landing-hero-desc">
                     {move || match persona.get() {
-                        0 => "Put down a deposit to reserve your spot. Show up, check in, and get every cent back — take a quick quiz to unlock a digital badge you own forever.".to_string(),
-                        1 => "Set a deposit for your event. Track check-ins live. Attendees who show up get their deposit back.".to_string(),
-                        _ => "Open the scanner on any phone, point it at an attendee's QR code, and the check-in is recorded. No app to install, no training.".to_string(),
+                        0 => t_string!(i18n, landing.hero.attendee_desc),
+                        1 => t_string!(i18n, landing.hero.organizer_desc),
+                        _ => t_string!(i18n, landing.hero.staff_desc),
                     }}
                 </p>
                 // Solana pill badge
                 <div class="solana-pill">
-                    "Built on Solana"
+                    {t!(i18n, landing.hero.built_on_solana)}
                     <Icon icon=IconName::Solana />
                 </div>
 
@@ -161,15 +180,15 @@ pub fn Landing() -> impl IntoView {
                 <div class="landing-stat-stubs">
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value stub-green">"100%"</div>
-                        <div class="landing-stat-stub-label">"Back When You Attend"</div>
+                        <div class="landing-stat-stub-label">{t!(i18n, landing.stats.back)}</div>
                     </div>
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value stub-poppy">"฿0"</div>
-                        <div class="landing-stat-stub-label">"Cost To Attend"</div>
+                        <div class="landing-stat-stub-label">{t!(i18n, landing.stats.cost)}</div>
                     </div>
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value">"< 1s"</div>
-                        <div class="landing-stat-stub-label">"QR Check-In"</div>
+                        <div class="landing-stat-stub-label">{t!(i18n, landing.stats.qr)}</div>
                     </div>
                 </div>
 
@@ -182,21 +201,21 @@ pub fn Landing() -> impl IntoView {
                             AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
                                 view! {
                                     <A href="/admin" attr:class="btn btn-primary landing-cta-link">
-                                        "Go to Dashboard →"
+                                        {t!(i18n, landing.cta.dashboard)}
                                     </A>
                                 }.into_any()
                             }
                             AuthState::SignedIn(_) if role == "staff" => {
                                 view! {
                                     <A href="/staff" attr:class="btn btn-primary landing-cta-link">
-                                        "Open Scanner →"
+                                        {t!(i18n, landing.cta.scanner)}
                                     </A>
                                 }.into_any()
                             }
                             AuthState::SignedIn(_) => {
                                 view! {
                                     <a href="#events" class="btn btn-primary landing-cta-link">
-                                        "Find Events ↓"
+                                        {t!(i18n, landing.cta.find_events)}
                                     </a>
                                 }.into_any()
                             }
@@ -207,7 +226,7 @@ pub fn Landing() -> impl IntoView {
                                         class="btn btn-primary landing-cta-link"
                                         on:click=move |_| trigger_landing_oauth()
                                     >
-                                        "Create an Event →"
+                                        {t!(i18n, landing.cta.create_event)}
                                     </button>
                                 }.into_any()
                             }
@@ -215,13 +234,13 @@ pub fn Landing() -> impl IntoView {
                                 // Attendee persona — primary = find events, secondary = create event
                                 view! {
                                     <a href="#events" class="btn btn-primary landing-cta-link">
-                                        "Find Events ↓"
+                                        {t!(i18n, landing.cta.find_events)}
                                     </a>
                                     <button
                                         class="btn btn-outline landing-cta-link"
                                         on:click=move |_| trigger_landing_oauth()
                                     >
-                                        "Create an Event →"
+                                        {t!(i18n, landing.cta.create_event)}
                                     </button>
                                 }.into_any()
                             }
@@ -240,10 +259,10 @@ pub fn Landing() -> impl IntoView {
             <section id="how-it-works" class="landing-section">
                 <div class="landing-section-header">
                     <h2 class="landing-h2">
-                        "How it works"
+                        {t!(i18n, landing.how.title)}
                     </h2>
                     <p class="landing-subtitle">
-                        "Choose your role to see the experience."
+                        {t!(i18n, landing.how.subtitle)}
                     </p>
                 </div>
 
@@ -259,8 +278,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Ticket class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Reserve your spot"</div>
-                                    <div class="landing-timeline-desc">"Browse events and reserve your place with the event’s configured THB or USDC deposit. You’ll see the exact amount and payment method before confirming."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.attendee.s1_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.attendee.s1_desc)}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -268,8 +287,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::QrCode class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Show your QR at the venue"</div>
-                                    <div class="landing-timeline-desc">"Open your ticket on any phone, show the QR code, and get scanned in under 2 seconds. No app needed."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.attendee.s2_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.attendee.s2_desc)}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -277,8 +296,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Puzzle class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Complete the brief quest"</div>
-                                    <div class="landing-timeline-desc">"After check-in, take a quick, fun quiz on your mobile device. It takes under a minute and confirms your engagement."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.attendee.s3_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.attendee.s3_desc)}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -286,8 +305,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Recycle class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Get your full refund"</div>
-                                    <div class="landing-timeline-desc">"Your deposit comes back after the event, as a refund or as credit for next time, plus a compressed NFT badge you own forever."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.attendee.s4_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.attendee.s4_desc)}</div>
                                 </div>
                             </div>
                         </div>
@@ -299,8 +318,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Target class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Set up event & deposit amount"</div>
-                                    <div class="landing-timeline-desc">"Create your event, choose the deposit and refund rules, and show attendees the exact THB or USDC amount before they confirm."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.organizer.s1_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.organizer.s1_desc)}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -308,8 +327,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Chart class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Monitor real-time registrations"</div>
-                                    <div class="landing-timeline-desc">"Track locked deposits and RSVPs on a live dashboard. See exactly who committed — no guesswork."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.organizer.s2_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.organizer.s2_desc)}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -317,8 +336,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Camera class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Scan check-ins at the venue"</div>
-                                    <div class="landing-timeline-desc">"Staff use the mobile scanner portal to verify attendance in under 2 seconds. No app install required."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.organizer.s3_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.organizer.s3_desc)}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -326,8 +345,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Coin class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Settle deposits in one place"</div>
-                                    <div class="landing-timeline-desc">"A payout queue lists every deposit to return, and anything kept as credit stays on the attendee's balance for your next event."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.organizer.s4_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.organizer.s4_desc)}</div>
                                 </div>
                             </div>
                         </div>
@@ -339,8 +358,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Camera class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Open scanner on any mobile browser"</div>
-                                    <div class="landing-timeline-desc">"No app to install. Open the staff scanner on any smartphone — works in Chrome, Safari, and more."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.staff.s1_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.staff.s1_desc)}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -348,8 +367,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::QrCode class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Verify attendee QR code in 1 second"</div>
-                                    <div class="landing-timeline-desc">"Point the camera at the attendee's QR code. Instant verification with visual + haptic feedback."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.staff.s2_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.staff.s2_desc)}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -357,8 +376,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Chain class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Badge on Solana"</div>
-                                    <div class="landing-timeline-desc">"Checked-in attendees can claim a compressed NFT badge on Solana. Manual search fallback available for lost QR codes."</div>
+                                    <div class="landing-timeline-title">{t!(i18n, landing.how.staff.s3_title)}</div>
+                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.staff.s3_desc)}</div>
                                 </div>
                             </div>
                         </div>
@@ -370,10 +389,10 @@ pub fn Landing() -> impl IntoView {
             <section id="faq" class="landing-section-narrow">
                 <div class="landing-section-header">
                     <h2 class="landing-h2">
-                        "Frequently asked questions"
+                        {t!(i18n, landing.faq.title)}
                     </h2>
                     <p class="landing-subtitle">
-                        "Everything you need to know."
+                        {t!(i18n, landing.faq.subtitle)}
                     </p>
                 </div>
 
@@ -381,37 +400,42 @@ pub fn Landing() -> impl IntoView {
 
                     <div class="landing-faq-card">
                         <h3 class="landing-faq-q">
-                            "What is BeThere?"
+                            {t!(i18n, landing.faq.what_q)}
                         </h3>
                         <p class="landing-faq-a">
-                            "A deposit-backed event check-in platform. Attendees put down a deposit, show up, get scanned, and get the whole deposit back, plus a compressed NFT badge on Solana."
+                            {t!(i18n, landing.faq.what_a)}
                         </p>
                     </div>
 
                     <div class="landing-faq-card">
                         <h3 class="landing-faq-q">
-                            "Do attendees need a crypto wallet?"
+                            {t!(i18n, landing.faq.wallet_q)}
                         </h3>
                         <p class="landing-faq-a">
-                            "No. Checking in and paying by PromptPay work on any phone. A wallet is only needed to pay a USDC deposit or to claim the NFT badge."
+                            {t!(i18n, landing.faq.wallet_a)}
                         </p>
                     </div>
 
                     <div class="landing-faq-card">
                         <h3 class="landing-faq-q">
-                            "How does the deposit work?"
+                            {t!(i18n, landing.faq.deposit_q)}
                         </h3>
                         <p class="landing-faq-a">
-                            {format!("Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back {THB_REFUND_WINDOW}, or you keep it as credit for your next event. {NEVER_FORFEITED} If you can't make it, tell the organizer. USDC deposits sit in a Solana escrow and you claim them back after the event ends.")}
+                            {t!(
+                                i18n,
+                                landing.faq.deposit_a,
+                                refund_window = move || refund_window(i18n.get_locale()),
+                                never_forfeited = move || never_forfeited(i18n.get_locale())
+                            )}
                         </p>
                     </div>
 
                     <div class="landing-faq-card">
                         <h3 class="landing-faq-q">
-                            "Is it only for crypto events?"
+                            {t!(i18n, landing.faq.crypto_q)}
                         </h3>
                         <p class="landing-faq-a">
-                            "It works for any event — meetups, workshops, conferences, hackathons. The blockchain part runs behind the scenes; attendees don't need to know anything about crypto."
+                            {t!(i18n, landing.faq.crypto_a)}
                         </p>
                     </div>
 
@@ -419,7 +443,7 @@ pub fn Landing() -> impl IntoView {
 
                 <div class="landing-faq-cta">
                     <a href="#waitlist" class="btn btn-outline landing-faq-cta-link">
-                        "Want to host events? Learn more ↓"
+                        {t!(i18n, landing.faq.host_cta)}
                     </a>
                 </div>
             </section>
@@ -428,10 +452,10 @@ pub fn Landing() -> impl IntoView {
             <section id="waitlist" class="landing-section">
                 <div class="landing-waitlist-inner">
                     <h2 class="landing-h2">
-                        "Bring deposit-backed events to your community"
+                        {t!(i18n, landing.waitlist.title)}
                     </h2>
                     <p class="landing-faq-a">
-                        "Stop losing seats to no-shows. Set a deposit, track check-ins live, and give attendees their deposit back when they show up."
+                        {t!(i18n, landing.waitlist.desc)}
                     </p>
                     {move || {
                         let state = auth_state.get();
@@ -440,7 +464,7 @@ pub fn Landing() -> impl IntoView {
                             AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
                                 view! {
                                     <A href="/admin" attr:class="btn btn-primary landing-waitlist-submit">
-                                        "Go to Dashboard →"
+                                        {t!(i18n, landing.cta.dashboard)}
                                     </A>
                                 }.into_any()
                             }
@@ -448,7 +472,7 @@ pub fn Landing() -> impl IntoView {
                                 view! {
                                     <div class="landing-waitlist-signed-in">
                                         <p class="landing-faq-a">
-                                            "Signed in! Contact us to get organizer access."
+                                            {t!(i18n, landing.waitlist.signed_in)}
                                         </p>
                                         <a
                                             href="https://x.com/ozoneRatchapon"
@@ -456,7 +480,7 @@ pub fn Landing() -> impl IntoView {
                                             rel="noopener noreferrer"
                                             class="btn btn-outline btn-sm"
                                         >
-                                            "DM us on X/Twitter"
+                                            {t!(i18n, landing.waitlist.dm)}
                                         </a>
                                     </div>
                                 }.into_any()
@@ -479,16 +503,16 @@ pub fn Landing() -> impl IntoView {
                             "BeThere"
                         </span>
                         <div class="landing-footer-brand-tagline">
-                            "Show up. Get refunded."
+                            {t!(i18n, landing.footer.tagline)}
                         </div>
                         <div class="landing-footer-built-with">
-                            "Built with "
+                            {t!(i18n, landing.footer.built_with)}
                             <span class="landing-footer-crab"><Icon icon=IconName::Crab class="icon-sm"/></span>
-                            " Rust & Solana"
+                            {t!(i18n, landing.footer.rust_solana)}
                         </div>
                         <div class="landing-footer-trust">
                             <span class="landing-footer-trust-icon"><Icon icon=IconName::Lock class="icon-xs"/></span>
-                            "Non-custodial & secure"
+                            {t!(i18n, landing.footer.non_custodial)}
                         </div>
                         <a
                             href="https://github.com/solana-thailand"
@@ -496,21 +520,21 @@ pub fn Landing() -> impl IntoView {
                             rel="noopener noreferrer"
                             class="landing-footer-partner"
                         >
-                            "Alpha partner: Solana Developer Thailand"
+                            {t!(i18n, landing.footer.partner)}
                         </a>
                     </div>
 
                     // Column 2 — Product
                     <div class="landing-footer-col">
-                        <h4>"Product"</h4>
-                        <a href="#how-it-works">"How It Works"</a>
-                        <a href="#faq">"FAQ"</a>
-                        <A href="/login">"Staff Portal"</A>
+                        <h4>{t!(i18n, landing.footer.product)}</h4>
+                        <a href="#how-it-works">{t!(i18n, landing.footer.how)}</a>
+                        <a href="#faq">{t!(i18n, landing.footer.faq)}</a>
+                        <A href="/login">{t!(i18n, landing.footer.staff_portal)}</A>
                     </div>
 
                     // Column 3 — Community
                     <div class="landing-footer-col">
-                        <h4>"Community"</h4>
+                        <h4>{t!(i18n, landing.footer.community)}</h4>
                         <a href="https://x.com/ozoneRatchapon" target="_blank" rel="noopener noreferrer">"X / Twitter"</a>
                         <a href="https://github.com/solana-thailand/BeThere" target="_blank" rel="noopener noreferrer">"GitHub"</a>
                     </div>
@@ -519,9 +543,9 @@ pub fn Landing() -> impl IntoView {
 
                 // Bottom row
                 <div class="landing-footer-bottom">
-                    <span class="landing-footer-copy">"© 2026 BeThere. All rights reserved."</span>
+                    <span class="landing-footer-copy">{t!(i18n, landing.footer.copyright)}</span>
                     <span class="landing-footer-powered">
-                        "Built on Solana"
+                        {t!(i18n, landing.hero.built_on_solana)}
                         <Icon icon=IconName::Solana />
                     </span>
                 </div>

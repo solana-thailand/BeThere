@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use serde::Deserialize;
 
 use crate::api::ApiResponse;
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Lightweight event item from the public events API.
@@ -42,6 +43,7 @@ struct PublicEventsResponse {
 /// Upcoming Events section — fetches active events and displays them.
 #[component]
 pub(super) fn UpcomingEvents() -> impl IntoView {
+    let i18n = use_i18n();
     let (events, set_events) = signal(Vec::<PublicEventItem>::new());
     let (loaded, set_loaded) = signal(false);
 
@@ -90,10 +92,10 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
             let heading = view! {
                 <div class="landing-section-header-sm">
                     <h2 class="landing-h2">
-                        <Icon icon=IconName::Party class="icon-sm"/>" Upcoming Events"
+                        <Icon icon=IconName::Party class="icon-sm"/>" "{t!(i18n, landing.upcoming.title)}
                     </h2>
                     <p class="landing-subtitle">
-                        "Reserve your spot with a deposit. Show up. Get refunded."
+                        {t!(i18n, landing.upcoming.subtitle)}
                     </p>
                 </div>
             };
@@ -104,7 +106,7 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                         {heading}
                         <div class="landing-events-loading">
                             <span class="landing-events-loading-spinner"></span>
-                            <p class="landing-events-loading-text">"Loading events..."</p>
+                            <p class="landing-events-loading-text">{t!(i18n, landing.upcoming.loading)}</p>
                         </div>
                     </section>
                 }.into_any()
@@ -115,17 +117,17 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                         {heading}
                         <div class="landing-sandbox-card">
                             <div class="landing-sandbox-icon">{"🎟️"}</div>
-                            <div class="landing-sandbox-title">"No live events right now"</div>
+                            <div class="landing-sandbox-title">{t!(i18n, landing.upcoming.none_title)}</div>
                             <div class="landing-sandbox-desc">
-                                "BeThere is a deposit-backed check-in platform. Try the flow below or host your own event."
+                                {t!(i18n, landing.upcoming.none_desc)}
                             </div>
                             <a href="#how-it-works" class="btn btn-primary btn-sm landing-sandbox-btn">
-                                "See how it works ↓"
+                                {t!(i18n, landing.upcoming.see_how)}
                             </a>
                         </div>
                         <div class="landing-sandbox-secondary">
                             <a href="#waitlist" class="btn btn-outline btn-sm">
-                                "Organize an Event"
+                                {t!(i18n, landing.upcoming.organize)}
                             </a>
                         </div>
                     </section>
@@ -137,28 +139,34 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                         <div class="landing-events-grid">
                             {evts.into_iter().map(|evt| {
                                 let event_url = format!("/e/{}", evt.slug);
-                                let date_str = match (evt.event_start_ms > 0, evt.time_tba) {
-                                    (false, _) => "Date TBA".to_string(),
+                                // A closure so the date and "TBA" follow a
+                                // language switch.
+                                let (start_ms, time_tba) = (evt.event_start_ms, evt.time_tba);
+                                let date_str = move || match (start_ms > 0, time_tba) {
+                                    (false, _) => t_string!(i18n, landing.upcoming.date_tba).to_string(),
                                     (true, true) => format!(
-                                        "{} · Time TBA",
-                                        crate::utils::format_event_day(evt.event_start_ms)
+                                        "{} · {}",
+                                        crate::utils::format_event_day(start_ms),
+                                        t_string!(i18n, landing.upcoming.time_tba)
                                     ),
-                                    (true, false) => {
-                                        crate::utils::format_event_datetime(evt.event_start_ms)
-                                    }
+                                    (true, false) => crate::utils::format_event_datetime(start_ms),
                                 };
                                 let deposit_badge = if evt.deposit_enabled {
-                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::Coin class="icon-xs"/>" Deposit required"</span> }.into_any()
+                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::Coin class="icon-xs"/>" "{t!(i18n, landing.upcoming.deposit_required)}</span> }.into_any()
                                 } else {
-                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::TicketFree class="icon-xs"/>" Free entry"</span> }.into_any()
+                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::TicketFree class="icon-xs"/>" "{t!(i18n, landing.upcoming.free_entry)}</span> }.into_any()
                                 };
 
                                 // Poster first, badge second — the same order
                                 // `event_hero` and `past_events` already use.
-                                let (image_url, image_alt) = if !evt.poster_url.is_empty() {
-                                    (evt.poster_url.clone(), "Event poster")
-                                } else {
-                                    (evt.nft_image_url.clone(), "Event badge")
+                                let has_poster = !evt.poster_url.is_empty();
+                                let image_url = match has_poster {
+                                    true => evt.poster_url.clone(),
+                                    false => evt.nft_image_url.clone(),
+                                };
+                                let image_alt = move || match has_poster {
+                                    true => t_string!(i18n, landing.upcoming.poster_alt),
+                                    false => t_string!(i18n, landing.upcoming.badge_alt),
                                 };
                                 let badge_img = if !image_url.is_empty() {
                                     view! {

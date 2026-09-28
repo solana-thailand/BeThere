@@ -5,6 +5,8 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 
+use crate::i18n::{t, t_string, use_i18n};
+
 #[derive(Clone, Deserialize)]
 struct InboxItem {
     id: i64,
@@ -27,6 +29,7 @@ struct InboxPage {
 
 #[component]
 pub(super) fn NotificationInbox() -> impl IntoView {
+    let i18n = use_i18n();
     let (page, set_page) = signal(None::<InboxPage>);
     let (busy, set_busy) = signal(false);
     let (error, set_error) = signal(None::<String>);
@@ -127,14 +130,20 @@ pub(super) fn NotificationInbox() -> impl IntoView {
             <section class="attendee-inbox" aria-labelledby="attendee-inbox-title">
                 <div class="attendee-inbox-header">
                     <div>
-                        <h2 id="attendee-inbox-title" class="landing-reg-title">"Notifications"</h2>
+                        <h2 id="attendee-inbox-title" class="landing-reg-title">{t!(i18n, landing.inbox.title)}</h2>
                         <p class="attendee-inbox-summary">
-                            {if unread_count == 0 { "You're all caught up.".to_string() } else { format!("{unread_count} unread") }}
+                            {match unread_count {
+                                0 => t!(i18n, landing.inbox.caught_up).into_any(),
+                                count => t!(i18n, landing.inbox.unread, count).into_any(),
+                            }}
                         </p>
                     </div>
                     {if unread_count > 0 { Some(view! {
                         <button class="btn btn-outline btn-xs" disabled=move || busy.get() on:click=read_all>
-                            {move || if busy.get() { "Saving…" } else { "Mark all read" }}
+                            {move || match busy.get() {
+                                true => t_string!(i18n, landing.inbox.saving),
+                                false => t_string!(i18n, landing.inbox.mark_all),
+                            }}
                         </button>
                     }) } else { None }}
                 </div>
@@ -142,10 +151,10 @@ pub(super) fn NotificationInbox() -> impl IntoView {
                     <p role="alert">{move || error.get()}</p>
                 </Show>
                 <Show when=move || busy.get() && page.get().is_none()>
-                    <p role="status">"Loading notifications…"</p>
+                    <p role="status">{t!(i18n, landing.inbox.loading)}</p>
                 </Show>
                 <Show when=move || !busy.get() && error.get().is_none() && page.get().is_some_and(|value| value.items.is_empty())>
-                    <p>"No notifications yet."</p>
+                    <p>{t!(i18n, landing.inbox.empty)}</p>
                 </Show>
                 <div class="attendee-inbox-list">
                     {items.into_iter().map(|item| {
@@ -201,7 +210,7 @@ pub(super) fn NotificationInbox() -> impl IntoView {
                                     <p>{item.body}</p>
                                 </div>
                                 <div class="attendee-inbox-actions">
-                                    {unread.then(|| view! { <button class="btn btn-outline btn-xs" disabled=move || busy.get() on:click=mark_read>"Mark read"</button> })}
+                                    {unread.then(|| view! { <button class="btn btn-outline btn-xs" disabled=move || busy.get() on:click=mark_read>{t!(i18n, landing.inbox.mark_read)}</button> })}
                                     <a class="btn btn-primary btn-sm" href=item.action_url>{item.action_label}" →"</a>
                                 </div>
                             </article>
@@ -210,7 +219,10 @@ pub(super) fn NotificationInbox() -> impl IntoView {
                 </div>
                 {has_more.then(|| view! {
                     <button class="btn btn-outline btn-sm" disabled=move || busy.get() on:click=load_older>
-                        {move || if busy.get() { "Loading…" } else { "Older notifications" }}
+                        {move || match busy.get() {
+                            true => t_string!(i18n, common.loading),
+                            false => t_string!(i18n, landing.inbox.older),
+                        }}
                     </button>
                 })}
             </section>

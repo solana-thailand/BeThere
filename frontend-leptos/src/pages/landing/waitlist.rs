@@ -2,14 +2,29 @@
 
 use leptos::prelude::*;
 
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
+
+/// Why the form did not go through. Local causes are typed so they render in
+/// the reader's language; a server message is passed through as sent.
+#[derive(Clone)]
+enum WaitlistError {
+    InvalidEmail,
+    /// The server said no without a reason.
+    Unspecified,
+    /// A non-2xx response whose body was not JSON.
+    Retry,
+    Network(String),
+    Server(String),
+}
 
 /// Waitlist signup form component.
 #[component]
 pub(super) fn WaitlistForm() -> impl IntoView {
     let (email, set_email) = signal(String::new());
     let (submitted, set_submitted) = signal(false);
-    let (error, set_error) = signal(None::<String>);
+    let i18n = use_i18n();
+    let (error, set_error) = signal(None::<WaitlistError>);
     let (submitting, set_submitting) = signal(false);
     let (already_registered, set_already_registered) = signal(false);
 
@@ -18,7 +33,7 @@ pub(super) fn WaitlistForm() -> impl IntoView {
         let email_val = email.get().trim().to_string();
 
         if email_val.is_empty() || !email_val.contains('@') || !email_val.contains('.') {
-            set_error.set(Some("Please enter a valid email".to_string()));
+            set_error.set(Some(WaitlistError::InvalidEmail));
             return;
         }
 
@@ -46,15 +61,16 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                             if body.get("success").and_then(|v| v.as_bool()) == Some(true) {
                                 set_submitted.set(true);
                             } else {
-                                let error_msg = body
-                                    .get("error")
-                                    .and_then(|v| v.as_str())
-                                    .unwrap_or("Something went wrong");
+                                let error_msg = body.get("error").and_then(|v| v.as_str());
                                 // Duplicate email — backend returns 400 with "already on the waitlist"
-                                if error_msg.contains("already on the waitlist") {
-                                    set_already_registered.set(true);
-                                } else {
-                                    set_error.set(Some(error_msg.to_string()));
+                                match error_msg {
+                                    Some(msg) if msg.contains("already on the waitlist") => {
+                                        set_already_registered.set(true);
+                                    }
+                                    Some(msg) => {
+                                        set_error.set(Some(WaitlistError::Server(msg.to_string())))
+                                    }
+                                    None => set_error.set(Some(WaitlistError::Unspecified)),
                                 }
                             }
                         }
@@ -62,15 +78,13 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                             if (200..300).contains(&status) {
                                 set_submitted.set(true);
                             } else {
-                                set_error.set(Some(
-                                    "Something went wrong. Please try again.".to_string(),
-                                ));
+                                set_error.set(Some(WaitlistError::Retry));
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    set_error.set(Some(format!("Network error: {e}")));
+                    set_error.set(Some(WaitlistError::Network(e.to_string())));
                 }
             }
             set_submitting.set(false);
@@ -85,9 +99,12 @@ pub(super) fn WaitlistForm() -> impl IntoView {
             <div class="landing-waitlist-success">
                 <div class="landing-waitlist-success-icon"><Icon icon=IconName::Check class="icon-md"/></div>
                 <div class="landing-waitlist-success-title">
-                    {move || if already_registered.get() { "You're already on the list!" } else { "You're on the list!" }}
+                    {move || match already_registered.get() {
+                        true => t!(i18n, landing.waitlist.already).into_any(),
+                        false => t!(i18n, landing.waitlist.on_list).into_any(),
+                    }}
                 </div>
-                <div class="landing-waitlist-success-desc">"We'll reach out when we're ready to onboard new events."</div>
+                <div class="landing-waitlist-success-desc">{t!(i18n, landing.waitlist.reach_out)}</div>
             </div>
         </Show>
         <Show
@@ -108,7 +125,10 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                     disabled=move || submitting.get() || email.get().trim().is_empty()
                     class="btn btn-primary landing-waitlist-submit"
                 >
-                    {move || if submitting.get() { "Joining..." } else { "Join Waitlist" }}
+                    {move || match submitting.get() {
+                        true => t!(i18n, landing.waitlist.joining).into_any(),
+                        false => t!(i18n, landing.waitlist.join).into_any(),
+                    }}
                 </button>
             </form>
             <Show
@@ -116,7 +136,14 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                 fallback=|| view! { <div></div> }
             >
                 <p class="landing-waitlist-error">
-                    {move || error.get().unwrap_or_default()}
+                    {move || match error.get() {
+                        Some(WaitlistError::InvalidEmail) => t!(i18n, landing.waitlist.invalid_email).into_any(),
+                        Some(WaitlistError::Unspecified) => t!(i18n, landing.waitlist.server_error).into_any(),
+                        Some(WaitlistError::Retry) => t!(i18n, landing.waitlist.retry_error).into_any(),
+                        Some(WaitlistError::Network(error)) => t!(i18n, landing.waitlist.network_error, error).into_any(),
+                        Some(WaitlistError::Server(msg)) => msg.into_any(),
+                        None => ().into_any(),
+                    }}
                 </p>
             </Show>
         </Show>

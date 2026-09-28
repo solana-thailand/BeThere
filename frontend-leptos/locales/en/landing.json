@@ -1,1 +1,159 @@
-{}
+{
+  "nav": {
+    "how_it_works": "How it works",
+    "faq": "FAQ",
+    "for_organizers": "For Organizers",
+    "sign_in": "Sign In",
+    "sign_out": "Sign Out",
+    "dashboard": "Dashboard",
+    "scanner": "Scanner",
+    "developer_profile": "Developer Profile"
+  },
+  "persona": {
+    "attendees": "For Attendees",
+    "organizers": "For Organizers",
+    "staff": "For Event Staff"
+  },
+  "hero": {
+    "attendee_line1": "Commit. Show up.",
+    "attendee_line2": "Get your money back.",
+    "organizer_line1": "No-shows cost you money.",
+    "organizer_line2": "Fix it with deposits.",
+    "staff_line1": "Scan. Check in.",
+    "staff_line2": "Under two seconds.",
+    "attendee_desc": "Put down a deposit to reserve your spot. Show up, check in, and get every cent back — take a quick quiz to unlock a digital badge you own forever.",
+    "organizer_desc": "Set a deposit for your event. Track check-ins live. Attendees who show up get their deposit back.",
+    "staff_desc": "Open the scanner on any phone, point it at an attendee's QR code, and the check-in is recorded. No app to install, no training.",
+    "built_on_solana": "Built on Solana"
+  },
+  "stats": {
+    "back": "Back When You Attend",
+    "cost": "Cost To Attend",
+    "qr": "QR Check-In"
+  },
+  "cta": {
+    "dashboard": "Go to Dashboard →",
+    "scanner": "Open Scanner →",
+    "find_events": "Find Events ↓",
+    "create_event": "Create an Event →"
+  },
+  "how": {
+    "title": "How it works",
+    "subtitle": "Choose your role to see the experience.",
+    "attendee": {
+      "s1_title": "Reserve your spot",
+      "s1_desc": "Browse events and reserve your place with the event’s configured THB or USDC deposit. You’ll see the exact amount and payment method before confirming.",
+      "s2_title": "Show your QR at the venue",
+      "s2_desc": "Open your ticket on any phone, show the QR code, and get scanned in under 2 seconds. No app needed.",
+      "s3_title": "Complete the brief quest",
+      "s3_desc": "After check-in, take a quick, fun quiz on your mobile device. It takes under a minute and confirms your engagement.",
+      "s4_title": "Get your full refund",
+      "s4_desc": "Your deposit comes back after the event, as a refund or as credit for next time, plus a compressed NFT badge you own forever."
+    },
+    "organizer": {
+      "s1_title": "Set up event & deposit amount",
+      "s1_desc": "Create your event, choose the deposit and refund rules, and show attendees the exact THB or USDC amount before they confirm.",
+      "s2_title": "Monitor real-time registrations",
+      "s2_desc": "Track locked deposits and RSVPs on a live dashboard. See exactly who committed — no guesswork.",
+      "s3_title": "Scan check-ins at the venue",
+      "s3_desc": "Staff use the mobile scanner portal to verify attendance in under 2 seconds. No app install required.",
+      "s4_title": "Settle deposits in one place",
+      "s4_desc": "A payout queue lists every deposit to return, and anything kept as credit stays on the attendee's balance for your next event."
+    },
+    "staff": {
+      "s1_title": "Open scanner on any mobile browser",
+      "s1_desc": "No app to install. Open the staff scanner on any smartphone — works in Chrome, Safari, and more.",
+      "s2_title": "Verify attendee QR code in 1 second",
+      "s2_desc": "Point the camera at the attendee's QR code. Instant verification with visual + haptic feedback.",
+      "s3_title": "Badge on Solana",
+      "s3_desc": "Checked-in attendees can claim a compressed NFT badge on Solana. Manual search fallback available for lost QR codes."
+    }
+  },
+  "faq": {
+    "title": "Frequently asked questions",
+    "subtitle": "Everything you need to know.",
+    "what_q": "What is BeThere?",
+    "what_a": "A deposit-backed event check-in platform. Attendees put down a deposit, show up, get scanned, and get the whole deposit back, plus a compressed NFT badge on Solana.",
+    "wallet_q": "Do attendees need a crypto wallet?",
+    "wallet_a": "No. Checking in and paying by PromptPay work on any phone. A wallet is only needed to pay a USDC deposit or to claim the NFT badge.",
+    "deposit_q": "How does the deposit work?",
+    "deposit_a": "Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back {{ refund_window }}, or you keep it as credit for your next event. {{ never_forfeited }} If you can't make it, tell the organizer. USDC deposits sit in a Solana escrow and you claim them back after the event ends.",
+    "crypto_q": "Is it only for crypto events?",
+    "crypto_a": "It works for any event — meetups, workshops, conferences, hackathons. The blockchain part runs behind the scenes; attendees don't need to know anything about crypto.",
+    "host_cta": "Want to host events? Learn more ↓"
+  },
+  "promise": {
+    "refund_window": "within 7 days after the event",
+    "never_forfeited": "Your deposit is never forfeited."
+  },
+  "waitlist": {
+    "title": "Bring deposit-backed events to your community",
+    "desc": "Stop losing seats to no-shows. Set a deposit, track check-ins live, and give attendees their deposit back when they show up.",
+    "signed_in": "Signed in! Contact us to get organizer access.",
+    "dm": "DM us on X/Twitter",
+    "invalid_email": "Please enter a valid email",
+    "server_error": "Something went wrong",
+    "retry_error": "Something went wrong. Please try again.",
+    "network_error": "Network error: {{ error }}",
+    "already": "You're already on the list!",
+    "on_list": "You're on the list!",
+    "reach_out": "We'll reach out when we're ready to onboard new events.",
+    "joining": "Joining...",
+    "join": "Join Waitlist"
+  },
+  "footer": {
+    "tagline": "Show up. Get refunded.",
+    "built_with": "Built with ",
+    "rust_solana": " Rust & Solana",
+    "non_custodial": "Non-custodial & secure",
+    "partner": "Alpha partner: Solana Developer Thailand",
+    "product": "Product",
+    "how": "How It Works",
+    "faq": "FAQ",
+    "staff_portal": "Staff Portal",
+    "community": "Community",
+    "copyright": "© 2026 BeThere. All rights reserved."
+  },
+  "upcoming": {
+    "title": "Upcoming Events",
+    "subtitle": "Reserve your spot with a deposit. Show up. Get refunded.",
+    "loading": "Loading events...",
+    "none_title": "No live events right now",
+    "none_desc": "BeThere is a deposit-backed check-in platform. Try the flow below or host your own event.",
+    "see_how": "See how it works ↓",
+    "organize": "Organize an Event",
+    "date_tba": "Date TBA",
+    "time_tba": "Time TBA",
+    "deposit_required": "Deposit required",
+    "free_entry": "Free entry",
+    "poster_alt": "Event poster",
+    "badge_alt": "Event badge"
+  },
+  "reg": {
+    "verified": "✓ Verified Passport",
+    "member": "Solana Thailand Developer Community Member",
+    "edit_profile": "Edit Profile",
+    "sign_out": "Sign out",
+    "your_events": "Your Events",
+    "tba": "TBA",
+    "empty": "You haven't registered for any events yet. Check out upcoming events below!",
+    "step": {
+      "claim": "Claim Badge",
+      "deposit": "Complete Deposit",
+      "quest": "Start Quest",
+      "ticket": "View Ticket",
+      "view": "View"
+    }
+  },
+  "inbox": {
+    "title": "Notifications",
+    "caught_up": "You're all caught up.",
+    "unread": "{{ count }} unread",
+    "saving": "Saving…",
+    "mark_all": "Mark all read",
+    "loading": "Loading notifications…",
+    "empty": "No notifications yet.",
+    "mark_read": "Mark read",
+    "older": "Older notifications"
+  }
+}
