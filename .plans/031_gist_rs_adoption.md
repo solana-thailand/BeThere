@@ -92,6 +92,25 @@ reflex-site has no license, so its code is a pattern only.
 - [ ] `--remap-path-prefix` for `$HOME` and the rustup/cargo roots in both wasm
   builds, then make the leak scan blocking. Measure the brotli delta and open
   the staging page.
+  **Built on branch `feature/031-remap-path-prefix` (`132d82be`, 2026-09-28,
+  session `event-checkin-82`), not merged** (same RTM #6 hold as plan 028 §5,
+  since it changes shipped bytes).
+  - [x] `scripts/wasm_rustflags.sh` (self-test 3/3) appends the remaps to the
+    caller's RUSTFLAGS. `frontend-leptos/build.sh`, the wrangler `[build]`
+    command and the CI trunk step use it. Cargo's `trim-paths` would be
+    simpler, but it is still unstable on 1.98.1.
+  - [x] CI leak scans for both wasm builds are blocking.
+  - [x] Same-tree A/B on `develop` `8c7da908`: frontend 112 build-host paths →
+    0, brotli q4 −642 B (first load 1,826,763 B, within budget); worker 187 → 0,
+    gzip +89 B (within budget). A trap while measuring: `frontend_size_budget.sh`
+    with no flag reuses a fresh `dist/`, so the first "B" was really A's build.
+  - [x] Opened locally (`wrangler dev --local`, headless Chrome): `/`, `/admin`
+    and `/privacy` render with no page errors.
+  - [x] Found: `worker/.cargo/config.toml`'s curve25519 `fiat` cfg was dropped
+    whenever RUSTFLAGS was set, which includes CI's `-D warnings`. So CI built
+    and size-measured the serial backend while local deploys shipped fiat. The
+    cfg now lives in the build command, and the config file is gone.
+  - [ ] Merge after RTM #6, then open the staging page (owner-gated deploy).
 - [ ] Toolchain pin (`.plans/030` §3): declare `components` and `targets`.
 - [ ] Build stamp on `/api/health`: git sha, `BUILD_TAG`, and "stale" when
   built outside `deploy.sh`.
