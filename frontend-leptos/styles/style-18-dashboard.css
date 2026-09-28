@@ -458,8 +458,8 @@
     width: 100vw !important;
     height: 100vh !important;
     background: rgba(8, 9, 14, 0.85) !important;
-    backdrop-filter: blur(16px) !important;
     -webkit-backdrop-filter: blur(16px) !important;
+    backdrop-filter: blur(16px) !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
