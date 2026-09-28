@@ -373,7 +373,7 @@ pub fn PublicEvent() -> impl IntoView {
                 // Back link
                 <div class="pe-back-wrap">
                     <a href="/" class="pe-back-link">
-                        {t!(i18n, event.back_home)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.back_home))}
                     </a>
                 </div>
 
@@ -387,7 +387,7 @@ pub fn PublicEvent() -> impl IntoView {
                             // than a blank/spinner — better perceived speed on
                             // venue wifi.
                             view! {
-                                <div class="pe-skeleton" aria-busy="true" aria-label=move || t_string!(i18n, event.loading_aria)>
+                                <div class="pe-skeleton" aria-busy="true" aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, event.loading_aria))>
                                     <div class="pe-skel pe-skel-hero"></div>
                                     <div class="pe-skel pe-skel-title"></div>
                                     <div class="pe-skel pe-skel-sub"></div>
@@ -401,11 +401,11 @@ pub fn PublicEvent() -> impl IntoView {
                             view! {
                                 <div class="pe-loading">
                                     <div class="pe-icon-mb"><Icon icon=IconName::Search class="icon-2xl" /></div>
-                                    <h1 class="pe-error-title">{t!(i18n, event.not_found_title)}</h1>
+                                    <h1 class="pe-error-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.not_found_title))}</h1>
                                     <p class="pe-detail-secondary pe-msg-mb-lg">
-                                        {t!(i18n, event.not_found_body)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.not_found_body))}
                                     </p>
-                                    <a href="/" class="btn btn-primary">{t!(i18n, event.go_home)}</a>
+                                    <a href="/" class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.go_home))}</a>
                                 </div>
                             }.into_any()
                         }
@@ -414,7 +414,7 @@ pub fn PublicEvent() -> impl IntoView {
                             view! {
                                 <div class="pe-loading">
                                     <div class="pe-icon-mb"><Icon icon=IconName::Warning class="icon-md icon-danger" /></div>
-                                    <h1 class="pe-error-title">{t!(i18n, event.error_title)}</h1>
+                                    <h1 class="pe-error-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.error_title))}</h1>
                                     <p class="pe-detail-secondary pe-msg-mb-lg">{msg_display}</p>
                                     <div class="pe-flex-row-gap">
                                         <button
@@ -425,9 +425,9 @@ pub fn PublicEvent() -> impl IntoView {
                                                 // The Effect will re-run because state changed
                                             }
                                         >
-                                            {t!(i18n, event.try_again)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.try_again))}
                                         </button>
-                                        <a href="/" class="btn btn-outline">{t!(i18n, event.go_home)}</a>
+                                        <a href="/" class="btn btn-outline">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.go_home))}</a>
                                     </div>
                                 </div>
                             }.into_any()
@@ -453,7 +453,7 @@ pub fn PublicEvent() -> impl IntoView {
                 // Footer
                 <div class="pe-footer">
                     <p>
-                        {t!(i18n, event.powered_by)}" "
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.powered_by))}" "
                         <a href="/" class="pe-footer-link">"BeThere"</a>
                     </p>
                 </div>
@@ -631,12 +631,12 @@ fn render_loaded_event(
             view! {
                 <div class="pe-card">
                     <h2 class="pe-section-title">
-                        <Icon icon=IconName::Ticket class="icon-md" />" "{t!(i18n, event.nft_badge_title)}
+                        <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.nft_badge_title))}
                     </h2>
                     <p class="pe-detail-secondary pe-mb-075">
                         {move || if is_online_only { t_string!(i18n, event.nft_badge_online) } else { t_string!(i18n, event.nft_badge_attend) }}
                     </p>
-                    <img src=url alt=move || t_string!(i18n, event.nft_badge_title) class="pe-nft-img" />
+                    <img src=url alt=crate::locale::tr(|l| crate::i18n::td_string!(l, event.nft_badge_title)) class="pe-nft-img" />
                 </div>
             }.into_any()
         } else {
@@ -675,7 +675,7 @@ fn render_loaded_event(
                                     });
                                 }
                             >
-                                {t!(i18n, event.sign_out)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.sign_out))}
                             </button>
                         </div>
                     }.into_any()
@@ -700,7 +700,7 @@ fn render_loaded_event(
                         AuthState::Checking => {
                             view! {
                                 <div class="pe-card pe-text-center">
-                                    <p class="pe-detail-secondary">{t!(i18n, event.checking_signin)}</p>
+                                    <p class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.checking_signin))}</p>
                                 </div>
                             }.into_any()
                         }
@@ -709,9 +709,9 @@ fn render_loaded_event(
                             view! {
                                 <div class="pe-card">
                                     <h2 class="pe-section-title">
-                                        <Icon icon=IconName::Ticket class="icon-md" />" "{t!(i18n, event.reserve_title)}
+                                        <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.reserve_title))}
                                     </h2>
-                                    <p class="pe-detail-secondary pe-mb-1">{t!(i18n, event.signin_prompt)}</p>
+                                    <p class="pe-detail-secondary pe-mb-1">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.signin_prompt))}</p>
                                     <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
                                         <button
                                             class="btn-google"
@@ -743,7 +743,7 @@ fn render_loaded_event(
                                             }
                                         >
                                             <span inner_html=google_icon()></span>
-                                            {t!(i18n, login.google)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, login.google))}
                                         </button>
 
                                         <crate::wallet_signin::WalletSignInButton
@@ -766,7 +766,7 @@ fn render_loaded_event(
                                 RegistrationLookup::Pending => {
                                     view! {
                                         <div class="pe-card pe-text-center">
-                                            <p class="pe-detail-secondary">{t!(i18n, event.checking_registration)}</p>
+                                            <p class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.checking_registration))}</p>
                                         </div>
                                     }.into_any()
                                 }
@@ -851,7 +851,7 @@ fn render_loaded_event(
                                                         {t!(i18n, event.credit_have, amount = credit_amt)}
                                                     </p>
                                                     <p class="pe-detail-secondary" style="margin:4px 0 0;">
-                                                        {t!(i18n, event.credit_applied)}
+                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.credit_applied))}
                                                     </p>
                                                 </div>
                                             }.into_any()
@@ -859,7 +859,7 @@ fn render_loaded_event(
                                             view! {
                                                 <div class="pe-card" style="background:rgba(153,69,255,0.06);border:1px solid rgba(153,69,255,0.22);">
                                                     <p class="pe-detail-secondary" style="margin:0;font-size:0.82rem;line-height:1.45;">
-                                                        {t!(i18n, event.credit_wallet_hint)}
+                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.credit_wallet_hint))}
                                                     </p>
                                                 </div>
                                             }.into_any()
@@ -882,7 +882,7 @@ fn render_loaded_event(
             let desc = description.clone();
             view! {
                 <div class="pe-card">
-                    <h2 class="pe-section-title">{t!(i18n, event.about_title)}</h2>
+                    <h2 class="pe-section-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.about_title))}</h2>
                     <p class="pe-description">{desc}</p>
                 </div>
             }.into_any()
@@ -900,10 +900,10 @@ fn render_loaded_event(
             view! {
                 <div class="pe-card">
                     <h2 class="pe-section-title">
-                        <Icon icon=IconName::Link class="icon-sm" />" "{t!(i18n, event.external_link_title)}
+                        <Icon icon=IconName::Link class="icon-sm" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.external_link_title))}
                     </h2>
                     <a href=href target="_blank" rel="noopener noreferrer" class="pe-ext-link">
-                        {t!(i18n, event.view_event_page)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.view_event_page))}
                     </a>
                 </div>
             }.into_any()
@@ -933,7 +933,6 @@ fn completed_event_gateway(
     let poster_url = data.poster_url.clone();
     let nft_image_url = data.nft_image_url.clone();
     let community_links = data.community_links.clone();
-    let i18n = use_i18n();
 
     view! {
         {event_hero(&poster_url, &nft_image_url)}
@@ -951,28 +950,28 @@ fn completed_event_gateway(
 
         <div class="pe-card">
             <h2 class="pe-section-title">
-                <Icon icon=IconName::Party class="icon-md" />" "{t!(i18n, event.ended_title)}
+                <Icon icon=IconName::Party class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_title))}
             </h2>
-            <p class="pe-detail-secondary pe-mb-075">{t!(i18n, event.ended_body)}</p>
+            <p class="pe-detail-secondary pe-mb-075">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_body))}</p>
 
             <div class="pe-btn-row-center">
                 {if !archive_url.is_empty() {
                     let href = archive_url.clone();
                     view! {
                         <a href=href target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
-                            <Icon icon=IconName::Link class="icon-sm" />" "{t!(i18n, event.view_archive)}
+                            <Icon icon=IconName::Link class="icon-sm" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.view_archive))}
                         </a>
                     }.into_any()
                 } else {
                     view! {
-                        <span class="pe-detail-secondary">{t!(i18n, event.archive_soon)}</span>
+                        <span class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.archive_soon))}</span>
                     }.into_any()
                 }}
 
                 {if enrollment_open {
                     let href = format!("/events/{slug}/post-event-register");
                     view! {
-                        <a href=href class="btn btn-primary btn-sm">" "{t!(i18n, event.join_community)}</a>
+                        <a href=href class="btn btn-primary btn-sm">" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.join_community))}</a>
                     }.into_any()
                 } else {
                     ().into_any()
@@ -983,7 +982,7 @@ fn completed_event_gateway(
         {if !description.is_empty() {
             view! {
                 <div class="pe-card">
-                    <h2 class="pe-section-title">{t!(i18n, event.about_title)}</h2>
+                    <h2 class="pe-section-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.about_title))}</h2>
                     <p class="pe-description">{description}</p>
                 </div>
             }.into_any()

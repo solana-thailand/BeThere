@@ -171,10 +171,20 @@ fn switch_shows_on_attendee_pages_only() {
         "/discover",
         "/feedback",
         "/privacy",
+        "/data-privacy",
+        "/past-events",
+        "/events/rtm-6/recap",
+        "/events/rtm-6/post-event-register",
     ] {
         assert!(is_attendee_path(path), "{path} should be bilingual");
     }
-    for path in ["/admin", "/staff", "/dashboard/live", "/events/e1/summary"] {
+    for path in [
+        "/admin",
+        "/staff",
+        "/dashboard/live",
+        "/events/e1/summary",
+        "/events/e1/pr-pack",
+    ] {
         assert!(!is_attendee_path(path), "{path} stays English");
     }
 }

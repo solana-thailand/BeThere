@@ -83,7 +83,7 @@ pub fn thb_payment_form_view(
         <div class="dep2-card">
             // Card header
             <div class="dep2-card-header">
-                <h2 class="dep2-card-title">{t!(i18n, deposit.thb.title)}</h2>
+                <h2 class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.title))}</h2>
                 <span class="badge badge-warning">
                     {format!("฿{deposit_amount_thb}")}
                 </span>
@@ -94,7 +94,7 @@ pub fn thb_payment_form_view(
                 view! {
                     <div class="dep2-section">
                         <div class="dep2-section-title">
-                            {t!(i18n, deposit.thb.scan_pay)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.scan_pay))}
                         </div>
 
                         {match pp_qr_image {
@@ -114,13 +114,13 @@ pub fn thb_payment_form_view(
                                                 );
                                             }
                                         >
-                                            {t!(i18n, deposit.thb.save_qr)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.save_qr))}
                                         </button>
                                     </div>
                                 }.into_any()
                             },
                             None => view! {
-                                <p class="hint-2xs">{t!(i18n, deposit.thb.qr_failed)}</p>
+                                <p class="hint-2xs">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.qr_failed))}</p>
                             }.into_any(),
                         }}
 
@@ -133,9 +133,9 @@ pub fn thb_payment_form_view(
                 view! {
                     <div class="dep2-section">
                         <div class="dep2-section-title">
-                            {t!(i18n, deposit.thb.scan_pay)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.scan_pay))}
                         </div>
-                        <p class="hint-desc">{t!(i18n, deposit.thb.no_promptpay)}</p>
+                        <p class="hint-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.no_promptpay))}</p>
                     </div>
                 }.into_any()
             }}
@@ -143,10 +143,10 @@ pub fn thb_payment_form_view(
             // ── Section B: Upload Slip ──────────────────────────────────
             <div class="dep2-section">
                 <div class="dep2-section-title">
-                    {t!(i18n, deposit.thb.upload_title)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.upload_title))}
                 </div>
                 <p class="thb-slip-hint">
-                    {t!(i18n, deposit.thb.upload_hint)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.upload_hint))}
                 </p>
                 {slip_vision_enabled.then(|| view! {
                     <p class="thb-slip-hint">
@@ -181,7 +181,7 @@ pub fn thb_payment_form_view(
                                 thumb_class="slip-preview-img"
                                 hint=t_string!(i18n, deposit.thb.preview_close_hint).to_string()
                             />
-                            <span class="slip-preview-zoom-hint">{t!(i18n, deposit.thb.tap_enlarge)}</span>
+                            <span class="slip-preview-zoom-hint">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.tap_enlarge))}</span>
                             <button
                                 class="slip-preview-remove"
                                 on:click=move |_| {
@@ -200,11 +200,11 @@ pub fn thb_payment_form_view(
 
                 // Manual URL fallback — advanced option
                 <details class="u-mt-xs dep2-advanced-toggle">
-                    <summary class="details-summary-text hint-muted">{t!(i18n, deposit.thb.advanced)}</summary>
+                    <summary class="details-summary-text hint-muted">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.advanced))}</summary>
                     <input
                         type="text"
                         class="form-input dep-input u-mt-xs"
-                        placeholder=move || t_string!(i18n, deposit.thb.url_placeholder)
+                        placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.url_placeholder))
                         prop:value=move || slip_url_input.get()
                         on:input=move |ev| {
                             let val = event_target_value(&ev);
@@ -217,14 +217,14 @@ pub fn thb_payment_form_view(
             // ── Section C: Refund Account ───────────────────────────────
             <div class="dep2-section">
                 <div class="dep2-section-title">
-                    {t!(i18n, deposit.thb.refund_title)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.refund_title))}
                 </div>
-                <p class="hint-desc">{t!(i18n, deposit.thb.refund_question)}</p>
+                <p class="hint-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.refund_question))}</p>
 
                 <input
                     type="text"
                     class="form-input dep-input u-mt-xs"
-                    placeholder=move || t_string!(i18n, deposit.thb.bank_account)
+                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.bank_account))
                     prop:value=move || bank_account_input.get()
                     on:input=move |ev| {
                         let val = event_target_value(&ev);
@@ -237,7 +237,7 @@ pub fn thb_payment_form_view(
                     <input
                         type="text"
                         class="form-input dep-input"
-                        placeholder=move || t_string!(i18n, deposit.thb.bank_name)
+                        placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.bank_name))
                         prop:value=move || bank_name_input.get()
                         on:focus=move |_| set_show_bank_dropdown.set(true)
                         on:input=move |ev| {
@@ -294,7 +294,7 @@ pub fn thb_payment_form_view(
                 <input
                     type="text"
                     class="form-input dep-input u-mt-xs"
-                    placeholder=move || t_string!(i18n, deposit.thb.account_name)
+                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.account_name))
                     prop:value=move || account_name_input.get()
                     on:input=move |ev| {
                         let val = event_target_value(&ev);
@@ -316,10 +316,10 @@ pub fn thb_payment_form_view(
                     move |_| hus()
                 }
             >
-                {t!(i18n, deposit.thb.submit)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.submit))}
             </button>
             <p class="thb-upload-disclaimer">
-                {t!(i18n, deposit.thb.required)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.required))}
             </p>
         </div>
     }
@@ -332,7 +332,6 @@ pub fn thb_payment_form_view(
 
 /// THB uploading spinner view.
 pub fn thb_uploading_view() -> AnyView {
-    let i18n = use_i18n();
     view! {
         <div class="dep2-card">
             <div class="dep2-confirming">
@@ -341,7 +340,7 @@ pub fn thb_uploading_view() -> AnyView {
                     <span class="dep2-confirming-dot"></span>
                     <span class="dep2-confirming-dot"></span>
                 </div>
-                <p class="hint-desc u-mt-xs">{t!(i18n, deposit.thb.uploading)}</p>
+                <p class="hint-desc u-mt-xs">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.uploading))}</p>
             </div>
         </div>
     }
@@ -364,9 +363,9 @@ pub fn thb_uploaded_view(attendee_id: &str, event_id: &str) -> AnyView {
     view! {
         <div class="dep2-card">
             <div class="dep2-success-icon">"✓"</div>
-            <h2 class="dep2-card-title" style="text-align:center;margin-top:0.75rem">{t!(i18n, deposit.thb.submitted_title)}</h2>
+            <h2 class="dep2-card-title" style="text-align:center;margin-top:0.75rem">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.submitted_title))}</h2>
             <p class="hint-desc" style="text-align:center">
-                {t!(i18n, deposit.thb.submitted_body)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.submitted_body))}
             </p>
             <div style="text-align:center">
                 {move || view! {
@@ -376,7 +375,7 @@ pub fn thb_uploaded_view(attendee_id: &str, event_id: &str) -> AnyView {
                     />
                 }}
             </div>
-            <p class="thb-success-redirect">{t!(i18n, deposit.thb.redirecting)}</p>
+            <p class="thb-success-redirect">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.redirecting))}</p>
         </div>
     }
         .into_any()
@@ -392,7 +391,6 @@ pub fn thb_rejected_view(
     set_state: WriteSignal<DepositPageState>,
     set_payment_choice: WriteSignal<Option<PaymentChoice>>,
 ) -> AnyView {
-    let i18n = use_i18n();
     let _amount_thb = data.deposit_amount_thb;
     let data_clone = data.clone();
 
@@ -400,7 +398,7 @@ pub fn thb_rejected_view(
         <div class="dep2-card">
             <div class="dep2-deadline dep2-deadline--danger">
                 <p class="dep2-deadline-text">
-                    {t!(i18n, deposit.thb.rejected)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.rejected))}
                 </p>
             </div>
 
@@ -411,7 +409,7 @@ pub fn thb_rejected_view(
                     set_state.set(DepositPageState::ChoosePayment(data_clone.clone()));
                 }
             >
-                {t!(i18n, deposit.thb.reupload)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.reupload))}
             </button>
         </div>
     }
@@ -432,7 +430,6 @@ pub fn thb_rejected_view(
 /// After successful sign-in, the user returns to the deposit page (via the
 /// URL they came from) and can retry the upload.
 pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
-    let i18n = use_i18n();
     let amount_thb = data.deposit_amount_thb;
 
     // Capture the current path + query string so we can return the user here
@@ -455,7 +452,7 @@ pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <h2 class="dep2-card-title">{t!(i18n, deposit.thb.auth_title)}</h2>
+                <h2 class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.auth_title))}</h2>
                 {if amount_thb > 0 {
                     view! {
                         <span class="badge badge-warning">
@@ -470,11 +467,11 @@ pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
             <div class="dep2-section">
                 <div class="dep2-deadline dep2-deadline--danger">
                     <p class="dep2-deadline-text">
-                        {t!(i18n, deposit.thb.auth_expired)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.auth_expired))}
                     </p>
                 </div>
                 <p class="hint-desc u-mt-xs">
-                    {t!(i18n, deposit.thb.auth_explain)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.auth_explain))}
                 </p>
             </div>
 
@@ -482,7 +479,7 @@ pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
                 class="btn btn-primary btn-block u-mt-1rem"
                 href=login_href
             >
-                {t!(i18n, deposit.thb.auth_cta)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.auth_cta))}
             </a>
         </div>
     }

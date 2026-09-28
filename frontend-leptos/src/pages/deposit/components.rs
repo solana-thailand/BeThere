@@ -4,7 +4,7 @@ use leptos::prelude::*;
 
 use super::types::DepositFlow;
 use crate::components::{self, ToastType};
-use crate::i18n::{Locale, t, t_string, td_string, use_i18n};
+use crate::i18n::{Locale, t, td_string, use_i18n};
 use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::{get_cluster, solscan_tx_url};
 
@@ -41,11 +41,10 @@ pub fn wallet_list_view(
 
 /// No wallets detected fallback message.
 pub fn wallet_fallback_view() -> AnyView {
-    let i18n = use_i18n();
     view! {
         <div class="wallet-fallback-box">
             <p class="wallet-fallback-text">
-                {t!(i18n, deposit.wallet_fallback)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.wallet_fallback))}
             </p>
         </div>
     }
@@ -65,7 +64,7 @@ pub fn wallet_connected_bar(wallet_name: &str, public_key: &str) -> AnyView {
                 <div class="wallet-label">{t!(i18n, deposit.connected_via, wallet)}</div>
                 <div class="wallet-address-bold">{pk_short}</div>
             </div>
-            <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" "{t!(i18n, deposit.connected)}</span>
+            <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.connected))}</span>
         </div>
     }
     .into_any()
@@ -97,11 +96,10 @@ pub fn tx_hash_box(sig_display: &str) -> AnyView {
 
 /// Solscan explorer link.
 pub fn solscan_link(tx_sig: &str) -> AnyView {
-    let i18n = use_i18n();
     let url = solscan_tx_url(tx_sig, &get_cluster());
     view! {
         <a href=&url target="_blank" class="tx-explorer-link">
-            {t!(i18n, deposit.view_solscan)}
+            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.view_solscan))}
         </a>
     }
     .into_any()
@@ -129,11 +127,10 @@ pub fn spinner_loading(text: &str) -> AnyView {
 
 /// "Back to event" link, or "Back to home" when the event slug is unknown.
 pub fn back_to_event_link(event_slug: &str) -> AnyView {
-    let i18n = use_i18n();
     if event_slug.is_empty() {
         view! {
             <a href="/" class="link-back-home">
-                {t!(i18n, deposit.back_home)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_home))}
             </a>
         }
         .into_any()
@@ -141,7 +138,7 @@ pub fn back_to_event_link(event_slug: &str) -> AnyView {
         let slug = event_slug.to_string();
         view! {
             <a href=format!("/e/{slug}") class="link-back-home">
-                {t!(i18n, deposit.back_event)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_event))}
             </a>
         }
         .into_any()
@@ -199,9 +196,8 @@ pub fn transaction_review(rows: Vec<(&'static str, String)>) -> AnyView {
 /// [`transaction_review`] with rendered cells, so a caller can pass catalog
 /// text (`t!`) that follows a language switch.
 pub fn transaction_review_views(rows: Vec<(AnyView, AnyView)>) -> AnyView {
-    let i18n = use_i18n();
     view! {
-        <div class="dep2-receipt" aria-label=move || t_string!(i18n, deposit.review.aria)>
+        <div class="dep2-receipt" aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.aria))>
             {rows.into_iter().map(|(label, value)| view! {
                 <div class="dep2-receipt-row">
                     <span class="dep2-receipt-label">{label}</span>

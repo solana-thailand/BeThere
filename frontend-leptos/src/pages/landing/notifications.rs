@@ -130,10 +130,10 @@ pub(super) fn NotificationInbox() -> impl IntoView {
             <section class="attendee-inbox" aria-labelledby="attendee-inbox-title">
                 <div class="attendee-inbox-header">
                     <div>
-                        <h2 id="attendee-inbox-title" class="landing-reg-title">{t!(i18n, landing.inbox.title)}</h2>
+                        <h2 id="attendee-inbox-title" class="landing-reg-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.inbox.title))}</h2>
                         <p class="attendee-inbox-summary">
                             {match unread_count {
-                                0 => t!(i18n, landing.inbox.caught_up).into_any(),
+                                0 => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.inbox.caught_up)).into_any(),
                                 count => t!(i18n, landing.inbox.unread, count).into_any(),
                             }}
                         </p>
@@ -151,10 +151,10 @@ pub(super) fn NotificationInbox() -> impl IntoView {
                     <p role="alert">{move || error.get()}</p>
                 </Show>
                 <Show when=move || busy.get() && page.get().is_none()>
-                    <p role="status">{t!(i18n, landing.inbox.loading)}</p>
+                    <p role="status">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.inbox.loading))}</p>
                 </Show>
                 <Show when=move || !busy.get() && error.get().is_none() && page.get().is_some_and(|value| value.items.is_empty())>
-                    <p>{t!(i18n, landing.inbox.empty)}</p>
+                    <p>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.inbox.empty))}</p>
                 </Show>
                 <div class="attendee-inbox-list">
                     {items.into_iter().map(|item| {
@@ -210,7 +210,7 @@ pub(super) fn NotificationInbox() -> impl IntoView {
                                     <p>{item.body}</p>
                                 </div>
                                 <div class="attendee-inbox-actions">
-                                    {unread.then(|| view! { <button class="btn btn-outline btn-xs" disabled=move || busy.get() on:click=mark_read>{t!(i18n, landing.inbox.mark_read)}</button> })}
+                                    {unread.then(|| view! { <button class="btn btn-outline btn-xs" disabled=move || busy.get() on:click=mark_read>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.inbox.mark_read))}</button> })}
                                     <a class="btn btn-primary btn-sm" href=item.action_url>{item.action_label}" →"</a>
                                 </div>
                             </article>

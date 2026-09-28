@@ -1,6 +1,6 @@
 //! Event context badge — shows event image, tagline, location, and link.
 
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t_string, use_i18n};
 use crate::utils;
 use event_checkin_domain::models::event::safe_map_url;
 use leptos::prelude::*;
@@ -53,7 +53,7 @@ pub fn EventContext(
                 view! {
                     <img
                         src=img
-                        alt=move || t_string!(i18n, ticket.context.badge_alt)
+                        alt=crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.context.badge_alt))
                         class="ticket-event-badge-img"
                     />
                 }.into_any()
@@ -90,7 +90,7 @@ pub fn EventContext(
                         rel="noopener noreferrer"
                         class="ticket-event-link"
                     >
-                        {t!(i18n, ticket.context.map)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.context.map))}
                     </a>
                 });
                 view! {

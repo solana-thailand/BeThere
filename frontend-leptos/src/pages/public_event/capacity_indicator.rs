@@ -1,4 +1,4 @@
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 
@@ -18,7 +18,7 @@ pub fn capacity_indicator(
     view! {
         <div class="pe-card">
             <h2 class="pe-section-title">
-                <Icon icon=IconName::Ticket class="icon-md" />" "{t!(i18n, event.capacity_title)}
+                <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.capacity_title))}
             </h2>
             <div class="pe-capacity-grid">
                 {if has_ip_cap {

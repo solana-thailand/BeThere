@@ -47,7 +47,6 @@ enum RecapLoadState {
 #[component]
 #[allow(non_snake_case)]
 pub fn EventRecap() -> impl IntoView {
-    let i18n = use_i18n();
     let params = use_params::<EventRecapParams>();
 
     let slug_val: String = match params.get() {
@@ -96,7 +95,7 @@ pub fn EventRecap() -> impl IntoView {
         move || matches!(load_state.get(), RecapLoadState::Failed(_)) && data.get().is_none();
 
     view! {
-        <Title text=move || t_string!(i18n, recap.page_title) />
+        <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.page_title)) />
         <Meta name="robots" content="index,follow" />
         <div class="center-page">
             <div class="container layout-col-center">
@@ -104,7 +103,7 @@ pub fn EventRecap() -> impl IntoView {
                 <Show when=move || is_loading() fallback=|| view! { <div></div> }>
                     <div class="page-loading">
                         <span class="spinner spinner-lg"></span>
-                        {t!(i18n, recap.loading)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.loading))}
                     </div>
                 </Show>
 
@@ -114,25 +113,25 @@ pub fn EventRecap() -> impl IntoView {
                         <span style="margin-bottom:1rem;opacity:0.6;">
                             <Icon icon=IconName::Calendar class="icon-2xl" />
                         </span>
-                        <h2 style="margin:0 0 0.5rem;">{t!(i18n, recap.none_title)}</h2>
+                        <h2 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.none_title))}</h2>
                         <p class="subtitle" style="margin:0 0 1rem;text-align:center;">
-                            {t!(i18n, recap.none_body)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.none_body))}
                         </p>
-                        <A href="/past-events" attr:class="btn btn-outline btn-sm">{t!(i18n, recap.all_past)}</A>
+                        <A href="/past-events" attr:class="btn btn-outline btn-sm">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.all_past))}</A>
                     </div>
                 </Show>
 
                 // ---------- Hard failure ----------
                 <Show when=move || is_hard_failure() fallback=|| view! { <div></div> }>
                     <div class="card">
-                        <h2>{t!(i18n, recap.failed_title)}</h2>
+                        <h2>{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.failed_title))}</h2>
                         <p class="subtitle">
                             {move || match load_state.get() {
                                 RecapLoadState::Failed(msg) => msg,
                                 _ => String::new(),
                             }}
                         </p>
-                        <A href="/past-events" attr:class="btn btn-primary">{t!(i18n, recap.back_past)}</A>
+                        <A href="/past-events" attr:class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.back_past))}</A>
                     </div>
                 </Show>
 
@@ -172,7 +171,7 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
     view! {
         // ── Back link ──
         <div class="flex-row-gap" style="margin-bottom:1rem;width:100%;justify-content:flex-start;">
-            <A href="/past-events" attr:class="btn btn-outline btn-sm">{t!(i18n, recap.all_past)}</A>
+            <A href="/past-events" attr:class="btn btn-outline btn-sm">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.all_past))}</A>
         </div>
 
         // ── Hero image ──
@@ -246,19 +245,19 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
 
         // ── Headline funnel ──
         <div class="card" style="width:100%;margin-bottom:1.5rem;">
-            <h2 style="margin:0 0 1rem;font-size:1.125rem;">{t!(i18n, recap.by_numbers)}</h2>
+            <h2 style="margin:0 0 1rem;font-size:1.125rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.by_numbers))}</h2>
             <div class="events-grid events-grid-3">
                 <div class="stat-tile">
                     <div class="stat-tile-value">{funnel.registered_count}</div>
-                    <div class="stat-tile-label">{t!(i18n, recap.registered)}</div>
+                    <div class="stat-tile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.registered))}</div>
                 </div>
                 <div class="stat-tile">
                     <div class="stat-tile-value">{funnel.checked_in_count}</div>
-                    <div class="stat-tile-label">{t!(i18n, recap.checked_in)}</div>
+                    <div class="stat-tile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.checked_in))}</div>
                 </div>
                 <div class="stat-tile">
                     <div class="stat-tile-value">{funnel.claimed_count}</div>
-                    <div class="stat-tile-label">{t!(i18n, recap.claimed)}</div>
+                    <div class="stat-tile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.claimed))}</div>
                 </div>
             </div>
             {move || {
@@ -332,15 +331,15 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
                             <Icon icon=IconName::Lightbulb class="icon-lg" />
                         </span>
                         <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">
-                            {t!(i18n, recap.missed_title)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.missed_title))}
                         </h2>
                         <p class="subtitle" style="margin:0 0 1rem;">
-                            {t!(i18n, recap.missed_body)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.missed_body))}
                         </p>
                         <A href=format!("/events/{slug}/post-event-register")
                             attr:class="btn btn-primary"
                         >
-                            {t!(i18n, recap.join_cta)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join_cta))}
                         </A>
                     </div>
                 }
@@ -393,9 +392,9 @@ fn render_learning_resources(links: Vec<crate::api::CommunityLink>) -> AnyView {
 
     view! {
         <div class="card" style="width:100%;margin-bottom:1.5rem;">
-            <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">{t!(i18n, recap.resources_title)}</h2>
+            <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.resources_title))}</h2>
             <p class="subtitle" style="margin:0 0 1rem;">
-                {t!(i18n, recap.resources_body)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.resources_body))}
             </p>
             <div class="pe-community-links-list">{items}</div>
         </div>

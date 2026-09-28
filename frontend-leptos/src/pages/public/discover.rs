@@ -17,7 +17,7 @@
 use leptos::prelude::*;
 use serde::Deserialize;
 
-use crate::i18n::{Locale, t, t_string, td_string, use_i18n};
+use crate::i18n::{Locale, t_string, td_string, use_i18n};
 use crate::pages::landing::{AuthState, SiteHeader};
 
 #[derive(Clone, Deserialize)]
@@ -238,17 +238,17 @@ pub fn Discover() -> impl IntoView {
         <div class="container dv-page">
 
             <header class="dv-head">
-                <h1>{t!(i18n, discover.title)}</h1>
-                <p class="subtitle">{t!(i18n, discover.subtitle)}</p>
+                <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, discover.title))}</h1>
+                <p class="subtitle">{crate::locale::tr(|l| crate::i18n::td_string!(l, discover.subtitle))}</p>
             </header>
 
             <Show when=move || loaded.get() && !signed_in.get() fallback=|| ()>
                 <p class="dv-signin-hint">
-                    {t!(i18n, discover.signin_hint)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, discover.signin_hint))}
                 </p>
             </Show>
 
-            <Show when=move || loaded.get() fallback=move || view! { <p class="page-loading">{t!(i18n, common.loading)}</p> }>
+            <Show when=move || loaded.get() fallback=move || view! { <p class="page-loading">{crate::locale::tr(|l| crate::i18n::td_string!(l, common.loading))}</p> }>
                 <Section
                     title=text(|l| td_string!(l, discover.upcoming))
                     rows=upcoming

@@ -15,7 +15,6 @@ use leptos_meta::Title;
 use leptos_router::components::A;
 
 use crate::api::{self, PastEventItem, PastEventsResponse};
-use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Coarse load state for the feed. Once we have any data we keep it on screen,
@@ -32,7 +31,6 @@ enum PastEventsLoadState {
 #[component]
 #[allow(non_snake_case)]
 pub fn PastEvents() -> impl IntoView {
-    let i18n = use_i18n();
     let (events, set_events) = signal(Vec::<PastEventItem>::new());
     let (load_state, set_load_state) = signal(PastEventsLoadState::Loading);
 
@@ -63,12 +61,12 @@ pub fn PastEvents() -> impl IntoView {
         move || matches!(load_state.get(), PastEventsLoadState::Loaded) && events.get().is_empty();
 
     view! {
-        <Title text=move || t_string!(i18n, recap.past.page_title) />
+        <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.past.page_title)) />
         <div class="center-page">
             <div class="container layout-col-center">
                 // ---------- Header ----------
                 <div class="flex-row-gap events-flex-wrap-center" style="margin-bottom:2rem;width:100%;">
-                    <h1 style="margin:0;">{t!(i18n, recap.past.title)}</h1>
+                    <h1 style="margin:0;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.past.title))}</h1>
                     <span class="badge badge-info-xs">
                         {move || events.get().len().to_string()}
                     </span>
@@ -78,21 +76,21 @@ pub fn PastEvents() -> impl IntoView {
                 <Show when=move || is_loading() fallback=|| view! { <div></div> }>
                     <div class="page-loading">
                         <span class="spinner spinner-lg"></span>
-                        {t!(i18n, recap.past.loading)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.past.loading))}
                     </div>
                 </Show>
 
                 // ---------- Hard failure ----------
                 <Show when=move || is_hard_failure() fallback=|| view! { <div></div> }>
                     <div class="card">
-                        <h2>{t!(i18n, recap.past.failed)}</h2>
+                        <h2>{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.past.failed))}</h2>
                         <p class="subtitle">
                             {move || match load_state.get() {
                                 PastEventsLoadState::Failed(msg) => msg,
                                 _ => String::new(),
                             }}
                         </p>
-                        <a href="/past-events" class="btn btn-primary">{t!(i18n, recap.past.try_again)}</a>
+                        <a href="/past-events" class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.past.try_again))}</a>
                     </div>
                 </Show>
 
@@ -102,9 +100,9 @@ pub fn PastEvents() -> impl IntoView {
                         <span style="margin-bottom:1rem;opacity:0.6;">
                             <Icon icon=IconName::Calendar class="icon-2xl" />
                         </span>
-                        <h2 style="margin:0 0 0.5rem;">{t!(i18n, recap.past.empty_title)}</h2>
+                        <h2 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.past.empty_title))}</h2>
                         <p class="subtitle" style="margin:0;">
-                            {t!(i18n, recap.past.empty_body)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.past.empty_body))}
                         </p>
                     </div>
                 </Show>
@@ -124,7 +122,7 @@ pub fn PastEvents() -> impl IntoView {
 
                 // ---------- Back to landing ----------
                 <div class="flex-row-gap" style="margin-top:2rem;">
-                    <A href="/" attr:class="btn btn-outline btn-sm">{t!(i18n, recap.past.back_home)}</A>
+                    <A href="/" attr:class="btn btn-outline btn-sm">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.past.back_home))}</A>
                 </div>
             </div>
         </div>
@@ -135,7 +133,6 @@ pub fn PastEvents() -> impl IntoView {
 /// `poster_url`, falling back to the NFT badge image, then to a Ticket icon
 /// empty-state — mirroring the dedicated event-page hero logic.
 fn past_event_card(ev: PastEventItem) -> impl IntoView {
-    let i18n = use_i18n();
     let image_url = if !ev.poster_url.is_empty() {
         ev.poster_url.clone()
     } else {
@@ -198,7 +195,7 @@ fn past_event_card(ev: PastEventItem) -> impl IntoView {
 
                     // CTA.
                     <div class="event-card-cta">
-                        <span class="btn btn-outline btn-sm">{t!(i18n, recap.past.read_recap)}</span>
+                        <span class="btn btn-outline btn-sm">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.past.read_recap))}</span>
                     </div>
                 </div>
             </div>

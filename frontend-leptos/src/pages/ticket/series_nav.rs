@@ -95,7 +95,7 @@ pub fn SeriesNav(
                 view! {
                     <div class="ticket-series-nav">
                         <div class="ticket-series-badge">
-                            <span class="ticket-series-badge-label">{t!(i18n, series.part_of)}</span>
+                            <span class="ticket-series-badge-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, series.part_of))}</span>
                             <span class="ticket-series-badge-title">
                                 {utils::escape_html(&campaign_title)}
                             </span>

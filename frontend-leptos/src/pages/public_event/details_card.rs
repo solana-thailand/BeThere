@@ -1,6 +1,6 @@
 use super::types::*;
 use crate::api::EventFormat;
-use crate::i18n::{Locale, t, td_string, use_i18n};
+use crate::i18n::{Locale, td_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use event_checkin_domain::models::event::safe_map_url;
 use leptos::prelude::*;
@@ -90,7 +90,7 @@ pub fn details_card(
                         rel="noopener noreferrer"
                         class="pe-map-link"
                     >
-                        {t!(i18n, event.open_in_maps)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.open_in_maps))}
                     </a>
                 });
                 view! {
@@ -124,7 +124,7 @@ pub fn details_card(
                     view! {
                         <div class="pe-detail-row">
                             <span><Icon icon=IconName::Party class="icon-sm icon-success" /></span>
-                            <span class="pe-text-success">{t!(i18n, event.event_completed)}</span>
+                            <span class="pe-text-success">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.event_completed))}</span>
                         </div>
                     }.into_any()
                 } else {
@@ -134,7 +134,7 @@ pub fn details_card(
                         view! {
                             <div class="pe-detail-row">
                                 <span class="pe-emoji-icon">"🔴"</span>
-                                <span class="pe-text-accent-bold">{t!(i18n, event.happening_now)}</span>
+                                <span class="pe-text-accent-bold">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.happening_now))}</span>
                             </div>
                         }.into_any()
                     } else {
@@ -142,7 +142,7 @@ pub fn details_card(
                             <div class="pe-detail-row">
                                 <span><Icon icon=IconName::Timer class="icon-sm icon-muted" /></span>
                                 <span class="pe-countdown-capsule">
-                                    {t!(i18n, event.starts_in)}" "{cd}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, event.starts_in))}" "{cd}
                                 </span>
                             </div>
                         }.into_any()

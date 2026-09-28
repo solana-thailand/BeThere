@@ -602,26 +602,26 @@ pub fn Feedback() -> impl IntoView {
         <SiteHeader auth_state=auth_state.read_only() user_role=user_role />
         <div class="container fb-page">
             {move || match state.get() {
-                PageState::Loading => view! { <p class="card layout-col-center">{t!(i18n, common.loading)}</p> }.into_any(),
+                PageState::Loading => view! { <p class="card layout-col-center">{crate::locale::tr(|l| crate::i18n::td_string!(l, common.loading))}</p> }.into_any(),
                 PageState::NothingToDo => view! {
                     <div class="card fb-notice">
-                        <h1>{t!(i18n, feedback.nothing_title)}</h1>
-                        <p>{t!(i18n, feedback.nothing_body)}</p>
-                        <a class="btn btn-primary" href="/">{t!(i18n, feedback.back_home)}</a>
+                        <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.nothing_title))}</h1>
+                        <p>{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.nothing_body))}</p>
+                        <a class="btn btn-primary" href="/">{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.back_home))}</a>
                     </div>
                 }.into_any(),
                 PageState::NeedsGoogle => view! {
                     <div class="card fb-notice">
-                        <h1>{t!(i18n, feedback.google_title)}</h1>
-                        <p>{t!(i18n, feedback.google_body)}</p>
+                        <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.google_title))}</h1>
+                        <p>{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.google_body))}</p>
                         <a class="btn btn-primary" href="/login?next=/feedback">
-                            {t!(i18n, feedback.google_cta)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.google_cta))}
                         </a>
                     </div>
                 }.into_any(),
                 PageState::Error(message) => view! {
                     <div class="card fb-notice">
-                        <h1>{t!(i18n, feedback.error_title)}</h1>
+                        <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.error_title))}</h1>
                         <p>{message}</p>
                     </div>
                 }.into_any(),
@@ -630,7 +630,7 @@ pub fn Feedback() -> impl IntoView {
                 // still unanswered (`.issues/107`).
                 PageState::Done(saved) => view! {
                     <div class="card fb-notice">
-                        <h1>{t!(i18n, feedback.done_title)}</h1>
+                        <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.done_title))}</h1>
                         <p>{t!(i18n, feedback.done_saved, saved)}</p>
                         // Close the loop rather than the conversation. Someone
                         // who just did the programme a favour is the best
@@ -646,7 +646,7 @@ pub fn Feedback() -> impl IntoView {
                                     .join(" · ");
                                 view! {
                                     <a class="fb-next-event" href=format!("/e/{}", next.slug)>
-                                        <span class="fb-next-label">{t!(i18n, feedback.next_label)}</span>
+                                        <span class="fb-next-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.next_label))}</span>
                                         <span class="fb-next-name">{next.name.clone()}</span>
                                         <span class="fb-next-meta">{line}</span>
                                     </a>
@@ -668,9 +668,9 @@ pub fn Feedback() -> impl IntoView {
                                     }
                                 }
                             >
-                                {t!(i18n, feedback.more)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.more))}
                             </button>
-                            <a class="btn btn-outline" href="/">{t!(i18n, feedback.back_home)}</a>
+                            <a class="btn btn-outline" href="/">{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.back_home))}</a>
                         </div>
                     </div>
                 }.into_any(),
@@ -685,18 +685,18 @@ pub fn Feedback() -> impl IntoView {
                     };
                     view! {
                         <header class="card">
-                            <h1>{t!(i18n, feedback.intro_title)}</h1>
+                            <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.intro_title))}</h1>
                             // The stake, which lived only in the covering email.
                             // Whoever clicks the link loses it, and this page
                             // then asks a favour without saying what the favour
                             // buys — the single cheapest thing that moves a
                             // response rate (`.issues/110`).
-                            <p class="fb-stake">{t!(i18n, feedback.stake)}</p>
+                            <p class="fb-stake">{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.stake))}</p>
                             <p>
                                 // "2 นาที" next to eleven sessions is a promise
                                 // the page cannot keep. Price the unit the
                                 // reader actually commits to — one event.
-                                {t!(i18n, feedback.effort)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.effort))}
                             </p>
                             // Only shown to people with more than one session,
                             // which is 83 of 206. For the other 123 a counter
@@ -706,7 +706,7 @@ pub fn Feedback() -> impl IntoView {
                                 // reader sees answers they do not remember
                                 // giving and wonders what else the page decided
                                 // on their behalf (`.issues/111`).
-                                <p class="fb-restored">{t!(i18n, feedback.restored)}</p>
+                                <p class="fb-restored">{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.restored))}</p>
                             </Show>
                             <Show when=move || { blocks.get().len() > 1 } fallback=|| ()>
                                 <p class="fb-progress">
@@ -729,7 +729,7 @@ pub fn Feedback() -> impl IntoView {
 
                         <section class="card">
                             <label>
-                                {t!(i18n, feedback.next_topics)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.next_topics))}
                                 <textarea
                                     class="dev-profile-input"
                                     rows="3"
@@ -739,7 +739,7 @@ pub fn Feedback() -> impl IntoView {
                             </label>
                             <fieldset class="fb-options">
                                 <legend class="dev-profile-label">
-                                    {t!(i18n, feedback.latent_q)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.latent_q))}
                                 </legend>
                                 {LATENT_SPACE_OPTIONS.iter().enumerate().map(|(index, option)| {
                                     let value = (*option).to_string();
@@ -798,7 +798,7 @@ pub fn Feedback() -> impl IntoView {
                             >
                                 // Says what is missing rather than leaving a
                                 // greyed-out button to be interpreted.
-                                <p class="fb-submit-hint">{t!(i18n, feedback.submit_hint)}</p>
+                                <p class="fb-submit-hint">{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.submit_hint))}</p>
                             </Show>
                         </div>
                     }.into_any()
@@ -885,7 +885,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                 // stored — otherwise someone who typed and left
                                 // would be told their answer was saved.
                                 {move || match (!open.get(), answered.already, block_answered(&answered)) {
-                                    (true, true, _) => view! { <span class="fb-badge">{t!(i18n, feedback.answered)}</span> }.into_any(),
+                                    (true, true, _) => view! { <span class="fb-badge">{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.answered))}</span> }.into_any(),
                                     (true, false, true) => view! { <span class="fb-tick">"✓"</span> }.into_any(),
                                     (true, false, false) => view! { <span class="fb-chevron">"+"</span> }.into_any(),
                                     _ => view! { <div></div> }.into_any(),
@@ -913,7 +913,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                     target="_blank"
                                     rel="noopener"
                                 >
-                                    {t!(i18n, feedback.recall)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.recall))}
                                 </a>
                             // Online only, and first: for someone who did
                             // not watch, this is the only question they can
@@ -926,7 +926,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                     true => view! {
                                         <fieldset class="fb-options">
                                             <legend class="dev-profile-label">
-                                                {t!(i18n, feedback.watched_q)}
+                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.watched_q))}
                                             </legend>
                                             {WATCHED_OPTIONS.iter().enumerate().map(|(index, option)| {
                                                 let value = (*option).to_string();
@@ -996,14 +996,14 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                             class="fb-add-comment"
                                             on:click=move |_| open.set(true)
                                         >
-                                            {t!(i18n, feedback.add_comment)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.add_comment))}
                                         </button>
                                     }.into_any(),
                                     true => view! {
                                         <textarea
                                             class="dev-profile-input"
                                             rows="3"
-                                            placeholder=move || t_string!(i18n, feedback.comment_placeholder)
+                                            placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.comment_placeholder))
                                             prop:value=move || comment.get()
                                             on:input=move |ev| comment.set(event_target_value(&ev))
                                         />

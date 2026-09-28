@@ -19,7 +19,7 @@ use leptos_router::hooks::use_params;
 
 use crate::api;
 use crate::components::{self as app_components, Toast};
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t, use_i18n};
 
 use self::types::*;
 
@@ -182,14 +182,14 @@ pub fn Deposit() -> impl IntoView {
     let has_wallets = move || !detected_wallets.get().is_empty();
 
     view! {
-        <Title text=move || t_string!(i18n, deposit.page_title) />
+        <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.page_title)) />
         <div class="center-page">
             <div class="container layout-col-center">
                 // Logo
                 <div class="brand-logo">"BeThere"</div>
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
 
-                <h1 class="claim-title">{t!(i18n, deposit.title)}</h1>
+                <h1 class="claim-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.title))}</h1>
 
                 // Logout button — only visible when signed in
                 {move || match signed_in_email.get() {
@@ -207,7 +207,7 @@ pub fn Deposit() -> impl IntoView {
                                     });
                                 }
                             >
-                                {t!(i18n, deposit.sign_out)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.sign_out))}
                             </button>
                         </div>
                     }.into_any(),

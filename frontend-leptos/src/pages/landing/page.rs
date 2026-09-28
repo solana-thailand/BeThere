@@ -91,14 +91,14 @@ pub fn Landing() -> impl IntoView {
                         class:landing-persona-btn--active=move || persona.get() == 0
                         on:click=move |_| set_persona.set(0)
                     >
-                        {t!(i18n, landing.persona.attendees)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.persona.attendees))}
                     </button>
                     <button
                         class="landing-persona-btn"
                         class:landing-persona-btn--active=move || persona.get() == 1
                         on:click=move |_| set_persona.set(1)
                     >
-                        {t!(i18n, landing.persona.organizers)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.persona.organizers))}
                     </button>
                     // Staff used to exist only in the "How it works" tabs, which
                     // meant the page carried two switchers for one axis that did
@@ -108,7 +108,7 @@ pub fn Landing() -> impl IntoView {
                         class:landing-persona-btn--active=move || persona.get() == 2
                         on:click=move |_| set_persona.set(2)
                     >
-                        {t!(i18n, landing.persona.staff)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.persona.staff))}
                     </button>
                 </div>
 
@@ -116,19 +116,19 @@ pub fn Landing() -> impl IntoView {
                     {move || match persona.get() {
                         0 => view! {
                             <>
-                                {t!(i18n, landing.hero.attendee_line1)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.attendee_line1))}
                                 <br />
                                 <span class="landing-hero-gradient">
-                                    {t!(i18n, landing.hero.attendee_line2)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.attendee_line2))}
                                 </span>
                             </>
                         }.into_any(),
                         1 => view! {
                             <>
-                                {t!(i18n, landing.hero.organizer_line1)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.organizer_line1))}
                                 <br />
                                 <span class="landing-hero-gradient">
-                                    {t!(i18n, landing.hero.organizer_line2)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.organizer_line2))}
                                 </span>
                             </>
                         }.into_any(),
@@ -137,10 +137,10 @@ pub fn Landing() -> impl IntoView {
                         // pitch would sell a door scanner on payouts.
                         _ => view! {
                             <>
-                                {t!(i18n, landing.hero.staff_line1)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.staff_line1))}
                                 <br />
                                 <span class="landing-hero-gradient">
-                                    {t!(i18n, landing.hero.staff_line2)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.staff_line2))}
                                 </span>
                             </>
                         }.into_any(),
@@ -155,7 +155,7 @@ pub fn Landing() -> impl IntoView {
                 </p>
                 // Solana pill badge
                 <div class="solana-pill">
-                    {t!(i18n, landing.hero.built_on_solana)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.built_on_solana))}
                     <Icon icon=IconName::Solana />
                 </div>
 
@@ -163,15 +163,15 @@ pub fn Landing() -> impl IntoView {
                 <div class="landing-stat-stubs">
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value stub-green">"100%"</div>
-                        <div class="landing-stat-stub-label">{t!(i18n, landing.stats.back)}</div>
+                        <div class="landing-stat-stub-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.stats.back))}</div>
                     </div>
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value stub-poppy">"฿0"</div>
-                        <div class="landing-stat-stub-label">{t!(i18n, landing.stats.cost)}</div>
+                        <div class="landing-stat-stub-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.stats.cost))}</div>
                     </div>
                     <div class="landing-stat-stub">
                         <div class="landing-stat-stub-value">"< 1s"</div>
-                        <div class="landing-stat-stub-label">{t!(i18n, landing.stats.qr)}</div>
+                        <div class="landing-stat-stub-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.stats.qr))}</div>
                     </div>
                 </div>
 
@@ -184,21 +184,21 @@ pub fn Landing() -> impl IntoView {
                             AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
                                 view! {
                                     <A href="/admin" attr:class="btn btn-primary landing-cta-link">
-                                        {t!(i18n, landing.cta.dashboard)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.dashboard))}
                                     </A>
                                 }.into_any()
                             }
                             AuthState::SignedIn(_) if role == "staff" => {
                                 view! {
                                     <A href="/staff" attr:class="btn btn-primary landing-cta-link">
-                                        {t!(i18n, landing.cta.scanner)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.scanner))}
                                     </A>
                                 }.into_any()
                             }
                             AuthState::SignedIn(_) => {
                                 view! {
                                     <a href="#events" class="btn btn-primary landing-cta-link">
-                                        {t!(i18n, landing.cta.find_events)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.find_events))}
                                     </a>
                                 }.into_any()
                             }
@@ -209,7 +209,7 @@ pub fn Landing() -> impl IntoView {
                                         class="btn btn-primary landing-cta-link"
                                         on:click=move |_| trigger_landing_oauth()
                                     >
-                                        {t!(i18n, landing.cta.create_event)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.create_event))}
                                     </button>
                                 }.into_any()
                             }
@@ -217,13 +217,13 @@ pub fn Landing() -> impl IntoView {
                                 // Attendee persona — primary = find events, secondary = create event
                                 view! {
                                     <a href="#events" class="btn btn-primary landing-cta-link">
-                                        {t!(i18n, landing.cta.find_events)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.find_events))}
                                     </a>
                                     <button
                                         class="btn btn-outline landing-cta-link"
                                         on:click=move |_| trigger_landing_oauth()
                                     >
-                                        {t!(i18n, landing.cta.create_event)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.create_event))}
                                     </button>
                                 }.into_any()
                             }
@@ -242,10 +242,10 @@ pub fn Landing() -> impl IntoView {
             <section id="how-it-works" class="landing-section">
                 <div class="landing-section-header">
                     <h2 class="landing-h2">
-                        {t!(i18n, landing.how.title)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.title))}
                     </h2>
                     <p class="landing-subtitle">
-                        {t!(i18n, landing.how.subtitle)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.subtitle))}
                     </p>
                 </div>
 
@@ -261,8 +261,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Ticket class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.attendee.s1_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.attendee.s1_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s1_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s1_desc))}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -270,8 +270,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::QrCode class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.attendee.s2_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.attendee.s2_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s2_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s2_desc))}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -279,8 +279,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Puzzle class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.attendee.s3_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.attendee.s3_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s3_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s3_desc))}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -288,8 +288,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Recycle class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.attendee.s4_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.attendee.s4_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s4_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s4_desc))}</div>
                                 </div>
                             </div>
                         </div>
@@ -301,8 +301,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Target class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.organizer.s1_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.organizer.s1_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s1_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s1_desc))}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -310,8 +310,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Chart class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.organizer.s2_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.organizer.s2_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s2_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s2_desc))}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -319,8 +319,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Camera class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.organizer.s3_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.organizer.s3_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s3_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s3_desc))}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -328,8 +328,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Coin class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.organizer.s4_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.organizer.s4_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s4_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.organizer.s4_desc))}</div>
                                 </div>
                             </div>
                         </div>
@@ -341,8 +341,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Camera class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.staff.s1_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.staff.s1_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s1_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s1_desc))}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -350,8 +350,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::QrCode class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.staff.s2_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.staff.s2_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s2_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s2_desc))}</div>
                                 </div>
                             </div>
                             <div class="landing-timeline-step">
@@ -359,8 +359,8 @@ pub fn Landing() -> impl IntoView {
                                     <Icon icon=IconName::Chain class="icon-sm"/>
                                 </div>
                                 <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">{t!(i18n, landing.how.staff.s3_title)}</div>
-                                    <div class="landing-timeline-desc">{t!(i18n, landing.how.staff.s3_desc)}</div>
+                                    <div class="landing-timeline-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s3_title))}</div>
+                                    <div class="landing-timeline-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.staff.s3_desc))}</div>
                                 </div>
                             </div>
                         </div>
@@ -372,10 +372,10 @@ pub fn Landing() -> impl IntoView {
             <section id="faq" class="landing-section-narrow">
                 <div class="landing-section-header">
                     <h2 class="landing-h2">
-                        {t!(i18n, landing.faq.title)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.title))}
                     </h2>
                     <p class="landing-subtitle">
-                        {t!(i18n, landing.faq.subtitle)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.subtitle))}
                     </p>
                 </div>
 
@@ -383,25 +383,25 @@ pub fn Landing() -> impl IntoView {
 
                     <div class="landing-faq-card">
                         <h3 class="landing-faq-q">
-                            {t!(i18n, landing.faq.what_q)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.what_q))}
                         </h3>
                         <p class="landing-faq-a">
-                            {t!(i18n, landing.faq.what_a)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.what_a))}
                         </p>
                     </div>
 
                     <div class="landing-faq-card">
                         <h3 class="landing-faq-q">
-                            {t!(i18n, landing.faq.wallet_q)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.wallet_q))}
                         </h3>
                         <p class="landing-faq-a">
-                            {t!(i18n, landing.faq.wallet_a)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.wallet_a))}
                         </p>
                     </div>
 
                     <div class="landing-faq-card">
                         <h3 class="landing-faq-q">
-                            {t!(i18n, landing.faq.deposit_q)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.deposit_q))}
                         </h3>
                         <p class="landing-faq-a">
                             {t!(
@@ -415,10 +415,10 @@ pub fn Landing() -> impl IntoView {
 
                     <div class="landing-faq-card">
                         <h3 class="landing-faq-q">
-                            {t!(i18n, landing.faq.crypto_q)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.crypto_q))}
                         </h3>
                         <p class="landing-faq-a">
-                            {t!(i18n, landing.faq.crypto_a)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.crypto_a))}
                         </p>
                     </div>
 
@@ -426,7 +426,7 @@ pub fn Landing() -> impl IntoView {
 
                 <div class="landing-faq-cta">
                     <a href="#waitlist" class="btn btn-outline landing-faq-cta-link">
-                        {t!(i18n, landing.faq.host_cta)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.host_cta))}
                     </a>
                 </div>
             </section>
@@ -435,10 +435,10 @@ pub fn Landing() -> impl IntoView {
             <section id="waitlist" class="landing-section">
                 <div class="landing-waitlist-inner">
                     <h2 class="landing-h2">
-                        {t!(i18n, landing.waitlist.title)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.title))}
                     </h2>
                     <p class="landing-faq-a">
-                        {t!(i18n, landing.waitlist.desc)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.desc))}
                     </p>
                     {move || {
                         let state = auth_state.get();
@@ -447,7 +447,7 @@ pub fn Landing() -> impl IntoView {
                             AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
                                 view! {
                                     <A href="/admin" attr:class="btn btn-primary landing-waitlist-submit">
-                                        {t!(i18n, landing.cta.dashboard)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.dashboard))}
                                     </A>
                                 }.into_any()
                             }
@@ -455,7 +455,7 @@ pub fn Landing() -> impl IntoView {
                                 view! {
                                     <div class="landing-waitlist-signed-in">
                                         <p class="landing-faq-a">
-                                            {t!(i18n, landing.waitlist.signed_in)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.signed_in))}
                                         </p>
                                         <a
                                             href="https://x.com/ozoneRatchapon"
@@ -463,7 +463,7 @@ pub fn Landing() -> impl IntoView {
                                             rel="noopener noreferrer"
                                             class="btn btn-outline btn-sm"
                                         >
-                                            {t!(i18n, landing.waitlist.dm)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.dm))}
                                         </a>
                                     </div>
                                 }.into_any()
@@ -486,16 +486,16 @@ pub fn Landing() -> impl IntoView {
                             "BeThere"
                         </span>
                         <div class="landing-footer-brand-tagline">
-                            {t!(i18n, landing.footer.tagline)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.tagline))}
                         </div>
                         <div class="landing-footer-built-with">
-                            {t!(i18n, landing.footer.built_with)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.built_with))}
                             <span class="landing-footer-crab"><Icon icon=IconName::Crab class="icon-sm"/></span>
-                            {t!(i18n, landing.footer.rust_solana)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.rust_solana))}
                         </div>
                         <div class="landing-footer-trust">
                             <span class="landing-footer-trust-icon"><Icon icon=IconName::Lock class="icon-xs"/></span>
-                            {t!(i18n, landing.footer.non_custodial)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.non_custodial))}
                         </div>
                         <a
                             href="https://github.com/solana-thailand"
@@ -503,21 +503,21 @@ pub fn Landing() -> impl IntoView {
                             rel="noopener noreferrer"
                             class="landing-footer-partner"
                         >
-                            {t!(i18n, landing.footer.partner)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.partner))}
                         </a>
                     </div>
 
                     // Column 2 — Product
                     <div class="landing-footer-col">
-                        <h4>{t!(i18n, landing.footer.product)}</h4>
-                        <a href="#how-it-works">{t!(i18n, landing.footer.how)}</a>
-                        <a href="#faq">{t!(i18n, landing.footer.faq)}</a>
-                        <A href="/login">{t!(i18n, landing.footer.staff_portal)}</A>
+                        <h4>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.product))}</h4>
+                        <a href="#how-it-works">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.how))}</a>
+                        <a href="#faq">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.faq))}</a>
+                        <A href="/login">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.staff_portal))}</A>
                     </div>
 
                     // Column 3 — Community
                     <div class="landing-footer-col">
-                        <h4>{t!(i18n, landing.footer.community)}</h4>
+                        <h4>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.community))}</h4>
                         <a href="https://x.com/ozoneRatchapon" target="_blank" rel="noopener noreferrer">"X / Twitter"</a>
                         <a href="https://github.com/solana-thailand/BeThere" target="_blank" rel="noopener noreferrer">"GitHub"</a>
                     </div>
@@ -526,9 +526,9 @@ pub fn Landing() -> impl IntoView {
 
                 // Bottom row
                 <div class="landing-footer-bottom">
-                    <span class="landing-footer-copy">{t!(i18n, landing.footer.copyright)}</span>
+                    <span class="landing-footer-copy">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.copyright))}</span>
                     <span class="landing-footer-powered">
-                        {t!(i18n, landing.hero.built_on_solana)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.built_on_solana))}
                         <Icon icon=IconName::Solana />
                     </span>
                 </div>

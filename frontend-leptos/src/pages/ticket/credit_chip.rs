@@ -23,7 +23,7 @@ use leptos::prelude::*;
 
 use crate::api;
 use crate::api::{CreditBalanceResponse, LockedCredit};
-use crate::i18n::{Locale, t, td_string, use_i18n};
+use crate::i18n::{Locale, td_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use crate::pages::ticket::action_cards::RequestCreditRefundCard;
 
@@ -98,11 +98,11 @@ fn chip_view(balance: &CreditBalanceResponse) -> Option<AnyView> {
         view! {
             <div class="ticket-credit-chip">
                 <Icon icon=IconName::MoneyWings class="icon-sm" />
-                <span class="ticket-credit-chip-label">{t!(i18n, ticket.credit.label)}</span>
+                <span class="ticket-credit-chip-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.credit.label))}</span>
                 {label.map(|text| view! {
                     <span class="ticket-credit-chip-value">{text}</span>
                     <span class="ticket-credit-chip-hint">
-                        {t!(i18n, ticket.credit.auto_applied)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.credit.auto_applied))}
                     </span>
                 })}
                 {(!locked.is_empty()).then(|| view! {
@@ -111,7 +111,7 @@ fn chip_view(balance: &CreditBalanceResponse) -> Option<AnyView> {
                             <li class="ticket-credit-chip-locked-item">
                                 {line}
                                 <span class="ticket-credit-chip-hint">
-                                    {t!(i18n, ticket.credit.returns_at_end)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.credit.returns_at_end))}
                                 </span>
                             </li>
                         }).collect::<Vec<_>>()}

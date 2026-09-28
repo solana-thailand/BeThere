@@ -17,7 +17,7 @@ use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
 use crate::api::{self, PostEventRegisterBody};
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Route parameters for `/events/:slug/post-event-register`.
@@ -159,13 +159,13 @@ pub fn PostEventRegister() -> impl IntoView {
     let is_submitting = move || matches!(state.get(), RegState::Submitting);
 
     view! {
-        <Title text=move || t_string!(i18n, recap.join.page_title) />
+        <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.page_title)) />
         <div class="center-page">
             <div class="container layout-col-center">
                 // ---------- Back link ----------
                 <div class="flex-row-gap" style="margin-bottom:1rem;width:100%;justify-content:flex-start;">
                     <A href=back_href.clone() attr:class="btn btn-outline btn-sm">
-                        {t!(i18n, recap.join.back)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.back))}
                     </A>
                 </div>
 
@@ -174,7 +174,7 @@ pub fn PostEventRegister() -> impl IntoView {
                     RegState::CheckingAuth => view! {
                         <div class="page-loading">
                             <span class="spinner spinner-lg"></span>
-                            {t!(i18n, recap.join.loading)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.loading))}
                         </div>
                     }.into_any(),
                     RegState::Error(msg) => view! {
@@ -182,17 +182,17 @@ pub fn PostEventRegister() -> impl IntoView {
                             <span style="margin-bottom:1rem;opacity:0.6;">
                                 <Icon icon=IconName::Warning class="icon-2xl icon-warning" />
                             </span>
-                            <h2 style="margin:0 0 0.5rem;">{t!(i18n, recap.join.error_title)}</h2>
+                            <h2 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.error_title))}</h2>
                             <p class="subtitle" style="margin:0 0 1rem;text-align:center;">
                                 {match msg {
-                                    RegError::MissingSlug => t!(i18n, recap.join.missing_slug).into_any(),
-                                    RegError::NeedName => t!(i18n, recap.join.need_name).into_any(),
-                                    RegError::NeedConsent => t!(i18n, recap.join.need_consent).into_any(),
+                                    RegError::MissingSlug => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.missing_slug)).into_any(),
+                                    RegError::NeedName => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.need_name)).into_any(),
+                                    RegError::NeedConsent => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.need_consent)).into_any(),
                                     RegError::Server(msg) => msg.into_any(),
                                 }}
                             </p>
                             <A href=back_href.clone() attr:class="btn btn-outline btn-sm">
-                                {t!(i18n, recap.join.back)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.back))}
                             </A>
                         </div>
                     }.into_any(),
@@ -201,29 +201,29 @@ pub fn PostEventRegister() -> impl IntoView {
                             <span style="margin-bottom:1rem;color:#16a34a;">
                                 <Icon icon=IconName::Check class="icon-2xl" />
                             </span>
-                            <h2 style="margin:0 0 0.5rem;">{t!(i18n, recap.join.done_title)}</h2>
+                            <h2 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.done_title))}</h2>
                             <p class="subtitle" style="margin:0 0 1rem;text-align:center;">
-                                {t!(i18n, recap.join.done_body)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.done_body))}
                             </p>
                             <A href="/past-events" attr:class="btn btn-primary">
-                                {t!(i18n, recap.join.browse_past)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.browse_past))}
                             </A>
                         </div>
                     }.into_any(),
                     RegState::Form | RegState::Submitting => view! {
                         <div class="card" style="width:100%;max-width:540px;">
-                            <h1 style="margin:0 0 0.5rem;">{t!(i18n, recap.join.title)}</h1>
+                            <h1 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.title))}</h1>
                             <p class="subtitle" style="margin:0 0 1.5rem;">
-                                {t!(i18n, recap.join.intro)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.intro))}
                             </p>
 
                             // Name
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">{t!(i18n, recap.join.name)}</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.name))}</label>
                                 <input
                                     class="dev-profile-input"
                                     type="text"
-                                    placeholder=move || t_string!(i18n, recap.join.name_placeholder)
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.name_placeholder))
                                     prop:value=name.get()
                                     on:input=move |ev| set_name.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -232,14 +232,14 @@ pub fn PostEventRegister() -> impl IntoView {
 
                             // Contact channel
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">{t!(i18n, recap.join.contact)}</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.contact))}</label>
                                 <select
                                     class="dev-profile-select"
                                     prop:value=contact_channel.get()
                                     on:change=move |ev| set_contact_channel.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">{t!(i18n, recap.join.select)}</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
                                     <option value="telegram">"Telegram"</option>
                                     <option value="line">"Line"</option>
                                     <option value="facebook">"Facebook"</option>
@@ -249,11 +249,11 @@ pub fn PostEventRegister() -> impl IntoView {
 
                             // Contact handle
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">{t!(i18n, recap.join.handle)}</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.handle))}</label>
                                 <input
                                     class="dev-profile-input"
                                     type="text"
-                                    placeholder=move || t_string!(i18n, recap.join.handle_placeholder)
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.handle_placeholder))
                                     prop:value=contact_handle.get()
                                     on:input=move |ev| set_contact_handle.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -262,27 +262,27 @@ pub fn PostEventRegister() -> impl IntoView {
 
                             // Experience level
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">{t!(i18n, recap.join.experience)}</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.experience))}</label>
                                 <select
                                     class="dev-profile-select"
                                     prop:value=experience_level.get()
                                     on:change=move |ev| set_experience_level.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">{t!(i18n, recap.join.select)}</option>
-                                    <option value="beginner">{t!(i18n, recap.join.beginner)}</option>
-                                    <option value="intermediate">{t!(i18n, recap.join.intermediate)}</option>
-                                    <option value="advanced">{t!(i18n, recap.join.advanced)}</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
+                                    <option value="beginner">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.beginner))}</option>
+                                    <option value="intermediate">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.intermediate))}</option>
+                                    <option value="advanced">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.advanced))}</option>
                                 </select>
                             </div>
 
                             // Tech stack
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">{t!(i18n, recap.join.stack)}</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.stack))}</label>
                                 <input
                                     class="dev-profile-input"
                                     type="text"
-                                    placeholder=move || t_string!(i18n, recap.join.stack_placeholder)
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.stack_placeholder))
                                     prop:value=tech_stack.get()
                                     on:input=move |ev| set_tech_stack.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -291,11 +291,11 @@ pub fn PostEventRegister() -> impl IntoView {
 
                             // Interests
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">{t!(i18n, recap.join.interests)}</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.interests))}</label>
                                 <textarea
                                     class="dev-profile-input"
                                     rows="3"
-                                    placeholder=move || t_string!(i18n, recap.join.interests_placeholder)
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.interests_placeholder))
                                     prop:value=interests.get()
                                     on:input=move |ev| set_interests.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -309,7 +309,7 @@ pub fn PostEventRegister() -> impl IntoView {
                             // the page, so this is the moment they will answer.
                             <div class="dev-profile-field">
                                 <label class="dev-profile-label">
-                                    {t!(i18n, recap.join.satisfaction_q)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.satisfaction_q))}
                                 </label>
                                 <select
                                     class="dev-profile-select"
@@ -317,18 +317,18 @@ pub fn PostEventRegister() -> impl IntoView {
                                     on:change=move |ev| set_sat_overall.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">{t!(i18n, recap.join.select)}</option>
-                                    <option value="5">{t!(i18n, recap.join.sat_5)}</option>
-                                    <option value="4">{t!(i18n, recap.join.sat_4)}</option>
-                                    <option value="3">{t!(i18n, recap.join.sat_3)}</option>
-                                    <option value="2">{t!(i18n, recap.join.sat_2)}</option>
-                                    <option value="1">{t!(i18n, recap.join.sat_1)}</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
+                                    <option value="5">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_5))}</option>
+                                    <option value="4">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_4))}</option>
+                                    <option value="3">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_3))}</option>
+                                    <option value="2">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_2))}</option>
+                                    <option value="1">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_1))}</option>
                                 </select>
                             </div>
 
                             <div class="dev-profile-field">
                                 <label class="dev-profile-label">
-                                    {t!(i18n, recap.join.nps_q)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.nps_q))}
                                 </label>
                                 <select
                                     class="dev-profile-select"
@@ -336,8 +336,8 @@ pub fn PostEventRegister() -> impl IntoView {
                                     on:change=move |ev| set_nps.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">{t!(i18n, recap.join.select)}</option>
-                                    <option value="10">{t!(i18n, recap.join.nps_10)}</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
+                                    <option value="10">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.nps_10))}</option>
                                     <option value="9">"9"</option>
                                     <option value="8">"8"</option>
                                     <option value="7">"7"</option>
@@ -347,13 +347,13 @@ pub fn PostEventRegister() -> impl IntoView {
                                     <option value="3">"3"</option>
                                     <option value="2">"2"</option>
                                     <option value="1">"1"</option>
-                                    <option value="0">{t!(i18n, recap.join.nps_0)}</option>
+                                    <option value="0">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.nps_0))}</option>
                                 </select>
                             </div>
 
                             <div class="dev-profile-field">
                                 <label class="dev-profile-label">
-                                    {t!(i18n, recap.join.return_q)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.return_q))}
                                 </label>
                                 <select
                                     class="dev-profile-select"
@@ -361,21 +361,21 @@ pub fn PostEventRegister() -> impl IntoView {
                                     on:change=move |ev| set_would_return.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">{t!(i18n, recap.join.select)}</option>
-                                    <option value="yes">{t!(i18n, recap.join.yes)}</option>
-                                    <option value="maybe">{t!(i18n, recap.join.maybe)}</option>
-                                    <option value="no">{t!(i18n, recap.join.no)}</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
+                                    <option value="yes">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.yes))}</option>
+                                    <option value="maybe">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.maybe))}</option>
+                                    <option value="no">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.no))}</option>
                                 </select>
                             </div>
 
                             <div class="dev-profile-field">
                                 <label class="dev-profile-label">
-                                    {t!(i18n, recap.join.change_q)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.change_q))}
                                 </label>
                                 <textarea
                                     class="dev-profile-input"
                                     rows="3"
-                                    placeholder=move || t_string!(i18n, recap.join.change_placeholder)
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.change_placeholder))
                                     prop:value=comment.get()
                                     on:input=move |ev| set_comment.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -391,7 +391,7 @@ pub fn PostEventRegister() -> impl IntoView {
                                     disabled=is_submitting()
                                 />
                                 <label class="dev-profile-label" style="font-weight:normal;">
-                                    {t!(i18n, recap.join.consent)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.consent))}
                                 </label>
                             </div>
                             <div class="dev-profile-field" style="flex-direction:row;align-items:flex-start;gap:0.5rem;">
@@ -402,7 +402,7 @@ pub fn PostEventRegister() -> impl IntoView {
                                     disabled=is_submitting()
                                 />
                                 <label class="dev-profile-label" style="font-weight:normal;">
-                                    {t!(i18n, recap.join.marketing)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.marketing))}
                                 </label>
                             </div>
 

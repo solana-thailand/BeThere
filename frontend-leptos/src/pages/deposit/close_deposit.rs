@@ -26,11 +26,11 @@ pub fn close_deposit_choose_wallet_view(
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{t!(i18n, deposit.close.title)}</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.title))}</span>
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
             <p class="hint-desc">
-                {t!(i18n, deposit.close.hint)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.hint))}
             </p>
             {if wallets.is_empty() {
                 components::wallet_fallback_view()
@@ -64,7 +64,7 @@ pub fn close_deposit_choose_wallet_view(
                     set_state.set(DepositPageState::CloseDepositChooseWallet(data_for_back.clone()));
                 }
             >
-                {t!(i18n, deposit.go_back)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.go_back))}
             </button>
         </div>
     }
@@ -95,7 +95,7 @@ pub fn close_deposit_wallet_connected_view(
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{t!(i18n, deposit.close.title)}</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.title))}</span>
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
             <div class="dep2-wallet-bar">
@@ -103,31 +103,31 @@ pub fn close_deposit_wallet_connected_view(
                     <span class="dep2-wallet-bar-name">{t!(i18n, deposit.connected_via, wallet)}</span>
                     <span class="dep2-wallet-bar-pk">{pk_display}</span>
                 </div>
-                <span class="dep2-wallet-bar-badge">{t!(i18n, deposit.connected)}</span>
+                <span class="dep2-wallet-bar-badge">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.connected))}</span>
             </div>
             {components::transaction_review_views(vec![
                 (
-                    view! { {t!(i18n, deposit.review.authorize)} }.into_any(),
-                    view! { {t!(i18n, deposit.close.authorize_value)} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.authorize))} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.authorize_value))} }.into_any(),
                 ),
-                (view! { {t!(i18n, deposit.review.network)} }.into_any(), network.into_any()),
+                (view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.network))} }.into_any(), network.into_any()),
                 (
-                    view! { {t!(i18n, deposit.review.receive)} }.into_any(),
-                    view! { {t!(i18n, deposit.close.receive_value)} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.receive))} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.receive_value))} }.into_any(),
                 ),
                 (
-                    view! { {t!(i18n, deposit.review.fee)} }.into_any(),
-                    view! { {t!(i18n, deposit.review.fee_value)} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.fee))} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.fee_value))} }.into_any(),
                 ),
             ])}
             <p class="hint-desc">
-                {t!(i18n, deposit.close.estimate)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.estimate))}
             </p>
             <button
                 class="btn btn-success btn-block"
                 on:click=move |_| handle_close(wallet_name_send.clone(), pk_send.clone())
             >
-                {t!(i18n, deposit.close.cta)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.cta))}
             </button>
             <button
                 class="btn btn-outline btn-sm"
@@ -135,7 +135,7 @@ pub fn close_deposit_wallet_connected_view(
                     set_state.set(DepositPageState::CloseDepositChooseWallet(data_for_back.clone()));
                 }
             >
-                {t!(i18n, deposit.go_back)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.go_back))}
             </button>
         </div>
     }
@@ -144,11 +144,10 @@ pub fn close_deposit_wallet_connected_view(
 
 /// Close deposit: Signing TX view.
 pub fn close_deposit_signing_view() -> AnyView {
-    let i18n = use_i18n();
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{t!(i18n, deposit.close.closing)}</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.closing))}</span>
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
             <div class="dep2-confirming">
@@ -158,7 +157,7 @@ pub fn close_deposit_signing_view() -> AnyView {
                     <span class="dep2-confirming-dot"></span>
                 </div>
                 <p class="hint-desc">
-                    {t!(i18n, deposit.approve_in_wallet)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.approve_in_wallet))}
                 </p>
             </div>
         </div>
@@ -168,7 +167,6 @@ pub fn close_deposit_signing_view() -> AnyView {
 
 /// Close deposit: Confirmed view.
 pub fn close_deposit_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) -> AnyView {
-    let i18n = use_i18n();
     let sig_display = truncate_sig(tx_sig);
     let data_slug = data.event_slug.clone();
 
@@ -176,7 +174,7 @@ pub fn close_deposit_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) 
         <div class="dep2-card">
             <div class="dep2-success-icon">"✓"</div>
             <p class="dep2-amount-hero">
-                {t!(i18n, deposit.close.done)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.done))}
             </p>
             <div class="dep2-receipt">
                 <div class="dep2-receipt-row">
@@ -186,7 +184,7 @@ pub fn close_deposit_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) 
             </div>
             {components::solscan_link(tx_sig)}
             <div class="dep2-back">
-                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") }>{t!(i18n, deposit.back_event)}</a>
+                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") }>{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_event))}</a>
             </div>
         </div>
     }

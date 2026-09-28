@@ -66,7 +66,7 @@ pub fn DataPrivacy() -> impl IntoView {
     };
 
     view! {
-        <Title text=move || t_string!(i18n, privacy.data.page_title) />
+        <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.page_title)) />
         <div class="center-page">
             <div class="container" style="max-width: 720px;">
 
@@ -74,10 +74,10 @@ pub fn DataPrivacy() -> impl IntoView {
                 <div class="pe-card">
                     <h1 class="pe-section-title" style="margin-bottom: 0.5rem;">
                         <Icon icon=IconName::Lock class="icon-md" />
-                        " "{t!(i18n, privacy.data.title)}
+                        " "{crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.title))}
                     </h1>
                     <p class="pe-detail-secondary">
-                        {t!(i18n, privacy.data.intro)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.intro))}
                     </p>
                 </div>
 
@@ -85,10 +85,10 @@ pub fn DataPrivacy() -> impl IntoView {
                 <div class="pe-card">
                     <h2 class="pe-section-title" style="font-size: 1.1rem;">
                         <Icon icon=IconName::Sound class="icon-sm" />
-                        " "{t!(i18n, privacy.data.marketing_title)}
+                        " "{crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.marketing_title))}
                     </h2>
                     <p class="pe-detail-secondary" style="margin-bottom: 0.75rem;">
-                        {t!(i18n, privacy.data.marketing_body)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.marketing_body))}
                     </p>
                     <button
                         class="btn btn-outline btn-block"
@@ -119,10 +119,10 @@ pub fn DataPrivacy() -> impl IntoView {
                 <div class="pe-card">
                     <h2 class="pe-section-title" style="font-size: 1.1rem;">
                         <Icon icon=IconName::Recycle class="icon-sm" />
-                        " "{t!(i18n, privacy.data.deletion_title)}
+                        " "{crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.deletion_title))}
                     </h2>
                     <p class="pe-detail-secondary" style="margin-bottom: 0.75rem;">
-                        {t!(i18n, privacy.data.deletion_body)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.deletion_body))}
                     </p>
                     <button
                         class="btn btn-outline btn-block"
@@ -152,7 +152,7 @@ pub fn DataPrivacy() -> impl IntoView {
                                     {match status.as_str() {
                                         "completed" => view! {
                                             <div>
-                                                <strong>{t!(i18n, privacy.data.completed_title)}</strong>
+                                                <strong>{crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.completed_title))}</strong>
                                                 <p style="margin-top: 0.25rem;">
                                                     {t!(i18n, privacy.data.completed_body, count = affected)}
                                                 </p>
@@ -160,15 +160,15 @@ pub fn DataPrivacy() -> impl IntoView {
                                         }.into_any(),
                                         "blocked" => view! {
                                             <div>
-                                                <strong>{t!(i18n, privacy.data.blocked_title)}</strong>
+                                                <strong>{crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.blocked_title))}</strong>
                                                 <p style="margin-top: 0.25rem;">
-                                                    {t!(i18n, privacy.data.blocked_body)}
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.blocked_body))}
                                                 </p>
                                             </div>
                                         }.into_any(),
                                         "partial" => view! {
                                             <div>
-                                                <strong>{t!(i18n, privacy.data.partial_title)}</strong>
+                                                <strong>{crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.partial_title))}</strong>
                                                 <p style="margin-top: 0.25rem;">
                                                     {match had_failures {
                                                         true => t!(i18n, privacy.data.partial_failures, count = affected).into_any(),
@@ -179,9 +179,9 @@ pub fn DataPrivacy() -> impl IntoView {
                                         }.into_any(),
                                         "failed" => view! {
                                             <div>
-                                                <strong>{t!(i18n, privacy.data.failed_title)}</strong>
+                                                <strong>{crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.failed_title))}</strong>
                                                 <p style="margin-top: 0.25rem;">
-                                                    {t!(i18n, privacy.data.failed_body)}
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.failed_body))}
                                                 </p>
                                             </div>
                                         }.into_any(),
@@ -195,7 +195,7 @@ pub fn DataPrivacy() -> impl IntoView {
                                     view! {
                                         <div style="margin-top: 0.75rem;">
                                             <p class="pe-detail-secondary" style="font-weight: 600; margin-bottom: 0.5rem;">
-                                                {t!(i18n, privacy.data.blocked_events)}
+                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.blocked_events))}
                                             </p>
                                             {blocked_clone.into_iter().map(|ev: BlockedEvent| {
                                                 let name = ev.event_name.clone();
@@ -227,7 +227,7 @@ pub fn DataPrivacy() -> impl IntoView {
                                 {if is_completed || is_partial {
                                     view! {
                                         <p class="pe-detail-secondary" style="margin-top: 0.5rem; font-size: 0.8rem;">
-                                            {t!(i18n, privacy.data.onchain_note)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.onchain_note))}
                                         </p>
                                     }.into_any()
                                 } else {
@@ -250,15 +250,15 @@ pub fn DataPrivacy() -> impl IntoView {
                 // Privacy Policy Link
                 <div class="pe-card">
                     <p class="pe-detail-secondary">
-                        {t!(i18n, privacy.data.policy_prefix)}
-                        <a href="/privacy" class="pe-ext-link">{t!(i18n, privacy.data.policy_link)}</a>
-                        {t!(i18n, privacy.data.policy_suffix)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.policy_prefix))}
+                        <a href="/privacy" class="pe-ext-link">{crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.policy_link))}</a>
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.data.policy_suffix))}
                     </p>
                 </div>
 
                 // Back link
                 <div style="text-align: center; margin-top: 0.5rem;">
-                    <a href="/" class="btn btn-outline">{t!(i18n, privacy.back_home)}</a>
+                    <a href="/" class="btn btn-outline">{crate::locale::tr(|l| crate::i18n::td_string!(l, privacy.back_home))}</a>
                 </div>
             </div>
         </div>

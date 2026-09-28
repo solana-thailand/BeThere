@@ -5,7 +5,7 @@ use wasm_bindgen::prelude::*;
 
 use super::view_data::TicketViewData;
 use crate::components::{ImageLightbox, LightboxSizing};
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Pulsing indicator that the backend is actively checking.
@@ -97,7 +97,7 @@ pub fn QrSection(
                             <div class="ticket-qr-wrapper">
                                 <img
                                     src=qr_image.clone().unwrap_or_default()
-                                    alt=move || t_string!(i18n, ticket.qr.alt)
+                                    alt=crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.qr.alt))
                                     class="ticket-qr-img"
                                 />
                             </div>
@@ -107,7 +107,7 @@ pub fn QrSection(
                                     on:click=move |_| set_fullscreen_qr.set(true)
                                 >
                                     <Icon icon=IconName::Expand class="icon-sm" />
-                                    " "{t!(i18n, ticket.qr.full_screen)}
+                                    " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.qr.full_screen))}
                                 </button>
                             </div>
                         }.into_any()
@@ -127,7 +127,7 @@ pub fn QrSection(
                         <div class="ticket-qr-wrapper">
                             <img
                                 src=qr_image.clone().unwrap_or_default()
-                                alt=move || t_string!(i18n, ticket.qr.alt)
+                                alt=crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.qr.alt))
                                 class="ticket-qr-img"
                             />
                         </div>
@@ -137,7 +137,7 @@ pub fn QrSection(
                                 on:click=move |_| set_fullscreen_qr.set(true)
                             >
                                 <Icon icon=IconName::Expand class="icon-sm" />
-                                " "{t!(i18n, ticket.qr.full_screen)}
+                                " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.qr.full_screen))}
                             </button>
                             <button
                                 class="btn btn-outline btn-sm"
@@ -156,7 +156,7 @@ pub fn QrSection(
                                 }
                             >
                                 <Icon icon=IconName::Save class="icon-sm" />
-                                " "{t!(i18n, ticket.qr.save)}
+                                " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.qr.save))}
                             </button>
                         </div>
                     }.into_any()
@@ -184,10 +184,10 @@ pub fn QrSection(
                                 </svg>
                             </div>
                             <p class="ticket-qr-placeholder-text">
-                                {t!(i18n, ticket.qr.preparing)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.qr.preparing))}
                             </p>
                             <p class="ticket-qr-placeholder-hint">
-                                {t!(i18n, ticket.qr.preparing_hint)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.qr.preparing_hint))}
                             </p>
                             <ReassuranceTicker method=deposit_method />
                         </div>

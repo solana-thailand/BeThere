@@ -37,7 +37,9 @@ pub(super) fn QuizView(
     let questions_clone = quiz_data.questions.clone();
     let i18n = use_i18n();
     let attempts_label = match max_att {
-        1 => t!(i18n, claim.quiz.attempts_single).into_any(),
+        1 => {
+            crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.attempts_single)).into_any()
+        }
         n => t!(i18n, claim.quiz.attempts_count, n).into_any(),
     };
     let claim_token = claim_data.claim_token.clone();
@@ -69,7 +71,7 @@ pub(super) fn QuizView(
                         <line x1="12" y1="17" x2="12.01" y2="17"></line>
                     </svg>
                 </div>
-                <h3>{t!(i18n, claim.quiz.title)}</h3>
+                <h3>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.title))}</h3>
                 <p class="claim-quiz-desc">
                     {t!(
                         i18n,
@@ -139,7 +141,7 @@ pub(super) fn QuizView(
                     });
                 }
             >
-                {t!(i18n, claim.quiz.submit)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.submit))}
                 <span class="claim-quiz-submit-count">
                     "("{answered}"/"{total_q}")"
                 </span>
@@ -180,8 +182,10 @@ pub(super) fn QuizSubmittedView(
     let claim_token = claim_data.claim_token.clone();
     let i18n = use_i18n();
     let retry_info = match remaining {
-        0 => t!(i18n, claim.quiz.no_attempts_left).into_any(),
-        1 => t!(i18n, claim.quiz.attempt_left_single).into_any(),
+        0 => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.no_attempts_left))
+            .into_any(),
+        1 => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.attempt_left_single))
+            .into_any(),
         n => t!(i18n, claim.quiz.attempts_left, n).into_any(),
     };
     let score_label = t!(i18n, claim.quiz.score, score, correct, total = total_q);
@@ -225,10 +229,13 @@ pub(super) fn QuizSubmittedView(
         }.into_any(),
     };
 
-    let result_title = match passed {
-        true => t!(i18n, claim.quiz.passed_title).into_any(),
-        false => t!(i18n, claim.quiz.failed_title).into_any(),
-    };
+    let result_title =
+        match passed {
+            true => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.passed_title))
+                .into_any(),
+            false => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.failed_title))
+                .into_any(),
+        };
 
     let retry_info_view: AnyView = match passed {
         true => view! { <div></div> }.into_any(),

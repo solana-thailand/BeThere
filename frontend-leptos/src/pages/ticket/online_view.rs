@@ -115,13 +115,19 @@ pub fn OnlineView(
         if has_claim {
             Some((
                 claim_href.clone(),
-                ViewFn::from(move || t!(i18n, ticket.timeline.go_to_quest)),
+                ViewFn::from(move || {
+                    crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.go_to_quest))
+                }),
             ))
         } else {
             let adventure_href = format!("/adventure?event_id={}", event_id);
             Some((
                 adventure_href,
-                ViewFn::from(move || t!(i18n, ticket.timeline.start_adventure)),
+                ViewFn::from(move || {
+                    crate::locale::tr(|l| {
+                        crate::i18n::td_string!(l, ticket.timeline.start_adventure)
+                    })
+                }),
             ))
         }
     } else {
@@ -133,8 +139,8 @@ pub fn OnlineView(
         <super::hero::TicketHero
             variant="ticket-hero--online"
             icon=IconName::Globe
-            title=move || t!(i18n, ticket.hero.online_title)
-            badge=ViewFn::from(move || t!(i18n, ticket.hero.online_badge))
+            title=move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.online_title))
+            badge=ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.online_badge)))
         />
 
         // 2. Main card
@@ -155,7 +161,7 @@ pub fn OnlineView(
             // Attendee info
             <div class="ticket-info">
                 <div class="ticket-info-row">
-                    <span class="ticket-info-label">{t!(i18n, ticket.info.name)}</span>
+                    <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.name))}</span>
                     <span class="ticket-info-value">
                         {utils::escape_html(&name)}
                     </span>
@@ -164,7 +170,7 @@ pub fn OnlineView(
                     let email = masked_email;
                     view! {
                         <div class="ticket-info-row">
-                            <span class="ticket-info-label">{t!(i18n, ticket.info.email)}</span>
+                            <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.email))}</span>
                             <span class="ticket-info-value">
                                 {utils::escape_html(&email)}
                             </span>
@@ -203,21 +209,21 @@ pub fn OnlineView(
                     TimelineStep {
                         done: true,
                         number: 1,
-                        title: ViewFn::from(move || t!(i18n, ticket.timeline.register)),
-                        desc: ViewFn::from(move || t!(i18n, ticket.timeline.register_done)),
+                        title: ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.register))),
+                        desc: ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.register_done))),
                         link: None,
                     },
                     TimelineStep {
                         done: ended,
                         number: 2,
                         title: ViewFn::from(move || match ended {
-                            true => t!(i18n, ticket.timeline.event_ended).into_any(),
-                            false => t!(i18n, ticket.timeline.wait_for_event).into_any(),
+                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.event_ended)).into_any(),
+                            false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.wait_for_event)).into_any(),
                         }),
                         desc: ViewFn::from(move || match ended {
-                            true => t!(i18n, ticket.timeline.event_ended_desc).into_any(),
+                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.event_ended_desc)).into_any(),
                             false => (move || countdown().unwrap_or_else(|| {
-                                t!(i18n, ticket.timeline.claims_open_after).into_any()
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claims_open_after)).into_any()
                             })).into_any(),
                         }),
                         link: None,
@@ -227,20 +233,20 @@ pub fn OnlineView(
                         number: 3,
                         title: ViewFn::from(move || {
                             if is_checked_in {
-                                t!(i18n, ticket.timeline.quest_completed).into_any()
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.quest_completed)).into_any()
                             } else if quiz_enabled {
-                                t!(i18n, ticket.timeline.complete_quest).into_any()
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.complete_quest)).into_any()
                             } else {
-                                t!(i18n, ticket.timeline.virtual_check_in).into_any()
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.virtual_check_in)).into_any()
                             }
                         }),
                         desc: ViewFn::from(move || {
                             if is_checked_in {
-                                t!(i18n, ticket.timeline.virtual_check_in_done).into_any()
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.virtual_check_in_done)).into_any()
                             } else if quiz_enabled {
-                                t!(i18n, ticket.timeline.pass_quiz).into_any()
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.pass_quiz)).into_any()
                             } else {
-                                t!(i18n, ticket.timeline.claim_opens_after).into_any()
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claim_opens_after)).into_any()
                             }
                         }),
                         link: quest_link,
@@ -249,12 +255,12 @@ pub fn OnlineView(
                         done: claimed,
                         number: 4,
                         title: ViewFn::from(move || match claimed {
-                            true => t!(i18n, ticket.timeline.badge_claimed).into_any(),
-                            false => t!(i18n, ticket.timeline.claim_badge).into_any(),
+                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.badge_claimed)).into_any(),
+                            false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claim_badge)).into_any(),
                         }),
                         desc: ViewFn::from(move || match claimed {
-                            true => t!(i18n, ticket.timeline.badge_minted).into_any(),
-                            false => t!(i18n, ticket.timeline.mint_badge).into_any(),
+                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.badge_minted)).into_any(),
+                            false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.mint_badge)).into_any(),
                         }),
                         link: None,
                     },
@@ -286,9 +292,9 @@ pub fn OnlineView(
                             <Icon icon=IconName::Clock class="icon-sm" />
                         </div>
                         <div>
-                            <div class="ticket-action-title">{t!(i18n, ticket.online.claim_soon)}</div>
+                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_soon))}</div>
                             <div class="ticket-action-desc">
-                                {t!(i18n, ticket.online.claim_soon_desc)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_soon_desc))}
                             </div>
                         </div>
                     </div>
@@ -302,9 +308,9 @@ pub fn OnlineView(
                                 <Icon icon=IconName::Gift class="icon-sm" />
                             </div>
                             <div>
-                                <div class="ticket-action-title">{t!(i18n, ticket.online.claim_pending)}</div>
+                                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_pending))}</div>
                                 <div class="ticket-action-desc">
-                                    {t!(i18n, ticket.online.claim_pending_desc)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_pending_desc))}
                                 </div>
                             </div>
                         </div>
@@ -316,9 +322,9 @@ pub fn OnlineView(
                                 <Icon icon=IconName::Clock class="icon-sm" />
                             </div>
                             <div>
-                                <div class="ticket-action-title">{t!(i18n, ticket.online.claim_soon)}</div>
+                                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_soon))}</div>
                                 <div class="ticket-action-desc">
-                                    {t!(i18n, ticket.online.quest_done_claim_soon)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.quest_done_claim_soon))}
                                 </div>
                             </div>
                         </div>
@@ -350,8 +356,8 @@ pub fn OnlineView(
         // 6. Footer
         <div class="ticket-footer">
             <div class="ticket-nav">
-                <A href="/">{t!(i18n, ticket.nav_home)}</A>
-                <A href="/profile">{t!(i18n, ticket.nav_profile)}</A>
+                <A href="/">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_home))}</A>
+                <A href="/profile">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_profile))}</A>
             </div>
         </div>
     }

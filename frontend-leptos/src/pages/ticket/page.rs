@@ -16,7 +16,7 @@ use leptos_router::params::Params;
 use wasm_bindgen::prelude::*;
 
 use crate::api::{self, cache_invalidate};
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 use crate::utils;
 
@@ -384,7 +384,7 @@ pub fn Ticket() -> impl IntoView {
 
     let i18n = use_i18n();
     view! {
-        <Title text=move || t_string!(i18n, ticket.page_title) />
+        <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.page_title)) />
 
         <div class="ticket-page">
             <div class="ticket-page-inner">
@@ -393,7 +393,7 @@ pub fn Ticket() -> impl IntoView {
                     TicketState::Loading => view! {
                         <div class="page-loading">
                             <span class="spinner spinner-lg"></span>
-                            " "{t!(i18n, ticket.loading)}
+                            " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.loading))}
                         </div>
                     }.into_any(),
 
@@ -427,9 +427,9 @@ pub fn Ticket() -> impl IntoView {
                         <div class="center-page">
                             <div class="container layout-col-center">
                                 <Icon icon=IconName::Search class="icon-xl" />
-                                <h1>{t!(i18n, ticket.not_found_title)}</h1>
-                                <p class="subtitle">{t!(i18n, ticket.not_found_body)}</p>
-                                <a href="/" class="btn btn-primary">{t!(i18n, ticket.go_home)}</a>
+                                <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.not_found_title))}</h1>
+                                <p class="subtitle">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.not_found_body))}</p>
+                                <a href="/" class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.go_home))}</a>
                             </div>
                         </div>
                     }.into_any(),
@@ -438,9 +438,9 @@ pub fn Ticket() -> impl IntoView {
                         <div class="center-page">
                             <div class="container layout-col-center">
                                 <Icon icon=IconName::AlertTriangle class="icon-xl" />
-                                <h1>{t!(i18n, ticket.error_title)}</h1>
+                                <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.error_title))}</h1>
                                 <p class="subtitle">{match err {
-                                    TicketError::InvalidLink => t!(i18n, ticket.invalid_link).into_any(),
+                                    TicketError::InvalidLink => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.invalid_link)).into_any(),
                                     TicketError::Load(e) => {
                                         let error = utils::escape_html(&e);
                                         t!(i18n, ticket.load_failed, error).into_any()
@@ -450,7 +450,7 @@ pub fn Ticket() -> impl IntoView {
                                         t!(i18n, ticket.refresh_failed, error).into_any()
                                     }
                                 }}</p>
-                                <a href="/" class="btn btn-primary">{t!(i18n, ticket.go_home)}</a>
+                                <a href="/" class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.go_home))}</a>
                             </div>
                         </div>
                     }.into_any(),
@@ -465,14 +465,14 @@ pub fn Ticket() -> impl IntoView {
                         {move || match &state.get() {
                             TicketState::Found(data) => match polling_tier(data) {
                                 Some(PollingTier::AwaitingDeposit) => {
-                                    t!(i18n, ticket.poll_deposit).into_any()
+                                    crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.poll_deposit)).into_any()
                                 }
                                 Some(PollingTier::AwaitingCheckIn) => {
-                                    t!(i18n, ticket.poll_checkin).into_any()
+                                    crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.poll_checkin)).into_any()
                                 }
                                 None => view! { <div></div> }.into_any(),
                             },
-                            _ => t!(i18n, ticket.poll_updates).into_any(),
+                            _ => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.poll_updates)).into_any(),
                         }}
                     </div>
                 </Show>
@@ -491,7 +491,7 @@ pub fn Ticket() -> impl IntoView {
                         on:click=move |_| on_manual_refresh()
                     >
                         <Icon icon=IconName::Refresh class="icon-sm" />
-                        " "{t!(i18n, ticket.refresh_status)}
+                        " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.refresh_status))}
                     </button>
                 </Show>
             </div>

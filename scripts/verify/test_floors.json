@@ -27,7 +27,7 @@
     "css_class_audit tests/css_class_audit.rs": 5,
     "date_formatting_has_one_home tests/date_formatting_has_one_home.rs": 1,
     "deposit_consent_names_currency tests/deposit_consent_names_currency.rs": 4,
-    "deposit_promise_has_one_home tests/deposit_promise_has_one_home.rs": 2,
+    "deposit_promise_has_one_home tests/deposit_promise_has_one_home.rs": 3,
     "doc-tests event_checkin_frontend": 0,
     "event_checkin_frontend src/lib.rs": 137,
     "event_checkin_frontend src/main.rs": 0,

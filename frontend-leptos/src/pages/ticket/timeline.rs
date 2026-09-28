@@ -2,8 +2,6 @@
 
 use leptos::prelude::*;
 
-use crate::i18n::{t, use_i18n};
-
 /// A single timeline step.
 ///
 /// Text fields are views so catalog text follows a language switch.
@@ -28,10 +26,9 @@ pub fn Timeline(
     #[prop(into)]
     steps: Vec<TimelineStep>,
 ) -> impl IntoView {
-    let i18n = use_i18n();
     view! {
         <div class="ticket-timeline">
-            <h3 class="ticket-timeline-heading">{t!(i18n, ticket.timeline.heading)}</h3>
+            <h3 class="ticket-timeline-heading">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.heading))}</h3>
             <div class="ticket-timeline-steps">
                 {steps.into_iter().map(|step| {
                     let dot_class = if step.done {

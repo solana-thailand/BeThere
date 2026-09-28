@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 
 use super::helpers::*;
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t_string, use_i18n};
 
 /// `SessionTimer` phase codes. Internal state only, never shown: the view
 /// turns them into words in the reader's language.
@@ -190,7 +190,6 @@ pub(super) fn ParticipantAvatar(name: String) -> impl IntoView {
 /// until real NFT artwork is uploaded. Pure CSS/SVG, no external image.
 #[component]
 pub(super) fn NftBadgePreview() -> impl IntoView {
-    let i18n = use_i18n();
     view! {
         <div class="nft-preview-card">
             <div class="nft-preview-badge">
@@ -215,8 +214,8 @@ pub(super) fn NftBadgePreview() -> impl IntoView {
                 </svg>
             </div>
             <div class="nft-preview-info">
-                <div class="nft-preview-title">{t!(i18n, claim.proof_of_attendance)}</div>
-                <div class="nft-preview-sub">{t!(i18n, claim.preview_sub)}</div>
+                <div class="nft-preview-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.proof_of_attendance))}</div>
+                <div class="nft-preview-sub">{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.preview_sub))}</div>
             </div>
         </div>
     }

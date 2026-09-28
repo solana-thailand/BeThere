@@ -71,15 +71,56 @@ Phase 2: the scattered Thai strings.
   - no horizontal scroll;
   - the feedback progress counter re-renders.
 
-Phase 3: every string on these routes comes from the catalog:
-- `/e/{slug}`
-- deposit, ticket, claim
-- discover, landing, feedback, privacy
+Phase 3: every string on the attendee routes comes from the catalog.
+- [x] Done by four parallel agents, one page group and one namespace each,
+  cherry-picked onto develop:
+  - `/e/{slug}` (`event`, 138 keys);
+  - deposit (`deposit`, 181);
+  - ticket + claim (`ticket` 184, `claim` 96);
+  - landing, site header, privacy, data-privacy, past events, recap,
+    post-event form, wallet sign-in (`landing`, `privacy`, `recap`,
+    `wallet`).
+- [x] The deposit promise has one home in both languages
+  (`deposit_copy::{never_forfeited, thb_refund_window}(locale)`). The test
+  also scans the catalog and the Thai phrasing.
+- [x] The switch also shows on `/data-privacy`, `/past-events`,
+  `/events/*/recap` and `/events/*/post-event-register`.
+- [x] `claim/page.rs` was 1,122 lines; the success screen moved to
+  `claim/success.rs`, leaving 962.
+- [x] Bundle: plain keys render through `locale::tr()` (one
+  `Signal<&str>` type instead of ~700 distinct closure types), which saved
+  ~60 KB. The whole bilingual attendee app costs +102 KB br4 over the phase-2
+  baseline (~27 KB of it is the catalog text); it is now 93.7% of the 2 MiB
+  budget and the baseline was updated deliberately. twiggy shows no single
+  hotspot; the rest is the extra reactive views.
+- Verified in headless Chrome at 390×844, TH browser → EN switch, on local
+  `wrangler dev` fixtures, for: `/`, `/e/{slug}` (hybrid, THB deposit),
+  `/ticket` (checked in), `/deposit` (unpaid), `/claim` (NFT not yet set),
+  `/privacy`, `/data-privacy`, `/past-events`, `/events/*/recap`.
+  - Every page renders in Thai, switches live, sets `<html lang>`, and has
+    no page errors or horizontal scroll.
+  - The English left in TH is brands, organizer content, technical proper
+    nouns (privacy notice) and deliberate loanwords.
+- Not yet opened in a browser: every deposit / ticket / claim sub-state the
+  agents listed (slip pending, USDC flows, refund, quiz, mint success). The
+  wallet modal.
 
-Done when:
-- switching works on every page without a reload;
-- wasm32 clippy and `cargo test` pass;
-- each page is opened at 390×844 in both languages.
+Owner decisions raised by phase 3:
+- [ ] Privacy notice PDPA section numbers (§5 "s.37 technical-impossibility
+  exemption", /data-privacy "s.29 erasure", "s.38 contract exemption") look
+  wrong against the Act (erasure is usually s.33, contract basis s.24(3)).
+  EN and TH both carry them as written. Needs legal review.
+- [ ] Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
+  refund window) contradicts "never forfeited" for THB readers only if
+  shown on THB; it is the USDC escrow path, where forfeiture is real. Check
+  the wording anyway.
+- [ ] Thai term consistency: the landing page says เหรียญตรา and the ticket
+  page says "badge".
+- [ ] `utils::format_timestamp` (receipt "Date") and
+  `deposit::types::format_refund_deadline` (`MM/DD`) are still US-style.
+- [ ] Still English on attendee pages, from shared code: `wallet_error.rs`
+  messages, `components::postponed_banner`, the escrow cluster-mismatch
+  toast, and `dev_profile.rs` "Connect Wallet →".
 
 ## 3. Admin on mobile (390 px)
 

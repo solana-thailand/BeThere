@@ -100,11 +100,11 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                 <div class="landing-waitlist-success-icon"><Icon icon=IconName::Check class="icon-md"/></div>
                 <div class="landing-waitlist-success-title">
                     {move || match already_registered.get() {
-                        true => t!(i18n, landing.waitlist.already).into_any(),
-                        false => t!(i18n, landing.waitlist.on_list).into_any(),
+                        true => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.already)).into_any(),
+                        false => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.on_list)).into_any(),
                     }}
                 </div>
-                <div class="landing-waitlist-success-desc">{t!(i18n, landing.waitlist.reach_out)}</div>
+                <div class="landing-waitlist-success-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.reach_out))}</div>
             </div>
         </Show>
         <Show
@@ -126,8 +126,8 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                     class="btn btn-primary landing-waitlist-submit"
                 >
                     {move || match submitting.get() {
-                        true => t!(i18n, landing.waitlist.joining).into_any(),
-                        false => t!(i18n, landing.waitlist.join).into_any(),
+                        true => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.joining)).into_any(),
+                        false => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.join)).into_any(),
                     }}
                 </button>
             </form>
@@ -137,9 +137,9 @@ pub(super) fn WaitlistForm() -> impl IntoView {
             >
                 <p class="landing-waitlist-error">
                     {move || match error.get() {
-                        Some(WaitlistError::InvalidEmail) => t!(i18n, landing.waitlist.invalid_email).into_any(),
-                        Some(WaitlistError::Unspecified) => t!(i18n, landing.waitlist.server_error).into_any(),
-                        Some(WaitlistError::Retry) => t!(i18n, landing.waitlist.retry_error).into_any(),
+                        Some(WaitlistError::InvalidEmail) => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.invalid_email)).into_any(),
+                        Some(WaitlistError::Unspecified) => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.server_error)).into_any(),
+                        Some(WaitlistError::Retry) => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.retry_error)).into_any(),
                         Some(WaitlistError::Network(error)) => t!(i18n, landing.waitlist.network_error, error).into_any(),
                         Some(WaitlistError::Server(msg)) => msg.into_any(),
                         None => ().into_any(),

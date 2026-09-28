@@ -15,6 +15,7 @@ mod quiz_helpers;
 mod quiz_views;
 mod state;
 mod stepper;
+mod success;
 mod widgets;
 
 pub use page::Claim;

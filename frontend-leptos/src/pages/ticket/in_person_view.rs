@@ -221,7 +221,7 @@ pub fn InPersonView(
             // ── Attendee info ──
             <div class="ticket-info">
                 <div class="ticket-info-row">
-                    <span class="ticket-info-label">{t!(i18n, ticket.info.name)}</span>
+                    <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.name))}</span>
                     <span class="ticket-info-value">
                         {utils::escape_html(&utils::capitalize_name(&name))}
                     </span>
@@ -230,7 +230,7 @@ pub fn InPersonView(
                     let email = masked_email;
                     view! {
                         <div class="ticket-info-row">
-                            <span class="ticket-info-label">{t!(i18n, ticket.info.email)}</span>
+                            <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.email))}</span>
                             <span class="ticket-info-value">
                                 {utils::escape_html(&email)}
                             </span>
@@ -243,7 +243,7 @@ pub fn InPersonView(
                     let tn = ticket_name;
                     view! {
                         <div class="ticket-info-row">
-                            <span class="ticket-info-label">{t!(i18n, ticket.info.ticket)}</span>
+                            <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.ticket))}</span>
                             <span class="ticket-info-value">
                                 {utils::escape_html(&tn)}
                             </span>
@@ -263,7 +263,7 @@ pub fn InPersonView(
                     };
                     view! {
                         <div class="ticket-info-row">
-                            <span class="ticket-info-label">{t!(i18n, ticket.info.kind)}</span>
+                            <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.kind))}</span>
                             <span class="ticket-info-value">
                                 {pt}
                             </span>
@@ -308,9 +308,9 @@ pub fn InPersonView(
                                     <div class="ticket-action-card ticket-action-card--info">
                                         <div class="ticket-action-icon"><Icon icon=IconName::Wallet class="icon-sm" /></div>
                                         <div>
-                                            <div class="ticket-action-title">{t!(i18n, ticket.usdc_refund.title)}</div>
-                                            <p class="ticket-action-desc">{t!(i18n, ticket.usdc_refund.body)}</p>
-                                            <a href=href class="btn btn-outline btn-sm ticket-action-btn">{t!(i18n, ticket.usdc_refund.cta)}</a>
+                                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.usdc_refund.title))}</div>
+                                            <p class="ticket-action-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.usdc_refund.body))}</p>
+                                            <a href=href class="btn btn-outline btn-sm ticket-action-btn">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.usdc_refund.cta))}</a>
                                         </div>
                                     </div>
                                 }.into_any()
@@ -321,7 +321,7 @@ pub fn InPersonView(
                                     <div class="ticket-action-card ticket-action-card--info">
                                         <div class="ticket-action-icon"><Icon icon=IconName::Info class="icon-sm" /></div>
                                         <div>
-                                            <div class="ticket-action-title">{t!(i18n, ticket.thb_options.title)}</div>
+                                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.thb_options.title))}</div>
                                             <p class="ticket-action-desc">{t!(i18n, ticket.thb_options.body, amount)}</p>
                                         </div>
                                     </div>
@@ -428,14 +428,14 @@ pub fn InPersonView(
                                 <Icon icon=IconName::Link class="icon-sm" />
                             </div>
                             <div>
-                                <div class="ticket-action-title">{t!(i18n, ticket.organizer_refund.title)}</div>
+                                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.organizer_refund.title))}</div>
                                 <a
                                     href=link
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     class="ticket-action-link"
                                 >
-                                    {t!(i18n, ticket.organizer_refund.cta)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.organizer_refund.cta))}
                                 </a>
                             </div>
                         </div>
@@ -455,9 +455,9 @@ pub fn InPersonView(
                             <Icon icon=IconName::Clock class="icon-sm" />
                         </div>
                         <div>
-                            <div class="ticket-action-title">{t!(i18n, ticket.hero.pending_approval)}</div>
+                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.pending_approval))}</div>
                             <div class="ticket-action-desc">
-                                {t!(i18n, ticket.pending_desc)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.pending_desc))}
                             </div>
                         </div>
                     </div>
@@ -470,9 +470,9 @@ pub fn InPersonView(
                             <Icon icon=IconName::QrCode class="icon-sm" />
                         </div>
                         <div>
-                            <div class="ticket-action-title">{t!(i18n, ticket.hero.ready)}</div>
+                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.ready))}</div>
                             <div class="ticket-action-desc">
-                                {t!(i18n, ticket.ready_desc)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.ready_desc))}
                             </div>
                         </div>
                     </div>
@@ -503,25 +503,25 @@ pub fn InPersonView(
         // 6. Footer
         <div class="ticket-footer">
             <div class="ticket-nav">
-                <A href="/">{t!(i18n, ticket.nav_home)}</A>
-                <A href="/profile">{t!(i18n, ticket.nav_profile)}</A>
+                <A href="/">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_home))}</A>
+                <A href="/profile">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_profile))}</A>
             </div>
             {if is_checked_in {
                 view! {
                     <p class="ticket-footer-hint">
-                        {t!(i18n, ticket.footer_checked_in)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_checked_in))}
                     </p>
                 }.into_any()
             } else if !is_approved {
                 view! {
                     <p class="ticket-footer-hint">
-                        {t!(i18n, ticket.footer_pending)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_pending))}
                     </p>
                 }.into_any()
             } else {
                 view! {
                     <p class="ticket-footer-hint">
-                        {t!(i18n, ticket.footer_ready)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_ready))}
                     </p>
                 }.into_any()
             }}

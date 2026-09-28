@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::CommunityLink;
-use crate::i18n::{Locale, t, td_string, use_i18n};
+use crate::i18n::{Locale, td_string, use_i18n};
 use crate::pages::ticket::access_logistics::GUIDE_PLATFORM;
 
 const LEARNING_RESOURCE_PLATFORMS: &[&str] = &["resource", "slides", "source", "download"];
@@ -131,11 +131,10 @@ fn render_ticket_variant(links: Vec<CommunityLink>) -> impl IntoView {
         })
         .collect();
 
-    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--community">
             <div class="community-links-inner">
-                <div class="community-links-title">{t!(i18n, ticket.community.title)}</div>
+                <div class="community-links-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.community.title))}</div>
                 <div class="community-links-list">
                     {items}
                 </div>
@@ -170,15 +169,14 @@ fn render_public_event_variant(links: Vec<CommunityLink>) -> impl IntoView {
         })
         .collect();
 
-    let i18n = use_i18n();
     view! {
         <div class="pe-card">
             <h2 class="pe-section-title">
                 <span class="pe-community-title-icon" inner_html=r#"<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>"# />
-                {t!(i18n, ticket.community.title)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.community.title))}
             </h2>
             <p class="pe-detail-secondary pe-mb-075">
-                {t!(i18n, ticket.community.subtitle)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.community.subtitle))}
             </p>
             <div class="pe-community-links-list">
                 {items}

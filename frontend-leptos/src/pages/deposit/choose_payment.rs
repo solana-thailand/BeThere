@@ -106,7 +106,7 @@ pub fn choose_payment_view(
                         format!("฿{}", thb_amount)
                     }}
                 </div>
-                <div class="dep2-amount-unit">{t!(i18n, deposit.choose.hero_sub)}</div>
+                <div class="dep2-amount-unit">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.hero_sub))}</div>
             }.into_any()
         } else {
             view! { <div></div> }.into_any()
@@ -117,7 +117,7 @@ pub fn choose_payment_view(
             view! {
                 <div class="dep2-deadline dep2-deadline--danger">
                     <span class="dep2-deadline-text">
-                        {t!(i18n, deposit.choose.deadline_moved)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.deadline_moved))}
                     </span>
                 </div>
             }.into_any()
@@ -125,7 +125,7 @@ pub fn choose_payment_view(
             view! {
                 <div class="dep2-deadline dep2-deadline--success">
                     <span class="dep2-deadline-text">
-                        {t!(i18n, deposit.choose.deadline_reclaim)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.deadline_reclaim))}
                     </span>
                 </div>
             }.into_any()
@@ -174,7 +174,7 @@ pub fn choose_payment_view(
                             view! {
                                 <div class="dep2-deadline dep2-deadline--danger">
                                     <span class="dep2-deadline-text">
-                                        {t!(i18n, deposit.choose.no_methods)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.no_methods))}
                                     </span>
                                 </div>
                             }.into_any()
@@ -191,13 +191,13 @@ pub fn choose_payment_view(
                                                 <div class="dep2-method-amount">
                                                     {format!("฿{} THB", thb_amount)}
                                                 </div>
-                                                <div class="dep2-method-label">{t!(i18n, deposit.choose.via_promptpay)}</div>
+                                                <div class="dep2-method-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.via_promptpay))}</div>
                                                 <button class="dep2-method-cta"
                                                     on:click=move |ev| {
                                                         ev.stop_propagation();
                                                         set_payment_choice.set(Some(PaymentChoice::Thb));
                                                     }>
-                                                    {t!(i18n, deposit.choose.pay_promptpay)}
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.pay_promptpay))}
                                                 </button>
                                             </div>
                                         }.into_any()
@@ -214,13 +214,13 @@ pub fn choose_payment_view(
                                                 <div class="dep2-method-amount">
                                                     {format!("{} USDC", usdc_formatted)}
                                                 </div>
-                                                <div class="dep2-method-label">{t!(i18n, deposit.choose.via_solana)}</div>
+                                                <div class="dep2-method-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.via_solana))}</div>
                                                 <button class="dep2-method-cta"
                                                     on:click=move |ev| {
                                                         ev.stop_propagation();
                                                         set_payment_choice.set(Some(PaymentChoice::Usdc));
                                                     }>
-                                                    {t!(i18n, deposit.choose.pay_usdc)}
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.pay_usdc))}
                                                 </button>
                                             </div>
                                         }.into_any()
@@ -235,7 +235,7 @@ pub fn choose_payment_view(
                     Some(PaymentChoice::Usdc) => view! {
                         <button class="dep2-back"
                             on:click=move |_| set_payment_choice.set(None)>
-                            {t!(i18n, deposit.choose.change_method)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.change_method))}
                         </button>
 
                         {if show_usdc {
@@ -250,7 +250,7 @@ pub fn choose_payment_view(
                                         view! {
                                             <div class="wallet-list">
                                                 <p class="wallet-prompt">
-                                                            {t!(i18n, deposit.choose.connect_prompt)}
+                                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.connect_prompt))}
                                                         </p>
                                                 {wallets_for_click.into_iter().map(|w| {
                                                     let w_clone = w.clone();
@@ -277,13 +277,13 @@ pub fn choose_payment_view(
 
                                     <div class="dep2-qr-secondary">
                                         <p class="dep2-qr-secondary-label">
-                                            {t!(i18n, deposit.choose.no_wallet_qr)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.no_wallet_qr))}
                                         </p>
                                         <div class="u-mb-sm">
                                             <input
                                                 type="text"
                                                 class="form-input dep-input"
-                                                placeholder=move || t_string!(i18n, deposit.choose.wallet_placeholder)
+                                                placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.wallet_placeholder))
                                                 prop:value=move || wallet_input.get()
                                                 on:input=move |ev| {
                                                     let val = event_target_value(&ev);
@@ -298,7 +298,7 @@ pub fn choose_payment_view(
                                                 move |_| hqr()
                                             }
                                         >
-                                            {t!(i18n, deposit.choose.generate_qr)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.generate_qr))}
                                         </button>
                                     </div>
                                 </div>
@@ -311,7 +311,7 @@ pub fn choose_payment_view(
                     Some(PaymentChoice::Thb) => view! {
                         <button class="dep2-back"
                             on:click=move |_| set_payment_choice.set(None)>
-                            {t!(i18n, deposit.choose.change_method)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.change_method))}
                         </button>
                         {super::thb_payment::thb_payment_form_view(
                             &data_clone,
@@ -342,13 +342,13 @@ pub fn choose_payment_view(
             if !event_slug.is_empty() {
                 view! {
                     <a href=format!("/e/{event_slug}") class="dep2-back">
-                        {t!(i18n, deposit.back_event)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_event))}
                     </a>
                 }.into_any()
             } else {
                 view! {
                     <a href="/" class="dep2-back">
-                        {t!(i18n, deposit.back_home)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_home))}
                     </a>
                 }.into_any()
             }

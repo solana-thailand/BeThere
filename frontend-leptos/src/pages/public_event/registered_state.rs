@@ -43,7 +43,7 @@ pub fn registered_state(reg_data: &MyRegistrationData, email: &str, current_slug
                     <Icon icon=IconName::Check class="icon-2xl icon-success" />
                 </div>
                 <h2 class="pe-section-title pe-title-success">
-                    {t!(i18n, event.already_registered)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, event.already_registered))}
                 </h2>
                 <p class="pe-detail-secondary pe-mb-025">
                     {t!(i18n, event.welcome_back, name = reg_name)}
@@ -54,7 +54,7 @@ pub fn registered_state(reg_data: &MyRegistrationData, email: &str, current_slug
                 {if has_claim_token {
                     view! {
                         <p class="pe-detail-secondary pe-mt-025" style="color: var(--success);">
-                            {t!(i18n, event.quest_complete)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.quest_complete))}
                         </p>
                     }.into_any()
                 } else {
@@ -76,7 +76,7 @@ pub fn registered_state(reg_data: &MyRegistrationData, email: &str, current_slug
                         }
                     >
                         <Icon icon=IconName::Link class="icon-sm" />
-                        " "{t!(i18n, event.share_event)}
+                        " "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.share_event))}
                     </button>
                 </div>
             </div>

@@ -15,7 +15,7 @@
 use leptos::prelude::*;
 
 use crate::api::CommunityLink;
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Platform tag that marks a `CommunityLink` as a logistics guide rather than
@@ -71,10 +71,10 @@ pub fn access_logistics_section(links: Vec<CommunityLink>) -> impl IntoView {
             <div class="access-logistics-inner">
                 <div class="access-logistics-title">
                     <Icon icon=IconName::Map class="icon-sm" />
-                    <span>{t!(i18n, ticket.logistics.title)}</span>
+                    <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.logistics.title))}</span>
                 </div>
                 <p class="access-logistics-hint">
-                    {t!(i18n, ticket.logistics.hint)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.logistics.hint))}
                 </p>
                 <div class="access-logistics-list">
                     {items}

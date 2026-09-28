@@ -50,9 +50,9 @@ pub(super) fn checked_in_label(checked_in_at: &str, participation_type: &str) ->
     let i18n = use_i18n();
     if checked_in_at.is_empty() || checked_in_at == "N/A" {
         if is_online_participant(participation_type) {
-            return t!(i18n, claim.registered).into_any();
+            return crate::locale::tr(|l| crate::i18n::td_string!(l, claim.registered)).into_any();
         }
-        return t!(i18n, claim.not_checked_in).into_any();
+        return crate::locale::tr(|l| crate::i18n::td_string!(l, claim.not_checked_in)).into_any();
     }
     let iso = checked_in_at.to_string();
     let time = move || format_check_in_time(&iso);

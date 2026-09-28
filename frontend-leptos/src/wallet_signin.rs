@@ -61,14 +61,15 @@ const MWA_WALLET: &str = "Mobile Wallet Adapter";
 /// Wallet Adapter entry is relabelled, with a hint line under it, because its
 /// registry name means nothing to the user.
 fn wallet_identity(name: &str) -> AnyView {
-    let i18n = use_i18n();
     let icon_name = crate::icons::wallet_icon_name(name);
     let is_mwa = name == MWA_WALLET;
     let label = match is_mwa {
-        true => t!(i18n, wallet.mwa_label).into_any(),
+        true => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.mwa_label)).into_any(),
         false => name.to_string().into_any(),
     };
-    let hint = is_mwa.then_some(t!(i18n, wallet.mwa_hint));
+    let hint = is_mwa.then_some(crate::locale::tr(|l| {
+        crate::i18n::td_string!(l, wallet.mwa_hint)
+    }));
     view! {
         <span style="display: flex; align-items: center; gap: 12px;">
             <span style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(255,255,255,0.06); border-radius: 10px;">
@@ -191,11 +192,13 @@ fn deep_link_caption() -> AnyView {
 
 /// Shown when nothing connectable was found, so the modal is never empty.
 fn no_wallet_row(mobile: bool) -> AnyView {
-    let i18n = use_i18n();
-    let msg = match mobile {
-        true => t!(i18n, wallet.no_wallet_mobile).into_any(),
-        false => t!(i18n, wallet.no_wallet_desktop).into_any(),
-    };
+    let msg =
+        match mobile {
+            true => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.no_wallet_mobile))
+                .into_any(),
+            false => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.no_wallet_desktop))
+                .into_any(),
+        };
     view! {
         <div
             class="siws-wallet-option"
@@ -397,7 +400,7 @@ pub fn WalletSignInButton(
                     <div class="loading visible">
                         <span class="spinner"></span>
                         " "
-                        {t!(i18n, wallet.connecting)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.connecting))}
                     </div>
                 }
             }
@@ -413,7 +416,7 @@ pub fn WalletSignInButton(
                 {show_icon.then(|| view! { <span inner_html=solana_icon()></span> })}
                 {match label.clone() {
                     Some(custom) => custom.into_any(),
-                    None => t!(i18n, wallet.sign_in).into_any(),
+                    None => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.sign_in)).into_any(),
                 }}
             </button>
         </Show>
@@ -426,9 +429,9 @@ pub fn WalletSignInButton(
                 <Icon icon=IconName::Denied class="icon-md icon-danger" />
                 " "
                 {move || match error_msg.get() {
-                    Some(WalletError::SigningFailed) => t!(i18n, wallet.err_sign).into_any(),
-                    Some(WalletError::VerifyFailed) => t!(i18n, wallet.err_verify).into_any(),
-                    Some(WalletError::NonceFailed) => t!(i18n, wallet.err_nonce).into_any(),
+                    Some(WalletError::SigningFailed) => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.err_sign)).into_any(),
+                    Some(WalletError::VerifyFailed) => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.err_verify)).into_any(),
+                    Some(WalletError::NonceFailed) => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.err_nonce)).into_any(),
                     Some(WalletError::ConnectCancelled(wallet)) => {
                         t!(i18n, wallet.err_connect_cancelled, wallet).into_any()
                     }
@@ -457,7 +460,7 @@ pub fn WalletSignInButton(
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <span inner_html=solana_icon()></span>
                                 <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #fff; letter-spacing: -0.01em;">
-                                    {t!(i18n, wallet.modal_title)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.modal_title))}
                                 </h3>
                             </div>
                             <button
@@ -469,7 +472,7 @@ pub fn WalletSignInButton(
                         </div>
 
                         <p style="color: #94a3b8; font-size: 0.88rem; line-height: 1.5; margin-top: 0; margin-bottom: 24px;">
-                            {t!(i18n, wallet.modal_desc)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.modal_desc))}
                         </p>
 
                         <div style="display: flex; flex-direction: column; gap: 12px;">

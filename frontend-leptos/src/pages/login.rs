@@ -13,7 +13,7 @@ use leptos_router::hooks::{use_navigate, use_query_map};
 
 use crate::api;
 use crate::auth::get_url_error;
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Google SVG icon markup.
@@ -154,7 +154,7 @@ pub fn Login() -> impl IntoView {
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
 
                 // Title
-                <h1 class="claim-title">{t!(i18n, login.title)}</h1>
+                <h1 class="claim-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, login.title))}</h1>
 
                 // Subtitle
                 <p class="subtitle">
@@ -173,7 +173,7 @@ pub fn Login() -> impl IntoView {
                 // Powered by Solana badge
                 <div class="powered-badge">
                     <span class="sol-dot"></span>
-                    {t!(i18n, login.powered_by)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, login.powered_by))}
                 </div>
 
                 // Sign-in Buttons Stack
@@ -185,14 +185,14 @@ pub fn Login() -> impl IntoView {
                             view! {
                                 <div class="loading visible">
                                     <span class="spinner"></span>
-                                    {t!(i18n, login.redirecting)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, login.redirecting))}
                                 </div>
                             }
                         }
                     >
                         <button class="btn-google" on:click=handle_login>
                             <span inner_html=google_icon()></span>
-                            {t!(i18n, login.google)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, login.google))}
                         </button>
                     </Show>
 
@@ -204,7 +204,7 @@ pub fn Login() -> impl IntoView {
                     // cheaper than the dead end it prevents (`.issues/106`).
                     <Show when=move || wants_feedback.get() fallback=|| ()>
                         <p class="login-method-note">
-                            {t!(i18n, login.wallet_note_feedback)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, login.wallet_note_feedback))}
                         </p>
                     </Show>
                 </div>
@@ -223,7 +223,7 @@ pub fn Login() -> impl IntoView {
 
                 // Back to landing
                 <a href="/" class="login-back-link" style="margin-top: 24px;">
-                    {t!(i18n, login.back_home)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, login.back_home))}
                 </a>
 
                 // Footer

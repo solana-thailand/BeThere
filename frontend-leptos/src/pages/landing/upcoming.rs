@@ -4,7 +4,7 @@ use leptos::prelude::*;
 use serde::Deserialize;
 
 use crate::api::ApiResponse;
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Lightweight event item from the public events API.
@@ -92,10 +92,10 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
             let heading = view! {
                 <div class="landing-section-header-sm">
                     <h2 class="landing-h2">
-                        <Icon icon=IconName::Party class="icon-sm"/>" "{t!(i18n, landing.upcoming.title)}
+                        <Icon icon=IconName::Party class="icon-sm"/>" "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.title))}
                     </h2>
                     <p class="landing-subtitle">
-                        {t!(i18n, landing.upcoming.subtitle)}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.subtitle))}
                     </p>
                 </div>
             };
@@ -106,7 +106,7 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                         {heading}
                         <div class="landing-events-loading">
                             <span class="landing-events-loading-spinner"></span>
-                            <p class="landing-events-loading-text">{t!(i18n, landing.upcoming.loading)}</p>
+                            <p class="landing-events-loading-text">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.loading))}</p>
                         </div>
                     </section>
                 }.into_any()
@@ -117,17 +117,17 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                         {heading}
                         <div class="landing-sandbox-card">
                             <div class="landing-sandbox-icon">{"🎟️"}</div>
-                            <div class="landing-sandbox-title">{t!(i18n, landing.upcoming.none_title)}</div>
+                            <div class="landing-sandbox-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_title))}</div>
                             <div class="landing-sandbox-desc">
-                                {t!(i18n, landing.upcoming.none_desc)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_desc))}
                             </div>
                             <a href="#how-it-works" class="btn btn-primary btn-sm landing-sandbox-btn">
-                                {t!(i18n, landing.upcoming.see_how)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.see_how))}
                             </a>
                         </div>
                         <div class="landing-sandbox-secondary">
                             <a href="#waitlist" class="btn btn-outline btn-sm">
-                                {t!(i18n, landing.upcoming.organize)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.organize))}
                             </a>
                         </div>
                     </section>
@@ -152,9 +152,9 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                                     (true, false) => crate::utils::format_event_datetime(start_ms),
                                 };
                                 let deposit_badge = if evt.deposit_enabled {
-                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::Coin class="icon-xs"/>" "{t!(i18n, landing.upcoming.deposit_required)}</span> }.into_any()
+                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::Coin class="icon-xs"/>" "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.deposit_required))}</span> }.into_any()
                                 } else {
-                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::TicketFree class="icon-xs"/>" "{t!(i18n, landing.upcoming.free_entry)}</span> }.into_any()
+                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::TicketFree class="icon-xs"/>" "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.free_entry))}</span> }.into_any()
                                 };
 
                                 // Poster first, badge second — the same order

@@ -175,10 +175,9 @@ pub(super) fn build_quiz_explanations(
         );
     }
 
-    let i18n = use_i18n();
     view! {
         <div class="card claim-quiz-explanations">
-            <h4>{t!(i18n, claim.quiz.review)}</h4>
+            <h4>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.review))}</h4>
             {items}
         </div>
     }
@@ -209,7 +208,6 @@ pub(super) fn build_quiz_action(
     claim_token: String,
     set_state: WriteSignal<ClaimState>,
 ) -> AnyView {
-    let i18n = use_i18n();
     match action {
         QuizAction::Passed => {
             let claim_data_c = claim_data_for_claim;
@@ -272,7 +270,7 @@ pub(super) fn build_quiz_action(
                 <NftBadgePreview />
 
                 <div class="card claim-quiz-adventure-check">
-                    <p class="claim-quiz-passed-msg"><Icon icon=IconName::Check class="icon-sm icon-success" />" "{t!(i18n, claim.quiz.passed_verifying)}</p>
+                    <p class="claim-quiz-passed-msg"><Icon icon=IconName::Check class="icon-sm icon-success" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.passed_verifying))}</p>
                 </div>
 
                 <button
@@ -281,7 +279,7 @@ pub(super) fn build_quiz_action(
                         check_adventure_and_proceed();
                     }
                 >
-                    {t!(i18n, claim.quiz.continue_to_claim)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.continue_to_claim))}
                 </button>
             }.into_any()
         }
@@ -296,14 +294,14 @@ pub(super) fn build_quiz_action(
                         set_state.set(ClaimState::Quiz(claim_d.clone(), quiz_d.clone()));
                     }
                 >
-                    {t!(i18n, claim.quiz.try_again)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.try_again))}
                 </button>
             }
             .into_any()
         }
         QuizAction::Exhausted => view! {
             <div class="card claim-quiz-exhausted">
-                <p>{t!(i18n, claim.quiz.exhausted)}</p>
+                <p>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.exhausted))}</p>
             </div>
         }
         .into_any(),

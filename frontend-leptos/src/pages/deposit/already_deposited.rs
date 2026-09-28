@@ -19,7 +19,6 @@ enum ConfirmCheck {
 
 /// Loading view.
 pub fn loading_view() -> AnyView {
-    let i18n = use_i18n();
     view! {
         <div class="dep2-card">
             <div class="dep2-confirming">
@@ -28,7 +27,7 @@ pub fn loading_view() -> AnyView {
                     <span class="dep2-confirming-dot"></span>
                     <span class="dep2-confirming-dot"></span>
                 </div>
-                <p>{t!(i18n, deposit.loading)}</p>
+                <p>{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.loading))}</p>
             </div>
         </div>
     }
@@ -39,22 +38,22 @@ pub fn loading_view() -> AnyView {
 pub fn error_view(error: DepositError) -> AnyView {
     let i18n = use_i18n();
     let message = match error {
-        DepositError::InvalidLink => view! { {t!(i18n, deposit.error.invalid_link)} }.into_any(),
+        DepositError::InvalidLink => view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.error.invalid_link))} }.into_any(),
         DepositError::EndedNoDeposit => {
-            view! { {t!(i18n, deposit.error.ended_no_deposit)} }.into_any()
+            view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.error.ended_no_deposit))} }.into_any()
         }
         DepositError::LoadFailed(error) => {
             view! { {t!(i18n, deposit.error.load_failed, error)} }.into_any()
         }
-        DepositError::ReloadFailed => view! { {t!(i18n, deposit.error.reload_failed)} }.into_any(),
+        DepositError::ReloadFailed => view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.error.reload_failed))} }.into_any(),
     };
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{t!(i18n, deposit.error.title)}</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.error.title))}</span>
             </div>
             <p>{message}</p>
-            <a href="/" class="btn btn-primary">{t!(i18n, deposit.error.go_home)}</a>
+            <a href="/" class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.error.go_home))}</a>
         </div>
     }
     .into_any()
@@ -77,9 +76,9 @@ pub fn not_enabled_view(data: &DepositStatusResponse) -> AnyView {
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{t!(i18n, deposit.not_enabled.title)}</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.not_enabled.title))}</span>
             </div>
-            <p>{t!(i18n, deposit.not_enabled.body)}</p>
+            <p>{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.not_enabled.body))}</p>
 
             // Diagnostic block — surface which event the backend actually
             // resolved. Without this, "wrong event fallback" looks identical
@@ -100,7 +99,7 @@ pub fn not_enabled_view(data: &DepositStatusResponse) -> AnyView {
                             ().into_any()
                         }}
                         <p class="hint-note">
-                            {t!(i18n, deposit.not_enabled.hint)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.not_enabled.hint))}
                         </p>
                     </div>
                 }.into_any()
@@ -108,7 +107,7 @@ pub fn not_enabled_view(data: &DepositStatusResponse) -> AnyView {
                 ().into_any()
             }}
 
-            <a href="/" class="btn btn-primary">{t!(i18n, deposit.error.go_home)}</a>
+            <a href="/" class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.error.go_home))}</a>
         </div>
     }
     .into_any()
@@ -200,7 +199,7 @@ pub fn already_deposited_view(
         <div class="dep2-card">
             // Header: title + badge
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{t!(i18n, deposit.already.title)}</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.title))}</span>
                 <span class=verified_class>
                     {verified_text}
                 </span>
@@ -223,19 +222,19 @@ pub fn already_deposited_view(
             // Receipt block
             <div class="dep2-receipt">
                 <div class="dep2-receipt-row">
-                    <span class="dep2-receipt-label">{t!(i18n, deposit.already.method)}</span>
+                    <span class="dep2-receipt-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.method))}</span>
                     <span class="dep2-receipt-value">
                         {display_method_label}
                     </span>
                 </div>
                 <div class="dep2-receipt-row">
-                    <span class="dep2-receipt-label">{t!(i18n, deposit.already.amount)}</span>
+                    <span class="dep2-receipt-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.amount))}</span>
                     <span class="dep2-receipt-value">
                         {amount_display.clone()}
                     </span>
                 </div>
                 <div class="dep2-receipt-row">
-                    <span class="dep2-receipt-label">{t!(i18n, deposit.already.status)}</span>
+                    <span class="dep2-receipt-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.status))}</span>
                     <span class="dep2-receipt-value">
                         <span class=verified_class>
                             {verified_text}
@@ -243,7 +242,7 @@ pub fn already_deposited_view(
                     </span>
                 </div>
                 <div class="dep2-receipt-row">
-                    <span class="dep2-receipt-label">{t!(i18n, deposit.already.date)}</span>
+                    <span class="dep2-receipt-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.date))}</span>
                     <span class="dep2-receipt-value">
                         {deposited_at}
                     </span>
@@ -290,7 +289,7 @@ pub fn already_deposited_view(
                                         set_state.set(DepositPageState::RefundChooseWallet(data_clone_for_refund.clone()));
                                     }
                                 >
-                                    {t!(i18n, deposit.claim_refund)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.claim_refund))}
                                 </button>
                             </div>
                         }.into_any()
@@ -298,13 +297,13 @@ pub fn already_deposited_view(
                         view! {
                             <div class="dep2-info-note">
                                 <p class="hint-note">
-                                    {t!(i18n, deposit.already.refund_after_event)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.refund_after_event))}
                                 </p>
                             </div>
                         }.into_any()
                     } else {
                         view! {
-                            <span class="badge badge-muted">{t!(i18n, deposit.already.non_refundable)}</span>
+                            <span class="badge badge-muted">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.non_refundable))}</span>
                         }.into_any()
                     }}
                 }.into_any()
@@ -388,7 +387,7 @@ pub fn already_deposited_view(
                             {t!(i18n, deposit.already.thb_secured, amount)}
                         </p>
                         <a href=nonusdc_ticket_href class="btn btn-outline btn-block">
-                            {t!(i18n, deposit.already.go_ticket)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.go_ticket))}
                         </a>
                     </div>
                 }.into_any()
@@ -399,7 +398,7 @@ pub fn already_deposited_view(
                 href=if data_clone_for_event_link.event_slug.is_empty() { "/".to_string() } else { format!("/e/{}", data_clone_for_event_link.event_slug) }
                 class="dep2-back"
             >
-                {t!(i18n, deposit.back_event)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_event))}
             </a>
         </div>
     }

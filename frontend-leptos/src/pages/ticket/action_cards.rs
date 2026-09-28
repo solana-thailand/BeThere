@@ -69,7 +69,7 @@ pub fn DepositActionCard(
                     view! {
                         <div class="ticket-action-desc ticket-action-alt-desc">
                             <span class="ticket-action-alt-text">
-                                {t!(i18n, ticket.action.usdc_closed)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.usdc_closed))}
                             </span>
                         </div>
                     }.into_any()
@@ -79,12 +79,12 @@ pub fn DepositActionCard(
                 <div class="ticket-action-desc">
                     {match deadline_hours {
                         Some(hours) => t!(i18n, ticket.action.deadline_hours, hours).into_any(),
-                        None => t!(i18n, ticket.action.deadline_none).into_any(),
+                        None => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.deadline_none)).into_any(),
                     }}
                 </div>
                 <a href=deposit_href class="btn btn-primary btn-sm ticket-action-btn">
                     <Icon icon=IconName::CreditCard class="icon-sm" />
-                    " "{t!(i18n, ticket.action.pay_now)}
+                    " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.pay_now))}
                 </a>
             </div>
         </div>
@@ -164,14 +164,13 @@ pub fn RefundCard(
     let url = event_checkin_domain::validation::safe_document_link(&refund_proof_url)
         .unwrap_or_default()
         .to_string();
-    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--refund">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Recycle class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">{t!(i18n, ticket.action.refund_returned)}</div>
+                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.refund_returned))}</div>
                 {if !url.is_empty() {
                     view! {
                         <a
@@ -180,7 +179,7 @@ pub fn RefundCard(
                             rel="noopener noreferrer"
                             class="ticket-action-link"
                         >
-                            {t!(i18n, ticket.action.refund_receipt)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.refund_receipt))}
                         </a>
                     }.into_any()
                 } else {
@@ -198,17 +197,16 @@ pub fn ClaimActionCard(
     #[prop(into)]
     claim_href: String,
 ) -> impl IntoView {
-    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--claim">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Gift class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">{t!(i18n, ticket.action.claim_title)}</div>
+                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.claim_title))}</div>
                 <a href=claim_href class="btn btn-primary btn-sm ticket-action-btn">
                     <Icon icon=IconName::Gift class="icon-sm" />
-                    " "{t!(i18n, ticket.action.claim_cta)}
+                    " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.claim_cta))}
                 </a>
             </div>
         </div>
@@ -222,20 +220,19 @@ pub fn ReclaimActionCard(
     #[prop(into)]
     reclaim_href: String,
 ) -> impl IntoView {
-    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--reclaim">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Warning class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">{t!(i18n, ticket.action.reclaim_title)}</div>
+                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.reclaim_title))}</div>
                 <div class="ticket-action-desc">
-                    {t!(i18n, ticket.action.reclaim_desc)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.reclaim_desc))}
                 </div>
                 <a href=reclaim_href class="btn btn-success btn-sm ticket-action-btn">
                     <Icon icon=IconName::CreditCard class="icon-sm" />
-                    " "{t!(i18n, ticket.action.reclaim_cta)}
+                    " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.reclaim_cta))}
                 </a>
             </div>
         </div>
@@ -245,16 +242,15 @@ pub fn ReclaimActionCard(
 /// Moved to online track notice — shown when deposit deadline passed and no in-person spots.
 #[component]
 pub fn MovedOnlineCard() -> impl IntoView {
-    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--moved-online">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Warning class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">{t!(i18n, ticket.action.moved_online_title)}</div>
+                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.moved_online_title))}</div>
                 <div class="ticket-action-desc">
-                    {t!(i18n, ticket.action.moved_online_desc)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.moved_online_desc))}
                 </div>
             </div>
         </div>
@@ -374,7 +370,7 @@ pub fn RolloverActionCard(
             <div>
                 {move || match state.get() {
                     RolloverState::Ready => view! {
-                        <div class="ticket-action-title">{t!(i18n, ticket.action.rollover_title)}</div>
+                        <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.rollover_title))}</div>
                         <div class="ticket-action-desc">
                             {
                                 let target = target_event_name.clone();
@@ -386,21 +382,21 @@ pub fn RolloverActionCard(
                             on:click=move |_| set_state.set(RolloverState::ChooseWallet)
                         >
                             <Icon icon=IconName::Refresh class="icon-sm" />
-                            " "{t!(i18n, ticket.action.rollover_cta)}
+                            " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.rollover_cta))}
                         </button>
                     }.into_any(),
 
                     RolloverState::ChooseWallet => {
                         let wallets = detected_wallets.get();
                         view! {
-                            <div class="ticket-action-title">{t!(i18n, ticket.action.rollover_connect_title)}</div>
+                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.rollover_connect_title))}</div>
                             <div class="ticket-action-desc">
-                                {t!(i18n, ticket.action.rollover_connect_desc)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.rollover_connect_desc))}
                             </div>
                             {if wallets.is_empty() {
                                 view! {
                                     <p class="ticket-action-desc ticket-action-alt-text">
-                                        {t!(i18n, ticket.action.no_wallet)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.no_wallet))}
                                     </p>
                                 }.into_any()
                             } else {
@@ -424,7 +420,7 @@ pub fn RolloverActionCard(
                                 class="btn btn-outline btn-xs ticket-action-cancel"
                                 on:click=move |_| set_state.set(RolloverState::Ready)
                             >
-                                {t!(i18n, ticket.action.cancel)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.cancel))}
                             </button>
                         }.into_any()
                     },
@@ -465,7 +461,7 @@ pub fn RolloverActionCard(
                                 ])
                             }
                             <div class="ticket-action-desc">
-                                {t!(i18n, ticket.action.review_hint)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.review_hint))}
                             </div>
                             <button
                                 class="btn btn-success btn-sm ticket-action-btn"
@@ -534,22 +530,22 @@ pub fn RolloverActionCard(
                                 }
                             >
                                 <Icon icon=IconName::Refresh class="icon-sm" />
-                                " "{t!(i18n, ticket.action.rollover_sign)}
+                                " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.rollover_sign))}
                             </button>
                             <button
                                 class="btn btn-outline btn-xs ticket-action-cancel-xs"
                                 on:click=move |_| set_state.set(RolloverState::Ready)
                             >
-                                {t!(i18n, ticket.action.cancel)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.cancel))}
                             </button>
                         }.into_any()
                     },
 
                     RolloverState::Signing(_, _) => view! {
-                        <div class="ticket-action-title">{t!(i18n, ticket.action.rollover_processing)}</div>
+                        <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.rollover_processing))}</div>
                         <div class="ticket-action-desc ticket-action-signing-row">
                             <span class="spinner spinner-sm"></span>
-                            {t!(i18n, ticket.action.approve_in_wallet)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.approve_in_wallet))}
                         </div>
                     }.into_any(),
 
@@ -562,7 +558,7 @@ pub fn RolloverActionCard(
                         };
                         view! {
                             <div class="ticket-action-title ticket-action-title-success">
-                                {t!(i18n, ticket.action.rollover_done)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.rollover_done))}
                             </div>
                             <div class="ticket-action-desc">
                                 {
@@ -576,35 +572,35 @@ pub fn RolloverActionCard(
                                 rel="noopener noreferrer"
                                 class="ticket-action-link"
                             >
-                                {t!(i18n, ticket.action.view_solscan)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.view_solscan))}
                             </a>
                         }.into_any()
                     },
 
                     RolloverState::Error(err) => view! {
                         <div class="ticket-action-title ticket-action-title-danger">
-                            {t!(i18n, ticket.action.rollover_failed)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.rollover_failed))}
                         </div>
                         <div class="ticket-action-desc">{match err {
                             RolloverError::Build(error) => {
                                 t!(i18n, ticket.action.err_build, error).into_any()
                             }
-                            RolloverError::Empty => t!(i18n, ticket.action.err_empty).into_any(),
+                            RolloverError::Empty => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.err_empty)).into_any(),
                             RolloverError::WouldFail(Some(error)) => {
                                 t!(i18n, ticket.action.err_would_fail, error).into_any()
                             }
                             RolloverError::WouldFail(None) => {
-                                let error = move || t_string!(i18n, ticket.action.err_simulation);
+                                let error = crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.err_simulation));
                                 t!(i18n, ticket.action.err_would_fail, error).into_any()
                             }
-                            RolloverError::Failed => t!(i18n, ticket.action.err_failed).into_any(),
+                            RolloverError::Failed => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.err_failed)).into_any(),
                             RolloverError::Message(msg) => msg.into_any(),
                         }}</div>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel-xs"
                             on:click=move |_| set_state.set(RolloverState::Ready)
                         >
-                            {t!(i18n, ticket.action.try_again)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.try_again))}
                         </button>
                     }.into_any(),
                 }}
@@ -678,16 +674,16 @@ pub fn HoldDepositCard(
             <div>
                 {move || match state.get() {
                     HoldDepositState::Ready => view! {
-                        <div class="ticket-action-title">{t!(i18n, ticket.action.hold_title)}</div>
+                        <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.hold_title))}</div>
                         <div class="ticket-action-desc">
-                            {t!(i18n, ticket.action.hold_desc)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.hold_desc))}
                         </div>
                         <button
                             class="btn btn-outline btn-sm ticket-action-btn"
                             on:click=move |_| set_state.set(HoldDepositState::Confirm)
                         >
                             <Icon icon=IconName::Save class="icon-sm" />
-                            " "{t!(i18n, ticket.action.hold_cta)}
+                            " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.hold_cta))}
                         </button>
                     }.into_any(),
 
@@ -728,21 +724,21 @@ pub fn HoldDepositCard(
                             }
                         >
                             <Icon icon=IconName::Check class="icon-sm" />
-                            " "{t!(i18n, ticket.action.hold_confirm_cta)}
+                            " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.hold_confirm_cta))}
                         </button>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel"
                             on:click=move |_| set_state.set(HoldDepositState::Ready)
                         >
-                            {t!(i18n, ticket.action.cancel)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.cancel))}
                         </button>
                     }.into_any(),
 
                     HoldDepositState::Holding => view! {
-                        <div class="ticket-action-title">{t!(i18n, ticket.action.holding)}</div>
+                        <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.holding))}</div>
                         <div class="ticket-action-desc ticket-action-signing-row">
                             <span class="spinner spinner-sm"></span>
-                            {t!(i18n, ticket.action.processing_request)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.processing_request))}
                         </div>
                     }.into_any(),
 
@@ -757,7 +753,7 @@ pub fn HoldDepositCard(
                                 .unwrap_or_else(|| format!("{amount} THB"));
                         view! {
                             <div class="ticket-action-title ticket-action-title-success">
-                                {t!(i18n, ticket.action.held_title)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.held_title))}
                             </div>
                             <div class="ticket-action-desc">
                                 {t!(i18n, ticket.action.held_desc, amount, balance)}
@@ -767,7 +763,7 @@ pub fn HoldDepositCard(
 
                     HoldDepositState::AlreadyHeld => view! {
                         <div class="ticket-action-title ticket-action-title-success">
-                            {t!(i18n, ticket.action.held_title)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.held_title))}
                         </div>
                         <div class="ticket-action-desc">
                             {t!(i18n, ticket.action.already_held_desc, amount)}
@@ -776,14 +772,14 @@ pub fn HoldDepositCard(
 
                     HoldDepositState::Error(msg) => view! {
                         <div class="ticket-action-title ticket-action-title-danger">
-                            {t!(i18n, ticket.action.hold_failed)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.hold_failed))}
                         </div>
                         <div class="ticket-action-desc">{msg.clone()}</div>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel-xs"
                             on:click=move |_| set_state.set(HoldDepositState::Ready)
                         >
-                            {t!(i18n, ticket.action.try_again)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.try_again))}
                         </button>
                     }.into_any(),
                 }}
@@ -837,7 +833,6 @@ enum RequestCreditRefundState {
 #[component]
 pub fn RequestCreditRefundCard() -> impl IntoView {
     let (state, set_state) = signal(RequestCreditRefundState::Loading);
-    let i18n = use_i18n();
 
     // On mount: fetch the attendee's own flag state. If already requested,
     // mount in `AlreadyRequested` (mirrors the `held_as_credit` UX pattern —
@@ -867,30 +862,30 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
             <div>
                 {move || match state.get() {
                     RequestCreditRefundState::Loading => view! {
-                        <div class="ticket-action-title">{t!(i18n, ticket.action.return_checking)}</div>
+                        <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_checking))}</div>
                         <div class="ticket-action-desc ticket-action-signing-row">
                             <span class="spinner spinner-sm"></span>
                         </div>
                     }.into_any(),
 
                     RequestCreditRefundState::Ready => view! {
-                        <div class="ticket-action-title">{t!(i18n, ticket.action.return_title)}</div>
+                        <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_title))}</div>
                         <div class="ticket-action-desc">
-                            {t!(i18n, ticket.action.return_desc)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_desc))}
                         </div>
                         <button
                             class="btn btn-outline btn-sm ticket-action-btn"
                             on:click=move |_| set_state.set(RequestCreditRefundState::Confirm)
                         >
                             <Icon icon=IconName::Check class="icon-sm" />
-                            " "{t!(i18n, ticket.action.return_cta)}
+                            " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_cta))}
                         </button>
                     }.into_any(),
 
                     RequestCreditRefundState::Confirm => view! {
-                        <div class="ticket-action-title">{t!(i18n, ticket.action.return_confirm_title)}</div>
+                        <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_confirm_title))}</div>
                         <div class="ticket-action-desc">
-                            {t!(i18n, ticket.action.return_confirm_desc)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_confirm_desc))}
                         </div>
                         <button
                             class="btn btn-primary btn-sm ticket-action-btn"
@@ -913,50 +908,50 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
                             }
                         >
                             <Icon icon=IconName::Check class="icon-sm" />
-                            " "{t!(i18n, ticket.action.return_confirm_cta)}
+                            " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_confirm_cta))}
                         </button>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel"
                             on:click=move |_| set_state.set(RequestCreditRefundState::Ready)
                         >
-                            {t!(i18n, ticket.action.cancel)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.cancel))}
                         </button>
                     }.into_any(),
 
                     RequestCreditRefundState::Requesting => view! {
-                        <div class="ticket-action-title">{t!(i18n, ticket.action.return_submitting)}</div>
+                        <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_submitting))}</div>
                         <div class="ticket-action-desc ticket-action-signing-row">
                             <span class="spinner spinner-sm"></span>
-                            {t!(i18n, ticket.action.processing_request)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.processing_request))}
                         </div>
                     }.into_any(),
 
                     RequestCreditRefundState::AlreadyRequested => view! {
                         <div class="ticket-action-title ticket-action-title-success">
-                            {t!(i18n, ticket.action.return_requested)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_requested))}
                         </div>
                         <div class="ticket-action-desc">
-                            {t!(i18n, ticket.action.return_requested_desc)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_requested_desc))}
                         </div>
                     }.into_any(),
 
                     RequestCreditRefundState::Requested { message } => view! {
                         <div class="ticket-action-title ticket-action-title-success">
-                            {t!(i18n, ticket.action.return_submitted)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_submitted))}
                         </div>
                         <div class="ticket-action-desc">{message.clone()}</div>
                     }.into_any(),
 
                     RequestCreditRefundState::Error(msg) => view! {
                         <div class="ticket-action-title ticket-action-title-danger">
-                            {t!(i18n, ticket.action.return_failed)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_failed))}
                         </div>
                         <div class="ticket-action-desc">{msg.clone()}</div>
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel-xs"
                             on:click=move |_| set_state.set(RequestCreditRefundState::Ready)
                         >
-                            {t!(i18n, ticket.action.try_again)}
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.try_again))}
                         </button>
                     }.into_any(),
                 }}

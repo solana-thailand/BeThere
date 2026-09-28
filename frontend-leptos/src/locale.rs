@@ -12,7 +12,7 @@
 
 use leptos::prelude::*;
 
-use crate::i18n::{Locale, t, t_string, use_i18n};
+use crate::i18n::{Locale, t_string, use_i18n};
 
 /// localStorage key for an explicit language pick.
 const STORAGE_KEY: &str = "bethere.lang";
@@ -58,7 +58,7 @@ pub fn RestoreSavedLocale() -> impl IntoView {
 
 /// Routes that are attendee-facing and therefore bilingual. Everything else
 /// (admin, staff, dashboards) is English-only for now and shows no switch.
-const ATTENDEE_PREFIXES: [&str; 7] = [
+const ATTENDEE_PREFIXES: [&str; 9] = [
     "/e/",
     "/deposit/",
     "/ticket/",
@@ -66,11 +66,20 @@ const ATTENDEE_PREFIXES: [&str; 7] = [
     "/discover",
     "/feedback",
     "/privacy",
+    "/data-privacy",
+    "/past-events",
 ];
+
+/// `/events/{slug}/…` pages that attendees see. The rest of `/events/` (the
+/// summary and PR pack) is staff-only.
+const ATTENDEE_EVENT_SUFFIXES: [&str; 2] = ["/recap", "/post-event-register"];
 
 /// Whether `path` is a bilingual attendee page (`/` and `/login` included).
 pub fn is_attendee_path(path: &str) -> bool {
-    matches!(path, "/" | "/login") || ATTENDEE_PREFIXES.iter().any(|p| path.starts_with(p))
+    matches!(path, "/" | "/login")
+        || ATTENDEE_PREFIXES.iter().any(|p| path.starts_with(p))
+        || (path.starts_with("/events/")
+            && ATTENDEE_EVENT_SUFFIXES.iter().any(|s| path.ends_with(s)))
 }
 
 /// The switch, on attendee pages only.
@@ -84,6 +93,22 @@ pub fn AttendeeLanguageSwitch() -> impl IntoView {
             </div>
         </Show>
     }
+}
+
+/// A catalog string that follows the language switch, as ONE concrete type.
+///
+/// `t!(i18n, key)` expands to a distinct closure type per call site, and
+/// Leptos instantiates its render code for every one: ~1,700 call sites cost
+/// ~135 KB brotli of wasm. A `Signal<&'static str>` is a single type, so the
+/// render code exists once and each key is only a `fn(Locale) -> &str`.
+/// Use `t!` only where a key interpolates.
+///
+/// ```ignore
+/// view! { <h1>{tr(|l| td_string!(l, discover.title))}</h1> }
+/// ```
+pub fn tr(text: fn(Locale) -> &'static str) -> Signal<&'static str> {
+    let i18n = use_i18n();
+    Signal::derive(move || text(i18n.get_locale()))
 }
 
 /// BCP 47 tag for `Intl` date formatting in `locale`.
@@ -143,9 +168,9 @@ pub fn LanguageSwitch() -> impl IntoView {
             type="button"
             class="lang-switch"
             on:click=toggle
-            aria-label=move || t_string!(i18n, lang.switch_aria)
+            aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, lang.switch_aria))
         >
-            {t!(i18n, lang.switch_label)}
+            {crate::locale::tr(|l| crate::i18n::td_string!(l, lang.switch_label))}
         </button>
     }
 }

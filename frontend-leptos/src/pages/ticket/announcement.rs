@@ -15,7 +15,6 @@
 
 use leptos::prelude::*;
 
-use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// One run of the announcement: literal text, or a URL to linkify.
@@ -122,13 +121,12 @@ pub fn announcement_section(note: String) -> impl IntoView {
         })
         .collect();
 
-    let i18n = use_i18n();
     view! {
         <div class="ticket-action-card ticket-action-card--info ticket-announcement-card">
             <div class="ticket-announcement-inner">
                 <div class="ticket-announcement-title">
                     <Icon icon=IconName::Info class="icon-sm" />
-                    <span>{t!(i18n, ticket.announcement_title)}</span>
+                    <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.announcement_title))}</span>
                 </div>
                 <p class="ticket-announcement-body">{body}</p>
             </div>

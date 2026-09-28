@@ -28,20 +28,20 @@ pub fn refund_choose_wallet_view(
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{t!(i18n, deposit.claim_refund)}</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.claim_refund))}</span>
                 <span class="badge badge-info">
                     {format!("{usdc_fmt} USDC")}
                 </span>
             </div>
             <p class="hint-desc">
-                {t!(i18n, deposit.refund.connect_hint)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.refund.connect_hint))}
             </p>
             {if is_refundable {
                 view! { <div></div> }.into_any()
             } else {
                 view! {
                     <div class="dep2-deadline dep2-deadline--warning">
-                        <span class="dep2-deadline-text">{t!(i18n, deposit.refund.non_refundable)}</span>
+                        <span class="dep2-deadline-text">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.refund.non_refundable))}</span>
                     </div>
                 }.into_any()
             }}
@@ -77,7 +77,7 @@ pub fn refund_choose_wallet_view(
                     set_state.set(DepositPageState::AlreadyDeposited(data_for_back.clone()));
                 }
             >
-                {t!(i18n, deposit.go_back)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.go_back))}
             </button>
         </div>
     }
@@ -111,7 +111,7 @@ pub fn refund_wallet_connected_view(
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{t!(i18n, deposit.claim_refund)}</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.claim_refund))}</span>
                 <span class="badge badge-info">
                     {format!("{usdc_fmt} USDC")}
                 </span>
@@ -121,24 +121,24 @@ pub fn refund_wallet_connected_view(
                     <span class="dep2-wallet-bar-name">{t!(i18n, deposit.connected_via, wallet)}</span>
                     <span class="dep2-wallet-bar-pk">{pk_display}</span>
                 </div>
-                <span class="dep2-wallet-bar-badge">{t!(i18n, deposit.connected)}</span>
+                <span class="dep2-wallet-bar-badge">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.connected))}</span>
             </div>
             {components::transaction_review_views(vec![
                 (
-                    view! { {t!(i18n, deposit.review.authorize)} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.authorize))} }.into_any(),
                     view! { {t!(i18n, deposit.refund.authorize_value, amount = authorize_amount)} }.into_any(),
                 ),
-                (view! { {t!(i18n, deposit.review.network)} }.into_any(), network.into_any()),
+                (view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.network))} }.into_any(), network.into_any()),
                 (
-                    view! { {t!(i18n, deposit.review.recipient)} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.recipient))} }.into_any(),
                     view! { {t!(i18n, deposit.refund.recipient_value, address)} }.into_any(),
                 ),
                 (
-                    view! { {t!(i18n, deposit.review.fee)} }.into_any(),
-                    view! { {t!(i18n, deposit.review.fee_value)} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.fee))} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.fee_value))} }.into_any(),
                 ),
             ])}
-            <p class="hint-desc">{t!(i18n, deposit.review_then_approve)}</p>
+            <p class="hint-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review_then_approve))}</p>
             <button
                 class="btn btn-success btn-block"
                 on:click=move |_| handle_claim_refund(wallet_name_send.clone(), pk_send.clone())
@@ -151,7 +151,7 @@ pub fn refund_wallet_connected_view(
                     set_state.set(DepositPageState::RefundChooseWallet(data_for_back.clone()));
                 }
             >
-                {t!(i18n, deposit.go_back)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.go_back))}
             </button>
         </div>
     }
@@ -160,12 +160,11 @@ pub fn refund_wallet_connected_view(
 
 /// Refund: Signing TX view.
 pub fn refund_signing_view(data: &DepositStatusResponse) -> AnyView {
-    let i18n = use_i18n();
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{t!(i18n, deposit.refund.processing)}</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.refund.processing))}</span>
                 <span class="badge badge-info">
                     {format!("{usdc_fmt} USDC")}
                 </span>
@@ -177,7 +176,7 @@ pub fn refund_signing_view(data: &DepositStatusResponse) -> AnyView {
                     <span class="dep2-confirming-dot"></span>
                 </div>
                 <p class="hint-desc">
-                    {t!(i18n, deposit.approve_in_wallet)}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.approve_in_wallet))}
                 </p>
             </div>
         </div>
@@ -199,7 +198,7 @@ pub fn refund_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) -> AnyV
                 {t!(i18n, deposit.refund.returned, amount = usdc_fmt)}
             </p>
             <p class="hint-desc">
-                {t!(i18n, deposit.refund.confirmed)}
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.refund.confirmed))}
             </p>
             <div class="dep2-receipt">
                 <div class="dep2-receipt-row">
@@ -209,7 +208,7 @@ pub fn refund_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) -> AnyV
             </div>
             {components::solscan_link(tx_sig)}
             <div class="dep2-back">
-                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") }>{t!(i18n, deposit.back_event)}</a>
+                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") }>{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_event))}</a>
             </div>
         </div>
     }

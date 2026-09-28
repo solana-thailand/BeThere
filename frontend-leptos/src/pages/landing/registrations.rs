@@ -7,7 +7,7 @@ use serde::Deserialize;
 use super::notifications::NotificationInbox;
 use crate::api::ApiResponse;
 use crate::components::{StatusBadge, StatusTone};
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use crate::pages::ticket::credit_chip::CreditWallet;
 
@@ -120,17 +120,17 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                 <div class="landing-passport-info">
                                     <div class="landing-passport-title-row">
                                         <span class="landing-passport-name">{user_email.clone()}</span>
-                                        <span class="landing-passport-verified-badge">{t!(i18n, landing.reg.verified)}</span>
+                                        <span class="landing-passport-verified-badge">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.verified))}</span>
                                     </div>
                                     <div class="landing-passport-sub">
-                                        {t!(i18n, landing.reg.member)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.member))}
                                     </div>
                                 </div>
                             </div>
                             <div class="landing-passport-actions">
                                 <A href="/profile" attr:class="btn btn-primary btn-sm landing-passport-btn">
                                     <Icon icon=IconName::Settings class="icon-sm" />
-                                    " "{t!(i18n, landing.reg.edit_profile)}
+                                    " "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.edit_profile))}
                                 </A>
                                 <button
                                     class="btn btn-outline btn-xs"
@@ -142,7 +142,7 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                         });
                                     }
                                 >
-                                    {t!(i18n, landing.reg.sign_out)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.sign_out))}
                                 </button>
                             </div>
                         </div>
@@ -160,7 +160,7 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                             view! {
                                 <div class="landing-reg-header" style="margin-top: 24px;">
                                     <h2 class="landing-reg-title">
-                                        {t!(i18n, landing.reg.your_events)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.your_events))}
                                     </h2>
                                 </div>
                                 <div class="landing-reg-grid">
@@ -228,7 +228,7 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                             view! {
                                 <div class="landing-reg-empty" style="margin-top: 16px;">
                                     <p class="landing-reg-empty-text">
-                                        {t!(i18n, landing.reg.empty)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.empty))}
                                     </p>
                                 </div>
                             }.into_any()

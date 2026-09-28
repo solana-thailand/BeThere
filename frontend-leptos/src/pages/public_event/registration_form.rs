@@ -165,7 +165,7 @@ pub fn registration_form(
                                     <Icon icon=IconName::Check class="icon-2xl icon-success" />
                                 </div>
                                 <h2 class="pe-section-title pe-title-success">
-                                    {t!(i18n, event.registered_title)}
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, event.registered_title))}
                                 </h2>
                                 <p class="pe-detail-secondary pe-mb-1">
                                     {t!(i18n, event.welcome, name)}
@@ -173,15 +173,15 @@ pub fn registration_form(
                                 {if wallet_not_linked {
                                     view! {
                                         <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:0.82rem;line-height:1.45;color:#cbd5e1;text-align:left;">
-                                            <strong style="color:#fff;">{t!(i18n, event.heads_up)}" "</strong>
-                                            {t!(i18n, event.wallet_not_linked)}
+                                            <strong style="color:#fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.heads_up))}" "</strong>
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.wallet_not_linked))}
                                         </div>
                                         <button class="pe-submit-btn" on:click=move |_| navigateTo(&continue_url)>
-                                            {t!(i18n, event.continue_cta)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.continue_cta))}
                                         </button>
                                     }.into_any()
                                 } else {
-                                    view! { <p class="pe-detail-secondary">{t!(i18n, event.redirecting)}</p> }.into_any()
+                                    view! { <p class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.redirecting))}</p> }.into_any()
                                 }}
                             </div>
                         </div>
@@ -192,7 +192,7 @@ pub fn registration_form(
                     view! {
                         <div class="pe-card">
                             <h2 class="pe-section-title">
-                                <Icon icon=IconName::Ticket class="icon-md" />" "{t!(i18n, event.reserve_title)}
+                                <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.reserve_title))}
                             </h2>
                             <div class="pe-error-box">
                                 {msg_clone}
@@ -201,7 +201,7 @@ pub fn registration_form(
                                 class="btn btn-outline btn-block"
                                 on:click=move |_| set_reg_state.set(RegState::Idle)
                             >
-                                {t!(i18n, event.try_again)}
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.try_again))}
                             </button>
                         </div>
                     }.into_any()
@@ -210,7 +210,7 @@ pub fn registration_form(
                     view! {
                         <div class="pe-card pe-text-center">
                             <div class="pe-icon-mb-sm"><Icon icon=IconName::Hourglass class="icon-md" /></div>
-                            <p class="pe-detail-secondary">{t!(i18n, event.registering)}</p>
+                            <p class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.registering))}</p>
                         </div>
                     }.into_any()
                 }
@@ -221,15 +221,15 @@ pub fn registration_form(
                     view! {
                         <div class="pe-card">
                             <h2 class="pe-section-title">
-                                <Icon icon=IconName::Ticket class="icon-md" />" "{t!(i18n, event.reserve_title)}
+                                <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.reserve_title))}
                             </h2>
                             <div class="pe-flex-col-gap-md">
                                 // Name
                                 <div class="pe-field" id="pe-field-name">
-                                    <label class="pe-field-label">{t!(i18n, event.field_name)}<span class="pe-required">" *"</span></label>
+                                    <label class="pe-field-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.field_name))}<span class="pe-required">" *"</span></label>
                                     <input
                                         type="text"
-                                        placeholder=move || t_string!(i18n, event.field_name_placeholder)
+                                        placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, event.field_name_placeholder))
                                         class="pe-input"
                                         prop:class=move || if field_errors.get().name.is_some() { "pe-input--error" } else { "" }
                                         prop:value=move || reg_name.get()
@@ -243,7 +243,7 @@ pub fn registration_form(
                                 // Email — locked for Google sessions; editable + required for wallet-only
                                 <div class="pe-field" id="pe-field-email">
                                     <label class="pe-field-label">
-                                        {t!(i18n, event.field_email)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.field_email))}
                                         {if wallet_only { view!{ <span class="pe-required">" *"</span> }.into_any() } else { ().into_any() }}
                                     </label>
                                     {if wallet_only {
@@ -259,7 +259,7 @@ pub fn registration_form(
                                                     set_field_errors.update(|e| e.email = None);
                                                 }
                                             />
-                                            <span class="pe-field-hint">{t!(i18n, event.field_email_hint)}</span>
+                                            <span class="pe-field-hint">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.field_email_hint))}</span>
                                             {field_error(|e| e.email, "pe-field-error")}
                                         }.into_any()
                                     } else {
@@ -280,20 +280,20 @@ pub fn registration_form(
                                         // server and stay English; only the labels translate.
                                         let ip_label = match in_person_remaining {
                                             Some(count) => view! { {t!(i18n, event.track_in_person_left, count)} }.into_any(),
-                                            None => view! { {t!(i18n, event.track_in_person)} }.into_any(),
+                                            None => view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, event.track_in_person))} }.into_any(),
                                         };
                                         let on_label = match online_remaining {
                                             Some(count) => view! { {t!(i18n, event.track_online_left, count)} }.into_any(),
-                                            None => view! { {t!(i18n, event.track_online)} }.into_any(),
+                                            None => view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, event.track_online))} }.into_any(),
                                         };
                                         view! {
                                             <div class="pe-field">
-                                                <label class="pe-field-label">{t!(i18n, event.track_label)}</label>
+                                                <label class="pe-field-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.track_label))}</label>
                                                 <select
                                                     class="pe-input"
                                                     on:change=move |ev| set_reg_participation.set(event_target_value(&ev))
                                                 >
-                                                    <option value="">{t!(i18n, event.track_placeholder)}</option>
+                                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.track_placeholder))}</option>
                                                     {if in_person_available {
                                                         view! { <option value="In-Person">{ip_label}</option> }.into_any()
                                                     } else {
@@ -314,7 +314,7 @@ pub fn registration_form(
                                 // Contact Channel
                                 <div class="pe-field" id="pe-field-channel">
                                     <label class="pe-field-label">
-                                        {t!(i18n, event.channel_label)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.channel_label))}
                                         {if require_contact {
                                             view! { <span class="pe-required">" *"</span> }.into_any()
                                         } else {
@@ -330,7 +330,7 @@ pub fn registration_form(
                                             set_field_errors.update(|e| e.contact_channel = None);
                                         }
                                     >
-                                        <option value="">{t!(i18n, event.channel_placeholder)}</option>
+                                        <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.channel_placeholder))}</option>
                                         <option value="Telegram">"Telegram"</option>
                                         <option value="Line">"Line"</option>
                                         <option value="Facebook">"Facebook"</option>
@@ -341,7 +341,7 @@ pub fn registration_form(
                                 // Contact Handle
                                 <div class="pe-field" id="pe-field-handle">
                                     <label class="pe-field-label">
-                                        {t!(i18n, event.handle_label)}
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.handle_label))}
                                         {if require_contact {
                                             view! { <span class="pe-required">" *"</span> }.into_any()
                                         } else {
@@ -350,7 +350,7 @@ pub fn registration_form(
                                     </label>
                                     <input
                                         type="text"
-                                        placeholder=move || t_string!(i18n, event.handle_placeholder)
+                                        placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, event.handle_placeholder))
                                         class="pe-input"
                                         prop:class=move || if field_errors.get().contact_handle.is_some() { "pe-input--error" } else { "" }
                                         prop:value=move || reg_contact_handle.get()
@@ -415,14 +415,14 @@ pub fn registration_form(
                                                     }
                                                 />
                                                 <span>
-                                                    {t!(i18n, event.consent_agree)}
-                                                    <a href="/privacy" target="_blank" class="pe-ext-link">{t!(i18n, event.privacy_policy)}</a>
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, event.consent_agree))}
+                                                    <a href="/privacy" target="_blank" class="pe-ext-link">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.privacy_policy))}</a>
                                                     {if show_deposit {
                                                         // `deposit_consent_label` names the currency (.issues/166).
                                                         let amount = dep_label;
                                                         view! { {t!(i18n, event.consent_deposit, amount)} }.into_any()
                                                     } else {
-                                                        view! { {t!(i18n, event.consent_no_deposit)} }.into_any()
+                                                        view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, event.consent_no_deposit))} }.into_any()
                                                     }}
                                                 </span>
                                             </label>
@@ -460,7 +460,7 @@ pub fn registration_form(
                                             checked=move || reg_consent_marketing.get()
                                             on:change=move |ev| set_reg_consent_marketing.set(event_target_checked(&ev))
                                         />
-                                        <span>{t!(i18n, event.marketing_consent)}</span>
+                                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.marketing_consent))}</span>
                                     </label>
                                 </div>
                                 // Submit button
@@ -611,7 +611,7 @@ pub fn registration_form(
                                                 });
                                             }
                                         >
-                                            {t!(i18n, event.submit)}
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.submit))}
                                         </button>
                                     }
                                 }
@@ -689,7 +689,6 @@ fn render_select_field(
     values: ReadSignal<HashMap<String, String>>,
     set_values: WriteSignal<HashMap<String, String>>,
 ) -> AnyView {
-    let i18n = use_i18n();
     let key = field.key.clone();
     let label = field.label.clone();
     let options = field.options.unwrap_or_default();
@@ -705,7 +704,7 @@ fn render_select_field(
                     set_values.update(|m| { m.insert(key.clone(), val); });
                 }
             >
-                <option value="">{t!(i18n, event.select_placeholder)}</option>
+                <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.select_placeholder))}</option>
                 {options.iter().map(|opt| {
                     let opt = opt.clone();
                     view! { <option value=opt.clone()>{opt.clone()}</option> }
