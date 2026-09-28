@@ -13,16 +13,18 @@ Execution order is unchanged: an external classic script without async/defer
 runs at its position like the inline one did, and a module script is deferred
 either way.
 
-Runs after `trunk build` (build.sh, and the CI e2e job). It is also the gate:
-it exits 1 if an inline executable script is still there afterwards.
+Runs as Trunk's post_build hook (Trunk.toml) on the staging dir, so every
+`trunk build`/`trunk serve` gets it. It is also the gate: it exits 1 if an
+inline executable script is still there afterwards.
 
 Usage:
-    python3 externalize_inline_scripts.py [dist_dir]
+    python3 externalize_inline_scripts.py [dist_dir]   # default: $TRUNK_STAGING_DIR, else dist
     python3 externalize_inline_scripts.py --self-test
 """
 
 import base64
 import hashlib
+import os
 import re
 import sys
 import tempfile
@@ -87,12 +89,11 @@ def self_test() -> int:
         "<script></script></head>"
         '<body><script type="module">import init from "/a.js"; await init();</script></body>'
     )
-    failed = 0
+    results: list[bool] = []
 
     def check(name: str, ok: bool) -> None:
-        nonlocal failed
         print(f"  {'ok ' if ok else 'FAIL'} {name}")
-        failed += not ok
+        results.append(ok)
 
     check("detector finds both executable inline scripts", len(inline_executables(page)) == 2)
     check("detector ignores JSON-LD, src= and empty scripts",
@@ -110,11 +111,12 @@ def self_test() -> int:
         sri = "sha384-" + base64.b64encode(hashlib.sha384(body).digest()).decode()
         check("SRI pin matches the file", f'integrity="{sri}"' in html)
         check("second run is a no-op", externalize(dist) == [])
-    print(f"self-test: {8 - failed}/8")
-    return 1 if failed else 0
+    print(f"self-test: {sum(results)}/{len(results)}")
+    return 0 if all(results) else 1
 
 
 if __name__ == "__main__":
     if sys.argv[1:] == ["--self-test"]:
         sys.exit(self_test())
-    sys.exit(main(Path(sys.argv[1] if len(sys.argv) > 1 else "dist")))
+    default = os.environ.get("TRUNK_STAGING_DIR", "dist")
+    sys.exit(main(Path(sys.argv[1] if len(sys.argv) > 1 else default)))

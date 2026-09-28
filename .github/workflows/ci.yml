@@ -294,14 +294,11 @@ jobs:
         working-directory: frontend-leptos
         run: trunk build
 
-      - name: Externalize inline scripts (CSP has no 'unsafe-inline')
-        # build.sh does this for deploys; without it the _headers CSP blocks
-        # Trunk's inline loader and the app never boots. The self-test runs
-        # first so a detector that cannot fail is caught.
+      - name: Self-test the inline-script externalizer
+        # Trunk's post_build hook (Trunk.toml) runs it on every build and fails
+        # the build if an inline script remains; this proves the detector can fail.
         working-directory: frontend-leptos
-        run: |
-          python3 externalize_inline_scripts.py --self-test
-          python3 externalize_inline_scripts.py dist
+        run: python3 externalize_inline_scripts.py --self-test
 
       - name: Frontend first-load size budget
         # The sibling of wasm-build's worker size gate. This is the only job

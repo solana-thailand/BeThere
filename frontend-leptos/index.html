@@ -88,10 +88,12 @@
              blank-page-after-deploy bug). Hashed assets cache forever. -->
         <link data-trunk rel="copy-file" href="_headers" />
         <!-- Written inline for readability, but it does not ship inline: the
-             CSP has no script-src 'unsafe-inline', so build.sh
+             CSP has no script-src 'unsafe-inline', so Trunk's post_build hook
              (externalize_inline_scripts.py) moves it and Trunk's loader into
-             hashed, SRI-pinned /inline-*.js files. -->
-        <script>
+             hashed, SRI-pinned /inline-*.js files. `defer` is inert inline and
+             takes effect once it is external, so the fetch never blocks the
+             parser; the script only adds a load listener. -->
+        <script defer>
             if ("serviceWorker" in navigator) {
                 window.addEventListener("load", function () {
                     navigator.serviceWorker
