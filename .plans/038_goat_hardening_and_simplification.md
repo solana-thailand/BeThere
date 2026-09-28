@@ -76,7 +76,14 @@ Wave 1 (`.plans/037`).
   - First load −7,055 B br4.
   - Before/after evidence is these numbers plus local screenshots (not
     committed: public repo, and Mac-only renders).
-- [ ] **P1-2:** attendee flow audit (fold in LM-2 / LM-3).
+- [~] **P1-2:** attendee flow audit (`.issues/173`). The happy path is 4 taps
+  plus form fields, with no dead ends.
+  - Fixed: C1 (the claim countdown read "28901h"; it now reuses the event
+    page's day-aware formatter) and C2 ("Recommended" on the only payment
+    option).
+  - `/claim` was added to the visual + a11y page list (45 e2e tests).
+  - **Awaiting owner approval:** C3–C5, C7 (LM-2 ticket banners), C8 (LM-3
+    claim trim). C6 folds into P2-b.
 
 ## P2: add
 

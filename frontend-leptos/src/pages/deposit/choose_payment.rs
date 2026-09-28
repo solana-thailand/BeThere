@@ -185,7 +185,10 @@ pub fn choose_payment_view(
                                     // THB card — shown only when admin set a THB amount
                                     {if show_thb {
                                         view! {
-                                            <div class="dep2-method-card dep2-method-card--recommended"
+                                            // "Recommended" only means something next to
+                                            // another option (.issues/173).
+                                            <div class="dep2-method-card"
+                                                class:dep2-method-card--recommended=!single_card
                                                 on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Thb))>
                                                 <div class="dep2-method-name">"THB"</div>
                                                 <div class="dep2-method-amount">

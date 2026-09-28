@@ -121,7 +121,12 @@ pub(super) fn SessionTimer(start_ms: i64, end_ms: i64) -> impl IntoView {
         let secs = time_display.get();
         let locale = i18n.get_locale();
         match status_label.get().as_str() {
-            PHASE_STARTS => format_duration(secs, locale),
+            // Same day-aware countdown as the event page: a start weeks away
+            // read "28901h …" here (.issues/173).
+            PHASE_STARTS => crate::pages::public_event::types::format_countdown(
+                secs.saturating_mul(1000),
+                locale,
+            ),
             PHASE_LIVE => format!("+{}", format_duration(secs, locale)),
             PHASE_ENDED => t_string!(i18n, claim.timer.thanks).to_string(),
             _ => String::new(),

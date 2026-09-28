@@ -9,6 +9,7 @@ export const EVENT_ID = process.env.E2E_EVENT_ID ?? "e2e-event";
 export const EVENT_SLUG = process.env.E2E_EVENT_SLUG ?? "e2e-builders-night";
 export const ATTENDEE_ID = process.env.E2E_ATTENDEE_ID ?? "e2e-att-01";
 export const EVENT_NAME = process.env.E2E_EVENT_NAME ?? "E2E Builders Night";
+export const CLAIM_TOKEN = process.env.E2E_CLAIM_TOKEN ?? "0190e2e0-0000-7000-8000-000000000001";
 
 export interface AppPage {
   name: string;
@@ -29,6 +30,7 @@ export const PAGES: AppPage[] = [
   { name: "admin", path: "/admin", authed: true, ready: EVENT_LOADED },
   { name: "staff", path: "/staff", authed: true, ready: EVENT_LOADED },
   { name: "ticket", path: `/ticket/${ATTENDEE_ID}?event_id=${EVENT_ID}`, authed: true, ready: EVENT_LOADED },
+  { name: "claim", path: `/claim/${CLAIM_TOKEN}`, authed: false, ready: EVENT_LOADED },
 ];
 
 export const VIEWPORTS = [
