@@ -1,0 +1,565 @@
+/* ===== Admin feedback (admin_feedback.rs) =====
+   Moved out of inline styles, same declarations (.plans/037 §5). Every rule
+   is scoped under the page root: inline styles beat everything, so a bare
+   `.afb-title` lost to `.admin-section-header h3` and the page shifted. */
+
+.admin-feedback-page .afb-cell {
+    padding: 0.6rem 0.75rem;
+}
+
+.admin-feedback-page .afb-stat-value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.admin-feedback-page .afb-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+}
+
+.admin-feedback-page .afb-stat-unit {
+    font-size: 0.875rem;
+    font-weight: 400;
+    color: #94a3b8;
+    margin-left: 0.25rem;
+}
+
+.admin-feedback-page .afb-stat-note-good {
+    font-size: 0.75rem;
+    color: #4ade80;
+    margin-top: 0.35rem;
+}
+
+.admin-feedback-page .afb-row-xs {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.admin-feedback-page .afb-panel {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+}
+
+.admin-feedback-page .afb-panel-title {
+    margin: 0 0 1rem 0;
+    font-size: 0.9375rem;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-feedback-page .afb-bar-track {
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden;
+}
+
+.admin-feedback-page .afb-strong {
+    font-weight: 600;
+    color: #fff;
+}
+
+.admin-feedback-page .afb-caption {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.admin-feedback-page .afb-bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8125rem;
+    margin-bottom: 0.25rem;
+}
+
+.admin-feedback-page .afb-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.admin-feedback-page .afb-row-sm {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.admin-feedback-page .afb-text-light {
+    color: #e2e8f0;
+}
+
+.admin-feedback-page .afb-text-dim {
+    color: #94a3b8;
+}
+
+.admin-feedback-page .afb-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.admin-feedback-page .afb-empty {
+    padding: 3rem 1rem;
+    text-align: center;
+    background: rgba(255,255,255,0.02);
+    border: 1px dashed rgba(255,255,255,0.1);
+    border-radius: 0.75rem;
+}
+
+.admin-feedback-page .afb-empty-lg {
+    padding: 3.5rem 1rem;
+    text-align: center;
+    background: rgba(255,255,255,0.02);
+    border: 1px dashed rgba(255,255,255,0.1);
+    border-radius: 0.75rem;
+}
+
+.admin-feedback-page .afb-cell-nowrap {
+    padding: 0.6rem 0.75rem;
+    white-space: nowrap;
+}
+
+.admin-feedback-page .afb-cell-meta {
+    padding: 0.6rem 0.75rem;
+    white-space: nowrap;
+    color: #94a3b8;
+    font-size: 0.75rem;
+}
+
+.admin-feedback-page .afb-cell-text {
+    padding: 0.6rem 0.75rem;
+    max-width: 320px;
+}
+
+.admin-feedback-page .afb-search {
+    padding: 0.35rem 0.75rem;
+    font-size: 0.8125rem;
+    border-radius: 0.375rem;
+    width: 260px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff;
+}
+
+.admin-feedback-page .afb-scroll-x {
+    overflow-x: auto;
+}
+
+.admin-feedback-page .afb-h3 {
+    margin: 0;
+    font-size: 1rem;
+    color: #fff;
+}
+
+.admin-feedback-page .afb-h3-spaced {
+    margin: 0 0 1rem 0;
+    font-size: 1rem;
+    color: #fff;
+}
+
+.admin-feedback-page .afb-mb-sm {
+    margin: 0 0 0.5rem 0;
+}
+
+.admin-feedback-page .afb-ml-xs {
+    margin-left: 0.25rem;
+}
+
+.admin-feedback-page .afb-mb-xs {
+    margin-bottom: 0.25rem;
+}
+
+.admin-feedback-page .afb-stack-bar {
+    height: 10px;
+    border-radius: 999px;
+    overflow: hidden;
+    display: flex;
+    background: rgba(255,255,255,0.05);
+    margin-bottom: 0.75rem;
+}
+
+.admin-feedback-page .afb-strong-sm {
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #fff;
+}
+
+.admin-feedback-page .afb-strong-violet {
+    font-weight: 600;
+    color: #a78bfa;
+}
+
+.admin-feedback-page .afb-strong-sky {
+    font-weight: 600;
+    color: #38bdf8;
+}
+
+.admin-feedback-page .afb-empty-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.admin-feedback-page .afb-small-dim {
+    font-size: 0.8125rem;
+    color: #94a3b8;
+}
+
+.admin-feedback-page .afb-kicker {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.35rem;
+}
+
+.admin-feedback-page .afb-kicker.afb-amber {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #fbbf24;
+    margin-bottom: 0.35rem;
+}
+
+.admin-feedback-page .afb-kicker.afb-pink {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #f472b6;
+    margin-bottom: 0.35rem;
+}
+
+.admin-feedback-page .afb-kicker.afb-violet {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #a78bfa;
+    margin-bottom: 0.35rem;
+}
+
+.admin-feedback-page .afb-kicker.afb-sky {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #38bdf8;
+    margin-bottom: 0.35rem;
+}
+
+.admin-feedback-page .afb-kicker-row.afb-sky {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #38bdf8;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.admin-feedback-page .afb-stat-foot {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.35rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.admin-feedback-page .afb-caption.afb-amber {
+    font-size: 0.75rem;
+    color: #fbbf24;
+}
+
+.admin-feedback-page .afb-caption-violet {
+    font-size: 0.75rem;
+    color: #a78bfa;
+    margin-top: 0.2rem;
+}
+
+.admin-feedback-page .afb-segmented {
+    display: inline-flex;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(0,0,0,0.3);
+}
+
+.admin-feedback-page .afb-dot.afb-dot-low {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+}
+
+.admin-feedback-page .afb-dot.afb-dot-mid {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3b82f6;
+}
+
+.admin-feedback-page .afb-dot.afb-dot-high {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #22c55e;
+}
+
+.admin-feedback-page .afb-grid-lg {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.25rem;
+}
+
+.admin-feedback-page .afb-grid-md {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.25rem;
+}
+
+.admin-feedback-page .afb-grid-sm {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 1rem;
+}
+
+.admin-feedback-page .afb-legend {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+.admin-feedback-page .afb-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1.25rem;
+}
+
+.admin-feedback-page .afb-head-sm {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.5rem;
+}
+
+.admin-feedback-page .afb-loading {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 4rem 1rem;
+}
+
+.admin-feedback-page .afb-wrap {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.admin-feedback-page .afb-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.admin-feedback-page .afb-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.admin-feedback-page .afb-scopebar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+    padding: 0.6rem 0.85rem;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0.5rem;
+}
+
+.admin-feedback-page .afb-page {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.admin-feedback-page .afb-callout {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    padding: 0.75rem 1rem;
+    background: rgba(56, 189, 248, 0.05);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 0.5rem;
+}
+
+.admin-feedback-page .afb-segmented-sm {
+    display: flex;
+    border-radius: 0.375rem;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+
+.admin-feedback-page .afb-row-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.8125rem;
+    color: #94a3b8;
+}
+
+.admin-feedback-page .afb-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.admin-feedback-page .afb-muted {
+    color: var(--text-muted);
+}
+
+.admin-feedback-page .afb-empty-text {
+    color: var(--text-muted);
+    max-width: 480px;
+    margin: 0 auto;
+    font-size: 0.875rem;
+}
+
+.admin-feedback-page .afb-subtitle {
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.admin-feedback-page .afb-white {
+    color: #fff;
+}
+
+.admin-feedback-page .afb-text-faint {
+    color: #64748b;
+}
+
+.admin-feedback-page .afb-quote-mark {
+    color: #38bdf8;
+    margin-right: 0.35rem;
+}
+
+.admin-feedback-page .afb-thead-row {
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    text-align: left;
+    color: #94a3b8;
+}
+
+.admin-feedback-page .afb-tbody-row {
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    vertical-align: top;
+}
+
+.admin-feedback-page .afb-tag {
+    background: rgba(99, 102, 241, 0.2);
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    color: #a5b4fc;
+    font-size: 0.7rem;
+    padding: 0.15rem 0.45rem;
+}
+
+.admin-feedback-page .afb-chip {
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 0.35rem 0.6rem;
+    color: #fff;
+    font-size: 0.75rem;
+}
+
+.admin-feedback-page .afb-quote {
+    background: rgba(255,255,255,0.03);
+    border-left: 2px solid #38bdf8;
+    padding: 0.35rem 0.5rem;
+    margin-bottom: 0.35rem;
+    border-radius: 0 0.25rem 0.25rem 0;
+    font-style: italic;
+    color: #e2e8f0;
+}
+
+.admin-feedback-page .afb-panel-lg {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+}
+
+.admin-feedback-page .afb-inset {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+/* Segmented toggles. `.btn` plus the page root so they beat `.btn` and its
+   hover, as the inline styles they replace did. */
+.admin-feedback-page .btn.afb-seg-btn,
+.admin-feedback-page .btn.afb-seg-btn:hover {
+    background: transparent;
+    color: #cbd5e1;
+}
+
+.admin-feedback-page .btn.afb-seg-btn.is-active,
+.admin-feedback-page .btn.afb-seg-btn.is-active:hover {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+}
+
+.admin-feedback-page .btn.afb-filter-btn,
+.admin-feedback-page .btn.afb-filter-btn:hover {
+    background: transparent;
+}
+
+.admin-feedback-page .btn.afb-filter-btn.is-active,
+.admin-feedback-page .btn.afb-filter-btn.is-active:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Bar fills: the width is data and stays inline; the colour lives here. */
+.admin-feedback-page .afb-seg-high {
+    background: #22c55e;
+}
+
+.admin-feedback-page .afb-seg-mid {
+    background: #3b82f6;
+}
+
+.admin-feedback-page .afb-seg-low {
+    background: #ef4444;
+}
+
+.admin-feedback-page .afb-bar-fill {
+    height: 100%;
+}
+
+.admin-feedback-page .afb-sky-bg {
+    background: #38bdf8;
+}
+
+.admin-feedback-page .afb-violet-bg {
+    background: #a78bfa;
+}

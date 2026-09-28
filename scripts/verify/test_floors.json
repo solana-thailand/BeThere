@@ -25,6 +25,7 @@
     "cluster_networks tests/cluster_networks.rs": 5,
     "csp_no_eval tests/csp_no_eval.rs": 2,
     "css_class_audit tests/css_class_audit.rs": 5,
+    "css_tokens_defined tests/css_tokens_defined.rs": 2,
     "date_formatting_has_one_home tests/date_formatting_has_one_home.rs": 1,
     "deposit_consent_names_currency tests/deposit_consent_names_currency.rs": 4,
     "deposit_promise_has_one_home tests/deposit_promise_has_one_home.rs": 3,

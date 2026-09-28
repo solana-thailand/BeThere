@@ -48,13 +48,13 @@
 
 .claim-step-circle.upcoming {
     background: rgba(255, 255, 255, 0.08);
-    color: var(--muted);
+    color: var(--text-muted);
     border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .claim-step-label {
     font-size: 0.72rem;
-    color: var(--muted);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     transition: color 0.3s ease;

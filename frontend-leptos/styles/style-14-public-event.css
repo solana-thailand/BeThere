@@ -214,7 +214,7 @@
     display: inline-block;
     width: 1.5rem;
     height: 1.5rem;
-    border: 2px solid var(--border-color);
+    border: 2px solid var(--border);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
@@ -515,7 +515,7 @@
     display: block;
     font-size: 0.85rem;
     margin-bottom: 0.25rem;
-    color: var(--muted);
+    color: var(--text-muted);
 }
 
 .scanner-walkin-input {
@@ -597,12 +597,12 @@
 }
 
 .scanner-muted-text {
-    color: var(--muted);
+    color: var(--text-muted);
 }
 
 .scanner-tx-detail {
     font-size: 0.8rem;
-    color: var(--muted);
+    color: var(--text-muted);
     word-break: break-all;
 }
 
@@ -644,7 +644,7 @@
 }
 
 .scanner-capacity-desc {
-    color: var(--muted);
+    color: var(--text-muted);
     margin-top: 0.5rem;
     font-size: 0.9rem;
 }

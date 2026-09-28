@@ -429,7 +429,7 @@
     width: 100%;
     padding: 0.6rem 0.8rem;
     border-radius: var(--radius-sm);
-    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+    border: 1px solid var(--border);
     background: var(--bg-secondary);
     color: var(--text-primary);
     font-size: 0.9rem;
@@ -698,9 +698,9 @@
 }
 
 .escrow-result-error {
-    border: 1px solid var(--error, red);
+    border: 1px solid var(--danger);
     background: rgba(255, 0, 0, 0.05);
-    color: var(--error, red);
+    color: var(--danger);
 }
 
 .escrow-result-text {

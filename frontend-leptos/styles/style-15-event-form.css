@@ -23,12 +23,12 @@
 }
 
 .event-form-nft-intro {
-    margin-bottom: var(--space-2xs, 0.25rem);
+    margin-bottom: 0.25rem;
 }
 
 .event-form-nft-actions {
     display: flex;
-    gap: var(--space-xs, 0.5rem);
+    gap: 0.5rem;
     align-items: center;
     flex-wrap: wrap;
 }

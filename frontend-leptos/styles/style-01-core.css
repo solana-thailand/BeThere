@@ -45,6 +45,8 @@
     --border: #2a3052;
     --radius: 10px;
     --radius-sm: 6px;
+    --radius-md: 8px;
+    --font-mono: "SF Mono", "Fira Code", ui-monospace, monospace;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     --text-heading: #f4f0e4;
     --bg-void: #0b0d1c;

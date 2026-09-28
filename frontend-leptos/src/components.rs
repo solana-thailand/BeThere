@@ -133,35 +133,24 @@ pub fn show_mutation_toast(
 /// Bind to a signal: `<Toast toast_signal=toast />`
 #[component]
 pub fn Toast(toast_signal: ReadSignal<Option<ToastMessage>>) -> impl IntoView {
+    // The live region is always in the DOM and only its content changes:
+    // screen readers announce changes to an existing region, and a region
+    // inserted together with its text is often read late or not at all
+    // (.plans/037 §5).
     view! {
-        <Show
-            when=move || toast_signal.get().is_some()
-            fallback=|| view! { <div></div> }
-        >
+        <div class="toast-region" role="status" aria-live="polite" aria-atomic="true">
             {move || {
-                let msg = toast_signal.get();
-                match msg {
-                    Some(m) => {
-                        let bg_style = match m.toast_type {
-                            ToastType::Success => "background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#22c55e;",
-                            ToastType::Error => "background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;",
-                            ToastType::Warning => "background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#f59e0b;",
-                            ToastType::Info => "background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.4);color:#3b82f6;",
-                        };
-                        let full_style = format!(
-                            "position:fixed;top:1rem;right:1rem;padding:0.85rem 1.25rem;border-radius:8px;font-size:0.9rem;font-weight:500;z-index:9999;max-width:360px;{bg_style}",
-                        );
-                        view! {
-                            <div style=full_style>
-                                {m.text}
-                            </div>
-                        }
-                            .into_any()
-                    }
-                    None => view! { <div></div> }.into_any(),
-                }
+                toast_signal.get().map(|m| {
+                    let class = match m.toast_type {
+                        ToastType::Success => "toast toast-success",
+                        ToastType::Error => "toast toast-error",
+                        ToastType::Warning => "toast toast-warning",
+                        ToastType::Info => "toast toast-info",
+                    };
+                    view! { <div class=class>{m.text}</div> }
+                })
             }}
-        </Show>
+        </div>
     }
 }
 

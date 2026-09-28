@@ -169,10 +169,31 @@ Owner decisions raised by phase 3:
 
 ## 5. Design tokens
 
-- [ ] Resolve undefined `var(--color-primary)` / `var(--color-text-muted)`.
-- [ ] Move inline colours into classes, starting with `admin_feedback.rs`.
-- [ ] Reduce breakpoints to 360 / 480 / 768.
-- [ ] Toast: classes plus `aria-live="polite"`.
+- [x] Undefined tokens. There were 15, not the 2 in the review; the claim
+  quiz's `--fg`/`--muted`/`--primary`/`--bg` had no fallback, so its
+  heading/icon colours and selected-option border silently vanished.
+  - Each maps onto an existing token (`--text-primary`, `--text-muted`,
+    `--accent`, `--bg-primary`, `--border`, `--bg-card`, `--danger`).
+  - `--radius-md` and `--font-mono` become real tokens.
+  - The guard `tests/css_tokens_defined.rs` fails on any undefined
+    `var()` (negative control done). The one documented exception is the
+    confetti keyframe variables, which nothing sets.
+- [x] `admin_feedback.rs`: 128 inline styles down to 5 (the data-driven bar
+  widths).
+  - 78 named `afb-*` classes in `style-23-admin-feedback.css`; the scope and
+    filter toggles become `is-active` classes; bar colours become classes.
+  - Rules are scoped under `.admin-feedback-page`. Unscoped, they lost to
+    `.admin-section-header h3` and the page shifted by 98 px.
+  - Verified by pixel diff of the section at 1280 and 390 against the
+    previous build: identical height; the only pixels that changed are the
+    two token recolours (subtitle `#94a3b8` → `--text-muted`, active pill
+    indigo → `--accent`).
+- [x] Toast: classes; an always-present `role="status" aria-live="polite"`
+  region (content changes inside it, so it is announced). Verified in the
+  browser: same colours and position.
+- [ ] Breakpoints: 8 sets → 360/480/768. Not started; it touches every
+  stylesheet and needs a per-file visual diff.
+- [ ] Remaining hardcoded colours in other Rust files.
 
 ## 6. Accessibility
 
