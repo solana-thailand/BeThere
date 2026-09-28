@@ -74,6 +74,7 @@
     "do_claim_lock tests/do_claim_lock.rs": 15,
     "doc-tests event_checkin_domain": 0,
     "doc-tests event_checkin_worker": 0,
+    "edge_cache_policy tests/edge_cache_policy.rs": 9,
     "email_validation tests/email_validation.rs": 4,
     "error_body_guard tests/error_body_guard.rs": 4,
     "error_public_message tests/error_public_message.rs": 11,
