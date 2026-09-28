@@ -110,6 +110,20 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     <span class="pe-check">"✓"</span>
                     <span class="pe-refund-text">"100% back when you attend the event."</span>
                 </div>
+                // Deposit model D1 (owner, 2026-09-28): nothing is forfeited.
+                // Ask for notice, threaten nothing (docs/deposit-commitment-model.md §5).
+                {if show_thb {
+                    view! {
+                        <div class="pe-refund-item">
+                            <span class="pe-check">"✓"</span>
+                            <span class="pe-refund-text">
+                                "Can't make it? Your deposit is never forfeited. Tell the organizer, and it's refunded or kept as credit for your next event."
+                            </span>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
                 {if show_usdc {
                     let refund = refund_label.clone();
                     view! {
@@ -128,7 +142,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>
                             <span class="pe-refund-text">
-                                "PromptPay: the organizer transfers it back after the event, or you keep it as credit for your next event."
+                                "PromptPay: the organizer transfers it back within 7 days after the event, or you keep it as credit for your next event."
                             </span>
                         </div>
                     }.into_any()
