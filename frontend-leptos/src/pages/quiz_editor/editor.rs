@@ -1020,10 +1020,10 @@ pub fn QuizEditor(
                     // Import JSON modal
                     <Show when=move || show_import.get() fallback=|| view! { <div></div> }>
                         <div class="quiz-modal-overlay" on:click=move |_| { set_show_import.set(false); }>
-                            <div class="quiz-modal" on:click=move |ev: web_sys::MouseEvent| { ev.stop_propagation(); }>
+                            <div class="quiz-modal" role="dialog" aria-modal="true" aria-label="Import Questions" on:click=move |ev: web_sys::MouseEvent| { ev.stop_propagation(); }>
                                 <div class="quiz-modal-header">
                                     <h3 class="quiz-modal-title">"Import Questions"</h3>
-                                    <button class="quiz-ctrl-btn" on:click=move |_| { set_show_import.set(false); }>"✕"</button>
+                                    <button class="quiz-ctrl-btn" aria-label="Close" on:click=move |_| { set_show_import.set(false); }>"✕"</button>
                                 </div>
                                 <div class="quiz-modal-body">
                                     <p class="quiz-modal-desc">

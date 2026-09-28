@@ -1026,7 +1026,19 @@ pub fn EventFormComponent(
 
             // ── Basic Info ──
             <div class="form-section">
-                <div class="form-section-header" on:click=move |_| set_sec_basic_open.update(|v| *v = !*v)>
+                <div
+                    class="form-section-header"
+                    role="button"
+                    tabindex="0"
+                    aria-expanded=move || sec_basic_open.get().to_string()
+                    on:click=move |_| set_sec_basic_open.update(|v| *v = !*v)
+                    on:keydown=move |ev| {
+                        if crate::utils::is_activation_key(&ev) {
+                            ev.prevent_default();
+                            set_sec_basic_open.update(|v| *v = !*v);
+                        }
+                    }
+                >
                     <span class="form-section-icon form-section-icon-basic"></span>
                     <span class="form-section-title">"Basic Info"</span>
                     <span class="form-section-badge form-section-badge-required">"Required"</span>
@@ -1164,7 +1176,19 @@ pub fn EventFormComponent(
 
             // ── Schedule ──
             <div class="form-section">
-                <div class="form-section-header" on:click=move |_| set_sec_schedule_open.update(|v| *v = !*v)>
+                <div
+                    class="form-section-header"
+                    role="button"
+                    tabindex="0"
+                    aria-expanded=move || sec_schedule_open.get().to_string()
+                    on:click=move |_| set_sec_schedule_open.update(|v| *v = !*v)
+                    on:keydown=move |ev| {
+                        if crate::utils::is_activation_key(&ev) {
+                            ev.prevent_default();
+                            set_sec_schedule_open.update(|v| *v = !*v);
+                        }
+                    }
+                >
                     <span class="form-section-icon form-section-icon-schedule"></span>
                     <span class="form-section-title">"Schedule"</span>
                     <span class="form-section-badge form-section-badge-required">"Required"</span>
@@ -1286,7 +1310,19 @@ pub fn EventFormComponent(
 
             // ── Google Sheets ──
             <div class="form-section">
-                <div class="form-section-header" on:click=move |_| set_sec_sheets_open.update(|v| *v = !*v)>
+                <div
+                    class="form-section-header"
+                    role="button"
+                    tabindex="0"
+                    aria-expanded=move || sec_sheets_open.get().to_string()
+                    on:click=move |_| set_sec_sheets_open.update(|v| *v = !*v)
+                    on:keydown=move |ev| {
+                        if crate::utils::is_activation_key(&ev) {
+                            ev.prevent_default();
+                            set_sec_sheets_open.update(|v| *v = !*v);
+                        }
+                    }
+                >
                     <span class="form-section-icon form-section-icon-sheets"></span>
                     <span class="form-section-title">"Google Sheets"</span>
                     <span class="form-section-badge form-section-badge-required">"Required"</span>
@@ -1370,7 +1406,19 @@ pub fn EventFormComponent(
 
             // ── Event Poster (marketing hero image) ──
             <div class="form-section">
-                <div class="form-section-header" on:click=move |_| set_sec_poster_open.update(|v| *v = !*v)>
+                <div
+                    class="form-section-header"
+                    role="button"
+                    tabindex="0"
+                    aria-expanded=move || sec_poster_open.get().to_string()
+                    on:click=move |_| set_sec_poster_open.update(|v| *v = !*v)
+                    on:keydown=move |ev| {
+                        if crate::utils::is_activation_key(&ev) {
+                            ev.prevent_default();
+                            set_sec_poster_open.update(|v| *v = !*v);
+                        }
+                    }
+                >
                     <span class="form-section-icon form-section-icon-nft"></span>
                     <span class="form-section-title">"Event Poster"</span>
                     <span class="form-section-badge form-section-badge-optional">"Optional"</span>
@@ -1528,7 +1576,19 @@ pub fn EventFormComponent(
 
             // ── NFT Configuration ──
             <div class="form-section">
-                <div class="form-section-header" on:click=move |_| set_sec_nft_open.update(|v| *v = !*v)>
+                <div
+                    class="form-section-header"
+                    role="button"
+                    tabindex="0"
+                    aria-expanded=move || sec_nft_open.get().to_string()
+                    on:click=move |_| set_sec_nft_open.update(|v| *v = !*v)
+                    on:keydown=move |ev| {
+                        if crate::utils::is_activation_key(&ev) {
+                            ev.prevent_default();
+                            set_sec_nft_open.update(|v| *v = !*v);
+                        }
+                    }
+                >
                     <span class="form-section-icon form-section-icon-nft"></span>
                     <span class="form-section-title">"NFT Attendance Badge"</span>
                     <span class="form-section-badge form-section-badge-recommended">"Recommended"</span>
@@ -1743,7 +1803,19 @@ pub fn EventFormComponent(
 
             // ── Settings ──
             <div class="form-section">
-                <div class="form-section-header" on:click=move |_| set_sec_settings_open.update(|v| *v = !*v)>
+                <div
+                    class="form-section-header"
+                    role="button"
+                    tabindex="0"
+                    aria-expanded=move || sec_settings_open.get().to_string()
+                    on:click=move |_| set_sec_settings_open.update(|v| *v = !*v)
+                    on:keydown=move |ev| {
+                        if crate::utils::is_activation_key(&ev) {
+                            ev.prevent_default();
+                            set_sec_settings_open.update(|v| *v = !*v);
+                        }
+                    }
+                >
                     <span class="form-section-icon form-section-icon-settings"></span>
                     <span class="form-section-title">"Settings"</span>
                     <span class="form-section-badge form-section-badge-optional">"Optional"</span>
@@ -1935,7 +2007,19 @@ pub fn EventFormComponent(
                     fmt == api::EventFormat::InPerson || fmt == api::EventFormat::Hybrid
                 } fallback=|| view! { <div></div> }>
                 <div class="form-section">
-                    <div class="form-section-header" on:click=move |_| set_sec_capacity_open.update(|v| *v = !*v)>
+                    <div
+                        class="form-section-header"
+                        role="button"
+                        tabindex="0"
+                        aria-expanded=move || sec_capacity_open.get().to_string()
+                        on:click=move |_| set_sec_capacity_open.update(|v| *v = !*v)
+                        on:keydown=move |ev| {
+                            if crate::utils::is_activation_key(&ev) {
+                                ev.prevent_default();
+                                set_sec_capacity_open.update(|v| *v = !*v);
+                            }
+                        }
+                    >
                         <span class="form-section-icon form-section-icon-settings"></span>
                         <span class="form-section-title">"Capacity & Registration Control"</span>
                         <span class="form-section-badge form-section-badge-optional">"Optional"</span>
@@ -2051,7 +2135,19 @@ pub fn EventFormComponent(
                 // Deposit config section — only when enabled
                 <Show when=move || form.get().deposit_enabled fallback=|| view! { <div></div> }>
                 <div class="form-section">
-                    <div class="form-section-header" on:click=move |_| set_sec_deposit_open.update(|v| *v = !*v)>
+                    <div
+                        class="form-section-header"
+                        role="button"
+                        tabindex="0"
+                        aria-expanded=move || sec_deposit_open.get().to_string()
+                        on:click=move |_| set_sec_deposit_open.update(|v| *v = !*v)
+                        on:keydown=move |ev| {
+                            if crate::utils::is_activation_key(&ev) {
+                                ev.prevent_default();
+                                set_sec_deposit_open.update(|v| *v = !*v);
+                            }
+                        }
+                    >
                         <span class="form-section-icon form-section-icon-deposit"></span>
                         <span class="form-section-title">"Deposit Details"</span>
                         <span class="form-section-badge form-section-badge-optional">"Optional"</span>
@@ -2342,7 +2438,19 @@ pub fn EventFormComponent(
 
                 // ── People ──
                 <div class="form-section">
-                    <div class="form-section-header" on:click=move |_| set_sec_people_open.update(|v| *v = !*v)>
+                    <div
+                        class="form-section-header"
+                        role="button"
+                        tabindex="0"
+                        aria-expanded=move || sec_people_open.get().to_string()
+                        on:click=move |_| set_sec_people_open.update(|v| *v = !*v)
+                        on:keydown=move |ev| {
+                            if crate::utils::is_activation_key(&ev) {
+                                ev.prevent_default();
+                                set_sec_people_open.update(|v| *v = !*v);
+                            }
+                        }
+                    >
                         <span class="form-section-icon form-section-icon-people"></span>
                         <span class="form-section-title">"People"</span>
                         <span class="form-section-badge form-section-badge-optional">"Optional"</span>
@@ -2379,7 +2487,19 @@ pub fn EventFormComponent(
                 // things on the day, and each attendee is shown only the one
                 // that matches how they are taking part.
                 <div class="form-section">
-                    <div class="form-section-header" on:click=move |_| set_sec_announce_open.update(|v| *v = !*v)>
+                    <div
+                        class="form-section-header"
+                        role="button"
+                        tabindex="0"
+                        aria-expanded=move || sec_announce_open.get().to_string()
+                        on:click=move |_| set_sec_announce_open.update(|v| *v = !*v)
+                        on:keydown=move |ev| {
+                            if crate::utils::is_activation_key(&ev) {
+                                ev.prevent_default();
+                                set_sec_announce_open.update(|v| *v = !*v);
+                            }
+                        }
+                    >
                         <span class="form-section-icon form-section-icon-community"></span>
                         <span class="form-section-title">"Ticket Announcements"</span>
                         <span class="form-section-badge form-section-badge-optional">"Optional"</span>
@@ -2430,7 +2550,19 @@ pub fn EventFormComponent(
 
                 // ── Community Links ──
                 <div class="form-section">
-                    <div class="form-section-header" on:click=move |_| set_sec_community_open.update(|v| *v = !*v)>
+                    <div
+                        class="form-section-header"
+                        role="button"
+                        tabindex="0"
+                        aria-expanded=move || sec_community_open.get().to_string()
+                        on:click=move |_| set_sec_community_open.update(|v| *v = !*v)
+                        on:keydown=move |ev| {
+                            if crate::utils::is_activation_key(&ev) {
+                                ev.prevent_default();
+                                set_sec_community_open.update(|v| *v = !*v);
+                            }
+                        }
+                    >
                         <span class="form-section-icon form-section-icon-community"></span>
                         <span class="form-section-title">"Community & Resources"</span>
                         <span class="form-section-badge form-section-badge-optional">"Optional"</span>

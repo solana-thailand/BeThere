@@ -82,15 +82,10 @@ pub(super) fn render_stats(
                     view! {
                         <div class="admin-cross-tab-summary">
                             {format!("{} {} attendee{}", other_count, other_tab.label(), if other_count != 1 { "s" } else { "" })}
-                            " — "
-                            <span
-                                class="admin-tab-switch-link"
-                                on:click=move |_| {
-                                    // Tab summary is informational; switching is done via the tab bar
-                                }
-                            >
-                                "switch tab to view"
-                            </span>
+                            // Plain text: this was styled as a link with an empty
+                            // click handler, so it looked like it switched tabs
+                            // and did nothing (.plans/037 §6).
+                            " — use the sidebar to switch track"
                         </div>
                     }.into_any()
                 } else {

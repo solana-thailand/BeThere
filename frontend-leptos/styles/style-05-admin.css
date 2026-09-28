@@ -672,11 +672,6 @@
     color: var(--text-muted);
 }
 
-.admin-tab-switch-link {
-    cursor: pointer;
-    text-decoration: underline;
-}
-
 .admin-progress-header {
     display: flex;
     justify-content: space-between;

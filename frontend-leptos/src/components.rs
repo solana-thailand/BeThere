@@ -342,21 +342,51 @@ pub fn ImageLightbox(
         LightboxSizing::Square => "lightbox-img lightbox-img--square",
     };
 
-    // Escape closes the overlay — register only while visible to avoid
-    // stealing Escape from other handlers on the page.
+    // A modal dialog (.plans/037 §6): on open, focus moves to the close
+    // button (the card's only control) and Tab stays there; Escape closes; on
+    // close, focus returns to whatever opened it. Listeners are registered only
+    // while visible so they never steal keys from the page.
+    let close_ref = NodeRef::<leptos::html::Button>::new();
+    let opener = StoredValue::new_local(None::<web_sys::HtmlElement>);
     Effect::new(move |_| {
         if !visible.get() {
+            if let Some(el) = opener.get_value() {
+                let _ = el.focus();
+                opener.set_value(None);
+            }
             return;
         }
-        let cleanup =
-            window_event_listener(leptos::ev::keydown, move |ev: web_sys::KeyboardEvent| {
-                if ev.key() == "Escape" {
-                    set_visible.set(false);
+        use wasm_bindgen::JsCast;
+        opener.set_value(
+            web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.active_element())
+                .and_then(|el| el.dyn_into::<web_sys::HtmlElement>().ok()),
+        );
+        // Next frame: the overlay is `visibility: hidden` until `.is-visible`
+        // applies, and a hidden element cannot take focus.
+        request_animation_frame(move || {
+            if let Some(btn) = close_ref.get_untracked() {
+                let _ = btn.focus();
+            }
+        });
+        let cleanup = window_event_listener(
+            leptos::ev::keydown,
+            move |ev: web_sys::KeyboardEvent| match ev.key().as_str() {
+                "Escape" => set_visible.set(false),
+                "Tab" => {
+                    ev.prevent_default();
+                    if let Some(btn) = close_ref.get() {
+                        let _ = btn.focus();
+                    }
                 }
-            });
+                _ => {}
+            },
+        );
         // Dropping a `WindowListenerHandle` does not remove the listener.
         on_cleanup(move || cleanup.remove());
     });
+    let label = alt.clone();
 
     view! {
         <div
@@ -366,6 +396,9 @@ pub fn ImageLightbox(
         >
             <div
                 class="lightbox-card"
+                role="dialog"
+                aria-modal="true"
+                aria-label=label
                 on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
             >
                 <div class="lightbox-header">
@@ -377,6 +410,7 @@ pub fn ImageLightbox(
                     </span>
                     <button
                         class="lightbox-close"
+                        node_ref=close_ref
                         aria-label="Close"
                         on:click=move |_| set_visible.set(false)
                     >

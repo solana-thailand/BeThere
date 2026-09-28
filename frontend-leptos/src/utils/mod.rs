@@ -205,6 +205,12 @@ pub fn get_participation_badge(participation_type: &str) -> ParticipationBadge {
     }
 }
 
+/// Whether a keydown should activate a `role="button"` element: Enter or
+/// Space, as a native `<button>` does (.plans/037 §6).
+pub fn is_activation_key(ev: &web_sys::KeyboardEvent) -> bool {
+    matches!(ev.key().as_str(), "Enter" | " ")
+}
+
 /// Build a JS object from key-value string pairs.
 ///
 /// Helper to avoid repeated `Reflect::set` calls when constructing

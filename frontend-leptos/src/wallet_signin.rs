@@ -392,6 +392,20 @@ pub fn WalletSignInButton(
         });
     };
 
+    // Escape closes the wallet dialog; registered only while it is open.
+    Effect::new(move |_| {
+        if !show_modal.get() {
+            return;
+        }
+        let cleanup =
+            window_event_listener(leptos::ev::keydown, move |ev: web_sys::KeyboardEvent| {
+                if ev.key() == "Escape" {
+                    set_show_modal.set(false);
+                }
+            });
+        on_cleanup(move || cleanup.remove());
+    });
+
     view! {
         <Show
             when=move || !loading.get()
@@ -454,6 +468,9 @@ pub fn WalletSignInButton(
                 >
                     <div
                         class="siws-modal-card"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.modal_title))
                         on:click=move |e| e.stop_propagation()
                     >
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -465,6 +482,7 @@ pub fn WalletSignInButton(
                             </div>
                             <button
                                 style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: all 0.15s;"
+                                aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, common.close))
                                 on:click=move |_| set_show_modal.set(false)
                             >
                                 "✕"

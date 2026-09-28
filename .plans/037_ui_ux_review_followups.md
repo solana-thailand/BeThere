@@ -197,10 +197,30 @@ Owner decisions raised by phase 3:
 
 ## 6. Accessibility
 
-- [ ] Clickable `<div>` → `<button>`, starting with `event_form.rs` and
-  `adventure/page.rs`.
-- [ ] ImageLightbox gets `role="dialog"` and a focus trap.
-- [ ] `alt` text on meaningful images.
+- [x] Clickable non-interactive elements. 30 found.
+  - 13 collapsible section headers (11 in `event_form.rs`, the audit panel,
+    the on-chain events panel) are now keyboard-operable: `role="button"`,
+    `tabindex`, `aria-expanded`, and Enter/Space through
+    `utils::is_activation_key`. They stay `<div>`s, so there is no visual
+    change.
+  - The rest are backdrop click-to-dismiss layers (fine as they are) and the
+    payment method cards, which already contain a real button.
+  - The admin "switch tab to view" was styled as a link with an empty click
+    handler; it is now plain text.
+- [x] ImageLightbox: `role="dialog"`, `aria-modal`, `aria-label`. Focus goes
+  to the close button on open, Tab is trapped, Escape closes, and focus
+  returns to the opener. Visibility flips instantly on open (the fade is
+  kept), because a `visibility` transition refused focus on the first frame.
+- [x] SIWS wallet modal and quiz import modal: `role="dialog"` and a labelled
+  close button; the wallet modal closes on Escape.
+- [x] `alt`: every meaningful image already has alt text (most via the
+  catalog); the empty ones are deliberately decorative and commented.
+- Verified in headless Chrome: the lightbox focus sequence (open → close
+  button, Tab → stays, Escape → back to "Full Screen"); SIWS
+  role/label/Escape; event-form header `aria-expanded` toggles on Enter and
+  on Space.
+- [ ] Adventure overlays have no dialog role. The game has its own key
+  handling; left alone.
 
 ## Backlog
 
