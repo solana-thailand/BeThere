@@ -32,10 +32,11 @@ Exit: 0 no false accepts, 1 false accepts found (or self-test failed), 2 error.
 import argparse
 import json
 import sqlite3
-import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
+
+import d1_remote
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKER = ROOT / "worker"
@@ -111,15 +112,7 @@ def render(summary: dict, label: str) -> str:
 
 def fetch_remote(staging: bool, event: str | None) -> list[dict]:
     sql = QUERY.replace("?1", "NULL" if event is None else "'" + event.replace("'", "''") + "'")
-    cmd = ["npx", "wrangler", "d1", "execute", "bethere-db-staging" if staging else "bethere-db", "--remote", "--json", "--command", " ".join(sql.split())]
-    if staging:
-        cmd += ["--env", "staging"]
-    out = subprocess.run(cmd, cwd=WORKER, capture_output=True, text=True)
-    text = out.stdout
-    start = text.find("[")
-    if out.returncode != 0 or start < 0:
-        raise RuntimeError(f"wrangler d1 execute failed: {out.stderr.strip()[-300:]}")
-    return json.loads(text[start:])[0]["results"]
+    return d1_remote.select(sql, staging)
 
 
 def self_test() -> int:
