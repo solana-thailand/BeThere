@@ -13,7 +13,8 @@
     --bg-hover: #232a52;
     --text-primary: #e9e4d3;
     --text-secondary: #9ba0b4;
-    --text-muted: #7a7f96;
+    /* ≥ 4.5:1 on every dark surface up to --bg-hover (axe gate, .plans/038). */
+    --text-muted: #8e93aa;
     --accent: #ff5c39;
     --accent-hover: #ff7b5c;
     --accent-bg: rgba(255, 92, 57, 0.08);

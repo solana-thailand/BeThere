@@ -1,0 +1,14 @@
+{
+  "landing": {
+    "color-contrast .landing-persona-btn--active": "White on --accent (3.06:1) in the audience tabs. P1-1 of .plans/038 removes the tabs; delete this entry with them."
+  },
+  "admin": {
+    "color-contrast .header-nav-label": "Light text on --accent (2.69:1) in the active header pill. Brand CTA contrast is an owner decision: .issues/171."
+  },
+  "staff": {
+    "color-contrast .header-nav-label": "Light text on --accent (2.69:1) in the active header pill. Brand CTA contrast is an owner decision: .issues/171."
+  },
+  "ticket": {
+    "color-contrast .ticket-action-btn": "White on --warning (2.14:1) on the Pay Deposit button. Brand CTA contrast is an owner decision: .issues/171."
+  }
+}

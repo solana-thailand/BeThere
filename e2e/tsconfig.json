@@ -6,8 +6,9 @@
     "strict": true,
     "skipLibCheck": true,
     "paths": {
-      "@playwright/test": ["../worker/node_modules/@playwright/test"]
+      "@playwright/test": ["../worker/node_modules/@playwright/test"],
+      "@axe-core/playwright": ["../worker/node_modules/@axe-core/playwright"]
     }
   },
-  "include": ["./*.spec.ts"]
+  "include": ["./*.ts"]
 }

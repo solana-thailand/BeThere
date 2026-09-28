@@ -206,7 +206,7 @@ pub fn AppHeader(
                     <div class="header-user-avatar" title=move || user_email.get()>
                         {move || user_email.get().chars().next().unwrap_or('?').to_uppercase().to_string()}
                     </div>
-                    <button class="btn btn-outline btn-sm header-sign-out" on:click=on_sign_out>
+                    <button class="btn btn-outline btn-sm header-sign-out" aria-label="Sign Out" on:click=on_sign_out>
                         <span class="header-sign-out-icon"><Icon icon=IconName::SignOut class="icon-sm" /></span>
                         <span class="header-sign-out-label">"Sign Out"</span>
                     </button>

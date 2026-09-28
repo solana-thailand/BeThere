@@ -41,7 +41,18 @@ Wave 1 (`.plans/037`).
   - **not** staff walk-in (staff-authed, and a door challenge is friction).
 
   It is enforced only when `TURNSTILE_SECRET_KEY` is set.
-- [ ] **P0-3:** Playwright visual snapshots + axe gate in CI.
+- [x] **P0-3:** `e2e/visual.spec.ts` + `e2e/a11y.spec.ts` over 7 pages ×
+  390/1440, a fixture (`e2e/fixtures/seed.sql`), and CI wiring (DEV_MODE with
+  a synthetic admin, `--update-snapshots=missing`, and a `visual-baselines`
+  artifact).
+  - Locally: 42/42 green, three runs.
+  - The axe self-test proves the gate fails on injected violations.
+  - **Open:** commit the Linux baselines from the first CI run's artifact.
+    This machine has no container runtime, so it cannot render Linux
+    baselines.
+  - Found and fixed along the way: `.issues/172` (the `/api/auth/me` per-IP
+    limit) and the muted-text contrast.
+  - Owner decision: `.issues/171` (brand CTA fills).
 
 ## P1: cut
 
@@ -74,3 +85,6 @@ Wave 1 (`.plans/037`).
   baseline is past the warn line (from Wave 1 `e1161fdd`).
 - At 390 px, the `/dashboard/live` header has a large empty gap above the
   controls. This predates this plan.
+- The ticket page with a pending deposit shows "Ready for Check-In", then
+  "Deposit Required", then "Verifying", all at once. This is input for P1-2
+  (LM-2).

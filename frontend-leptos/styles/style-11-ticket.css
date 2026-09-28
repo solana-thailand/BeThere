@@ -175,7 +175,8 @@
 }
 
 .ticket-ticker-step--active {
-    color: var(--accent);
+    /* --accent is 4.2:1 on this tint mid-pulse; the lighter step clears 4.5. */
+    color: var(--accent-hover);
     background: rgba(255, 92, 57, 0.08);
     opacity: 1;
     animation: ticker-pulse 1.8s ease-in-out infinite;

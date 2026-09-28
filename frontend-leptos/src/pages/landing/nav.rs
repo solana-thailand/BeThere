@@ -112,6 +112,14 @@ pub fn SiteHeader(
                     // Hamburger button — visible only on mobile
                     <button
                         class="landing-nav-hamburger"
+                        aria-expanded=move || mobile_menu_open.get().to_string()
+                        aria-label=move || {
+                            let locale = crate::i18n::use_i18n().get_locale();
+                            match mobile_menu_open.get() {
+                                true => crate::i18n::td_string!(locale, landing.nav.menu_close),
+                                false => crate::i18n::td_string!(locale, landing.nav.menu_open),
+                            }
+                        }
                         on:click=move |_| set_mobile_menu_open.update(|v| *v = !*v)
                     >
                         {move || {

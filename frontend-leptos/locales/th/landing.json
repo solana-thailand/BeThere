@@ -7,7 +7,9 @@
     "sign_out": "ออกจากระบบ",
     "dashboard": "แดชบอร์ด",
     "scanner": "สแกนเนอร์",
-    "developer_profile": "โปรไฟล์นักพัฒนา"
+    "developer_profile": "โปรไฟล์นักพัฒนา",
+    "menu_open": "เปิดเมนู",
+    "menu_close": "ปิดเมนู"
   },
   "persona": {
     "attendees": "สำหรับผู้เข้าร่วม",
