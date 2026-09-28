@@ -1,6 +1,6 @@
 # 156: The Solana blockhash cache never stored anything
 
-**Status:** fixed on develop (`a6343840`, which includes `3a6f69f2` and the one-retry follow-up; session `event-checkin-62`); not deployed to prod. Staging runs it since 2026-09-28 as version `0de8ec15`; prod still runs the old code until the 3 Oct deploy. Verified in `.benchmarks/004`: no 500s at concurrency 10–40, and the retry was proven against a local stub RPC. Found during the plan 028 M1 burst run on staging.
+**Status:** deployed 2026-09-28 — prod version `13b1b7eb` (`main` `0121ece2`, tag `deploy/production/20260928T002515Z`), shipping `3a6f69f2` and `a6343840` (session `event-checkin-af`). Staging ran it from 2026-09-27 as `0de8ec15`. Verified in `.benchmarks/004`: no 500s at concurrency 10–40; the one-shot retry was proven against a local stub RPC. A real Helius 429 being retried has not been seen in prod yet. Found during the plan 028 M1 burst run on staging.
 
 ## What happens
 
