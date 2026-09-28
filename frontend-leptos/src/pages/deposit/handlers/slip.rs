@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::{self, ThbSlipUploadRequest};
 use crate::components::{self as app_components, ToastType};
+use crate::i18n::{td_string, use_i18n};
 
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
@@ -25,7 +26,9 @@ pub fn make_upload_slip(
     file_input_ref: NodeRef<leptos::html::Input>,
     params: DepositParamsSignal,
 ) -> impl Fn() + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move || {
+        let locale = i18n.get_locale_untracked();
         let current_state = state.get();
         let (deposit_data, attendee_id, event_id) = match &current_state {
             DepositPageState::ChoosePayment(d) => {
@@ -62,7 +65,7 @@ pub fn make_upload_slip(
                                     .set(DepositPageState::ChoosePayment(deposit_data_for_err));
                                 app_components::show_toast(
                                     &set_toast,
-                                    "Please select a slip image or paste a URL.",
+                                    td_string!(locale, deposit.toast.select_slip),
                                     ToastType::Warning,
                                 );
                                 return;
@@ -76,7 +79,7 @@ pub fn make_upload_slip(
                         set_state.set(DepositPageState::ChoosePayment(deposit_data_for_err));
                         app_components::show_toast(
                             &set_toast,
-                            "Please select a slip image or paste a URL.",
+                            td_string!(locale, deposit.toast.select_slip),
                             ToastType::Warning,
                         );
                         return;
@@ -133,7 +136,7 @@ pub fn make_upload_slip(
                     if e.status == 401 {
                         app_components::show_toast(
                             &set_toast,
-                            "Session expired. Please sign in again to upload your slip.",
+                            td_string!(locale, deposit.toast.session_expired),
                             ToastType::Warning,
                         );
                         let aid = match params.get() {
@@ -146,23 +149,19 @@ pub fn make_upload_slip(
                                 set_state.set(DepositPageState::ThbAuthRequired(data));
                             }
                             Err(_) => {
-                                set_state.set(DepositPageState::Error(
-                                    "Failed to reload deposit status.".to_string(),
-                                ));
+                                set_state.set(DepositPageState::Error(DepositError::ReloadFailed));
                             }
                         }
                         return;
                     }
-                    let error_msg = if e.to_string().contains("413")
-                        || e.to_string().contains("too large")
-                    {
-                        "Image is too large to upload. Please resize or compress it to under 3MB and try again."
-                            .to_string()
-                    } else if e.to_string().contains("File size exceeds") {
-                        e.to_string()
-                    } else {
-                        format!("Failed to upload slip: {e}")
-                    };
+                    let error_msg =
+                        if e.to_string().contains("413") || e.to_string().contains("too large") {
+                            td_string!(locale, deposit.toast.too_large).to_string()
+                        } else if e.to_string().contains("File size exceeds") {
+                            e.to_string()
+                        } else {
+                            format!("{} {e}", td_string!(locale, deposit.toast.upload_failed))
+                        };
                     app_components::show_toast(&set_toast, &error_msg, ToastType::Error);
                     let aid = match params.get() {
                         Ok(p) => p.attendee_id.unwrap_or_default(),
@@ -174,9 +173,7 @@ pub fn make_upload_slip(
                             set_state.set(DepositPageState::ChoosePayment(data));
                         }
                         Err(_) => {
-                            set_state.set(DepositPageState::Error(
-                                "Failed to reload deposit status.".to_string(),
-                            ));
+                            set_state.set(DepositPageState::Error(DepositError::ReloadFailed));
                         }
                     }
                 }
@@ -194,10 +191,16 @@ pub fn make_copy_url(
     set_toast: WriteSignal<Option<app_components::ToastMessage>>,
     set_pay_url_copied: WriteSignal<bool>,
 ) -> impl Fn(String) + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move |url: String| {
+        let locale = i18n.get_locale_untracked();
         if js_interop::copy_to_clipboard(&url) {
             set_pay_url_copied.set(true);
-            app_components::show_toast(&set_toast, "Payment link copied!", ToastType::Success);
+            app_components::show_toast(
+                &set_toast,
+                td_string!(locale, deposit.toast.link_copied),
+                ToastType::Success,
+            );
             set_timeout(
                 move || set_pay_url_copied.set(false),
                 std::time::Duration::from_secs(3),
@@ -205,7 +208,7 @@ pub fn make_copy_url(
         } else {
             app_components::show_toast(
                 &set_toast,
-                "Failed to copy. Please copy the link manually.",
+                td_string!(locale, deposit.toast.copy_failed),
                 ToastType::Error,
             );
         }

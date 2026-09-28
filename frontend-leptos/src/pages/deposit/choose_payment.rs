@@ -6,6 +6,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, wallet_icon_name};
 
 use super::types::*;
@@ -42,6 +43,7 @@ pub fn choose_payment_view(
     handle_pay_usdc_qr: impl Fn() + Clone + Send + Sync + 'static,
     handle_upload_slip: impl Fn() + Clone + Send + Sync + 'static,
 ) -> impl IntoView {
+    let i18n = use_i18n();
     let data_clone = data.clone();
     let event_slug = data_clone.event_slug.clone();
     let wallets = detected_wallets.get();
@@ -60,8 +62,10 @@ pub fn choose_payment_view(
 
     // Reactive countdown for the deposit deadline banner.
     // Computes deadline from registration_date + deposit_deadline_hours, then ticks every second.
+    // The signal holds the remaining seconds, not text, so the view formats it
+    // in the current language (`None` = no registration date to count from).
     let deadline_ms = compute_deadline_ms(&data_clone.registration_date, deposit_deadline);
-    let (countdown_text, set_countdown_text) = signal(String::new());
+    let (countdown_secs, set_countdown_secs) = signal(None::<i64>);
     let (countdown_expired, set_countdown_expired) = signal(false);
     if let Some(dl_ms) = deadline_ms {
         let now_ms = js_sys::Date::now();
@@ -70,16 +74,16 @@ pub fn choose_payment_view(
             set_countdown_expired.set(true);
         } else {
             let remaining_secs = (remaining_ms / 1000.0) as i64;
-            set_countdown_text.set(format_countdown(remaining_secs));
+            set_countdown_secs.set(Some(remaining_secs));
             if let Ok(handle) = set_interval_with_handle(
                 move || {
                     let now = js_sys::Date::now();
                     let remaining = dl_ms - now;
                     if remaining <= 0.0 {
-                        set_countdown_text.set(String::new());
+                        set_countdown_secs.set(None);
                         set_countdown_expired.set(true);
                     } else {
-                        set_countdown_text.set(format_countdown((remaining / 1000.0) as i64));
+                        set_countdown_secs.set(Some((remaining / 1000.0) as i64));
                     }
                 },
                 std::time::Duration::from_secs(1),
@@ -102,7 +106,7 @@ pub fn choose_payment_view(
                         format!("฿{}", thb_amount)
                     }}
                 </div>
-                <div class="dep2-amount-unit">"Secure your spot with a deposit"</div>
+                <div class="dep2-amount-unit">{t!(i18n, deposit.choose.hero_sub)}</div>
             }.into_any()
         } else {
             view! { <div></div> }.into_any()
@@ -113,7 +117,7 @@ pub fn choose_payment_view(
             view! {
                 <div class="dep2-deadline dep2-deadline--danger">
                     <span class="dep2-deadline-text">
-                        "Your deposit deadline has passed and in-person spots are now full. You have been moved to the online track. You will be able to claim your NFT after the event ends."
+                        {t!(i18n, deposit.choose.deadline_moved)}
                     </span>
                 </div>
             }.into_any()
@@ -121,7 +125,7 @@ pub fn choose_payment_view(
             view! {
                 <div class="dep2-deadline dep2-deadline--success">
                     <span class="dep2-deadline-text">
-                        "Your deadline has passed, but in-person spots are still available! Complete your deposit now to reclaim your spot."
+                        {t!(i18n, deposit.choose.deadline_reclaim)}
                     </span>
                 </div>
             }.into_any()
@@ -130,24 +134,24 @@ pub fn choose_payment_view(
                 <div class="dep2-deadline dep2-deadline--warning">
                     <span class="dep2-deadline-text">
                         {move || {
-                            let ct = countdown_text.get();
+                            let locale = i18n.get_locale();
+                            let secs = countdown_secs.get();
                             let expired = countdown_expired.get();
-                            if expired {
-                                view! {
-                                    "Your deposit deadline has passed. After that, your in-person spot may be released."
-                                }.into_any()
-                            } else if ct.is_empty() {
+                            match (expired, secs) {
+                                (true, _) => view! {
+                                    {t_string!(i18n, deposit.choose.deadline_passed)}
+                                }.into_any(),
                                 // Fallback when no registration_date available
-                                let label = format_duration_label(_hours);
-                                view! {
-                                    "You have "{label.to_string()}" to complete your deposit. After that, your in-person spot may be released."
-                                }.into_any()
-                            } else {
-                                view! {
-                                    "You have "
-                                    <span class="dep2-countdown-timer">{ct}</span>
-                                    " to complete your deposit. After that, your in-person spot may be released."
-                                }.into_any()
+                                (false, None) => view! {
+                                    {t_string!(i18n, deposit.choose.time_left_before)}
+                                    {format_duration_label(locale, _hours)}
+                                    {t_string!(i18n, deposit.choose.time_left_after)}
+                                }.into_any(),
+                                (false, Some(secs)) => view! {
+                                    {t_string!(i18n, deposit.choose.time_left_before)}
+                                    <span class="dep2-countdown-timer">{format_countdown(locale, secs)}</span>
+                                    {t_string!(i18n, deposit.choose.time_left_after)}
+                                }.into_any(),
                             }
                         }}
                     </span>
@@ -170,7 +174,7 @@ pub fn choose_payment_view(
                             view! {
                                 <div class="dep2-deadline dep2-deadline--danger">
                                     <span class="dep2-deadline-text">
-                                        "No payment methods are configured for this event. Please contact the organizer."
+                                        {t!(i18n, deposit.choose.no_methods)}
                                     </span>
                                 </div>
                             }.into_any()
@@ -187,13 +191,13 @@ pub fn choose_payment_view(
                                                 <div class="dep2-method-amount">
                                                     {format!("฿{} THB", thb_amount)}
                                                 </div>
-                                                <div class="dep2-method-label">"via PromptPay"</div>
+                                                <div class="dep2-method-label">{t!(i18n, deposit.choose.via_promptpay)}</div>
                                                 <button class="dep2-method-cta"
                                                     on:click=move |ev| {
                                                         ev.stop_propagation();
                                                         set_payment_choice.set(Some(PaymentChoice::Thb));
                                                     }>
-                                                    "Pay with PromptPay →"
+                                                    {t!(i18n, deposit.choose.pay_promptpay)}
                                                 </button>
                                             </div>
                                         }.into_any()
@@ -210,13 +214,13 @@ pub fn choose_payment_view(
                                                 <div class="dep2-method-amount">
                                                     {format!("{} USDC", usdc_formatted)}
                                                 </div>
-                                                <div class="dep2-method-label">"via Solana"</div>
+                                                <div class="dep2-method-label">{t!(i18n, deposit.choose.via_solana)}</div>
                                                 <button class="dep2-method-cta"
                                                     on:click=move |ev| {
                                                         ev.stop_propagation();
                                                         set_payment_choice.set(Some(PaymentChoice::Usdc));
                                                     }>
-                                                    "Pay with USDC →"
+                                                    {t!(i18n, deposit.choose.pay_usdc)}
                                                 </button>
                                             </div>
                                         }.into_any()
@@ -231,7 +235,7 @@ pub fn choose_payment_view(
                     Some(PaymentChoice::Usdc) => view! {
                         <button class="dep2-back"
                             on:click=move |_| set_payment_choice.set(None)>
-                            "← Change method"
+                            {t!(i18n, deposit.choose.change_method)}
                         </button>
 
                         {if show_usdc {
@@ -246,7 +250,7 @@ pub fn choose_payment_view(
                                         view! {
                                             <div class="wallet-list">
                                                 <p class="wallet-prompt">
-                                                            "Connect your Solana wallet:"
+                                                            {t!(i18n, deposit.choose.connect_prompt)}
                                                         </p>
                                                 {wallets_for_click.into_iter().map(|w| {
                                                     let w_clone = w.clone();
@@ -261,7 +265,7 @@ pub fn choose_payment_view(
                                                             }
                                                         >
                                                             <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                                                            <span>{format!("Connect {}", w_clone)}</span>
+                                                            <span>{t!(i18n, deposit.connect_wallet, wallet = w_clone)}</span>
                                                         </button>
                                                     }
                                                 }).collect::<Vec<_>>()}
@@ -273,13 +277,13 @@ pub fn choose_payment_view(
 
                                     <div class="dep2-qr-secondary">
                                         <p class="dep2-qr-secondary-label">
-                                            "No wallet? Use QR code instead:"
+                                            {t!(i18n, deposit.choose.no_wallet_qr)}
                                         </p>
                                         <div class="u-mb-sm">
                                             <input
                                                 type="text"
                                                 class="form-input dep-input"
-                                                placeholder="Enter your Solana wallet address"
+                                                placeholder=move || t_string!(i18n, deposit.choose.wallet_placeholder)
                                                 prop:value=move || wallet_input.get()
                                                 on:input=move |ev| {
                                                     let val = event_target_value(&ev);
@@ -294,7 +298,7 @@ pub fn choose_payment_view(
                                                 move |_| hqr()
                                             }
                                         >
-                                            "Generate QR Code"
+                                            {t!(i18n, deposit.choose.generate_qr)}
                                         </button>
                                     </div>
                                 </div>
@@ -307,7 +311,7 @@ pub fn choose_payment_view(
                     Some(PaymentChoice::Thb) => view! {
                         <button class="dep2-back"
                             on:click=move |_| set_payment_choice.set(None)>
-                            "← Change method"
+                            {t!(i18n, deposit.choose.change_method)}
                         </button>
                         {super::thb_payment::thb_payment_form_view(
                             &data_clone,
@@ -338,13 +342,13 @@ pub fn choose_payment_view(
             if !event_slug.is_empty() {
                 view! {
                     <a href=format!("/e/{event_slug}") class="dep2-back">
-                        "← Back to event"
+                        {t!(i18n, deposit.back_event)}
                     </a>
                 }.into_any()
             } else {
                 view! {
                     <a href="/" class="dep2-back">
-                        "← Back to home"
+                        {t!(i18n, deposit.back_home)}
                     </a>
                 }.into_any()
             }

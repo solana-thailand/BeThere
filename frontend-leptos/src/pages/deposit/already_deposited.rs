@@ -3,12 +3,23 @@
 use leptos::prelude::*;
 
 use crate::api::{self, DepositMethod, DepositStatusResponse};
+use crate::i18n::{t, t_string, use_i18n};
 use crate::utils::format_timestamp;
 
 use super::types::*;
 
+/// Outcome of the "Check confirmation again" button, kept typed so the note
+/// renders in the reader's current language.
+#[derive(Clone, Copy)]
+enum ConfirmCheck {
+    Syncing,
+    Pending,
+    Unavailable,
+}
+
 /// Loading view.
 pub fn loading_view() -> AnyView {
+    let i18n = use_i18n();
     view! {
         <div class="dep2-card">
             <div class="dep2-confirming">
@@ -17,7 +28,7 @@ pub fn loading_view() -> AnyView {
                     <span class="dep2-confirming-dot"></span>
                     <span class="dep2-confirming-dot"></span>
                 </div>
-                <p>"Loading deposit info..."</p>
+                <p>{t!(i18n, deposit.loading)}</p>
             </div>
         </div>
     }
@@ -25,15 +36,25 @@ pub fn loading_view() -> AnyView {
 }
 
 /// Error view.
-pub fn error_view(msg: &str) -> AnyView {
-    let msg = msg.to_string();
+pub fn error_view(error: DepositError) -> AnyView {
+    let i18n = use_i18n();
+    let message = match error {
+        DepositError::InvalidLink => view! { {t!(i18n, deposit.error.invalid_link)} }.into_any(),
+        DepositError::EndedNoDeposit => {
+            view! { {t!(i18n, deposit.error.ended_no_deposit)} }.into_any()
+        }
+        DepositError::LoadFailed(error) => {
+            view! { {t!(i18n, deposit.error.load_failed, error)} }.into_any()
+        }
+        DepositError::ReloadFailed => view! { {t!(i18n, deposit.error.reload_failed)} }.into_any(),
+    };
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">"Something went wrong"</span>
+                <span class="dep2-card-title">{t!(i18n, deposit.error.title)}</span>
             </div>
-            <p>{msg}</p>
-            <a href="/" class="btn btn-primary">"Go Home"</a>
+            <p>{message}</p>
+            <a href="/" class="btn btn-primary">{t!(i18n, deposit.error.go_home)}</a>
         </div>
     }
     .into_any()
@@ -49,15 +70,16 @@ pub fn error_view(msg: &str) -> AnyView {
 /// event has them enabled. Showing the resolved event name makes that mismatch
 /// self-diagnosable instead of looking like a backend bug.
 pub fn not_enabled_view(data: &DepositStatusResponse) -> AnyView {
+    let i18n = use_i18n();
     let event_name = data.event_name.clone();
     let event_slug = data.event_slug.clone();
     let has_event_info = !event_name.is_empty();
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">"Deposits Not Available"</span>
+                <span class="dep2-card-title">{t!(i18n, deposit.not_enabled.title)}</span>
             </div>
-            <p>"Deposits are not enabled for this event."</p>
+            <p>{t!(i18n, deposit.not_enabled.body)}</p>
 
             // Diagnostic block — surface which event the backend actually
             // resolved. Without this, "wrong event fallback" looks identical
@@ -66,20 +88,19 @@ pub fn not_enabled_view(data: &DepositStatusResponse) -> AnyView {
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            {format!("Resolved event: {event_name}")}
+                            {t!(i18n, deposit.not_enabled.resolved, name = event_name)}
                         </p>
                         {if !event_slug.is_empty() {
                             view! {
                                 <p class="hint-note">
-                                    {format!("Slug: {event_slug}")}
+                                    {t!(i18n, deposit.not_enabled.slug, slug = event_slug)}
                                 </p>
                             }.into_any()
                         } else {
                             ().into_any()
                         }}
                         <p class="hint-note">
-                            "If this isn't the event you expected, check that the URL contains the correct \
-                             \"?event_id=...\" for your event, or hard-refresh to bypass any stale cache."
+                            {t!(i18n, deposit.not_enabled.hint)}
                         </p>
                     </div>
                 }.into_any()
@@ -87,7 +108,7 @@ pub fn not_enabled_view(data: &DepositStatusResponse) -> AnyView {
                 ().into_any()
             }}
 
-            <a href="/" class="btn btn-primary">"Go Home"</a>
+            <a href="/" class="btn btn-primary">{t!(i18n, deposit.error.go_home)}</a>
         </div>
     }
     .into_any()
@@ -98,8 +119,8 @@ pub fn already_deposited_view(
     data: &DepositStatusResponse,
     set_state: &WriteSignal<DepositPageState>,
 ) -> AnyView {
+    let i18n = use_i18n();
     let info = data.status.as_ref().unwrap();
-    let (_method_icon, method_label) = deposit_method_display(&info.method);
     // Rolling credit is reliably signalled by the method enum (auto-applied credit
     // is stored as credit_thb/credit_usdc). The string checks are a legacy
     // fallback; on their own they missed auto-applied credit (the markers live in
@@ -115,15 +136,16 @@ pub fn already_deposited_view(
             .wallet_address
             .as_ref()
             .is_some_and(|w| w.contains("CREDIT"));
-    let display_method_label = if is_credit {
-        "Rolling Credit (Previous Event)".to_string()
-    } else {
-        method_label.to_string()
+    // The label is display-only; the method stays the typed enum.
+    let method = info.method;
+    let display_method_label = move || match is_credit {
+        true => t_string!(i18n, deposit.method.rolling_credit),
+        false => deposit_method_display(i18n.get_locale(), &method).1,
     };
-    let verified_text = if info.verified {
-        "Verified"
-    } else {
-        "Pending Verification"
+    let verified = info.verified;
+    let verified_text = move || match verified {
+        true => t_string!(i18n, deposit.already.verified),
+        false => t_string!(i18n, deposit.already.pending),
     };
     let verified_class = if info.verified {
         "badge badge-success"
@@ -131,7 +153,6 @@ pub fn already_deposited_view(
         "badge badge-warning"
     };
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
-    let refund_info = compute_refund_info(data);
     // Refund window check: mirrors bethere-escrow refund instruction's
     // two-path model (checked-in → [event_end, ∞); no-show →
     // [event_end, refund_deadline)). The on-chain program is the source of
@@ -142,9 +163,8 @@ pub fn already_deposited_view(
         event_refund_window_open(data.event_end_ms, data.refund_deadline_ms, data.checked_in);
 
     let data_clone_for_refund = data.clone();
-    let refund_info_clone = refund_info.clone();
+    let data_clone_for_refund_info = data.clone();
     let data_clone_for_event_link = data.clone();
-    let info_clone = data.status.clone();
     let pending_usdc = !info.verified
         && info.method == DepositMethod::Usdc
         && info
@@ -155,21 +175,24 @@ pub fn already_deposited_view(
     let pending_attendee_id = info.attendee_id.clone();
     let pending_data = data.clone();
     let (checking_confirmation, set_checking_confirmation) = signal(false);
-    let (confirmation_message, set_confirmation_message) = signal(None::<String>);
+    let (confirmation_message, set_confirmation_message) = signal(None::<ConfirmCheck>);
 
-    // Non-USDC (THB / rolling credit) refund guidance — computed here (not inside
-    // the view) to avoid borrowing `info`. THB refund/credit actions live on the
-    // TICKET page, so point there; never mislabel a ฿ deposit as USDC.
-    let nonusdc_amount_display = if info.currency == "THB" {
+    // Currency codes are compared, never translated: "THB" is the stored code.
+    let amount_display = if info.currency == "THB" {
         format!("฿{}", info.amount)
     } else {
         format!("{} {}", format_usdc(info.amount), info.currency)
     };
+    // Non-USDC (THB / rolling credit) refund guidance — computed here (not inside
+    // the view) to avoid borrowing `info`. THB refund/credit actions live on the
+    // TICKET page, so point there; never mislabel a ฿ deposit as USDC.
+    let nonusdc_amount_display = amount_display.clone();
     let nonusdc_ticket_href = if info.event_id.is_empty() {
         format!("/ticket/{}", info.attendee_id)
     } else {
         format!("/ticket/{}?event_id={}", info.attendee_id, info.event_id)
     };
+    let deposited_at = format_timestamp(&info.deposited_at);
 
     let set_state = *set_state;
 
@@ -177,7 +200,7 @@ pub fn already_deposited_view(
         <div class="dep2-card">
             // Header: title + badge
             <div class="dep2-card-header">
-                <span class="dep2-card-title">"Spot Reserved"</span>
+                <span class="dep2-card-title">{t!(i18n, deposit.already.title)}</span>
                 <span class=verified_class>
                     {verified_text}
                 </span>
@@ -194,40 +217,25 @@ pub fn already_deposited_view(
 
             // Amount hero
             <div class="dep2-amount-hero">
-                {{
-                    let info = info_clone.as_ref().unwrap();
-                    if info.currency == "THB" {
-                        format!("฿{}", info.amount)
-                    } else {
-                        format!("{} {}", format_usdc(info.amount), info.currency)
-                    }
-                }}
-                " deposited"
+                {t!(i18n, deposit.already.amount_deposited, amount = amount_display.clone())}
             </div>
 
             // Receipt block
             <div class="dep2-receipt">
                 <div class="dep2-receipt-row">
-                    <span class="dep2-receipt-label">"Method"</span>
+                    <span class="dep2-receipt-label">{t!(i18n, deposit.already.method)}</span>
                     <span class="dep2-receipt-value">
-                        {display_method_label.clone()}
+                        {display_method_label}
                     </span>
                 </div>
                 <div class="dep2-receipt-row">
-                    <span class="dep2-receipt-label">"Amount"</span>
+                    <span class="dep2-receipt-label">{t!(i18n, deposit.already.amount)}</span>
                     <span class="dep2-receipt-value">
-                        {{
-                            let info = info_clone.as_ref().unwrap();
-                            if info.currency == "THB" {
-                                format!("฿{}", info.amount)
-                            } else {
-                                format!("{} {}", format_usdc(info.amount), info.currency)
-                            }
-                        }}
+                        {amount_display.clone()}
                     </span>
                 </div>
                 <div class="dep2-receipt-row">
-                    <span class="dep2-receipt-label">"Status"</span>
+                    <span class="dep2-receipt-label">{t!(i18n, deposit.already.status)}</span>
                     <span class="dep2-receipt-value">
                         <span class=verified_class>
                             {verified_text}
@@ -235,9 +243,9 @@ pub fn already_deposited_view(
                     </span>
                 </div>
                 <div class="dep2-receipt-row">
-                    <span class="dep2-receipt-label">"Date"</span>
+                    <span class="dep2-receipt-label">{t!(i18n, deposit.already.date)}</span>
                     <span class="dep2-receipt-value">
-                        {format_timestamp(&info_clone.as_ref().unwrap().deposited_at)}
+                        {deposited_at}
                     </span>
                 </div>
             </div>
@@ -245,19 +253,20 @@ pub fn already_deposited_view(
             // Refund info section
             {if info.verified && info.method == DepositMethod::Usdc {
                 let data_clone_for_refund = data_clone_for_refund.clone();
-                let refund_info_clone = refund_info_clone.clone();
+                let data_for_info = data_clone_for_refund_info.clone();
+                let usdc_secured = usdc_fmt.clone();
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            {format!("Your {usdc_fmt} USDC is secured on-chain. Show up → get it all back.")}
+                            {t!(i18n, deposit.already.usdc_secured, amount = usdc_secured)}
                         </p>
                     </div>
                     // Refund deadline
-                    {match refund_info_clone {
-                        Some((deadline_date, duration_label)) => view! {
+                    {move || match compute_refund_info(i18n.get_locale(), &data_for_info) {
+                        Some((deadline, duration)) => view! {
                             <div class="dep2-deadline dep2-deadline--warning">
                                 <span class="dep2-deadline-text">
-                                    {format!("Refund window: {duration_label} after event ends ({deadline_date}).")}
+                                    {t!(i18n, deposit.already.refund_window, duration, deadline)}
                                 </span>
                             </div>
                         }.into_any(),
@@ -269,10 +278,11 @@ pub fn already_deposited_view(
                     //   (c) not refundable tier → muted badge (unchanged)
                     {if info.refundable && event_ended {
                         let data_clone_for_refund = data_clone_for_refund.clone();
+                        let claim_amount = usdc_fmt.clone();
                         view! {
                             <div class="dep2-refund-cta">
                                 <span class="dep2-refund-cta-text">
-                                    {format!("Don't lose your {usdc_fmt} USDC — claim it now")}
+                                    {t!(i18n, deposit.already.claim_now, amount = claim_amount)}
                                 </span>
                                 <button
                                     class="btn btn-success btn-block"
@@ -280,7 +290,7 @@ pub fn already_deposited_view(
                                         set_state.set(DepositPageState::RefundChooseWallet(data_clone_for_refund.clone()));
                                     }
                                 >
-                                    "Claim Refund"
+                                    {t!(i18n, deposit.claim_refund)}
                                 </button>
                             </div>
                         }.into_any()
@@ -288,13 +298,13 @@ pub fn already_deposited_view(
                         view! {
                             <div class="dep2-info-note">
                                 <p class="hint-note">
-                                    "Refund will be available after the event ends."
+                                    {t!(i18n, deposit.already.refund_after_event)}
                                 </p>
                             </div>
                         }.into_any()
                     } else {
                         view! {
-                            <span class="badge badge-muted">"Non-refundable deposit"</span>
+                            <span class="badge badge-muted">{t!(i18n, deposit.already.non_refundable)}</span>
                         }.into_any()
                     }}
                 }.into_any()
@@ -302,10 +312,9 @@ pub fn already_deposited_view(
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            {if pending_usdc {
-                                "Your payment signature is recorded. It is safe to close this page and use the same deposit link later; do not send another payment."
-                            } else {
-                                "Refund will be available after verification."
+                            {move || match pending_usdc {
+                                true => t_string!(i18n, deposit.already.usdc_recorded),
+                                false => t_string!(i18n, deposit.already.refund_after_verify),
                             }}
                         </p>
                         {if pending_usdc {
@@ -328,33 +337,31 @@ pub fn already_deposited_view(
                                                     if let Some(signature) = result.tx_signature {
                                                         set_state.set(DepositPageState::DepositConfirmed(data, signature));
                                                     } else {
-                                                        set_confirmation_message.set(Some(
-                                                            "Confirmed, but the receipt is still syncing. Check again shortly."
-                                                                .to_string(),
-                                                        ));
+                                                        set_confirmation_message.set(Some(ConfirmCheck::Syncing));
                                                     }
                                                 }
-                                                Ok(_) => set_confirmation_message.set(Some(
-                                                    "Still pending on Solana. No action is required; check again shortly."
-                                                        .to_string(),
-                                                )),
-                                                Err(_) => set_confirmation_message.set(Some(
-                                                    "The status check is temporarily unavailable. Your recorded payment is unchanged."
-                                                        .to_string(),
-                                                )),
+                                                Ok(_) => set_confirmation_message.set(Some(ConfirmCheck::Pending)),
+                                                Err(_) => set_confirmation_message.set(Some(ConfirmCheck::Unavailable)),
                                             }
                                             set_checking_confirmation.set(false);
                                         });
                                     }
                                 >
                                     {move || if checking_confirmation.get() {
-                                        "Checking recorded payment..."
+                                        t_string!(i18n, deposit.already.checking)
                                     } else {
-                                        "Check confirmation again"
+                                        t_string!(i18n, deposit.already.check_again)
                                     }}
                                 </button>
-                                {move || confirmation_message.get().map(|message| view! {
-                                    <p class="hint-note" role="status">{message}</p>
+                                {move || confirmation_message.get().map(|check| {
+                                    let message = match check {
+                                        ConfirmCheck::Syncing => t_string!(i18n, deposit.already.confirm_syncing),
+                                        ConfirmCheck::Pending => t_string!(i18n, deposit.already.confirm_pending),
+                                        ConfirmCheck::Unavailable => t_string!(i18n, deposit.already.confirm_unavailable),
+                                    };
+                                    view! {
+                                        <p class="hint-note" role="status">{message}</p>
+                                    }
                                 })}
                             }.into_any()
                         } else {
@@ -363,23 +370,25 @@ pub fn already_deposited_view(
                     </div>
                 }.into_any()
             } else if is_credit {
+                let amount = nonusdc_amount_display.clone();
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            {format!("This {nonusdc_amount_display} is rolling credit from a previous event, applied to your spot here.")}
+                            {t!(i18n, deposit.already.credit_note, amount)}
                         </p>
                     </div>
                 }.into_any()
             } else {
                 // Verified THB deposit. Refund and hold-as-credit actions live on
                 // the ticket page — surface the choice honestly (no "USDC" label).
+                let amount = nonusdc_amount_display.clone();
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            {format!("Your {nonusdc_amount_display} deposit is secured. After the event you can keep it as credit toward your next event, or request a refund — manage it from your ticket.")}
+                            {t!(i18n, deposit.already.thb_secured, amount)}
                         </p>
                         <a href=nonusdc_ticket_href class="btn btn-outline btn-block">
-                            "Go to your ticket →"
+                            {t!(i18n, deposit.already.go_ticket)}
                         </a>
                     </div>
                 }.into_any()
@@ -390,9 +399,9 @@ pub fn already_deposited_view(
                 href=if data_clone_for_event_link.event_slug.is_empty() { "/".to_string() } else { format!("/e/{}", data_clone_for_event_link.event_slug) }
                 class="dep2-back"
             >
-                "← Back to event"
+                {t!(i18n, deposit.back_event)}
             </a>
         </div>
     }
-        .into_any()
+    .into_any()
 }

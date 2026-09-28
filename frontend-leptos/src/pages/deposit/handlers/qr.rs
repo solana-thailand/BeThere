@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::{self, UsdcDepositRequest};
 use crate::components::{self as app_components, ToastType};
+use crate::i18n::{td_string, use_i18n};
 
 use crate::pages::deposit::types::*;
 
@@ -19,7 +20,9 @@ pub fn make_pay_usdc_qr(
     wallet_input: ReadSignal<String>,
     params: DepositParamsSignal,
 ) -> impl Fn() + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move || {
+        let locale = i18n.get_locale_untracked();
         let current_state = state.get();
         let (deposit_data, attendee_id, event_id) = match &current_state {
             DepositPageState::ChoosePayment(d) => {
@@ -37,7 +40,7 @@ pub fn make_pay_usdc_qr(
         if wallet.trim().is_empty() {
             app_components::show_toast(
                 &set_toast,
-                "Please enter your Solana wallet address.",
+                td_string!(locale, deposit.toast.enter_wallet),
                 ToastType::Warning,
             );
             return;
@@ -62,7 +65,7 @@ pub fn make_pay_usdc_qr(
                     log::error!("[deposit] USDC deposit failed: {e}");
                     app_components::show_toast(
                         &set_toast,
-                        &format!("Failed to initiate USDC payment: {e}"),
+                        &format!("{} {e}", td_string!(locale, deposit.toast.qr_failed)),
                         ToastType::Error,
                     );
                 }

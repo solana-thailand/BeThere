@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::{self, RefundTxRequest};
 use crate::components::{self as app_components, ToastType};
+use crate::i18n::{td_string, use_i18n};
 
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
@@ -18,7 +19,9 @@ pub fn make_refund_connect_wallet(
     set_state: WriteSignal<DepositPageState>,
     set_toast: WriteSignal<Option<app_components::ToastMessage>>,
 ) -> impl Fn(String) + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move |wallet_name: String| {
+        let locale = i18n.get_locale_untracked();
         let deposit_data = match &state.get() {
             DepositPageState::RefundChooseWallet(d) => Some(d.clone()),
             _ => None,
@@ -59,7 +62,7 @@ pub fn make_refund_connect_wallet(
                 crate::wallet_error::WalletResult::UnknownFailure => {
                     app_components::show_toast(
                         &set_toast,
-                        "Failed to connect wallet. Please try again.",
+                        td_string!(locale, deposit.toast.connect_failed),
                         ToastType::Error,
                     );
                 }
@@ -79,7 +82,9 @@ pub fn make_claim_refund(
     set_toast: WriteSignal<Option<app_components::ToastMessage>>,
     params: DepositParamsSignal,
 ) -> impl Fn(String, String) + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move |wallet_name: String, public_key: String| {
+        let locale = i18n.get_locale_untracked();
         let current_state = state.get();
         let deposit_data = match &current_state {
             DepositPageState::RefundWalletConnected(d, _, _) => d.clone(),
@@ -114,7 +119,10 @@ pub fn make_claim_refund(
                     log::error!("[deposit] refund TX build failed: {e}");
                     app_components::show_toast(
                         &set_toast,
-                        &format!("Failed to build refund transaction: {e}"),
+                        &format!(
+                            "{} {e}",
+                            td_string!(locale, deposit.toast.refund_build_failed)
+                        ),
                         ToastType::Error,
                     );
                     set_state.set(DepositPageState::RefundWalletConnected(
@@ -131,7 +139,7 @@ pub fn make_claim_refund(
                 log::error!("[deposit] refund TX is empty");
                 app_components::show_toast(
                     &set_toast,
-                    "Refund transaction was empty. Please try again later.",
+                    td_string!(locale, deposit.toast.refund_empty),
                     ToastType::Error,
                 );
                 set_state.set(DepositPageState::RefundWalletConnected(
@@ -160,11 +168,13 @@ pub fn make_claim_refund(
             {
                 Ok(sim) if sim.ok => {}
                 Ok(sim) => {
-                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                    let err_msg = sim.error.unwrap_or_else(|| {
+                        td_string!(locale, deposit.toast.simulation_failed).to_string()
+                    });
                     log::error!("[deposit] refund simulation failed: {err_msg}");
                     app_components::show_toast(
                         &set_toast,
-                        &format!("Transaction would fail: {err_msg}"),
+                        &format!("{} {err_msg}", td_string!(locale, deposit.toast.would_fail)),
                         ToastType::Error,
                     );
                     return;
@@ -200,7 +210,7 @@ pub fn make_claim_refund(
                     log::error!("[deposit] refund wallet sign+send failed");
                     app_components::show_toast(
                         &set_toast,
-                        "Refund transaction failed. Please try again.",
+                        td_string!(locale, deposit.toast.refund_failed),
                         ToastType::Error,
                     );
                     set_state.set(DepositPageState::RefundWalletConnected(

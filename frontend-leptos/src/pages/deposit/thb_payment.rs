@@ -9,15 +9,26 @@ use super::js_interop;
 use super::types::*;
 use crate::api::DepositStatusResponse;
 use crate::components::LightboxImage;
+use crate::i18n::{t, t_string, use_i18n};
 
 // ---------------------------------------------------------------------------
 // THB payment form (ChoosePayment → Thb)
 // ---------------------------------------------------------------------------
 
+/// Where a slip without a readable QR goes. A product name, so it is not
+/// translated; the sentence around it lives in `deposit.thb.vision_privacy`.
+const SLIP_VISION_VENDOR: &str = "Anthropic's Claude API";
+
 /// Shown above the file picker only while the worker's vision fallback is on
 /// (`.plans/033` §4 Q3): the attendee learns before submitting that a slip
-/// without a readable QR leaves our storage for the Claude API.
-const SLIP_VISION_PRIVACY_LINE: &str = "Privacy: if the QR code on your slip can't be read, the slip image is sent to Anthropic's Claude API to read the amount and reference. The organizer still reviews every slip.";
+/// without a readable QR leaves our storage for the Claude API. A render
+/// function rather than a string so the line follows the language switch.
+const SLIP_VISION_PRIVACY_LINE: fn() -> AnyView = slip_vision_privacy_line;
+
+fn slip_vision_privacy_line() -> AnyView {
+    let i18n = use_i18n();
+    view! { {t!(i18n, deposit.thb.vision_privacy, vendor = SLIP_VISION_VENDOR)} }.into_any()
+}
 
 /// Renders the full THB payment form: instructions, PromptPay QR, slip upload,
 /// bank account info, and submit button.
@@ -39,6 +50,7 @@ pub fn thb_payment_form_view(
     set_show_bank_dropdown: WriteSignal<bool>,
     handle_upload_slip: impl Fn() + Clone + Send + Sync + 'static,
 ) -> AnyView {
+    let i18n = use_i18n();
     let deposit_amount_thb = data.deposit_amount_thb;
     let promptpay_id = data.promptpay_id.clone();
     let pp_amount = data.deposit_amount_thb as f64;
@@ -71,7 +83,7 @@ pub fn thb_payment_form_view(
         <div class="dep2-card">
             // Card header
             <div class="dep2-card-header">
-                <h2 class="dep2-card-title">"Pay with THB"</h2>
+                <h2 class="dep2-card-title">{t!(i18n, deposit.thb.title)}</h2>
                 <span class="badge badge-warning">
                     {format!("฿{deposit_amount_thb}")}
                 </span>
@@ -82,7 +94,7 @@ pub fn thb_payment_form_view(
                 view! {
                     <div class="dep2-section">
                         <div class="dep2-section-title">
-                            "Scan & Pay"
+                            {t!(i18n, deposit.thb.scan_pay)}
                         </div>
 
                         {match pp_qr_image {
@@ -102,18 +114,18 @@ pub fn thb_payment_form_view(
                                                 );
                                             }
                                         >
-                                            "⬇ Save QR Code"
+                                            {t!(i18n, deposit.thb.save_qr)}
                                         </button>
                                     </div>
                                 }.into_any()
                             },
                             None => view! {
-                                <p class="hint-2xs">"QR generation failed — please pay manually."</p>
+                                <p class="hint-2xs">{t!(i18n, deposit.thb.qr_failed)}</p>
                             }.into_any(),
                         }}
 
                         <p class="hint-desc u-mt-xs">
-                            {format!("Scan with your banking app → Transfer ฿{} THB", deposit_amount_thb)}
+                            {t!(i18n, deposit.thb.scan_hint, amount = deposit_amount_thb)}
                         </p>
                     </div>
                 }.into_any()
@@ -121,9 +133,9 @@ pub fn thb_payment_form_view(
                 view! {
                     <div class="dep2-section">
                         <div class="dep2-section-title">
-                            "Scan & Pay"
+                            {t!(i18n, deposit.thb.scan_pay)}
                         </div>
-                        <p class="hint-desc">"PromptPay QR is not available for this event. Please transfer manually and upload your slip below."</p>
+                        <p class="hint-desc">{t!(i18n, deposit.thb.no_promptpay)}</p>
                     </div>
                 }.into_any()
             }}
@@ -131,10 +143,10 @@ pub fn thb_payment_form_view(
             // ── Section B: Upload Slip ──────────────────────────────────
             <div class="dep2-section">
                 <div class="dep2-section-title">
-                    "Upload Payment Slip"
+                    {t!(i18n, deposit.thb.upload_title)}
                 </div>
                 <p class="thb-slip-hint">
-                    "Take a screenshot or photo of your transfer confirmation. Max 3MB (JPEG, PNG, WebP)."
+                    {t!(i18n, deposit.thb.upload_hint)}
                 </p>
                 {slip_vision_enabled.then(|| view! {
                     <p class="thb-slip-hint">
@@ -165,11 +177,11 @@ pub fn thb_payment_form_view(
                         <div class="slip-preview-container">
                             <LightboxImage
                                 src=url
-                                alt="Payment slip preview"
+                                alt=t_string!(i18n, deposit.thb.preview_alt)
                                 thumb_class="slip-preview-img"
-                                hint="Tap the image or backdrop to close".to_string()
+                                hint=t_string!(i18n, deposit.thb.preview_close_hint).to_string()
                             />
-                            <span class="slip-preview-zoom-hint">"\u{1f50d} Tap to enlarge"</span>
+                            <span class="slip-preview-zoom-hint">{t!(i18n, deposit.thb.tap_enlarge)}</span>
                             <button
                                 class="slip-preview-remove"
                                 on:click=move |_| {
@@ -188,11 +200,11 @@ pub fn thb_payment_form_view(
 
                 // Manual URL fallback — advanced option
                 <details class="u-mt-xs dep2-advanced-toggle">
-                    <summary class="details-summary-text hint-muted">"Advanced: paste slip image URL"</summary>
+                    <summary class="details-summary-text hint-muted">{t!(i18n, deposit.thb.advanced)}</summary>
                     <input
                         type="text"
                         class="form-input dep-input u-mt-xs"
-                        placeholder="Paste slip image URL"
+                        placeholder=move || t_string!(i18n, deposit.thb.url_placeholder)
                         prop:value=move || slip_url_input.get()
                         on:input=move |ev| {
                             let val = event_target_value(&ev);
@@ -205,14 +217,14 @@ pub fn thb_payment_form_view(
             // ── Section C: Refund Account ───────────────────────────────
             <div class="dep2-section">
                 <div class="dep2-section-title">
-                    "Refund Account"
+                    {t!(i18n, deposit.thb.refund_title)}
                 </div>
-                <p class="hint-desc">"Where should we send your refund after the event?"</p>
+                <p class="hint-desc">{t!(i18n, deposit.thb.refund_question)}</p>
 
                 <input
                     type="text"
                     class="form-input dep-input u-mt-xs"
-                    placeholder="Bank account number"
+                    placeholder=move || t_string!(i18n, deposit.thb.bank_account)
                     prop:value=move || bank_account_input.get()
                     on:input=move |ev| {
                         let val = event_target_value(&ev);
@@ -225,7 +237,7 @@ pub fn thb_payment_form_view(
                     <input
                         type="text"
                         class="form-input dep-input"
-                        placeholder="Bank name (e.g. KBank, SCB)"
+                        placeholder=move || t_string!(i18n, deposit.thb.bank_name)
                         prop:value=move || bank_name_input.get()
                         on:focus=move |_| set_show_bank_dropdown.set(true)
                         on:input=move |ev| {
@@ -282,7 +294,7 @@ pub fn thb_payment_form_view(
                 <input
                     type="text"
                     class="form-input dep-input u-mt-xs"
-                    placeholder="Account holder name"
+                    placeholder=move || t_string!(i18n, deposit.thb.account_name)
                     prop:value=move || account_name_input.get()
                     on:input=move |ev| {
                         let val = event_target_value(&ev);
@@ -304,10 +316,10 @@ pub fn thb_payment_form_view(
                     move |_| hus()
                 }
             >
-                "Submit Payment Slip"
+                {t!(i18n, deposit.thb.submit)}
             </button>
             <p class="thb-upload-disclaimer">
-                "Bank account, bank name, and account holder name are required for refund."
+                {t!(i18n, deposit.thb.required)}
             </p>
         </div>
     }
@@ -320,6 +332,7 @@ pub fn thb_payment_form_view(
 
 /// THB uploading spinner view.
 pub fn thb_uploading_view() -> AnyView {
+    let i18n = use_i18n();
     view! {
         <div class="dep2-card">
             <div class="dep2-confirming">
@@ -328,7 +341,7 @@ pub fn thb_uploading_view() -> AnyView {
                     <span class="dep2-confirming-dot"></span>
                     <span class="dep2-confirming-dot"></span>
                 </div>
-                <p class="hint-desc u-mt-xs">"Uploading your slip..."</p>
+                <p class="hint-desc u-mt-xs">{t!(i18n, deposit.thb.uploading)}</p>
             </div>
         </div>
     }
@@ -341,6 +354,7 @@ pub fn thb_uploading_view() -> AnyView {
 
 /// THB uploaded successfully view — auto-redirects to ticket page.
 pub fn thb_uploaded_view(attendee_id: &str, event_id: &str) -> AnyView {
+    let i18n = use_i18n();
     let aid = attendee_id.to_string();
     let eid = event_id.to_string();
     leptos::task::spawn_local(async move {
@@ -350,17 +364,19 @@ pub fn thb_uploaded_view(attendee_id: &str, event_id: &str) -> AnyView {
     view! {
         <div class="dep2-card">
             <div class="dep2-success-icon">"✓"</div>
-            <h2 class="dep2-card-title" style="text-align:center;margin-top:0.75rem">"Slip Submitted!"</h2>
+            <h2 class="dep2-card-title" style="text-align:center;margin-top:0.75rem">{t!(i18n, deposit.thb.submitted_title)}</h2>
             <p class="hint-desc" style="text-align:center">
-                "Your payment slip has been submitted for verification."
+                {t!(i18n, deposit.thb.submitted_body)}
             </p>
             <div style="text-align:center">
-                <crate::components::StatusBadge
-                    tone=crate::components::StatusTone::Pending
-                    label="Pending verification"
-                />
+                {move || view! {
+                    <crate::components::StatusBadge
+                        tone=crate::components::StatusTone::Pending
+                        label=t_string!(i18n, deposit.thb.pending)
+                    />
+                }}
             </div>
-            <p class="thb-success-redirect">"Redirecting to your ticket..."</p>
+            <p class="thb-success-redirect">{t!(i18n, deposit.thb.redirecting)}</p>
         </div>
     }
         .into_any()
@@ -376,6 +392,7 @@ pub fn thb_rejected_view(
     set_state: WriteSignal<DepositPageState>,
     set_payment_choice: WriteSignal<Option<PaymentChoice>>,
 ) -> AnyView {
+    let i18n = use_i18n();
     let _amount_thb = data.deposit_amount_thb;
     let data_clone = data.clone();
 
@@ -383,7 +400,7 @@ pub fn thb_rejected_view(
         <div class="dep2-card">
             <div class="dep2-deadline dep2-deadline--danger">
                 <p class="dep2-deadline-text">
-                    "Your slip was rejected. Please re-upload."
+                    {t!(i18n, deposit.thb.rejected)}
                 </p>
             </div>
 
@@ -394,7 +411,7 @@ pub fn thb_rejected_view(
                     set_state.set(DepositPageState::ChoosePayment(data_clone.clone()));
                 }
             >
-                "Re-upload Payment Slip"
+                {t!(i18n, deposit.thb.reupload)}
             </button>
         </div>
     }
@@ -415,6 +432,7 @@ pub fn thb_rejected_view(
 /// After successful sign-in, the user returns to the deposit page (via the
 /// URL they came from) and can retry the upload.
 pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
+    let i18n = use_i18n();
     let amount_thb = data.deposit_amount_thb;
 
     // Capture the current path + query string so we can return the user here
@@ -437,7 +455,7 @@ pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <h2 class="dep2-card-title">"Sign in required"</h2>
+                <h2 class="dep2-card-title">{t!(i18n, deposit.thb.auth_title)}</h2>
                 {if amount_thb > 0 {
                     view! {
                         <span class="badge badge-warning">
@@ -452,11 +470,11 @@ pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
             <div class="dep2-section">
                 <div class="dep2-deadline dep2-deadline--danger">
                     <p class="dep2-deadline-text">
-                        "Your session has expired. Please sign in again to upload your payment slip."
+                        {t!(i18n, deposit.thb.auth_expired)}
                     </p>
                 </div>
                 <p class="hint-desc u-mt-xs">
-                    "The deposit page can be viewed without signing in, but uploading a slip requires a verified session."
+                    {t!(i18n, deposit.thb.auth_explain)}
                 </p>
             </div>
 
@@ -464,9 +482,9 @@ pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
                 class="btn btn-primary btn-block u-mt-1rem"
                 href=login_href
             >
-                "Sign in to Continue"
+                {t!(i18n, deposit.thb.auth_cta)}
             </a>
         </div>
     }
-        .into_any()
+    .into_any()
 }

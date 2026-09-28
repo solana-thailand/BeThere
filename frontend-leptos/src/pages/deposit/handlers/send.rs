@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::{self, UsdcDepositRequest};
 use crate::components::{self as app_components, ToastType};
+use crate::i18n::{td_string, use_i18n};
 
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
@@ -19,7 +20,9 @@ pub fn make_send_deposit(
     set_toast: WriteSignal<Option<app_components::ToastMessage>>,
     params: DepositParamsSignal,
 ) -> impl Fn(String, String) + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move |wallet_name: String, public_key: String| {
+        let locale = i18n.get_locale_untracked();
         let current_state = state.get();
         let deposit_data = match &current_state {
             DepositPageState::WalletConnected(d, _, _) => d.clone(),
@@ -49,7 +52,7 @@ pub fn make_send_deposit(
                     log::error!("[deposit] USDC deposit initiate failed: {e}");
                     app_components::show_toast(
                         &set_toast,
-                        &format!("Failed to initiate deposit: {e}"),
+                        &format!("{} {e}", td_string!(locale, deposit.toast.initiate_failed)),
                         ToastType::Error,
                     );
                     return;
@@ -68,7 +71,7 @@ pub fn make_send_deposit(
                     log::error!("[deposit] failed to fetch TX from callback");
                     app_components::show_toast(
                         &set_toast,
-                        "Failed to build deposit transaction. Please try again.",
+                        td_string!(locale, deposit.toast.build_failed),
                         ToastType::Error,
                     );
                     return;
@@ -93,11 +96,13 @@ pub fn make_send_deposit(
             {
                 Ok(sim) if sim.ok => {}
                 Ok(sim) => {
-                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                    let err_msg = sim.error.unwrap_or_else(|| {
+                        td_string!(locale, deposit.toast.simulation_failed).to_string()
+                    });
                     log::error!("[deposit] simulation failed: {err_msg}");
                     app_components::show_toast(
                         &set_toast,
-                        &format!("Transaction would fail: {err_msg}"),
+                        &format!("{} {err_msg}", td_string!(locale, deposit.toast.would_fail)),
                         ToastType::Error,
                     );
                     return;
@@ -135,7 +140,7 @@ pub fn make_send_deposit(
                     log::error!("[deposit] wallet sign+send failed");
                     app_components::show_toast(
                         &set_toast,
-                        "Transaction failed. Please try again.",
+                        td_string!(locale, deposit.toast.tx_failed),
                         ToastType::Error,
                     );
                 }
