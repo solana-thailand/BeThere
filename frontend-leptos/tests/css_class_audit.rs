@@ -95,12 +95,10 @@ use std::path::{Path, PathBuf};
 /// only shrink.
 const KNOWN_UNSTYLED: &[&str] = &[
     "access-logistics-card",
-    "admin-actions-divider",
     "admin-content-inner",
     "admin-dep-credit-used",
     "admin-escrow",
     "admin-event-select",
-    "admin-events-page",
     "admin-info-card",
     "admin-info-card-body",
     "admin-info-card-header",

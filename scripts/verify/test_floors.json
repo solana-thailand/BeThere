@@ -16,6 +16,7 @@
   },
   "frontend": {
     "admin_duplicate_hint tests/admin_duplicate_hint.rs": 3,
+    "admin_organizers_label tests/admin_organizers_label.rs": 3,
     "admin_roster_rerender tests/admin_roster_rerender.rs": 3,
     "admin_slip_link tests/admin_slip_link.rs": 2,
     "admin_slip_request tests/admin_slip_request.rs": 2,

@@ -100,11 +100,18 @@ pub(super) fn render_stats(
                 // Progress bar
                 <div class="card mb-2">
                     <div class="admin-progress-header">
+                        // Named by its denominator: this card counts one track,
+                        // the one below counts every registrant. Side by side,
+                        // "81.2% (26/32)" and "37% (26/69)" read as a
+                        // contradiction (.plans/037 §4).
                         <span class="admin-progress-title">
-                            {format!("{} Progress", tab.label())}
+                            {format!("{} checked in", tab.label())}
                         </span>
                         <span class="admin-progress-pct">
-                            {format!("{tab_percentage:.1}% ({tab_checked_in} / {tab_total})")}
+                            {format!(
+                                "{tab_percentage:.1}% · {tab_checked_in} of {tab_total} {} registrants",
+                                tab.label().to_lowercase()
+                            )}
                         </span>
                     </div>
                     <div class="progress-bar">
@@ -291,7 +298,8 @@ pub(super) fn render_walkin_sync_result(result: Option<api::WalkinSyncResponse>)
     }
 }
 
-/// Render the check-in velocity neon progress bar (all tabs).
+/// Render the all-tracks check-in bar. Online registrants are in the
+/// denominator, so it is lower than the per-track card above it.
 pub(super) fn render_velocity(list: &[AttendeeListItem]) -> impl IntoView + use<> {
     let total = list.len();
     let checked_in = list.iter().filter(|a| a.checked_in_at.is_some()).count();
@@ -304,9 +312,11 @@ pub(super) fn render_velocity(list: &[AttendeeListItem]) -> impl IntoView + use<
         <div style="background: rgba(19, 20, 28, 0.6); border: 1px solid rgba(153, 69, 255, 0.25); border-radius: 14px; padding: 14px 18px; margin: 16px 0; backdrop-filter: blur(12px);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-weight: 700; color: #fff; font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
-                    <span style="color: #14F195;">"⚡"</span>" Check-in Velocity"
+                    <span style="color: #14F195;">"⚡"</span>" All tracks checked in"
                 </span>
-                <span style="font-weight: 800; color: #14F195; font-size: 0.88rem;">{pct}"% Checked In ("{checked_in}" / "{total}")"</span>
+                <span style="font-weight: 800; color: #14F195; font-size: 0.88rem;">
+                    {pct}"% · "{checked_in}" of "{total}" registrants, online included"
+                </span>
             </div>
             <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.08); border-radius: 8px; overflow: hidden;">
                 <div style=format!("width: {pct}%; height: 100%; background: linear-gradient(90deg, #9945FF, #14F195); border-radius: 8px; transition: width 0.4s ease;")></div>

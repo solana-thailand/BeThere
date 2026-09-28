@@ -532,24 +532,10 @@ pub fn Admin() -> impl IntoView {
 
                 // Dashboard content
                 <Show when=show_content fallback=|| view! { <div></div> }>
-                    // Action buttons row
+                    // Action buttons row: the two actions used at the door stay
+                    // visible; the rest sit behind "More" so eight buttons no
+                    // longer wrap into four rows on a phone (.plans/037 §3).
                     <div class="admin-actions-row">
-                        <button class="btn btn-outline btn-sm" on:click=handle_refresh>
-                            "Refresh"
-                        </button>
-                        <button
-                            class="btn btn-outline btn-sm"
-                            on:click=handle_flush_cache
-                            disabled=move || flushing_cache.get()
-                        >
-                            {move || {
-                                if flushing_cache.get() {
-                                    "Flushing...".to_string()
-                                } else {
-                                    "Flush Cache".to_string()
-                                }
-                            }}
-                        </button>
                         // QR generation + walk-in actions — only for in-person/hybrid events
                         <Show when=move || current_event_format.get().has_in_person() fallback=|| view! { <span></span> }>
                             <button
@@ -569,7 +555,27 @@ pub fn Admin() -> impl IntoView {
                         <button class="btn btn-outline btn-sm" on:click=handle_export_csv>
                             "Export CSV"
                         </button>
-                        // Cross-event audience export — deduped by email across ALL events.
+                        <details class="admin-actions-more">
+                            <summary class="btn btn-outline btn-sm">"More ▾"</summary>
+                            // Close the menu once an action is picked.
+                            <div class="admin-actions-menu" on:click=close_parent_details>
+                                <button class="btn btn-outline btn-sm" on:click=handle_refresh>
+                            "Refresh"
+                        </button>
+                                <button
+                            class="btn btn-outline btn-sm"
+                            on:click=handle_flush_cache
+                            disabled=move || flushing_cache.get()
+                        >
+                            {move || {
+                                if flushing_cache.get() {
+                                    "Flushing...".to_string()
+                                } else {
+                                    "Flush Cache".to_string()
+                                }
+                            }}
+                        </button>
+                                // Cross-event audience export — deduped by email across ALL events.
                         // Not gated by event format; works without an event selected.
                         <button
                             class="btn btn-outline btn-sm"
@@ -584,13 +590,12 @@ pub fn Admin() -> impl IntoView {
                                 }
                             }}
                         </button>
-                        <button class="btn btn-outline btn-sm" on:click=handle_select_all>
+                                <button class="btn btn-outline btn-sm" on:click=handle_select_all>
                             "Select All Pending"
                         </button>
-                        // Walk-in management — only for in-person/hybrid
+                                // Walk-in management — only for in-person/hybrid
                         <Show when=move || current_event_format.get().has_in_person() fallback=|| view! { <span></span> }>
-                            <span class="admin-actions-divider"></span>
-                            <button
+                                                        <button
                                 class="btn btn-outline btn-sm"
                                 on:click=handle_walkin_export
                                 disabled=move || walkin_exporting.get()
@@ -617,6 +622,8 @@ pub fn Admin() -> impl IntoView {
                                 }}
                             </button>
                         </Show>
+                            </div>
+                        </details>
                     </div>
 
                     // QR generation result
@@ -917,5 +924,17 @@ pub fn Admin() -> impl IntoView {
 
             <components::Toast toast_signal=toast />
         </div>
+    }
+}
+
+/// Close the `<details>` menu an action was picked from.
+fn close_parent_details(ev: web_sys::MouseEvent) {
+    use wasm_bindgen::JsCast;
+    if let Some(details) = ev
+        .current_target()
+        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+        .and_then(|el| el.closest("details").ok().flatten())
+    {
+        let _ = details.remove_attribute("open");
     }
 }

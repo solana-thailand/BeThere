@@ -345,6 +345,43 @@
     flex-wrap: wrap;
 }
 
+/* "More" menu for the secondary roster actions (.plans/037 §3). A native
+   <details>, so keyboard and screen readers get a disclosure for free. */
+.admin-actions-more {
+    position: relative;
+}
+
+.admin-actions-more > summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.admin-actions-more > summary::-webkit-details-marker {
+    display: none;
+}
+
+.admin-actions-menu {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 4px);
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.25rem;
+    min-width: 240px;
+    padding: 0.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.admin-actions-menu .btn {
+    justify-content: flex-start;
+    width: 100%;
+}
+
 .admin-force-regen-row {
     margin-top: 0.5rem;
     display: flex;
@@ -791,3 +828,102 @@
     }
 }
 
+
+/* Admin at phone width (.plans/037 §3). The nav groups wrap instead of
+   running off the edge, keyboard hints go (no Alt key on a phone), and every
+   tap target is at least 44px. */
+@media (max-width: 767px) {
+    .admin-sidebar-group {
+        flex-wrap: wrap;
+    }
+
+    .admin-sidebar-kbd {
+        display: none;
+    }
+
+    /* Chips, not a list: the desktop full-width rule would put each item
+       on its own row once the groups wrap. */
+    .admin-sidebar-item {
+        min-height: 44px;
+    }
+
+    .admin-sidebar-group .admin-sidebar-item {
+        width: auto;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Roster row: name on its own line after the checkbox, badges wrap below
+       it. A single nowrap row starved the name to zero width. */
+    .attendee-row-top {
+        flex-wrap: wrap;
+    }
+
+    .attendee-name {
+        flex-basis: calc(100% - 32px);
+        margin-right: 0;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    /* Actions wrap from the left. `flex-end` without wrap pushed the first
+       button off the card's left edge. */
+    .attendee-actions {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+
+    .attendee-actions .btn,
+    .attendee-actions .admin-answer-picker {
+        min-height: 44px;
+        margin-left: 0;
+    }
+
+    /* 44px hit area around the 22px box without changing how it looks. */
+    .attendee-checkbox {
+        position: relative;
+    }
+
+    .attendee-checkbox::after {
+        content: "";
+        position: absolute;
+        inset: -11px;
+    }
+
+    /* The menu spans the toolbar instead of hanging off its summary, which
+       sits at the right of the row and pushed the menu past the edge. */
+    .admin-actions-row {
+        position: relative;
+    }
+
+    .admin-actions-more {
+        position: static;
+    }
+
+    .admin-actions-menu {
+        left: 0;
+        right: 0;
+        min-width: 0;
+    }
+
+    .filter-pill {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    /* "Admin Dashboard" truncated to "Admin Dashb…"; the active Admin nav
+       icon and the section heading already say where you are. */
+    .header-page-title {
+        display: none;
+    }
+
+    .header-nav-link {
+        min-width: 44px;
+        min-height: 44px;
+        justify-content: center;
+    }
+
+    .header-sign-out {
+        min-width: 44px;
+    }
+}

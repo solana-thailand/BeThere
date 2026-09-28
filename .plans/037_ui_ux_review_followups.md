@@ -83,20 +83,48 @@ Done when:
 
 ## 3. Admin on mobile (390 px)
 
-- [ ] The header title and nav labels are not truncated.
-- [ ] Event card: fold its 4 buttons into primary actions plus an overflow
-  menu.
-- [ ] Attendee toolbar: primary actions (Generate QR Codes, Export CSV) plus
-  a "···" menu.
-- [ ] Attendee row: primary action plus a menu.
-- [ ] Touch targets are ≥ 44 px, with no horizontal scroll.
+- [x] The header title is hidden at ≤480 px (the active Admin icon says where
+  you are). Nav links and sign-out are ≥44 px.
+- [x] The sidebar nav wraps as chips instead of running off the edge
+  ("Cancellat…"). The `Alt+N` hints are hidden on phones.
+- [x] Event card: the actions flow as a wrapping row (they were 4 full-width
+  rows). List cards had the title squeezed and the actions off-screen; they
+  now wrap under the title.
+- [x] Attendee toolbar: Generate QR Codes + Export CSV, then a `<details>`
+  "More ▾" menu (Refresh, Flush Cache, Export Audience, Select All Pending,
+  walk-in export/sync). The menu closes on pick and spans the row on phones.
+- [x] Attendee row: fixes, not a menu.
+  - The name was starved to zero width; it now has its own line and wraps.
+  - The badges wrap.
+  - The actions wrap left-aligned; with `flex-end` they had overflowed off
+    the card's left edge.
+  - All actions are ≥44 px. The checkbox's hit area grows to 44 px through
+    `::after`, with no visual change.
+  - Why not a menu: all row actions stay one tap away. A menu for Delete may
+    still be worth it (owner call).
+- [x] The filter pills are ≥44 px.
+- Verified (headless Chrome, local `wrangler dev`, hybrid event, 69
+  attendees):
+  - 390×844, Events and In-Person views: no truncated text, no horizontal
+    scroll, no element past the viewport, and 0 tap targets under 44 px apart
+    from the 22 px checkbox visual, whose extended hit area was confirmed with
+    `elementFromPoint` ±8 px.
+  - 1280×900: no regressions.
 
 ## 4. Admin information design (desktop)
 
-- [ ] Label the two progress denominators, or merge them.
-- [ ] Show the selected event once.
-- [ ] Move the SHEET ID behind a copy button.
-- [ ] ORGANIZERS shows names, not a bare count.
+- [x] The metrics are named by their denominator:
+  - "In-Person checked in · 26 of 32 in-person registrants";
+  - "All tracks checked in · 26 of 69 registrants, online included" (was
+    "Check-in Velocity").
+- [x] The selected event shows once: the list skips it, since the detail
+  card is above.
+- [x] The raw SHEET ID is gone. The detail card has "Copy sheet ID" (the
+  sidebar already opens the sheet); the list cards drop the field.
+- [x] ORGANIZERS shows up to two emails and "+N more"
+  (`organizers_label`, `tests/admin_organizers_label.rs`).
+- Noticed, not changed: the event cards render `utils::escape_html(name)`
+  as a text node, so a name containing `&` shows `&amp;`.
 
 ## 5. Design tokens
 
