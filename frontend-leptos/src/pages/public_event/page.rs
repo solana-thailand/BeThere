@@ -499,21 +499,11 @@ fn render_loaded_event(
     let community_links = data.community_links.clone();
 
     // Deposit label for registration form checkbox
-    let thb = data.deposit_amount_thb;
-    let deposit_label = if escrow_closed {
-        if thb > 0 {
-            format!("{thb} Baht")
-        } else {
-            format_usdc(data.deposit_amount_usdc)
-        }
-    } else if data.deposit_amount_usdc > 0 && thb > 0 {
-        let usdc = format_usdc(data.deposit_amount_usdc);
-        format!("{usdc} (~{thb} Baht)")
-    } else if data.deposit_amount_usdc > 0 {
-        format_usdc(data.deposit_amount_usdc)
-    } else {
-        thb.to_string()
-    };
+    let deposit_label = crate::utils::money::deposit_consent_label(
+        data.deposit_amount_thb,
+        data.deposit_amount_usdc,
+        escrow_closed,
+    );
 
     let show_reg_form = !event_completed.get();
     let require_contact = data.require_contact_info;

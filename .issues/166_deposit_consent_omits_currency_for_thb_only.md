@@ -1,6 +1,6 @@
 # 166: The deposit consent omits the currency for THB-only events
 
-**Status:** open (2026-09-29). Found by session `event-checkin-f6` while checking `.issues/161` on staging `53de706d`. No code change yet; it is outside that change.
+**Status:** fixed on develop (2026-09-29, session `event-checkin-31`). Staging page check still to do. Found by session `event-checkin-f6` while checking `.issues/161` on staging `53de706d`.
 
 ## What happens
 
@@ -24,3 +24,12 @@ Its last arm, reached when `deposit_amount_usdc == 0` and escrow is open, is
 Render `"{thb} Baht"` in that arm too (owner rule 2026-09-28: lead with
 THB). Add a test that every `deposit_label` arm with a non-zero amount names
 a currency. Then open the page on staging for a THB-only event.
+
+## Resolution
+
+- The label moved into `deposit_consent_label` in
+  `frontend-leptos/src/utils/money.rs`, a pure function. The THB-only, escrow-open
+  arm now renders `"{thb} Baht"`, and the USDC arms now say `USDC`.
+- `frontend-leptos/tests/deposit_consent_names_currency.rs` covers every arm
+  (4 tests; the floor was ratcheted).
+- Still to do: open a THB-only event page on staging after the next staging deploy.
