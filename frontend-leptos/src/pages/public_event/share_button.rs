@@ -38,7 +38,7 @@ pub fn share_button(
                     });
                 }
             >
-                <Icon icon=IconName::Link class="icon-sm" />" Share Event ↗"
+                <Icon icon=IconName::Link class="icon-sm" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.share_event))}" ↗"
             </button>
             <a
                 href=google_cal_url
@@ -46,12 +46,12 @@ pub fn share_button(
                 rel="noopener noreferrer"
                 class="btn btn-outline btn-sm"
             >
-                "📅 Add to Calendar ↗"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.add_to_calendar))}
             </a>
             {move || {
                 if share_copied.get() {
                     view! {
-                        <span class="pe-share-copied">"Link copied!"</span>
+                        <span class="pe-share-copied">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.link_copied))}</span>
                     }.into_any()
                 } else {
                     ().into_any()

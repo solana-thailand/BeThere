@@ -1,4 +1,5 @@
 use crate::api::EventFormat;
+use crate::i18n::{Locale, td_string};
 use leptos::prelude::*;
 use leptos_router::params::Params;
 use wasm_bindgen::prelude::*;
@@ -119,16 +120,20 @@ pub enum RegState {
     Error(String),
 }
 
+/// A validation message in the reader's language. A catalog lookup rather
+/// than a `String`, so a message already on screen follows a language switch.
+pub type FieldMsg = fn(Locale) -> &'static str;
+
 /// Inline field validation errors.
 #[derive(Clone, Debug, Default)]
 pub struct FieldErrors {
-    pub name: Option<String>,
-    pub email: Option<String>,
-    pub contact_channel: Option<String>,
-    pub contact_handle: Option<String>,
-    pub deposit_agreed: Option<String>,
-    pub consent_given: Option<String>,
-    pub photo_consent_given: Option<String>,
+    pub name: Option<FieldMsg>,
+    pub email: Option<FieldMsg>,
+    pub contact_channel: Option<FieldMsg>,
+    pub contact_handle: Option<FieldMsg>,
+    pub deposit_agreed: Option<FieldMsg>,
+    pub consent_given: Option<FieldMsg>,
+    pub photo_consent_given: Option<FieldMsg>,
 }
 
 // ---------------------------------------------------------------------------
@@ -465,10 +470,15 @@ pub fn format_event_date(ms: i64) -> String {
     )
 }
 
-pub fn format_event_time(ms: i64) -> String {
+/// Clock time of `ms`: `1:00 PM` in EN, `13:00` in TH (24-hour is the Thai
+/// norm; the caller appends the catalog's `time_unit`, "น.").
+pub fn format_event_time(ms: i64, locale: Locale) -> String {
     let date = js_sys::Date::new(&(ms as f64).into());
     let h = date.get_hours();
     let m = date.get_minutes();
+    if locale == Locale::th {
+        return format!("{h:02}:{m:02}");
+    }
     let suffix = if h >= 12 { "PM" } else { "AM" };
     let h12 = if h == 0 {
         12
@@ -480,33 +490,40 @@ pub fn format_event_time(ms: i64) -> String {
     format!("{h12}:{m:02} {suffix}")
 }
 
-pub fn format_countdown(ms: i64) -> String {
+/// Time left until the start: `3d 4h 5m` (EN), `3 วัน 4 ชม. 5 นาที` (TH).
+pub fn format_countdown(ms: i64, locale: Locale) -> String {
     if ms <= 0 {
         return String::new();
     }
+    let d = td_string!(locale, event.countdown_day);
+    let h = td_string!(locale, event.countdown_hour);
+    let m = td_string!(locale, event.countdown_min);
+    let sec = td_string!(locale, event.countdown_sec);
     let secs = ms / 1000;
     let days = secs / 86400;
     let hours = (secs % 86400) / 3600;
     let mins = (secs % 3600) / 60;
     let s = secs % 60;
     if days > 0 {
-        format!("{days}d {hours}h {mins}m")
+        format!("{days}{d} {hours}{h} {mins}{m}")
     } else if hours > 0 {
-        format!("{hours}h {mins}m {s}s")
+        format!("{hours}{h} {mins}{m} {s}{sec}")
     } else if mins > 0 {
-        format!("{mins}m {s}s")
+        format!("{mins}{m} {s}{sec}")
     } else {
-        format!("{s}s")
+        format!("{s}{sec}")
     }
 }
 
-pub fn format_refund_deadline(hours: u32) -> String {
+pub fn format_refund_deadline(hours: u32, locale: Locale) -> String {
+    let unit_hours = td_string!(locale, event.refund_hours);
+    let unit_days = td_string!(locale, event.refund_days);
+    let one_day = td_string!(locale, event.refund_one_day);
     match hours {
-        0..=23 => format!("{hours} hours"),
-        24 => "1 day".to_string(),
-        25..=47 => format!("1 day {} hours", hours % 24),
-        48..=167 => format!("{} days", hours / 24),
-        168 => "1 week".to_string(),
-        _ => format!("{} days", hours / 24),
+        0..=23 => format!("{hours} {unit_hours}"),
+        24 => one_day.to_string(),
+        25..=47 => format!("{one_day} {} {unit_hours}", hours % 24),
+        168 => td_string!(locale, event.refund_one_week).to_string(),
+        _ => format!("{} {unit_days}", hours / 24),
     }
 }

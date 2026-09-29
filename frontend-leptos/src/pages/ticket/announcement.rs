@@ -126,7 +126,7 @@ pub fn announcement_section(note: String) -> impl IntoView {
             <div class="ticket-announcement-inner">
                 <div class="ticket-announcement-title">
                     <Icon icon=IconName::Info class="icon-sm" />
-                    <span>"From the organizer"</span>
+                    <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.announcement_title))}</span>
                 </div>
                 <p class="ticket-announcement-body">{body}</p>
             </div>

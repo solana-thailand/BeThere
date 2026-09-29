@@ -39,6 +39,7 @@ pub mod solana_escrow;
 // Public so `worker/tests/security_spike_alert.rs` can drive the detector.
 pub mod spike;
 mod state;
+pub mod turnstile;
 // Public for the same reason as `db` above: `worker/tests/r2_cache_policy.rs`
 // drives `Visibility` and `if_none_match_hits` directly (`.issues/114`).
 pub mod slip_vision;
@@ -51,6 +52,8 @@ pub use durable_objects::EventDurableObject;
 pub use middleware::headers::SECURITY_HEADERS;
 // Public so `tests/public_cache_policy.rs` can drive the public-cache rule (.plans/028 W4).
 pub use middleware::cache::{CACHE_PRIVATE_NO_STORE, with_public_cache};
+// Public so `tests/edge_cache_policy.rs` can drive the edge-cache rules (.plans/028 W4).
+pub use middleware::edge_cache::{edge_cache_key, is_edge_storable};
 
 use std::sync::OnceLock;
 

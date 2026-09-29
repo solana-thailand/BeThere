@@ -2,6 +2,7 @@
 
 pub mod deposit_copy;
 pub mod money;
+pub mod poll_policy;
 pub mod promptpay;
 pub mod qr_gen;
 
@@ -205,48 +206,28 @@ pub fn get_participation_badge(participation_type: &str) -> ParticipationBadge {
     }
 }
 
-/// Build a JS object from key-value string pairs.
-///
-/// Helper to avoid repeated `Reflect::set` calls when constructing
-/// JS options objects for `toLocaleString` etc.
-fn js_object(pairs: &[(&str, &str)]) -> js_sys::Object {
-    let obj = js_sys::Object::new();
-    for (key, val) in pairs {
-        let _ = js_sys::Reflect::set(
-            &obj,
-            &wasm_bindgen::JsValue::from_str(key),
-            &wasm_bindgen::JsValue::from_str(val),
-        );
-    }
-    obj
+/// Whether a keydown should activate a `role="button"` element: Enter or
+/// Space, as a native `<button>` does (.plans/037 §6).
+pub fn is_activation_key(ev: &web_sys::KeyboardEvent) -> bool {
+    matches!(ev.key().as_str(), "Enter" | " ")
 }
 
-/// Format an ISO 8601 timestamp to a human-readable locale string.
+/// Format an ISO 8601 timestamp like [`format_event_datetime`]:
+/// `29 Sep 2026, 13:00`, in the attendee's language.
 ///
 /// Returns "N/A" for empty strings and the raw input if parsing fails.
 pub fn format_timestamp(iso: &str) -> String {
     if iso.is_empty() {
         return "N/A".to_string();
     }
-
-    let js_date = js_sys::Date::new_with_year_month_day_hr_min_sec(0, 0, 0, 0, 0, 0);
-    js_date.set_time(js_sys::Date::parse(iso));
-    if js_date.get_time().is_nan() {
+    let ms = js_sys::Date::parse(iso);
+    if ms.is_nan() {
         return iso.to_string();
     }
-
-    let opts = js_object(&[
-        ("year", "numeric"),
-        ("month", "short"),
-        ("day", "numeric"),
-        ("hour", "2-digit"),
-        ("minute", "2-digit"),
-    ]);
-
-    js_date
-        .to_locale_string("en-US", &opts)
-        .as_string()
-        .unwrap_or_else(|| iso.to_string())
+    match format_event_datetime(ms as i64) {
+        formatted if formatted.is_empty() => iso.to_string(),
+        formatted => formatted,
+    }
 }
 
 /// Format a relative time string (e.g. "5m ago", "2h ago").
@@ -360,6 +341,11 @@ pub fn is_retrospective(participation_type: &str) -> bool {
 /// renders the browser's default: `9/27/2026, 1:00:00 PM`. Seconds are noise on
 /// an event date, and `9/27` is ambiguous to the Thai-majority audience this is
 /// written for — `en-GB` puts the day first and names the month.
+///
+/// These three helpers format in the attendee's language
+/// (`crate::locale::current_date_tag`): `en-GB`, or `th-TH` with Thai month
+/// names and the Buddhist-era year. Read inside a view closure, they follow a
+/// language switch.
 pub fn format_event_datetime(ms: i64) -> String {
     if ms <= 0 {
         return String::new();
@@ -377,8 +363,31 @@ pub fn format_event_datetime(ms: i64) -> String {
         let _ = js_sys::Reflect::set(&opts, &key.into(), &value.into());
     }
     let _ = js_sys::Reflect::set(&opts, &"hour12".into(), &false.into());
-    d.to_locale_string("en-GB", &opts)
+    d.to_locale_string(crate::locale::current_date_tag(), &opts)
         .as_string()
+        .unwrap_or_default()
+}
+
+/// The viewer's timezone at `ms`, short form (`GMT+7`), for labelling event
+/// times: they render in the viewer's local zone, which a visitor abroad
+/// cannot otherwise tell (.plans/038 P2-b). Empty when `Intl` has no name.
+pub fn local_tz_label(ms: i64) -> String {
+    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+    d.set_time(ms as f64);
+    let opts = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(&opts, &"timeZoneName".into(), &"short".into());
+    let formatter = js_sys::Intl::DateTimeFormat::new(&js_sys::Array::of1(&"en-GB".into()), &opts);
+    formatter
+        .format_to_parts(&d)
+        .iter()
+        .find(|part| {
+            js_sys::Reflect::get(part, &"type".into())
+                .ok()
+                .and_then(|t| t.as_string())
+                .is_some_and(|t| t == "timeZoneName")
+        })
+        .and_then(|part| js_sys::Reflect::get(&part, &"value".into()).ok())
+        .and_then(|value| value.as_string())
         .unwrap_or_default()
 }
 
@@ -397,7 +406,7 @@ pub fn format_event_day_parts(ms: i64) -> (String, String) {
     let opts = js_sys::Object::new();
     let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
     let month = d
-        .to_locale_string("en-GB", &opts)
+        .to_locale_string(crate::locale::current_date_tag(), &opts)
         .as_string()
         .unwrap_or_default();
     (d.get_date().to_string(), month.to_uppercase())
@@ -413,7 +422,7 @@ pub fn format_event_day(ms: i64) -> String {
     let _ = js_sys::Reflect::set(&opts, &"year".into(), &"numeric".into());
     let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
     let _ = js_sys::Reflect::set(&opts, &"day".into(), &"numeric".into());
-    d.to_locale_string("en-GB", &opts)
+    d.to_locale_string(crate::locale::current_date_tag(), &opts)
         .as_string()
         .unwrap_or_default()
 }

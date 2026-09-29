@@ -41,7 +41,7 @@
 
 ```bash
 # 1. Build frontend
-cd frontend-leptos && trunk build && cd ..
+cd frontend-leptos && bash build.sh && cd ..
 
 # 2. Start worker dev server
 cd worker && ./deploy.sh dev

@@ -175,7 +175,8 @@
 }
 
 .ticket-ticker-step--active {
-    color: var(--accent);
+    /* --accent is 4.2:1 on this tint mid-pulse; the lighter step clears 4.5. */
+    color: var(--accent-hover);
     background: rgba(255, 92, 57, 0.08);
     opacity: 1;
     animation: ticker-pulse 1.8s ease-in-out infinite;
@@ -425,7 +426,7 @@
 }
 .ticket-event-name {
     margin: 0 0 0.25rem;
-    font-size: 1.15rem;
+    font-size: var(--font-size-2);
     line-height: 1.3;
     color: var(--text-primary);
 }

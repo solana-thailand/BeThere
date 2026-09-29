@@ -56,3 +56,23 @@ fn every_security_header_value_fits_on_one_headers_line() {
         assert!(!value.contains("  "), "{name} has a doubled space");
     }
 }
+
+/// Plan 029 (8.23): scripts run only from files. index.html's inline scripts
+/// are moved out at build time (`frontend-leptos/externalize_inline_scripts.py`),
+/// so `script-src` needs no `'unsafe-inline'`; putting it back would re-open
+/// injected-markup script execution.
+#[test]
+fn script_src_does_not_allow_inline_scripts() {
+    let csp = SECURITY_HEADERS
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("content-security-policy"))
+        .map(|(_, value)| *value)
+        .expect("SECURITY_HEADERS has a CSP");
+    let script_src = csp
+        .split(';')
+        .map(str::trim)
+        .find(|d| d.starts_with("script-src"))
+        .expect("CSP has script-src");
+    assert!(!script_src.contains("'unsafe-inline'"), "{script_src}");
+    assert!(!script_src.contains("'unsafe-eval'"), "{script_src}");
+}

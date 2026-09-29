@@ -29,7 +29,6 @@ pub struct TicketViewData {
     // Check-in detail
     pub checked_in_at: Option<String>,
     pub checked_in_by: Option<String>,
-    pub status_detail: String,
 
     // Claim
     pub claim_href: String,
@@ -89,30 +88,6 @@ pub struct TicketViewData {
 impl TicketViewData {
     /// Build from API response data.
     pub fn from_data(data: &api::AttendeeData) -> Self {
-        let status_detail = if data.is_checked_in {
-            let ts = data
-                .attendee
-                .checked_in_at
-                .as_deref()
-                .map(utils::format_timestamp)
-                .unwrap_or_default();
-            let by = data
-                .attendee
-                .checked_in_by
-                .as_ref()
-                .map(|by| {
-                    if by.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" by {}", utils::escape_html(by))
-                    }
-                })
-                .unwrap_or_default();
-            format!("{ts}{by}")
-        } else {
-            String::new()
-        };
-
         let claim_href = data
             .attendee
             .claim_token
@@ -154,7 +129,6 @@ impl TicketViewData {
             cluster: data.cluster.clone(),
             checked_in_at: data.attendee.checked_in_at.clone(),
             checked_in_by: data.attendee.checked_in_by.clone(),
-            status_detail,
             claim_href,
             has_claim,
             deposit_enabled: data.deposit_enabled,
@@ -188,5 +162,16 @@ impl TicketViewData {
             community_links: data.community_links.clone(),
             calendar_subscribe_url: data.calendar_subscribe_url.clone(),
         }
+    }
+}
+
+/// An ISO check-in timestamp in the attendee's language (`utils` owns the
+/// format). Unparseable input is shown as it came. Call it inside a view
+/// closure so it re-renders on a language switch.
+pub fn format_check_in_time(iso: &str) -> String {
+    let ms = js_sys::Date::parse(iso);
+    match ms.is_nan() {
+        true => iso.to_string(),
+        false => utils::format_event_datetime(ms as i64),
     }
 }

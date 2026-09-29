@@ -13,6 +13,7 @@ use leptos::portal::Portal;
 use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 
 #[wasm_bindgen(module = "/js/solana_wallet.js")]
@@ -54,27 +55,21 @@ const KNOWN_WALLETS: [(&str, &str); 3] = [
 /// user actually has, so the raw name means nothing to them and is relabelled.
 const MWA_WALLET: &str = "Mobile Wallet Adapter";
 
-/// User-facing name for a Wallet Standard registry entry.
-fn wallet_label(name: &str) -> &str {
-    match name {
-        MWA_WALLET => "Solana Wallet App",
-        other => other,
-    }
-}
-
-/// Secondary line under the wallet name, where the name alone is not enough.
-fn wallet_hint(name: &str) -> Option<&'static str> {
-    match name {
-        MWA_WALLET => Some("Opens Phantom, Solflare or Seed Vault"),
-        _ => None,
-    }
-}
-
 /// Name + icon cell shared by the connect and install rows.
+///
+/// A wallet's own name is shown as registered (a brand). Only the Mobile
+/// Wallet Adapter entry is relabelled, with a hint line under it, because its
+/// registry name means nothing to the user.
 fn wallet_identity(name: &str) -> AnyView {
     let icon_name = crate::icons::wallet_icon_name(name);
-    let label = wallet_label(name).to_string();
-    let hint = wallet_hint(name);
+    let is_mwa = name == MWA_WALLET;
+    let label = match is_mwa {
+        true => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.mwa_label)).into_any(),
+        false => name.to_string().into_any(),
+    };
+    let hint = is_mwa.then_some(crate::locale::tr(|l| {
+        crate::i18n::td_string!(l, wallet.mwa_hint)
+    }));
     view! {
         <span style="display: flex; align-items: center; gap: 12px;">
             <span style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(255,255,255,0.06); border-radius: 10px;">
@@ -110,7 +105,7 @@ fn wallet_connect_row(name: &str, connect: impl Fn(String) + 'static) -> AnyView
             on:click=move |_| connect(name_owned.clone())
         >
             {wallet_identity(name)}
-            <span class="siws-badge-installed">"Connect →"</span>
+            <span class="siws-badge-installed">{t!(use_i18n(), wallet.connect)}</span>
         </div>
     }
     .into_any()
@@ -129,7 +124,7 @@ fn wallet_install_row(name: &str, download_url: &str) -> AnyView {
                 class="siws-badge-install"
                 on:click=move |e| e.stop_propagation()
             >
-                "Get Extension ↗"
+                {t!(use_i18n(), wallet.get_extension)}
             </a>
         </div>
     }
@@ -178,7 +173,7 @@ fn wallet_deep_link_row(name: &str, base: &str) -> Option<AnyView> {
         view! {
             <a class="siws-wallet-option" href=url style="text-decoration: none;">
                 {wallet_identity(name)}
-                <span class="siws-badge-install">"Open App ↗"</span>
+                <span class="siws-badge-install">{t!(use_i18n(), wallet.open_app)}</span>
             </a>
         }
         .into_any(),
@@ -189,7 +184,7 @@ fn wallet_deep_link_row(name: &str, base: &str) -> Option<AnyView> {
 fn deep_link_caption() -> AnyView {
     view! {
         <p style="margin: 8px 0 0; font-size: 0.8rem; color: #94a3b8; line-height: 1.45;">
-            "Or open this page inside your wallet app and sign in from there:"
+            {t!(use_i18n(), wallet.deep_link_caption)}
         </p>
     }
     .into_any()
@@ -197,12 +192,13 @@ fn deep_link_caption() -> AnyView {
 
 /// Shown when nothing connectable was found, so the modal is never empty.
 fn no_wallet_row(mobile: bool) -> AnyView {
-    let msg = match mobile {
-        true => {
-            "No Solana wallet found in this browser. Open this page from inside              your wallet app's built-in browser to sign in."
-        }
-        false => "No Solana wallet detected. Install one and refresh the page.",
-    };
+    let msg =
+        match mobile {
+            true => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.no_wallet_mobile))
+                .into_any(),
+            false => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.no_wallet_desktop))
+                .into_any(),
+        };
     view! {
         <div
             class="siws-wallet-option"
@@ -212,6 +208,17 @@ fn no_wallet_row(mobile: bool) -> AnyView {
         </div>
     }
     .into_any()
+}
+
+/// Why a wallet sign-in failed. Typed so it renders in the reader's language;
+/// the wallet name is a brand and is shown as registered.
+#[derive(Clone)]
+enum WalletError {
+    SigningFailed,
+    VerifyFailed,
+    NonceFailed,
+    ConnectCancelled(String),
+    ConnectFailed(String),
 }
 
 /// Which SIWS flow the button performs.
@@ -244,13 +251,14 @@ pub fn WalletSignInButton(
     /// Inline style applied to the trigger button.
     #[prop(optional, into)]
     style: Option<String>,
-    /// Trigger button label (default: "Sign in with Solana Wallet").
+    /// Trigger button label (default: the catalog's "Sign in with Solana
+    /// Wallet", in the reader's language).
     #[prop(optional, into)]
-    label: Option<String>,
+    label: Option<Signal<&'static str>>,
 ) -> impl IntoView {
     let btn_class = class.unwrap_or_else(|| "btn-google btn-solana-wallet".to_string());
     let btn_style = style.unwrap_or_default();
-    let btn_label = label.unwrap_or_else(|| "Sign in with Solana Wallet".to_string());
+    let i18n = use_i18n();
     let show_icon = btn_class.contains("btn-solana-wallet");
     let endpoint = match flow {
         WalletFlow::Login => "/api/auth/wallet/verify",
@@ -258,7 +266,7 @@ pub fn WalletSignInButton(
     };
     let (show_modal, set_show_modal) = signal(false);
     let (loading, set_loading) = signal(false);
-    let (error_msg, set_error_msg) = signal(None::<String>);
+    let (error_msg, set_error_msg) = signal(None::<WalletError>);
     let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
 
     // Detect wallets on mount. Seed synchronously, then await the polling
@@ -337,9 +345,7 @@ pub fn WalletSignInButton(
                                     if signature.is_empty()
                                         || signature.contains("__wallet_error__")
                                     {
-                                        set_error_msg.set(Some(
-                                            "Message signing was cancelled or failed.".into(),
-                                        ));
+                                        set_error_msg.set(Some(WalletError::SigningFailed));
                                         set_loading.set(false);
                                         return;
                                     }
@@ -364,32 +370,41 @@ pub fn WalletSignInButton(
                                             return;
                                         }
                                         _ => {
-                                            set_error_msg
-                                                .set(Some("Wallet verification failed.".into()));
+                                            set_error_msg.set(Some(WalletError::VerifyFailed));
                                         }
                                     }
                                 }
                             }
                             _ => {
-                                set_error_msg.set(Some("Failed to request wallet nonce.".into()));
+                                set_error_msg.set(Some(WalletError::NonceFailed));
                             }
                         }
                     } else {
-                        set_error_msg.set(Some(format!(
-                            "{wallet_name} connection failed or cancelled."
-                        )));
+                        set_error_msg.set(Some(WalletError::ConnectCancelled(wallet_name)));
                     }
                 }
                 Err(e) => {
                     log::error!("[wallet_signin] connect error for {wallet_name}: {e:?}");
-                    set_error_msg.set(Some(format!(
-                        "Could not connect to {wallet_name}. Please make sure it is installed."
-                    )));
+                    set_error_msg.set(Some(WalletError::ConnectFailed(wallet_name)));
                 }
             }
             set_loading.set(false);
         });
     };
+
+    // Escape closes the wallet dialog; registered only while it is open.
+    Effect::new(move |_| {
+        if !show_modal.get() {
+            return;
+        }
+        let cleanup =
+            window_event_listener(leptos::ev::keydown, move |ev: web_sys::KeyboardEvent| {
+                if ev.key() == "Escape" {
+                    set_show_modal.set(false);
+                }
+            });
+        on_cleanup(move || cleanup.remove());
+    });
 
     view! {
         <Show
@@ -398,7 +413,8 @@ pub fn WalletSignInButton(
                 view! {
                     <div class="loading visible">
                         <span class="spinner"></span>
-                        " Connecting Solana Wallet..."
+                        " "
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.connecting))}
                     </div>
                 }
             }
@@ -412,7 +428,10 @@ pub fn WalletSignInButton(
                 }
             >
                 {show_icon.then(|| view! { <span inner_html=solana_icon()></span> })}
-                {btn_label.clone()}
+                {match label {
+                    Some(custom) => custom.into_any(),
+                    None => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.sign_in)).into_any(),
+                }}
             </button>
         </Show>
 
@@ -423,7 +442,18 @@ pub fn WalletSignInButton(
             <div class="error-msg visible" role="alert" aria-live="assertive" style="margin-top: 12px;">
                 <Icon icon=IconName::Denied class="icon-md icon-danger" />
                 " "
-                {move || error_msg.get().unwrap_or_default()}
+                {move || match error_msg.get() {
+                    Some(WalletError::SigningFailed) => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.err_sign)).into_any(),
+                    Some(WalletError::VerifyFailed) => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.err_verify)).into_any(),
+                    Some(WalletError::NonceFailed) => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.err_nonce)).into_any(),
+                    Some(WalletError::ConnectCancelled(wallet)) => {
+                        t!(i18n, wallet.err_connect_cancelled, wallet).into_any()
+                    }
+                    Some(WalletError::ConnectFailed(wallet)) => {
+                        t!(i18n, wallet.err_connect, wallet).into_any()
+                    }
+                    None => ().into_any(),
+                }}
             </div>
         </Show>
 
@@ -438,17 +468,21 @@ pub fn WalletSignInButton(
                 >
                     <div
                         class="siws-modal-card"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.modal_title))
                         on:click=move |e| e.stop_propagation()
                     >
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <span inner_html=solana_icon()></span>
                                 <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #fff; letter-spacing: -0.01em;">
-                                    "Connect Wallet"
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.modal_title))}
                                 </h3>
                             </div>
                             <button
                                 style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: all 0.15s;"
+                                aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, common.close))
                                 on:click=move |_| set_show_modal.set(false)
                             >
                                 "✕"
@@ -456,7 +490,7 @@ pub fn WalletSignInButton(
                         </div>
 
                         <p style="color: #94a3b8; font-size: 0.88rem; line-height: 1.5; margin-top: 0; margin-bottom: 24px;">
-                            "Select your Solana wallet to sign in securely with Sign-In With Solana (SIWS)."
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.modal_desc))}
                         </p>
 
                         <div style="display: flex; flex-direction: column; gap: 12px;">

@@ -1,4 +1,3 @@
-use super::capacity_indicator::capacity_indicator;
 use super::deposit_section::deposit_section;
 use super::details_card::details_card;
 use super::event_hero::event_hero;
@@ -6,6 +5,7 @@ use super::registered_state::registered_state;
 use super::registration_form::registration_form;
 use super::share_button::share_button;
 use super::types::*;
+use crate::i18n::{t, t_string, td_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 use leptos_meta::{Meta, Title};
@@ -13,6 +13,7 @@ use leptos_router::hooks::use_params;
 
 #[allow(non_snake_case)]
 pub fn PublicEvent() -> impl IntoView {
+    let i18n = use_i18n();
     let params = use_params::<PublicEventParams>();
 
     // Reactive state
@@ -34,7 +35,8 @@ pub fn PublicEvent() -> impl IntoView {
                     set_countdown.set(String::new());
                     set_countdown_start_ms.set(None);
                 } else {
-                    set_countdown.set(format_countdown(remaining));
+                    // Re-rendered every second, so a language switch shows within 1 s.
+                    set_countdown.set(format_countdown(remaining, i18n.get_locale_untracked()));
                 }
             },
             std::time::Duration::from_secs(1),
@@ -86,6 +88,8 @@ pub fn PublicEvent() -> impl IntoView {
         set_countdown.set(String::new());
         log::info!("[public_event] fetching slug: {slug}");
         let slug_clone = slug.clone();
+        // Client-side error text, in the language current at load time.
+        let locale = i18n.get_locale_untracked();
         leptos::task::spawn_local(async move {
             let window = web_sys::window().expect("no window");
             let origin = window
@@ -125,44 +129,45 @@ pub fn PublicEvent() -> impl IntoView {
                                             // Start countdown if event is in the future
                                             let now_ms = js_sys::Date::now() as i64;
                                             if !is_completed && start_ms > now_ms {
-                                                set_countdown
-                                                    .set(format_countdown(start_ms - now_ms));
+                                                set_countdown.set(format_countdown(
+                                                    start_ms - now_ms,
+                                                    i18n.get_locale_untracked(),
+                                                ));
                                                 set_countdown_start_ms.set(Some(start_ms));
                                             }
                                         } else {
                                             set_state.set(PublicEventState::Error(
-                                                "No event data returned".to_string(),
+                                                td_string!(locale, event.err_no_event_data)
+                                                    .to_string(),
                                             ));
                                         }
                                     } else {
                                         set_state.set(PublicEventState::Error(
-                                            api_resp
-                                                .error
-                                                .unwrap_or_else(|| "Unknown error".to_string()),
+                                            api_resp.error.unwrap_or_else(|| {
+                                                td_string!(locale, event.err_unknown).to_string()
+                                            }),
                                         ));
                                     }
                                 }
                                 Err(e) => {
                                     log::error!("[public_event] JSON parse error: {e}");
-                                    set_state.set(PublicEventState::Error(format!(
-                                        "Failed to parse response: {e}"
-                                    )));
+                                    let msg = td_string!(locale, event.err_parse_response);
+                                    set_state.set(PublicEventState::Error(format!("{msg}: {e}")));
                                 }
                             }
                         }
                         Err(e) => {
                             log::error!("[public_event] body read error: {e}");
                             set_state.set(PublicEventState::Error(
-                                "Failed to read response".to_string(),
+                                td_string!(locale, event.err_read_response).to_string(),
                             ));
                         }
                     }
                 }
                 Err(e) => {
                     log::error!("[public_event] fetch error: {e}");
-                    set_state.set(PublicEventState::Error(format!(
-                        "Failed to fetch event: {e}"
-                    )));
+                    let msg = td_string!(locale, event.err_fetch_event);
+                    set_state.set(PublicEventState::Error(format!("{msg}: {e}")));
                 }
             }
         });
@@ -327,7 +332,7 @@ pub fn PublicEvent() -> impl IntoView {
     let title_text = move || {
         let name = event_name.get();
         if name.is_empty() {
-            "Event — BeThere".to_string()
+            t_string!(i18n, event.page_title).to_string()
         } else {
             format!("{name} — BeThere")
         }
@@ -367,7 +372,7 @@ pub fn PublicEvent() -> impl IntoView {
                 // Back link
                 <div class="pe-back-wrap">
                     <a href="/" class="pe-back-link">
-                        "← Back to BeThere"
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.back_home))}
                     </a>
                 </div>
 
@@ -381,7 +386,7 @@ pub fn PublicEvent() -> impl IntoView {
                             // than a blank/spinner — better perceived speed on
                             // venue wifi.
                             view! {
-                                <div class="pe-skeleton" aria-busy="true" aria-label="Loading event">
+                                <div class="pe-skeleton" aria-busy="true" aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, event.loading_aria))>
                                     <div class="pe-skel pe-skel-hero"></div>
                                     <div class="pe-skel pe-skel-title"></div>
                                     <div class="pe-skel pe-skel-sub"></div>
@@ -395,11 +400,11 @@ pub fn PublicEvent() -> impl IntoView {
                             view! {
                                 <div class="pe-loading">
                                     <div class="pe-icon-mb"><Icon icon=IconName::Search class="icon-2xl" /></div>
-                                    <h1 class="pe-error-title">"Event Not Found"</h1>
+                                    <h1 class="pe-error-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.not_found_title))}</h1>
                                     <p class="pe-detail-secondary pe-msg-mb-lg">
-                                        "This event doesn't exist or is not publicly available."
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.not_found_body))}
                                     </p>
-                                    <a href="/" class="btn btn-primary">"Go Home"</a>
+                                    <a href="/" class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.go_home))}</a>
                                 </div>
                             }.into_any()
                         }
@@ -408,7 +413,7 @@ pub fn PublicEvent() -> impl IntoView {
                             view! {
                                 <div class="pe-loading">
                                     <div class="pe-icon-mb"><Icon icon=IconName::Warning class="icon-md icon-danger" /></div>
-                                    <h1 class="pe-error-title">"Something went wrong"</h1>
+                                    <h1 class="pe-error-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.error_title))}</h1>
                                     <p class="pe-detail-secondary pe-msg-mb-lg">{msg_display}</p>
                                     <div class="pe-flex-row-gap">
                                         <button
@@ -419,9 +424,9 @@ pub fn PublicEvent() -> impl IntoView {
                                                 // The Effect will re-run because state changed
                                             }
                                         >
-                                            "Try Again"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.try_again))}
                                         </button>
-                                        <a href="/" class="btn btn-outline">"Go Home"</a>
+                                        <a href="/" class="btn btn-outline">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.go_home))}</a>
                                     </div>
                                 </div>
                             }.into_any()
@@ -447,7 +452,7 @@ pub fn PublicEvent() -> impl IntoView {
                 // Footer
                 <div class="pe-footer">
                     <p>
-                        "Powered by "
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.powered_by))}" "
                         <a href="/" class="pe-footer-link">"BeThere"</a>
                     </p>
                 </div>
@@ -477,6 +482,7 @@ fn render_loaded_event(
     if data.status.eq_ignore_ascii_case("completed") {
         return completed_event_gateway(data, countdown, event_completed);
     }
+    let i18n = use_i18n();
 
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
@@ -499,24 +505,15 @@ fn render_loaded_event(
     let community_links = data.community_links.clone();
 
     // Deposit label for registration form checkbox
-    let thb = data.deposit_amount_thb;
-    let deposit_label = if escrow_closed {
-        if thb > 0 {
-            format!("{thb} Baht")
-        } else {
-            format_usdc(data.deposit_amount_usdc)
-        }
-    } else if data.deposit_amount_usdc > 0 && thb > 0 {
-        let usdc = format_usdc(data.deposit_amount_usdc);
-        format!("{usdc} (~{thb} Baht)")
-    } else if data.deposit_amount_usdc > 0 {
-        format_usdc(data.deposit_amount_usdc)
-    } else {
-        thb.to_string()
-    };
+    let deposit_label = crate::utils::money::deposit_consent_label(
+        data.deposit_amount_thb,
+        data.deposit_amount_usdc,
+        escrow_closed,
+    );
 
     let show_reg_form = !event_completed.get();
     let require_contact = data.require_contact_info;
+    let require_photo_consent = data.require_photo_consent;
     let dev_profile_enabled = data.dev_profile_enabled;
 
     // Dynamic form config (Issue #049 Phase 2)
@@ -526,7 +523,6 @@ fn render_loaded_event(
     let online_available = data.online_available;
     let in_person_remaining = data.in_person_remaining;
     let online_remaining = data.online_remaining;
-    let in_person_capacity = data.in_person_capacity;
 
     // Registration form signals
     let (reg_name, set_reg_name) = signal(String::new());
@@ -595,8 +591,8 @@ fn render_loaded_event(
                 return ().into_any();
             }
             let label = match reg_lookup.get() {
-                RegistrationLookup::Registered(_) => "View Your Ticket →",
-                _ => "Reserve Your Spot →",
+                RegistrationLookup::Registered(_) => t_string!(i18n, event.cta_view_ticket),
+                _ => t_string!(i18n, event.cta_reserve),
             };
             view! {
                 <a href="#reserve" class="btn btn-primary btn-block pe-hero-cta">{label}</a>
@@ -610,8 +606,8 @@ fn render_loaded_event(
                 return ().into_any();
             }
             let label = match reg_lookup.get() {
-                RegistrationLookup::Registered(_) => "View Your Ticket →",
-                _ => "Reserve Your Spot →",
+                RegistrationLookup::Registered(_) => t_string!(i18n, event.cta_view_ticket),
+                _ => t_string!(i18n, event.cta_reserve),
             };
             view! {
                 <a href="#reserve" class="pe-sticky-cta">{label}</a>
@@ -633,12 +629,12 @@ fn render_loaded_event(
             view! {
                 <div class="pe-card">
                     <h2 class="pe-section-title">
-                        <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
+                        <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.nft_badge_title))}
                     </h2>
                     <p class="pe-detail-secondary pe-mb-075">
-                        {if is_online_only { "Earn this NFT badge when you complete the quest after the event." } else { "Earn a commemorative NFT badge when you attend." }}
+                        {move || if is_online_only { t_string!(i18n, event.nft_badge_online) } else { t_string!(i18n, event.nft_badge_attend) }}
                     </p>
-                    <img src=url alt="NFT Badge" class="pe-nft-img" />
+                    <img src=url alt=crate::locale::tr(|l| crate::i18n::td_string!(l, event.nft_badge_title)) class="pe-nft-img" />
                 </div>
             }.into_any()
         } else {
@@ -648,9 +644,6 @@ fn render_loaded_event(
         // Deposit Info Section
         {deposit_section(&data)}
 
-        // Capacity indicator
-        {capacity_indicator(in_person_capacity, online_remaining, in_person_remaining)}
-
         // Signed-in indicator + logout
         {move || {
             match &auth_state.get() {
@@ -659,7 +652,7 @@ fn render_loaded_event(
                     let email_disp = if wallet_only.get() {
                         wallet_addr.get()
                             .map(|a| crate::api::short_wallet(&a))
-                            .unwrap_or_else(|| "Wallet".to_string())
+                            .unwrap_or_else(|| t_string!(i18n, event.wallet_fallback).to_string())
                     } else {
                         email.clone()
                     };
@@ -677,7 +670,7 @@ fn render_loaded_event(
                                     });
                                 }
                             >
-                                "Sign out"
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.sign_out))}
                             </button>
                         </div>
                     }.into_any()
@@ -702,7 +695,7 @@ fn render_loaded_event(
                         AuthState::Checking => {
                             view! {
                                 <div class="pe-card pe-text-center">
-                                    <p class="pe-detail-secondary">"Checking sign-in status..."</p>
+                                    <p class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.checking_signin))}</p>
                                 </div>
                             }.into_any()
                         }
@@ -711,11 +704,9 @@ fn render_loaded_event(
                             view! {
                                 <div class="pe-card">
                                     <h2 class="pe-section-title">
-                                        <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
+                                        <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.reserve_title))}
                                     </h2>
-                                    <p class="pe-detail-secondary pe-mb-1">
-                                        "Sign in with Google or your Solana Wallet to register for this event."
-                                    </p>
+                                    <p class="pe-detail-secondary pe-mb-1">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.signin_prompt))}</p>
                                     <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
                                         <button
                                             class="btn-google"
@@ -747,7 +738,7 @@ fn render_loaded_event(
                                             }
                                         >
                                             <span inner_html=google_icon()></span>
-                                            "Sign in with Google"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, login.google))}
                                         </button>
 
                                         <crate::wallet_signin::WalletSignInButton
@@ -770,7 +761,7 @@ fn render_loaded_event(
                                 RegistrationLookup::Pending => {
                                     view! {
                                         <div class="pe-card pe-text-center">
-                                            <p class="pe-detail-secondary">"Checking registration..."</p>
+                                            <p class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.checking_registration))}</p>
                                         </div>
                                     }.into_any()
                                 }
@@ -786,6 +777,7 @@ fn render_loaded_event(
                                         wallet_only.get(),
                                         is_hybrid,
                                         require_contact,
+                                        require_photo_consent,
                                         has_deposit,
                                         deposit_label.clone(),
                                         in_person_available,
@@ -825,6 +817,7 @@ fn render_loaded_event(
                                         wallet_only.get(),
                                         is_hybrid,
                                         require_contact,
+                                        require_photo_consent,
                                         has_deposit,
                                         deposit_label.clone(),
                                         in_person_available,
@@ -850,10 +843,10 @@ fn render_loaded_event(
                                             view! {
                                                 <div class="pe-card" style="background:rgba(20,241,149,0.08);border:1px solid rgba(20,241,149,0.3);">
                                                     <p class="pe-detail-secondary" style="margin:0;color:#14F195;font-weight:600;">
-                                                        {format!("💳 You have ฿{credit_amt} deposit credit from a previous event.")}
+                                                        {t!(i18n, event.credit_have, amount = credit_amt)}
                                                     </p>
                                                     <p class="pe-detail-secondary" style="margin:4px 0 0;">
-                                                        "It's applied automatically when you register if it covers this event's deposit — you may not need to pay again."
+                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.credit_applied))}
                                                     </p>
                                                 </div>
                                             }.into_any()
@@ -861,7 +854,7 @@ fn render_loaded_event(
                                             view! {
                                                 <div class="pe-card" style="background:rgba(153,69,255,0.06);border:1px solid rgba(153,69,255,0.22);">
                                                     <p class="pe-detail-secondary" style="margin:0;font-size:0.82rem;line-height:1.45;">
-                                                        "Have deposit credit from a previous event? Credit is tied to your email — sign in with Google, or connect this wallet from your Profile, to apply it."
+                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.credit_wallet_hint))}
                                                     </p>
                                                 </div>
                                             }.into_any()
@@ -884,7 +877,7 @@ fn render_loaded_event(
             let desc = description.clone();
             view! {
                 <div class="pe-card">
-                    <h2 class="pe-section-title">"About this Event"</h2>
+                    <h2 class="pe-section-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.about_title))}</h2>
                     <p class="pe-description">{desc}</p>
                 </div>
             }.into_any()
@@ -902,19 +895,16 @@ fn render_loaded_event(
             view! {
                 <div class="pe-card">
                     <h2 class="pe-section-title">
-                        <Icon icon=IconName::Link class="icon-sm" />" External Link"
+                        <Icon icon=IconName::Link class="icon-sm" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.external_link_title))}
                     </h2>
                     <a href=href target="_blank" rel="noopener noreferrer" class="pe-ext-link">
-                        "View Event Page →"
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.view_event_page))}
                     </a>
                 </div>
             }.into_any()
         } else {
             ().into_any()
         }}
-
-        // Bottom spacer so the sticky mobile CTA never hides the last section.
-        <div class="pe-sticky-spacer"></div>
     }.into_any()
 }
 
@@ -952,30 +942,28 @@ fn completed_event_gateway(
 
         <div class="pe-card">
             <h2 class="pe-section-title">
-                <Icon icon=IconName::Party class="icon-md" />" This event has ended"
+                <Icon icon=IconName::Party class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_title))}
             </h2>
-            <p class="pe-detail-secondary pe-mb-075">
-                "Explore the event archive and join the community to hear about future events."
-            </p>
+            <p class="pe-detail-secondary pe-mb-075">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_body))}</p>
 
             <div class="pe-btn-row-center">
                 {if !archive_url.is_empty() {
                     let href = archive_url.clone();
                     view! {
                         <a href=href target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
-                            <Icon icon=IconName::Link class="icon-sm" />" View the archive"
+                            <Icon icon=IconName::Link class="icon-sm" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.view_archive))}
                         </a>
                     }.into_any()
                 } else {
                     view! {
-                        <span class="pe-detail-secondary">"The event archive will be available soon."</span>
+                        <span class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.archive_soon))}</span>
                     }.into_any()
                 }}
 
                 {if enrollment_open {
                     let href = format!("/events/{slug}/post-event-register");
                     view! {
-                        <a href=href class="btn btn-primary btn-sm">" Join the community"</a>
+                        <a href=href class="btn btn-primary btn-sm">" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.join_community))}</a>
                     }.into_any()
                 } else {
                     ().into_any()
@@ -986,7 +974,7 @@ fn completed_event_gateway(
         {if !description.is_empty() {
             view! {
                 <div class="pe-card">
-                    <h2 class="pe-section-title">"About this Event"</h2>
+                    <h2 class="pe-section-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.about_title))}</h2>
                     <p class="pe-description">{description}</p>
                 </div>
             }.into_any()

@@ -87,10 +87,15 @@
              stale shell can't reference purged, content-hashed JS/WASM (the
              blank-page-after-deploy bug). Hashed assets cache forever. -->
         <link data-trunk rel="copy-file" href="_headers" />
-        <!-- Inline SW registration is allowed here (no eval, just a register()
-             call). Project CSP (handover 007) restricts eval(), not inline
-             <script> registration calls. -->
-        <script>
+        <!-- Serves staff-app.html (the staff shell) for the staff paths. -->
+        <link data-trunk rel="copy-file" href="_redirects" />
+        <!-- Written inline for readability, but it does not ship inline: the
+             CSP has no script-src 'unsafe-inline', so Trunk's post_build hook
+             (externalize_inline_scripts.py) moves it and Trunk's loader into
+             hashed, SRI-pinned /inline-*.js files. `defer` is inert inline and
+             takes effect once it is external, so the fetch never blocks the
+             parser; the script only adds a load listener. -->
+        <script defer>
             if ("serviceWorker" in navigator) {
                 window.addEventListener("load", function () {
                     navigator.serviceWorker
@@ -145,14 +150,16 @@
             rel="stylesheet"
         />
         <!-- Stylesheet split by section (see styles/). ORDER IS LOAD-BEARING:
-             these files concatenate to the former single style.css byte-for-byte,
-             so the cascade only holds if they stay in this order. -->
+             the numeric prefix is the cascade order. This is the attendee list:
+             the style-NN-*.staff.css files hold rules for staff-only classes,
+             and staff_shell_html.py links every file, sorted, into the staff
+             shell. Keep this list sorted and free of .staff.css files
+             (tests/staff_shell_split.rs). -->
         <link data-trunk rel="css" href="styles/style-01-core.css" />
         <link data-trunk rel="css" href="styles/style-02-claim.css" />
         <link data-trunk rel="css" href="styles/style-03-responsive.css" />
         <link data-trunk rel="css" href="styles/style-04-scanner.css" />
         <link data-trunk rel="css" href="styles/style-05-admin.css" />
-        <link data-trunk rel="css" href="styles/style-06-admin.css" />
         <link data-trunk rel="css" href="styles/style-07-quiz.css" />
         <link data-trunk rel="css" href="styles/style-08-core.css" />
         <link data-trunk rel="css" href="styles/style-09-core.css" />
@@ -178,5 +185,5 @@
     </head>
     <body>
         <!-- Leptos mounts here -->
-    </body>
+    <link data-trunk rel="rust" data-cargo-profile-dev="fast-dev" data-wasm-opt="0" /></body>
 </html>

@@ -23,6 +23,20 @@ pub fn format_usdc(atomic_usdc: u64) -> String {
     format!("{whole}.{cents:02}")
 }
 
+/// The deposit amount the registration consent asks the attendee to
+/// authorize. Every non-zero amount names its currency (`.issues/166`: a
+/// THB-only event used to read "authorize the 500 commitment deposit").
+///
+/// Once escrow is closed only one currency is shown, THB first.
+pub fn deposit_consent_label(thb: u64, atomic_usdc: u64, escrow_closed: bool) -> String {
+    let usdc = || format!("{} USDC", format_usdc(atomic_usdc));
+    match (escrow_closed, thb > 0, atomic_usdc > 0) {
+        (true, true, _) | (false, true, false) => format!("{thb} Baht"),
+        (true, false, _) | (false, false, _) => usdc(),
+        (false, true, true) => format!("{} (~{thb} Baht)", usdc()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::format_usdc;

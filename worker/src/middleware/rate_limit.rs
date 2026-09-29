@@ -159,6 +159,13 @@ fn rate_limit_for_path(path: &str) -> Option<(&'static RateLimitConfig, LimiterK
     ) {
         return Some((&RATE_LIMIT_WEBHOOK, LimiterKind::Webhook));
     }
+    // The session check runs on every page mount and only verifies the signed
+    // cookie, so there is nothing to guess. Keyed per IP, it put a whole venue
+    // Wi-Fi (or a mobile CGNAT address) on 20 checks a minute, and a 429 reads
+    // as "signed out" in the SPA (.issues/172).
+    if path == "/api/auth/me" {
+        return None;
+    }
     // Auth endpoints
     if path.starts_with("/api/auth/") {
         return Some((&RATE_LIMIT_AUTH, LimiterKind::Auth));
@@ -334,6 +341,21 @@ mod tests {
                 i64::from(RATE_LIMIT_SHEETS_FALLBACK.max_requests)
             );
             assert_eq!(field("period = "), RATE_LIMIT_SHEETS_FALLBACK.window_secs);
+        }
+    }
+
+    #[test]
+    fn session_check_is_not_limited_but_sign_in_is() {
+        assert!(rate_limit_for_path("/api/auth/me").is_none());
+        for path in [
+            "/api/auth/callback",
+            "/api/auth/wallet/verify",
+            "/api/auth/me/extra",
+        ] {
+            assert!(
+                matches!(rate_limit_for_path(path), Some((_, LimiterKind::Auth))),
+                "{path}"
+            );
         }
     }
 

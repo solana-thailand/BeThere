@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, wallet_icon_name};
 use crate::utils::get_cluster;
 
@@ -16,6 +17,7 @@ pub fn close_deposit_choose_wallet_view(
     set_state: WriteSignal<DepositPageState>,
     handle_close_deposit_connect_wallet: impl Fn(String) + Clone + 'static,
 ) -> AnyView {
+    let i18n = use_i18n();
     let wallets = detected_wallets.to_vec();
     let data_for_back = data.clone();
 
@@ -24,11 +26,11 @@ pub fn close_deposit_choose_wallet_view(
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">"Reclaim Rent"</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.title))}</span>
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
             <p class="hint-desc">
-                "Close your deposit account to reclaim rent-exempt SOL."
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.hint))}
             </p>
             {if wallets.is_empty() {
                 components::wallet_fallback_view()
@@ -49,7 +51,7 @@ pub fn close_deposit_choose_wallet_view(
                                     }
                                 >
                                     <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                                    <span>{format!("Connect {}", w_clone)}</span>
+                                    <span>{t!(i18n, deposit.connect_wallet, wallet = w_clone)}</span>
                                 </button>
                             }
                         }).collect::<Vec<_>>()}
@@ -62,7 +64,7 @@ pub fn close_deposit_choose_wallet_view(
                     set_state.set(DepositPageState::CloseDepositChooseWallet(data_for_back.clone()));
                 }
             >
-                "← Go Back"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.go_back))}
             </button>
         </div>
     }
@@ -77,9 +79,11 @@ pub fn close_deposit_wallet_connected_view(
     set_state: WriteSignal<DepositPageState>,
     handle_close_deposit: impl Fn(String, String) + Clone + 'static,
 ) -> AnyView {
+    let i18n = use_i18n();
     let wallet_name_send = wallet_name.to_string();
     let pk_send = public_key.to_string();
     let data_for_back = data.clone();
+    let wallet = wallet_name.to_string();
 
     let _wallet_icon = wallet_icon_name(wallet_name);
     let pk_display = truncate_pk(public_key);
@@ -91,30 +95,39 @@ pub fn close_deposit_wallet_connected_view(
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">"Reclaim Rent"</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.title))}</span>
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
             <div class="dep2-wallet-bar">
                 <div class="dep2-wallet-bar-info">
-                    <span class="dep2-wallet-bar-name">{format!("Connected via {}", wallet_name)}</span>
+                    <span class="dep2-wallet-bar-name">{t!(i18n, deposit.connected_via, wallet)}</span>
                     <span class="dep2-wallet-bar-pk">{pk_display}</span>
                 </div>
-                <span class="dep2-wallet-bar-badge">"Connected"</span>
+                <span class="dep2-wallet-bar-badge">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.connected))}</span>
             </div>
-            {components::transaction_review(vec![
-                ("You authorize", "Close your deposit account".to_string()),
-                ("Network", network),
-                ("You receive", "Remaining account rent (about 0.002 SOL)".to_string()),
-                ("Network fee", "Paid in SOL by this connected wallet".to_string()),
+            {components::transaction_review_views(vec![
+                (
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.authorize))} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.authorize_value))} }.into_any(),
+                ),
+                (view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.network))} }.into_any(), network.into_any()),
+                (
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.receive))} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.receive_value))} }.into_any(),
+                ),
+                (
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.fee))} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.fee_value))} }.into_any(),
+                ),
             ])}
             <p class="hint-desc">
-                "The returned balance is an estimate and can differ from 0.002 SOL. Review, then approve in your wallet."
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.estimate))}
             </p>
             <button
                 class="btn btn-success btn-block"
                 on:click=move |_| handle_close(wallet_name_send.clone(), pk_send.clone())
             >
-                "Reclaim ~0.002 SOL Rent"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.cta))}
             </button>
             <button
                 class="btn btn-outline btn-sm"
@@ -122,7 +135,7 @@ pub fn close_deposit_wallet_connected_view(
                     set_state.set(DepositPageState::CloseDepositChooseWallet(data_for_back.clone()));
                 }
             >
-                "← Go Back"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.go_back))}
             </button>
         </div>
     }
@@ -134,7 +147,7 @@ pub fn close_deposit_signing_view() -> AnyView {
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">"Closing Deposit..."</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.closing))}</span>
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
             <div class="dep2-confirming">
@@ -144,7 +157,7 @@ pub fn close_deposit_signing_view() -> AnyView {
                     <span class="dep2-confirming-dot"></span>
                 </div>
                 <p class="hint-desc">
-                    "Please approve the transaction in your wallet..."
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.approve_in_wallet))}
                 </p>
             </div>
         </div>
@@ -161,7 +174,7 @@ pub fn close_deposit_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) 
         <div class="dep2-card">
             <div class="dep2-success-icon">"✓"</div>
             <p class="dep2-amount-hero">
-                "Rent Reclaimed! ~0.002 SOL returned to your wallet."
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.done))}
             </p>
             <div class="dep2-receipt">
                 <div class="dep2-receipt-row">
@@ -171,7 +184,7 @@ pub fn close_deposit_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) 
             </div>
             {components::solscan_link(tx_sig)}
             <div class="dep2-back">
-                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") }>"← Back to event"</a>
+                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") }>{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_event))}</a>
             </div>
         </div>
     }

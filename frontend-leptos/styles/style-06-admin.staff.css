@@ -1,3 +1,7 @@
+/* Staff-shell only (.issues/169): rules from style-06-admin.css that match
+   no class the attendee app renders. staff-app.html links this file
+   right after style-06-admin.css, so the cascade order is unchanged. */
+
 /* ===== Quiz Editor (Admin) ===== */
 .quiz-editor {
     max-width: 800px;
@@ -535,4 +539,3 @@
     font-size: 0.82rem;
     min-height: 200px;
 }
-

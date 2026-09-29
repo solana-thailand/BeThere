@@ -258,22 +258,8 @@ pub async fn upload_thb_slip_handler(
             + chrono::Duration::hours(i64::from(deadline_hours));
         if chrono::Utc::now() > deadline {
             // Deadline passed — check if reclaim is possible
-            let capacity_available = if let Some(cap) = event.in_person_capacity {
-                // Quick capacity check (sheet only — walk-ins less likely for THB)
-                let in_person_count = crate::sheets::get_attendees_for_event(
-                    &state,
-                    &event.sheet_id,
-                    &event.sheet_name,
-                    Some(kv),
-                    &event.id,
-                )
-                .await
-                .map(|a| a.iter().filter(|a| a.is_in_person()).count() as u32)
-                .unwrap_or(u32::MAX);
-                in_person_count < cap
-            } else {
-                true // No capacity limit = always available
-            };
+            let capacity_available =
+                crate::handlers::capacity::has_in_person_room(&state, &event, Some(kv)).await;
 
             if capacity_available {
                 // Reclaim: switch back to In-Person

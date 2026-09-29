@@ -1,4 +1,5 @@
 use super::types::*;
+use crate::i18n::{Locale, t, t_string, td_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -30,6 +31,7 @@ pub fn registration_form(
     wallet_only: bool,
     is_hybrid: bool,
     require_contact: bool,
+    require_photo_consent: bool,
     has_deposit: bool,
     deposit_label: String,
     in_person_available: bool,
@@ -64,11 +66,23 @@ pub fn registration_form(
     // Pre-fill email from JWT — but NOT for wallet-only sessions, where
     // locked_email is a synthetic `wallet:<address>` and the user must type a
     // real one.
+    // Bot check (.issues/170): only signed-in visitors who can register see
+    // this form, so it starts on render rather than on first touch.
+    let bot_check = crate::bot_check::BotCheck::new();
+    bot_check.activate();
     if !wallet_only {
         set_reg_email.set(locked_email.clone());
     }
 
+    let i18n = use_i18n();
     let (field_errors, set_field_errors) = signal(FieldErrors::default());
+    // One field's inline error, in the current language.
+    let field_error = move |pick: fn(&FieldErrors) -> Option<FieldMsg>, class: &'static str| {
+        move || match pick(&field_errors.get()) {
+            Some(msg) => view! { <span class=class>{msg(i18n.get_locale())}</span> }.into_any(),
+            None => view! { <div></div> }.into_any(),
+        }
+    };
 
     // Resolve form config: use provided config or defaults
     let resolved_config = match form_config {
@@ -147,6 +161,7 @@ pub fn registration_form(
                     }
 
                     let continue_url = next_url.clone();
+                    let name = data.name.clone();
                     view! {
                         <div class="pe-card">
                             <div class="pe-text-center">
@@ -154,23 +169,23 @@ pub fn registration_form(
                                     <Icon icon=IconName::Check class="icon-2xl icon-success" />
                                 </div>
                                 <h2 class="pe-section-title pe-title-success">
-                                    "You're registered!"
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, event.registered_title))}
                                 </h2>
                                 <p class="pe-detail-secondary pe-mb-1">
-                                    {format!("Welcome, {}!", data.name)}
+                                    {t!(i18n, event.welcome, name)}
                                 </p>
                                 {if wallet_not_linked {
                                     view! {
                                         <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:0.82rem;line-height:1.45;color:#cbd5e1;text-align:left;">
-                                            <strong style="color:#fff;">"Heads up: "</strong>
-                                            "your wallet wasn't linked to the email because the email hasn't been verified. To sign in with your wallet next time, open your Profile after signing in with Google, then press \"Connect Wallet\"."
+                                            <strong style="color:#fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.heads_up))}" "</strong>
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.wallet_not_linked))}
                                         </div>
                                         <button class="pe-submit-btn" on:click=move |_| navigateTo(&continue_url)>
-                                            "Continue →"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.continue_cta))}
                                         </button>
                                     }.into_any()
                                 } else {
-                                    view! { <p class="pe-detail-secondary">"Redirecting..."</p> }.into_any()
+                                    view! { <p class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.redirecting))}</p> }.into_any()
                                 }}
                             </div>
                         </div>
@@ -181,7 +196,7 @@ pub fn registration_form(
                     view! {
                         <div class="pe-card">
                             <h2 class="pe-section-title">
-                                <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
+                                <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.reserve_title))}
                             </h2>
                             <div class="pe-error-box">
                                 {msg_clone}
@@ -190,7 +205,7 @@ pub fn registration_form(
                                 class="btn btn-outline btn-block"
                                 on:click=move |_| set_reg_state.set(RegState::Idle)
                             >
-                                "Try Again"
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.try_again))}
                             </button>
                         </div>
                     }.into_any()
@@ -199,7 +214,7 @@ pub fn registration_form(
                     view! {
                         <div class="pe-card pe-text-center">
                             <div class="pe-icon-mb-sm"><Icon icon=IconName::Hourglass class="icon-md" /></div>
-                            <p class="pe-detail-secondary">"Registering..."</p>
+                            <p class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.registering))}</p>
                         </div>
                     }.into_any()
                 }
@@ -210,15 +225,15 @@ pub fn registration_form(
                     view! {
                         <div class="pe-card">
                             <h2 class="pe-section-title">
-                                <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
+                                <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.reserve_title))}
                             </h2>
                             <div class="pe-flex-col-gap-md">
                                 // Name
                                 <div class="pe-field" id="pe-field-name">
-                                    <label class="pe-field-label">"Name"<span class="pe-required">" *"</span></label>
+                                    <label class="pe-field-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.field_name))}<span class="pe-required">" *"</span></label>
                                     <input
                                         type="text"
-                                        placeholder="Your name"
+                                        placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, event.field_name_placeholder))
                                         class="pe-input"
                                         prop:class=move || if field_errors.get().name.is_some() { "pe-input--error" } else { "" }
                                         prop:value=move || reg_name.get()
@@ -227,15 +242,12 @@ pub fn registration_form(
                                             set_field_errors.update(|e| e.name = None);
                                         }
                                     />
-                                    {move || match &field_errors.get().name {
-                                        Some(err) => view! { <span class="pe-field-error">{err.clone()}</span> }.into_any(),
-                                        None => view! { <div></div> }.into_any(),
-                                    }}
+                                    {field_error(|e| e.name, "pe-field-error")}
                                 </div>
                                 // Email — locked for Google sessions; editable + required for wallet-only
                                 <div class="pe-field" id="pe-field-email">
                                     <label class="pe-field-label">
-                                        "Email Address"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.field_email))}
                                         {if wallet_only { view!{ <span class="pe-required">" *"</span> }.into_any() } else { ().into_any() }}
                                     </label>
                                     {if wallet_only {
@@ -251,11 +263,8 @@ pub fn registration_form(
                                                     set_field_errors.update(|e| e.email = None);
                                                 }
                                             />
-                                            <span class="pe-field-hint">"We'll link this email to your wallet so the organizer can reach you."</span>
-                                            {move || match &field_errors.get().email {
-                                                Some(err) => view! { <span class="pe-field-error">{err.clone()}</span> }.into_any(),
-                                                None => view! { <div></div> }.into_any(),
-                                            }}
+                                            <span class="pe-field-hint">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.field_email_hint))}</span>
+                                            {field_error(|e| e.email, "pe-field-error")}
                                         }.into_any()
                                     } else {
                                         view! {
@@ -271,22 +280,24 @@ pub fn registration_form(
                                 // Participation type (hybrid only)
                                 {move || {
                                     if is_hybrid {
+                                        // The option values ("In-Person", "Online") go to the
+                                        // server and stay English; only the labels translate.
                                         let ip_label = match in_person_remaining {
-                                            Some(r) => format!("In-Person (on-site) — {r} spots left"),
-                                            None => "In-Person (on-site)".to_string(),
+                                            Some(count) => view! { {t!(i18n, event.track_in_person_left, count)} }.into_any(),
+                                            None => view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, event.track_in_person))} }.into_any(),
                                         };
                                         let on_label = match online_remaining {
-                                            Some(r) => format!("Online (virtual) — {r} spots left"),
-                                            None => "Online (virtual)".to_string(),
+                                            Some(count) => view! { {t!(i18n, event.track_online_left, count)} }.into_any(),
+                                            None => view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, event.track_online))} }.into_any(),
                                         };
                                         view! {
                                             <div class="pe-field">
-                                                <label class="pe-field-label">"Select Track"</label>
+                                                <label class="pe-field-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.track_label))}</label>
                                                 <select
                                                     class="pe-input"
                                                     on:change=move |ev| set_reg_participation.set(event_target_value(&ev))
                                                 >
-                                                    <option value="">"Select track..."</option>
+                                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.track_placeholder))}</option>
                                                     {if in_person_available {
                                                         view! { <option value="In-Person">{ip_label}</option> }.into_any()
                                                     } else {
@@ -307,7 +318,7 @@ pub fn registration_form(
                                 // Contact Channel
                                 <div class="pe-field" id="pe-field-channel">
                                     <label class="pe-field-label">
-                                        "Preferred Contact Channel"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.channel_label))}
                                         {if require_contact {
                                             view! { <span class="pe-required">" *"</span> }.into_any()
                                         } else {
@@ -323,21 +334,18 @@ pub fn registration_form(
                                             set_field_errors.update(|e| e.contact_channel = None);
                                         }
                                     >
-                                        <option value="">"Select channel..."</option>
+                                        <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.channel_placeholder))}</option>
                                         <option value="Telegram">"Telegram"</option>
                                         <option value="Line">"Line"</option>
                                         <option value="Facebook">"Facebook"</option>
                                         <option value="X (Twitter)">"X (Twitter)"</option>
                                     </select>
-                                    {move || match &field_errors.get().contact_channel {
-                                        Some(err) => view! { <span class="pe-field-error">{err.clone()}</span> }.into_any(),
-                                        None => view! { <div></div> }.into_any(),
-                                    }}
+                                    {field_error(|e| e.contact_channel, "pe-field-error")}
                                 </div>
                                 // Contact Handle
                                 <div class="pe-field" id="pe-field-handle">
                                     <label class="pe-field-label">
-                                        "Contact Username / Profile Link"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.handle_label))}
                                         {if require_contact {
                                             view! { <span class="pe-required">" *"</span> }.into_any()
                                         } else {
@@ -346,7 +354,7 @@ pub fn registration_form(
                                     </label>
                                     <input
                                         type="text"
-                                        placeholder="Username or profile link"
+                                        placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, event.handle_placeholder))
                                         class="pe-input"
                                         prop:class=move || if field_errors.get().contact_handle.is_some() { "pe-input--error" } else { "" }
                                         prop:value=move || reg_contact_handle.get()
@@ -355,10 +363,7 @@ pub fn registration_form(
                                             set_field_errors.update(|e| e.contact_handle = None);
                                         }
                                     />
-                                    {move || match &field_errors.get().contact_handle {
-                                        Some(err) => view! { <span class="pe-field-error">{err.clone()}</span> }.into_any(),
-                                        None => view! { <div></div> }.into_any(),
-                                    }}
+                                    {field_error(|e| e.contact_handle, "pe-field-error")}
                                 </div>
 
                                 // Dynamic Developer Profile Section (Issue #049 Phase 2)
@@ -390,7 +395,8 @@ pub fn registration_form(
                                     }
                                 }}
 
-                                // Single unified consent checkbox
+                                // Registration consent (privacy + deposit). Photo and
+                                // marketing consent are separate boxes below (.issues/161).
                                 {move || {
                                     let is_online_track = is_hybrid && reg_participation.get().to_lowercase().contains("online");
                                     let show_deposit = has_deposit && !is_online_track;
@@ -406,32 +412,62 @@ pub fn registration_form(
                                                         let checked = event_target_checked(&ev);
                                                         set_reg_consent_given.set(checked);
                                                         set_reg_deposit_agreed.set(checked);
-                                                        set_reg_photo_consent_given.set(checked);
-                                                        set_reg_consent_marketing.set(checked);
                                                         set_field_errors.update(|e| {
                                                             e.consent_given = None;
                                                             e.deposit_agreed = None;
-                                                            e.photo_consent_given = None;
                                                         });
                                                     }
                                                 />
                                                 <span>
-                                                    "I agree to the "
-                                                    <a href="/privacy" target="_blank" class="pe-ext-link">"Privacy Policy"</a>
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, event.consent_agree))}
+                                                    <a href="/privacy" target="_blank" class="pe-ext-link">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.privacy_policy))}</a>
                                                     {if show_deposit {
-                                                        format!(" and authorize the {} commitment deposit (returned after the event).", dep_label).into_any()
+                                                        // `deposit_consent_label` names the currency (.issues/166).
+                                                        let amount = dep_label;
+                                                        view! { {t!(i18n, event.consent_deposit, amount)} }.into_any()
                                                     } else {
-                                                        " for registration, check-in, and NFT issuance.".into_any()
+                                                        view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, event.consent_no_deposit))} }.into_any()
                                                     }}
                                                 </span>
                                             </label>
-                                            {move || match (&field_errors.get().consent_given, &field_errors.get().deposit_agreed) {
-                                                (Some(err), _) | (_, Some(err)) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
-                                                _ => view! { <div></div> }.into_any(),
-                                            }}
+                                            {field_error(|e| e.consent_given.or(e.deposit_agreed), "pe-field-error pe-field-error-indent")}
                                         </div>
                                     }.into_any()
                                 }}
+                                // Photo consent: optional unless the event requires it
+                                <div id="pe-field-photo-consent">
+                                    <label class="pe-checkbox-label">
+                                        <input
+                                            type="checkbox"
+                                            class="pe-checkbox"
+                                            checked=move || reg_photo_consent_given.get()
+                                            on:change=move |ev| {
+                                                set_reg_photo_consent_given.set(event_target_checked(&ev));
+                                                set_field_errors.update(|e| e.photo_consent_given = None);
+                                            }
+                                        />
+                                        <span>
+                                            {move || match require_photo_consent {
+                                                true => t_string!(i18n, event.photo_consent_required),
+                                                false => t_string!(i18n, event.photo_consent_optional),
+                                            }}
+                                        </span>
+                                    </label>
+                                    {field_error(|e| e.photo_consent_given, "pe-field-error pe-field-error-indent")}
+                                </div>
+                                // Marketing consent: always optional, never a condition of registering
+                                <div id="pe-field-marketing-consent">
+                                    <label class="pe-checkbox-label">
+                                        <input
+                                            type="checkbox"
+                                            class="pe-checkbox"
+                                            checked=move || reg_consent_marketing.get()
+                                            on:change=move |ev| set_reg_consent_marketing.set(event_target_checked(&ev))
+                                        />
+                                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.marketing_consent))}</span>
+                                    </label>
+                                </div>
+                                <crate::bot_check::BotCheckSlot check=bot_check />
                                 // Submit button
                                 {
                                     let slug = slug.clone();
@@ -440,6 +476,7 @@ pub fn registration_form(
                                     view! {
                                         <button
                                             class="pe-submit-btn"
+                                            disabled=move || !bot_check.ready()
                                             on:click=move |_| {
                                                 let name_val = reg_name.get();
                                                 let part_val = reg_participation.get();
@@ -451,25 +488,28 @@ pub fn registration_form(
 
                                                 let mut errors = FieldErrors::default();
                                                 if name_val.trim().is_empty() {
-                                                    errors.name = Some("Name is required".to_string());
+                                                    errors.name = Some(|l| td_string!(l, event.err_name_required));
                                                 }
                                                 if wallet_only && !email_looks_valid(email_val.trim()) {
-                                                    errors.email = Some("Please enter a valid email".to_string());
+                                                    errors.email = Some(|l| td_string!(l, event.err_email_invalid));
                                                 }
                                                 if require_contact && channel_val.trim().is_empty() {
-                                                    errors.contact_channel = Some("Please select a channel".to_string());
+                                                    errors.contact_channel = Some(|l| td_string!(l, event.err_channel_required));
                                                 }
                                                 if require_contact && handle_val.trim().is_empty() {
-                                                    errors.contact_handle = Some("Please provide your contact info".to_string());
+                                                    errors.contact_handle = Some(|l| td_string!(l, event.err_handle_required));
                                                 }
                                                 let consent_val = reg_consent_given.get();
                                                 if !consent_val {
-                                                    errors.consent_given = Some("You must agree to continue".to_string());
+                                                    errors.consent_given = Some(|l| td_string!(l, event.err_consent_required));
                                                 }
                                                 let photo_consent_val = reg_photo_consent_given.get();
+                                                if require_photo_consent && !photo_consent_val {
+                                                    errors.photo_consent_given = Some(|l| td_string!(l, event.err_photo_consent_required));
+                                                }
                                                 let is_online_track = is_hybrid && part_val.to_lowercase().contains("online");
                                                 if has_deposit && !is_online_track && !deposit_val {
-                                                    errors.deposit_agreed = Some("You must agree to the deposit".to_string());
+                                                    errors.deposit_agreed = Some(|l| td_string!(l, event.err_deposit_required));
                                                 }
 
                                                 let has_errors = errors.name.is_some()
@@ -477,7 +517,8 @@ pub fn registration_form(
                                                     || errors.contact_channel.is_some()
                                                     || errors.contact_handle.is_some()
                                                     || errors.consent_given.is_some()
-                                                    || errors.deposit_agreed.is_some();
+                                                    || errors.deposit_agreed.is_some()
+                                                    || errors.photo_consent_given.is_some();
 
                                                 // Determine scroll target before moving errors
                                                 let scroll_target = errors.name.as_ref()
@@ -486,7 +527,8 @@ pub fn registration_form(
                                                     .or(errors.contact_channel.as_ref().map(|_| "pe-field-channel"))
                                                     .or(errors.contact_handle.as_ref().map(|_| "pe-field-handle"))
                                                     .or(errors.consent_given.as_ref().map(|_| "pe-field-consent"))
-                                                    .or(errors.deposit_agreed.as_ref().map(|_| "pe-field-deposit"));
+                                                    .or(errors.deposit_agreed.as_ref().map(|_| "pe-field-deposit"))
+                                                    .or(errors.photo_consent_given.as_ref().map(|_| "pe-field-photo-consent"));
 
                                                 set_field_errors.set(errors);
 
@@ -531,18 +573,29 @@ pub fn registration_form(
                                                     profile_fields: if profile_fields.is_empty() { None } else { Some(profile_fields) },
                                                 };
 
+                                                // Client-side messages are rendered in the language
+                                                // current at submit time; server errors pass through.
+                                                let locale: Locale = i18n.get_locale_untracked();
                                                 leptos::task::spawn_local(async move {
                                                     let window = web_sys::window().expect("no window");
                                                     let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
                                                     let url = format!("{origin}/api/public/register");
+                                                    let fail = |msg: &str| RegState::Error(msg.to_string());
+                                                    let fail_with = |msg: &str, e: &dyn std::fmt::Display| RegState::Error(format!("{msg}: {e}"));
 
-                                                    match crate::api::fetch::post(&url, &[("Content-Type", "application/json")], Some(serde_json::to_string(&body).unwrap_or_default())).await
+                                                    let token_header = bot_check.header();
+                                                    let mut hdrs = vec![("Content-Type", "application/json")];
+                                                    if let Some((name, token)) = token_header.as_ref() {
+                                                        hdrs.push((name, token.as_str()));
+                                                    }
+                                                    let result = crate::api::fetch::post(&url, &hdrs, Some(serde_json::to_string(&body).unwrap_or_default())).await;
+                                                    // The token is spent whatever the answer was.
+                                                    bot_check.reset();
+                                                    match result
                                                     {
                                                         Ok(resp) => {
                                                             if resp.status() == 401 {
-                                                                set_reg_state.set(RegState::Error(
-                                                                    "Session expired. Please sign in again.".to_string()
-                                                                ));
+                                                                set_reg_state.set(fail(td_string!(locale, event.err_session_expired)));
                                                                 return;
                                                             }
                                                             match crate::api::fetch::response_text(&resp).await {
@@ -553,26 +606,30 @@ pub fn registration_form(
                                                                                 if let Some(data) = api_resp.data {
                                                                                     set_reg_state.set(RegState::Success(data));
                                                                                 } else {
-                                                                                    set_reg_state.set(RegState::Error("No data returned".to_string()));
+                                                                                    set_reg_state.set(fail(td_string!(locale, event.err_no_data)));
                                                                                 }
                                                                             } else {
-                                                                                set_reg_state.set(RegState::Error(
-                                                                                    api_resp.error.unwrap_or_else(|| "Registration failed".to_string())
-                                                                                ));
+                                                                                set_reg_state.set(RegState::Error(match api_resp.error {
+                                                                                    Some(msg) if event_checkin_domain::turnstile::is_rejection(&msg) => {
+                                                                                        td_string!(locale, event.err_bot_check).to_string()
+                                                                                    }
+                                                                                    Some(msg) => msg,
+                                                                                    None => td_string!(locale, event.err_registration_failed).to_string(),
+                                                                                }));
                                                                             }
                                                                         }
-                                                                        Err(e) => set_reg_state.set(RegState::Error(format!("Parse error: {e}"))),
+                                                                        Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_parse), &e)),
                                                                     }
                                                                 }
-                                                                Err(e) => set_reg_state.set(RegState::Error(format!("Read error: {e}"))),
+                                                                Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_read), &e)),
                                                             }
                                                         }
-                                                        Err(e) => set_reg_state.set(RegState::Error(format!("Network error: {e}"))),
+                                                        Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_network), &e)),
                                                     }
                                                 });
                                             }
                                         >
-                                            "Reserve My Spot"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.submit))}
                                         </button>
                                     }
                                 }
@@ -665,7 +722,7 @@ fn render_select_field(
                     set_values.update(|m| { m.insert(key.clone(), val); });
                 }
             >
-                <option value="">"Select..."</option>
+                <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.select_placeholder))}</option>
                 {options.iter().map(|opt| {
                     let opt = opt.clone();
                     view! { <option value=opt.clone()>{opt.clone()}</option> }

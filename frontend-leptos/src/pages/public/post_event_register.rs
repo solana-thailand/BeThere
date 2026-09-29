@@ -17,6 +17,7 @@ use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
 use crate::api::{self, PostEventRegisterBody};
+use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 
 /// Route parameters for `/events/:slug/post-event-register`.
@@ -37,7 +38,17 @@ enum RegState {
     /// Success — the lead was captured.
     Done,
     /// Error (409/410/404/network).
-    Error(String),
+    Error(RegError),
+}
+
+/// Why the form cannot go on. Local causes are typed so they render in the
+/// reader's language; a server message is passed through as sent.
+#[derive(Debug, Clone, PartialEq)]
+enum RegError {
+    MissingSlug,
+    NeedName,
+    NeedConsent,
+    Server(String),
 }
 
 /// Public post-event registration form component.
@@ -84,6 +95,7 @@ fn collected_answers(
 #[component]
 #[allow(non_snake_case)]
 pub fn PostEventRegister() -> impl IntoView {
+    let i18n = use_i18n();
     let params = use_params::<PostEventRegisterParams>();
     let slug_val: String = match params.get() {
         Ok(p) => p.slug.unwrap_or_default(),
@@ -118,7 +130,7 @@ pub fn PostEventRegister() -> impl IntoView {
         leptos::task::spawn_local(async move {
             // Empty slug = bad link — surface an error rather than a form.
             if slug.is_empty() {
-                set_state.set(RegState::Error("Missing event slug.".to_string()));
+                set_state.set(RegState::Error(RegError::MissingSlug));
                 return;
             }
             // Verify auth via cookie-based API call (HttpOnly cookie may be
@@ -147,13 +159,13 @@ pub fn PostEventRegister() -> impl IntoView {
     let is_submitting = move || matches!(state.get(), RegState::Submitting);
 
     view! {
-        <Title text="Join the Community — BeThere" />
+        <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.page_title)) />
         <div class="center-page">
             <div class="container layout-col-center">
                 // ---------- Back link ----------
                 <div class="flex-row-gap" style="margin-bottom:1rem;width:100%;justify-content:flex-start;">
                     <A href=back_href.clone() attr:class="btn btn-outline btn-sm">
-                        "← Back to event"
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.back))}
                     </A>
                 </div>
 
@@ -162,7 +174,7 @@ pub fn PostEventRegister() -> impl IntoView {
                     RegState::CheckingAuth => view! {
                         <div class="page-loading">
                             <span class="spinner spinner-lg"></span>
-                            "Loading..."
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.loading))}
                         </div>
                     }.into_any(),
                     RegState::Error(msg) => view! {
@@ -170,10 +182,17 @@ pub fn PostEventRegister() -> impl IntoView {
                             <span style="margin-bottom:1rem;opacity:0.6;">
                                 <Icon icon=IconName::Warning class="icon-2xl icon-warning" />
                             </span>
-                            <h2 style="margin:0 0 0.5rem;">"Couldn't register"</h2>
-                            <p class="subtitle" style="margin:0 0 1rem;text-align:center;">{msg}</p>
+                            <h2 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.error_title))}</h2>
+                            <p class="subtitle" style="margin:0 0 1rem;text-align:center;">
+                                {match msg {
+                                    RegError::MissingSlug => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.missing_slug)).into_any(),
+                                    RegError::NeedName => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.need_name)).into_any(),
+                                    RegError::NeedConsent => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.need_consent)).into_any(),
+                                    RegError::Server(msg) => msg.into_any(),
+                                }}
+                            </p>
                             <A href=back_href.clone() attr:class="btn btn-outline btn-sm">
-                                "← Back to event"
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.back))}
                             </A>
                         </div>
                     }.into_any(),
@@ -182,29 +201,29 @@ pub fn PostEventRegister() -> impl IntoView {
                             <span style="margin-bottom:1rem;color:#16a34a;">
                                 <Icon icon=IconName::Check class="icon-2xl" />
                             </span>
-                            <h2 style="margin:0 0 0.5rem;">"You're on the list!"</h2>
+                            <h2 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.done_title))}</h2>
                             <p class="subtitle" style="margin:0 0 1rem;text-align:center;">
-                                "We'll email you about the next event."
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.done_body))}
                             </p>
                             <A href="/past-events" attr:class="btn btn-primary">
-                                "Browse past events"
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.browse_past))}
                             </A>
                         </div>
                     }.into_any(),
                     RegState::Form | RegState::Submitting => view! {
                         <div class="card" style="width:100%;max-width:540px;">
-                            <h1 style="margin:0 0 0.5rem;">"Join the community"</h1>
+                            <h1 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.title))}</h1>
                             <p class="subtitle" style="margin:0 0 1.5rem;">
-                                "Missed the event? No worries — tell us about yourself and we'll keep you in the loop."
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.intro))}
                             </p>
 
                             // Name
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Name"</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.name))}</label>
                                 <input
                                     class="dev-profile-input"
                                     type="text"
-                                    placeholder="Your name"
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.name_placeholder))
                                     prop:value=name.get()
                                     on:input=move |ev| set_name.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -213,14 +232,14 @@ pub fn PostEventRegister() -> impl IntoView {
 
                             // Contact channel
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Preferred contact (optional)"</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.contact))}</label>
                                 <select
                                     class="dev-profile-select"
                                     prop:value=contact_channel.get()
                                     on:change=move |ev| set_contact_channel.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">"— Select —"</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
                                     <option value="telegram">"Telegram"</option>
                                     <option value="line">"Line"</option>
                                     <option value="facebook">"Facebook"</option>
@@ -230,11 +249,11 @@ pub fn PostEventRegister() -> impl IntoView {
 
                             // Contact handle
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Username / profile link (optional)"</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.handle))}</label>
                                 <input
                                     class="dev-profile-input"
                                     type="text"
-                                    placeholder="@handle or profile URL"
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.handle_placeholder))
                                     prop:value=contact_handle.get()
                                     on:input=move |ev| set_contact_handle.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -243,27 +262,27 @@ pub fn PostEventRegister() -> impl IntoView {
 
                             // Experience level
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Experience level (optional)"</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.experience))}</label>
                                 <select
                                     class="dev-profile-select"
                                     prop:value=experience_level.get()
                                     on:change=move |ev| set_experience_level.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">"— Select —"</option>
-                                    <option value="beginner">"Beginner"</option>
-                                    <option value="intermediate">"Intermediate"</option>
-                                    <option value="advanced">"Advanced"</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
+                                    <option value="beginner">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.beginner))}</option>
+                                    <option value="intermediate">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.intermediate))}</option>
+                                    <option value="advanced">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.advanced))}</option>
                                 </select>
                             </div>
 
                             // Tech stack
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Tech stack (optional)"</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.stack))}</label>
                                 <input
                                     class="dev-profile-input"
                                     type="text"
-                                    placeholder="e.g. Rust, React, Solana"
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.stack_placeholder))
                                     prop:value=tech_stack.get()
                                     on:input=move |ev| set_tech_stack.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -272,11 +291,11 @@ pub fn PostEventRegister() -> impl IntoView {
 
                             // Interests
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Interests (optional)"</label>
+                                <label class="dev-profile-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.interests))}</label>
                                 <textarea
                                     class="dev-profile-input"
                                     rows="3"
-                                    placeholder="What are you curious about?"
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.interests_placeholder))
                                     prop:value=interests.get()
                                     on:input=move |ev| set_interests.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -290,7 +309,7 @@ pub fn PostEventRegister() -> impl IntoView {
                             // the page, so this is the moment they will answer.
                             <div class="dev-profile-field">
                                 <label class="dev-profile-label">
-                                    "How was the event? (optional)"
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.satisfaction_q))}
                                 </label>
                                 <select
                                     class="dev-profile-select"
@@ -298,18 +317,18 @@ pub fn PostEventRegister() -> impl IntoView {
                                     on:change=move |ev| set_sat_overall.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">"— Select —"</option>
-                                    <option value="5">"5 — Loved it"</option>
-                                    <option value="4">"4 — Good"</option>
-                                    <option value="3">"3 — OK"</option>
-                                    <option value="2">"2 — Not great"</option>
-                                    <option value="1">"1 — Poor"</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
+                                    <option value="5">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_5))}</option>
+                                    <option value="4">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_4))}</option>
+                                    <option value="3">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_3))}</option>
+                                    <option value="2">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_2))}</option>
+                                    <option value="1">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.sat_1))}</option>
                                 </select>
                             </div>
 
                             <div class="dev-profile-field">
                                 <label class="dev-profile-label">
-                                    "How likely are you to recommend it? (optional)"
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.nps_q))}
                                 </label>
                                 <select
                                     class="dev-profile-select"
@@ -317,8 +336,8 @@ pub fn PostEventRegister() -> impl IntoView {
                                     on:change=move |ev| set_nps.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">"— Select —"</option>
-                                    <option value="10">"10 — Definitely"</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
+                                    <option value="10">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.nps_10))}</option>
                                     <option value="9">"9"</option>
                                     <option value="8">"8"</option>
                                     <option value="7">"7"</option>
@@ -328,13 +347,13 @@ pub fn PostEventRegister() -> impl IntoView {
                                     <option value="3">"3"</option>
                                     <option value="2">"2"</option>
                                     <option value="1">"1"</option>
-                                    <option value="0">"0 — Not at all"</option>
+                                    <option value="0">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.nps_0))}</option>
                                 </select>
                             </div>
 
                             <div class="dev-profile-field">
                                 <label class="dev-profile-label">
-                                    "Would you come to another one? (optional)"
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.return_q))}
                                 </label>
                                 <select
                                     class="dev-profile-select"
@@ -342,21 +361,21 @@ pub fn PostEventRegister() -> impl IntoView {
                                     on:change=move |ev| set_would_return.set(event_target_value(&ev))
                                     disabled=is_submitting()
                                 >
-                                    <option value="">"— Select —"</option>
-                                    <option value="yes">"Yes"</option>
-                                    <option value="maybe">"Maybe"</option>
-                                    <option value="no">"No"</option>
+                                    <option value="">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.select))}</option>
+                                    <option value="yes">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.yes))}</option>
+                                    <option value="maybe">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.maybe))}</option>
+                                    <option value="no">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.no))}</option>
                                 </select>
                             </div>
 
                             <div class="dev-profile-field">
                                 <label class="dev-profile-label">
-                                    "Anything you would change? (optional)"
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.change_q))}
                                 </label>
                                 <textarea
                                     class="dev-profile-input"
                                     rows="3"
-                                    placeholder="What would have made it better?"
+                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.change_placeholder))
                                     prop:value=comment.get()
                                     on:input=move |ev| set_comment.set(event_target_value(&ev))
                                     disabled=is_submitting()
@@ -372,7 +391,7 @@ pub fn PostEventRegister() -> impl IntoView {
                                     disabled=is_submitting()
                                 />
                                 <label class="dev-profile-label" style="font-weight:normal;">
-                                    "I consent to BeThere collecting my data for this registration."
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.consent))}
                                 </label>
                             </div>
                             <div class="dev-profile-field" style="flex-direction:row;align-items:flex-start;gap:0.5rem;">
@@ -383,7 +402,7 @@ pub fn PostEventRegister() -> impl IntoView {
                                     disabled=is_submitting()
                                 />
                                 <label class="dev-profile-label" style="font-weight:normal;">
-                                    "Send me updates about future events."
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.marketing))}
                                 </label>
                             </div>
 
@@ -394,13 +413,11 @@ pub fn PostEventRegister() -> impl IntoView {
                                 on:click=move |_| {
                                     let n = name.get();
                                     if n.trim().is_empty() {
-                                        set_state.set(RegState::Error("Please enter your name.".to_string()));
+                                        set_state.set(RegState::Error(RegError::NeedName));
                                         return;
                                     }
                                     if !consent_given.get() {
-                                        set_state.set(RegState::Error(
-                                            "Please consent to data collection to continue.".to_string(),
-                                        ));
+                                        set_state.set(RegState::Error(RegError::NeedConsent));
                                         return;
                                     }
                                     let body = PostEventRegisterBody {
@@ -424,13 +441,16 @@ pub fn PostEventRegister() -> impl IntoView {
                                     leptos::task::spawn_local(async move {
                                         match api::register_post_event(&slug, &body).await {
                                             Ok(_) => set_state.set(RegState::Done),
-                                            Err(e) => set_state.set(RegState::Error(e.message)),
+                                            Err(e) => set_state.set(RegState::Error(RegError::Server(e.message))),
                                         }
                                     });
                                 }
                                 disabled=is_submitting()
                             >
-                                {move || if is_submitting() { "Submitting..." } else { "Join the community" }}
+                                {move || match is_submitting() {
+                                    true => t_string!(i18n, recap.join.submitting),
+                                    false => t_string!(i18n, recap.join.submit),
+                                }}
                             </button>
                         </div>
                     }.into_any(),

@@ -19,6 +19,7 @@ use leptos_router::hooks::use_params;
 
 use crate::api;
 use crate::components::{self as app_components, Toast};
+use crate::i18n::{t, use_i18n};
 
 use self::types::*;
 
@@ -28,6 +29,7 @@ use self::types::*;
 /// or THB (PromptPay slip upload).
 #[component]
 pub fn Deposit() -> impl IntoView {
+    let i18n = use_i18n();
     let params = use_params::<DepositParams>();
 
     // Auth state — check if user is signed in (for logout button visibility)
@@ -70,17 +72,13 @@ pub fn Deposit() -> impl IntoView {
         let attendee_id = match params.get() {
             Ok(p) => p.attendee_id.unwrap_or_default(),
             Err(_) => {
-                set_state.set(DepositPageState::Error(
-                    "Invalid deposit link — missing attendee ID.".to_string(),
-                ));
+                set_state.set(DepositPageState::Error(DepositError::InvalidLink));
                 return;
             }
         };
 
         if attendee_id.is_empty() {
-            set_state.set(DepositPageState::Error(
-                "Invalid deposit link — missing attendee ID.".to_string(),
-            ));
+            set_state.set(DepositPageState::Error(DepositError::InvalidLink));
             return;
         }
 
@@ -119,9 +117,7 @@ pub fn Deposit() -> impl IntoView {
                         // after the fact). Otherwise it's a normal pre-event deposit.
                         let now_ms = js_sys::Date::now() as i64;
                         if data.event_end_ms > 0 && now_ms > data.event_end_ms {
-                            set_state.set(DepositPageState::Error(
-                                "This event has ended and no deposit is on file for you — there's nothing to pay or refund.".to_string(),
-                            ));
+                            set_state.set(DepositPageState::Error(DepositError::EndedNoDeposit));
                         } else {
                             set_state.set(DepositPageState::ChoosePayment(data));
                         }
@@ -129,8 +125,8 @@ pub fn Deposit() -> impl IntoView {
                 }
                 Err(e) => {
                     log::error!("[deposit] failed to get status: {e}");
-                    set_state.set(DepositPageState::Error(format!(
-                        "Failed to load deposit info: {e}"
+                    set_state.set(DepositPageState::Error(DepositError::LoadFailed(
+                        e.to_string(),
                     )));
                 }
             }
@@ -186,21 +182,21 @@ pub fn Deposit() -> impl IntoView {
     let has_wallets = move || !detected_wallets.get().is_empty();
 
     view! {
-        <Title text="BeThere — Event Deposit" />
+        <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.page_title)) />
         <div class="center-page">
             <div class="container layout-col-center">
                 // Logo
                 <div class="brand-logo">"BeThere"</div>
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
 
-                <h1 class="claim-title">"Event Deposit"</h1>
+                <h1 class="claim-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.title))}</h1>
 
                 // Logout button — only visible when signed in
                 {move || match signed_in_email.get() {
                     Some(email) => view! {
                         <div class="logout-btn-wrapper">
                             <span class="dep-note-text">
-                                {format!("Welcome, {email}")}
+                                {t!(i18n, deposit.welcome, email)}
                             </span>
                             <button
                                 class="btn btn-outline btn-xs"
@@ -211,7 +207,7 @@ pub fn Deposit() -> impl IntoView {
                                     });
                                 }
                             >
-                                "Sign out"
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.sign_out))}
                             </button>
                         </div>
                     }.into_any(),
@@ -255,7 +251,7 @@ pub fn Deposit() -> impl IntoView {
                         DepositPageState::Loading => already_deposited::loading_view(),
 
                         // ===== Error =====
-                        DepositPageState::Error(msg) => already_deposited::error_view(&msg),
+                        DepositPageState::Error(msg) => already_deposited::error_view(msg),
 
                         // ===== Not Enabled =====
                         DepositPageState::NotEnabled(data) => {

@@ -1,13 +1,12 @@
 //! The landing page component itself.
 
-use crate::utils::deposit_copy::{NEVER_FORFEITED, THB_REFUND_WINDOW};
 use leptos::prelude::*;
 use leptos_router::components::A;
 
 use crate::components::is_admin_role;
 use crate::icons::{Icon, IconName};
 
-use super::auth::{AuthState, trigger_landing_oauth};
+use super::auth::AuthState;
 use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
 use super::upcoming::UpcomingEvents;
@@ -19,16 +18,6 @@ pub fn Landing() -> impl IntoView {
     // Auth state for nav bar
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (user_role, set_user_role) = signal(String::new());
-
-    // Persona toggle: 0 = Attendees, 1 = Organizers
-    // The page's one role switcher: 0 = Attendee, 1 = Organizer, 2 = Staff.
-    //
-    // There used to be two — this pill and a separate tab row in "How it works"
-    // — on the same axis, with their own signals and a one-way sync between
-    // them, and they did not agree on how many roles exist (two against three).
-    // A reader who chose a side at the top had to choose again 800px later
-    // (`.issues/105`).
-    let (persona, set_persona) = signal(0u8);
 
     // Check auth on mount
     Effect::new(move |_| {
@@ -74,364 +63,90 @@ pub fn Landing() -> impl IntoView {
             <SiteHeader auth_state=auth_state user_role=user_role />
 
             // ===== Hero =====
+            // One screen, one decision (.plans/038 P1-1, after lu.ma): a
+            // headline, one line of value, one button. The audience tabs,
+            // stat cards, brand eyebrow and Solana pill are gone: organizers
+            // get the host link above the waitlist, Solana is in the footer.
             <section class="landing-hero">
-
-
-                // BeThere name + tagline
-                <div class="landing-hero-brand landing-brand-gradient">
-                    "BeThere"
-                </div>
-
-                // Persona toggle
-                <div class="landing-persona-toggle">
-                    <button
-                        class="landing-persona-btn"
-                        class:landing-persona-btn--active=move || persona.get() == 0
-                        on:click=move |_| set_persona.set(0)
-                    >
-                        "For Attendees"
-                    </button>
-                    <button
-                        class="landing-persona-btn"
-                        class:landing-persona-btn--active=move || persona.get() == 1
-                        on:click=move |_| set_persona.set(1)
-                    >
-                        "For Organizers"
-                    </button>
-                    // Staff used to exist only in the "How it works" tabs, which
-                    // meant the page carried two switchers for one axis that did
-                    // not even agree on how many roles there are (`.issues/105`).
-                    <button
-                        class="landing-persona-btn"
-                        class:landing-persona-btn--active=move || persona.get() == 2
-                        on:click=move |_| set_persona.set(2)
-                    >
-                        "For Event Staff"
-                    </button>
-                </div>
-
                 <h1 class="landing-hero-h1">
-                    {move || match persona.get() {
-                        0 => view! {
-                            <>
-                                "Commit. Show up."
-                                <br />
-                                <span class="landing-hero-gradient">
-                                    "Get your money back."
-                                </span>
-                            </>
-                        }.into_any(),
-                        1 => view! {
-                            <>
-                                "No-shows cost you money."
-                                <br />
-                                <span class="landing-hero-gradient">
-                                    "Fix it with deposits."
-                                </span>
-                            </>
-                        }.into_any(),
-                        // Staff had no hero of its own before, because it was
-                        // not a hero option. Falling through to the organizer
-                        // pitch would sell a door scanner on payouts.
-                        _ => view! {
-                            <>
-                                "Scan. Check in."
-                                <br />
-                                <span class="landing-hero-gradient">
-                                    "Under two seconds."
-                                </span>
-                            </>
-                        }.into_any(),
-                    }}
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.headline_1))}
+                    <br />
+                    <span class="landing-hero-gradient">
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.headline_2))}
+                    </span>
                 </h1>
-                <p class="landing-hero-desc">
-                    {move || match persona.get() {
-                        0 => "Put down a deposit to reserve your spot. Show up, check in, and get every cent back — take a quick quiz to unlock a digital badge you own forever.".to_string(),
-                        1 => "Set a deposit for your event. Track check-ins live. Attendees who show up get their deposit back.".to_string(),
-                        _ => "Open the scanner on any phone, point it at an attendee's QR code, and the check-in is recorded. No app to install, no training.".to_string(),
-                    }}
+                <p class="landing-hero-value">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.value))}
                 </p>
-                // Solana pill badge
-                <div class="solana-pill">
-                    "Built on Solana"
-                    <Icon icon=IconName::Solana />
-                </div>
-
-                // Platform stats — paper ticket stubs on the night ground
-                <div class="landing-stat-stubs">
-                    <div class="landing-stat-stub">
-                        <div class="landing-stat-stub-value stub-green">"100%"</div>
-                        <div class="landing-stat-stub-label">"Back When You Attend"</div>
-                    </div>
-                    <div class="landing-stat-stub">
-                        <div class="landing-stat-stub-value stub-poppy">"฿0"</div>
-                        <div class="landing-stat-stub-label">"Cost To Attend"</div>
-                    </div>
-                    <div class="landing-stat-stub">
-                        <div class="landing-stat-stub-value">"< 1s"</div>
-                        <div class="landing-stat-stub-label">"QR Check-In"</div>
-                    </div>
-                </div>
-
                 <div class="landing-ctas">
                     {move || {
-                        let state = auth_state.get();
                         let role = user_role.get();
-                        let p = persona.get();
-                        match &state {
-                            AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
-                                view! {
-                                    <A href="/admin" attr:class="btn btn-primary landing-cta-link">
-                                        "Go to Dashboard →"
-                                    </A>
-                                }.into_any()
-                            }
-                            AuthState::SignedIn(_) if role == "staff" => {
-                                view! {
-                                    <A href="/staff" attr:class="btn btn-primary landing-cta-link">
-                                        "Open Scanner →"
-                                    </A>
-                                }.into_any()
-                            }
-                            AuthState::SignedIn(_) => {
-                                view! {
-                                    <a href="#events" class="btn btn-primary landing-cta-link">
-                                        "Find Events ↓"
-                                    </a>
-                                }.into_any()
-                            }
-                            _ if p == 1 => {
-                                // Organizer persona — primary = create event
-                                view! {
-                                    <button
-                                        class="btn btn-primary landing-cta-link"
-                                        on:click=move |_| trigger_landing_oauth()
-                                    >
-                                        "Create an Event →"
-                                    </button>
-                                }.into_any()
-                            }
-                            _ => {
-                                // Attendee persona — primary = find events, secondary = create event
-                                view! {
-                                    <a href="#events" class="btn btn-primary landing-cta-link">
-                                        "Find Events ↓"
-                                    </a>
-                                    <button
-                                        class="btn btn-outline landing-cta-link"
-                                        on:click=move |_| trigger_landing_oauth()
-                                    >
-                                        "Create an Event →"
-                                    </button>
-                                }.into_any()
-                            }
+                        match auth_state.get() {
+                            AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => view! {
+                                <A href="/admin" attr:class="btn btn-primary landing-cta-link">
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.dashboard))}
+                                </A>
+                            }.into_any(),
+                            AuthState::SignedIn(_) if role == "staff" => view! {
+                                <A href="/staff" attr:class="btn btn-primary landing-cta-link">
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.scanner))}
+                                </A>
+                            }.into_any(),
+                            _ => view! {
+                                <a href="#events" class="btn btn-primary landing-cta-link">
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.find_events))}
+                                </a>
+                            }.into_any(),
                         }
                     }}
                 </div>
             </section>
 
-            // ===== Upcoming Events =====
-            <UpcomingEvents />
-
-            // ===== My Registrations (visible when signed in) =====
+            // ===== My Registrations (signed in) — straight under the hero =====
             <MyRegistrations />
 
-            // ===== How It Works =====
+            // ===== Upcoming Events (two cards + see all) =====
+            <UpcomingEvents />
+
+            // ===== How It Works — three steps on one line =====
             <section id="how-it-works" class="landing-section">
                 <div class="landing-section-header">
                     <h2 class="landing-h2">
-                        "How it works"
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.title))}
                     </h2>
-                    <p class="landing-subtitle">
-                        "Choose your role to see the experience."
-                    </p>
                 </div>
-
-                // No tab row here any more. The hero pill is the page's one
-                // role switcher; this section follows it (`.issues/105`).
-
-                // Tab content — vertical timelines
-                {move || match persona.get() {
-                    0 => view! {
-                        <div class="landing-feature-timeline">
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--green">
-                                    <Icon icon=IconName::Ticket class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Reserve your spot"</div>
-                                    <div class="landing-timeline-desc">"Browse events and reserve your place with the event’s configured THB or USDC deposit. You’ll see the exact amount and payment method before confirming."</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::QrCode class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Show your QR at the venue"</div>
-                                    <div class="landing-timeline-desc">"Open your ticket on any phone, show the QR code, and get scanned in under 2 seconds. No app needed."</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--indigo">
-                                    <Icon icon=IconName::Puzzle class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Complete the brief quest"</div>
-                                    <div class="landing-timeline-desc">"After check-in, take a quick, fun quiz on your mobile device. It takes under a minute and confirms your engagement."</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--green">
-                                    <Icon icon=IconName::Recycle class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Get your full refund"</div>
-                                    <div class="landing-timeline-desc">"Your deposit comes back after the event, as a refund or as credit for next time, plus a compressed NFT badge you own forever."</div>
-                                </div>
-                            </div>
-                        </div>
-                    }.into_any(),
-                    1 => view! {
-                        <div class="landing-feature-timeline">
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--indigo">
-                                    <Icon icon=IconName::Target class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Set up event & deposit amount"</div>
-                                    <div class="landing-timeline-desc">"Create your event, choose the deposit and refund rules, and show attendees the exact THB or USDC amount before they confirm."</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--indigo">
-                                    <Icon icon=IconName::Chart class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Monitor real-time registrations"</div>
-                                    <div class="landing-timeline-desc">"Track locked deposits and RSVPs on a live dashboard. See exactly who committed — no guesswork."</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::Camera class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Scan check-ins at the venue"</div>
-                                    <div class="landing-timeline-desc">"Staff use the mobile scanner portal to verify attendance in under 2 seconds. No app install required."</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--green">
-                                    <Icon icon=IconName::Coin class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Settle deposits in one place"</div>
-                                    <div class="landing-timeline-desc">"A payout queue lists every deposit to return, and anything kept as credit stays on the attendee's balance for your next event."</div>
-                                </div>
-                            </div>
-                        </div>
-                    }.into_any(),
-                    _ => view! {
-                        <div class="landing-feature-timeline">
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::Camera class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Open scanner on any mobile browser"</div>
-                                    <div class="landing-timeline-desc">"No app to install. Open the staff scanner on any smartphone — works in Chrome, Safari, and more."</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::QrCode class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Verify attendee QR code in 1 second"</div>
-                                    <div class="landing-timeline-desc">"Point the camera at the attendee's QR code. Instant verification with visual + haptic feedback."</div>
-                                </div>
-                            </div>
-                            <div class="landing-timeline-step">
-                                <div class="landing-timeline-dot landing-timeline-dot--amber">
-                                    <Icon icon=IconName::Chain class="icon-sm"/>
-                                </div>
-                                <div class="landing-timeline-body">
-                                    <div class="landing-timeline-title">"Badge on Solana"</div>
-                                    <div class="landing-timeline-desc">"Checked-in attendees can claim a compressed NFT badge on Solana. Manual search fallback available for lost QR codes."</div>
-                                </div>
-                            </div>
-                        </div>
-                    }.into_any(),
-                }}
+                <ol class="landing-how-row">
+                    <li class="landing-how-step">
+                        <Icon icon=IconName::Ticket class="icon-md"/>
+                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s1_title))}</span>
+                    </li>
+                    <li class="landing-how-step">
+                        <Icon icon=IconName::QrCode class="icon-md"/>
+                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s2_title))}</span>
+                    </li>
+                    <li class="landing-how-step">
+                        <Icon icon=IconName::Recycle class="icon-md"/>
+                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s4_title))}</span>
+                    </li>
+                </ol>
             </section>
 
-            // ===== FAQ =====
-            <section id="faq" class="landing-section-narrow">
-                <div class="landing-section-header">
-                    <h2 class="landing-h2">
-                        "Frequently asked questions"
-                    </h2>
-                    <p class="landing-subtitle">
-                        "Everything you need to know."
-                    </p>
-                </div>
-
-                <div class="landing-faq-grid">
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            "What is BeThere?"
-                        </h3>
-                        <p class="landing-faq-a">
-                            "A deposit-backed event check-in platform. Attendees put down a deposit, show up, get scanned, and get the whole deposit back, plus a compressed NFT badge on Solana."
-                        </p>
-                    </div>
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            "Do attendees need a crypto wallet?"
-                        </h3>
-                        <p class="landing-faq-a">
-                            "No. Checking in and paying by PromptPay work on any phone. A wallet is only needed to pay a USDC deposit or to claim the NFT badge."
-                        </p>
-                    </div>
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            "How does the deposit work?"
-                        </h3>
-                        <p class="landing-faq-a">
-                            {format!("Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back {THB_REFUND_WINDOW}, or you keep it as credit for your next event. {NEVER_FORFEITED} If you can't make it, tell the organizer. USDC deposits sit in a Solana escrow and you claim them back after the event ends.")}
-                        </p>
-                    </div>
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            "Is it only for crypto events?"
-                        </h3>
-                        <p class="landing-faq-a">
-                            "It works for any event — meetups, workshops, conferences, hackathons. The blockchain part runs behind the scenes; attendees don't need to know anything about crypto."
-                        </p>
-                    </div>
-
-                </div>
-
-                <div class="landing-faq-cta">
-                    <a href="#waitlist" class="btn btn-outline landing-faq-cta-link">
-                        "Want to host events? Learn more ↓"
-                    </a>
-                </div>
-            </section>
+            // The FAQ moved to /faq, linked from the footer (.plans/038 P3-a).
+            // Organizers keep their one entry point here, above the waitlist.
+            <div class="landing-faq-cta">
+                <a href="#waitlist" class="btn btn-outline landing-faq-cta-link">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.host_cta))}
+                </a>
+            </div>
 
             // ===== Waitlist (organizer-focused) =====
             <section id="waitlist" class="landing-section">
                 <div class="landing-waitlist-inner">
                     <h2 class="landing-h2">
-                        "Bring deposit-backed events to your community"
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.title))}
                     </h2>
                     <p class="landing-faq-a">
-                        "Stop losing seats to no-shows. Set a deposit, track check-ins live, and give attendees their deposit back when they show up."
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.desc))}
                     </p>
                     {move || {
                         let state = auth_state.get();
@@ -440,7 +155,7 @@ pub fn Landing() -> impl IntoView {
                             AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
                                 view! {
                                     <A href="/admin" attr:class="btn btn-primary landing-waitlist-submit">
-                                        "Go to Dashboard →"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.dashboard))}
                                     </A>
                                 }.into_any()
                             }
@@ -448,7 +163,7 @@ pub fn Landing() -> impl IntoView {
                                 view! {
                                     <div class="landing-waitlist-signed-in">
                                         <p class="landing-faq-a">
-                                            "Signed in! Contact us to get organizer access."
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.signed_in))}
                                         </p>
                                         <a
                                             href="https://x.com/ozoneRatchapon"
@@ -456,7 +171,7 @@ pub fn Landing() -> impl IntoView {
                                             rel="noopener noreferrer"
                                             class="btn btn-outline btn-sm"
                                         >
-                                            "DM us on X/Twitter"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.dm))}
                                         </a>
                                     </div>
                                 }.into_any()
@@ -479,16 +194,16 @@ pub fn Landing() -> impl IntoView {
                             "BeThere"
                         </span>
                         <div class="landing-footer-brand-tagline">
-                            "Show up. Get refunded."
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.tagline))}
                         </div>
                         <div class="landing-footer-built-with">
-                            "Built with "
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.built_with))}
                             <span class="landing-footer-crab"><Icon icon=IconName::Crab class="icon-sm"/></span>
-                            " Rust & Solana"
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.rust_solana))}
                         </div>
                         <div class="landing-footer-trust">
                             <span class="landing-footer-trust-icon"><Icon icon=IconName::Lock class="icon-xs"/></span>
-                            "Non-custodial & secure"
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.non_custodial))}
                         </div>
                         <a
                             href="https://github.com/solana-thailand"
@@ -496,21 +211,21 @@ pub fn Landing() -> impl IntoView {
                             rel="noopener noreferrer"
                             class="landing-footer-partner"
                         >
-                            "Alpha partner: Solana Developer Thailand"
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.partner))}
                         </a>
                     </div>
 
                     // Column 2 — Product
                     <div class="landing-footer-col">
-                        <h4>"Product"</h4>
-                        <a href="#how-it-works">"How It Works"</a>
-                        <a href="#faq">"FAQ"</a>
-                        <A href="/login">"Staff Portal"</A>
+                        <h4>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.product))}</h4>
+                        <a href="#how-it-works">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.how))}</a>
+                        <a href="/faq">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.faq))}</a>
+                        <A href="/login">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.staff_portal))}</A>
                     </div>
 
                     // Column 3 — Community
                     <div class="landing-footer-col">
-                        <h4>"Community"</h4>
+                        <h4>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.community))}</h4>
                         <a href="https://x.com/ozoneRatchapon" target="_blank" rel="noopener noreferrer">"X / Twitter"</a>
                         <a href="https://github.com/solana-thailand/BeThere" target="_blank" rel="noopener noreferrer">"GitHub"</a>
                     </div>
@@ -519,9 +234,14 @@ pub fn Landing() -> impl IntoView {
 
                 // Bottom row
                 <div class="landing-footer-bottom">
-                    <span class="landing-footer-copy">"© 2026 BeThere. All rights reserved."</span>
+                    <span class="landing-footer-copy">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.copyright))}</span>
+                    // Which build is live (.plans/038 P2-f): set by build.sh,
+                    // absent from builds that do not know their commit.
+                    {option_env!("BETHERE_GIT_SHA").filter(|sha| !sha.is_empty()).map(|sha| view! {
+                        <span class="landing-footer-version">{format!("v{} · {sha}", env!("CARGO_PKG_VERSION"))}</span>
+                    })}
                     <span class="landing-footer-powered">
-                        "Built on Solana"
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.built_on_solana))}
                         <Icon icon=IconName::Solana />
                     </span>
                 </div>

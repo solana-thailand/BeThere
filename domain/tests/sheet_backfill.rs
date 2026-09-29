@@ -18,7 +18,9 @@ fn want(api_id: &str, column: ColumnKey, value: &str) -> CellWant {
 }
 
 fn qr_col() -> usize {
-    ColumnMapping::hardcoded().get_or_default(ColumnKey::QrCodeUrl)
+    ColumnMapping::hardcoded()
+        .resolve(ColumnKey::QrCodeUrl)
+        .expect("standard layout has a QR column")
 }
 
 /// A sheet whose rows are wide enough to hold the QR column.

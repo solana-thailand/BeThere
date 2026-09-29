@@ -1,0 +1,8 @@
+{
+  "part_of": "Part of",
+  "position": "{{ n }} of {{ total }}",
+  "up_next": "Up next",
+  "previous": "Previous",
+  "last": "Last in series",
+  "first": "First in series"
+}

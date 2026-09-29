@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 
 use crate::components::{self as app_components, ToastType};
+use crate::i18n::{td_string, use_i18n};
 
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
@@ -17,7 +18,9 @@ pub fn make_connect_wallet(
     set_state: WriteSignal<DepositPageState>,
     set_toast: WriteSignal<Option<app_components::ToastMessage>>,
 ) -> impl Fn(String) + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move |wallet_name: String| {
+        let locale = i18n.get_locale_untracked();
         let deposit_data = match &state.get() {
             DepositPageState::ChoosePayment(d) => d.clone(),
             _ => return,
@@ -47,14 +50,14 @@ pub fn make_connect_wallet(
                     );
                     app_components::show_toast(
                         &set_toast,
-                        &crate::wallet_error::user_friendly_message(&e),
+                        &crate::wallet_error::user_friendly_message(&e, locale),
                         ToastType::Error,
                     );
                 }
                 crate::wallet_error::WalletResult::UnknownFailure => {
                     app_components::show_toast(
                         &set_toast,
-                        "Failed to connect wallet. Please try again.",
+                        td_string!(locale, deposit.toast.connect_failed),
                         ToastType::Error,
                     );
                 }

@@ -47,6 +47,9 @@ run_worker_first = ["/api/*", "/event-checkin-frontend-*_bg.wasm", "/jsqr-*.js"]
 # Build configuration for workers-rs (Rust → WASM)
 # Manual build instead of worker-build to reduce memory usage.
 # Requires: wasm-bindgen CLI matching the crate version (0.2.118)
+# cargo uses its default job count (one per core). CARGO_BUILD_JOBS=1 was set
+# here with no recorded reason: a cold build took 74 s at 1 job vs 36 s at the
+# default, and peak RSS was 2.8 GB vs 2.4 GB (2026-09-29, M5 Pro).
 #
 # The shim.mjs is rewritten after wasm-bindgen runs to create a proper
 # ES Module entry point. Workers imports WASM as a WebAssembly.Module,
@@ -54,7 +57,7 @@ run_worker_first = ["/api/*", "/event-checkin-frontend-*_bg.wasm", "/jsqr-*.js"]
 [build]
 command = """
   mkdir -p build/worker && \
-  CARGO_BUILD_JOBS=1 cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release && \
+  cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release && \
   wasm-bindgen \
     --target bundler \
     --no-typescript \
@@ -77,6 +80,9 @@ SHIM
 
 # Environment variables (non-secret config)
 [vars]
+# Slug of a seeded demo event; the landing shows "View a sample event" when
+# no event is live. Empty hides the button (.plans/038 P2-f).
+SAMPLE_EVENT_SLUG = ""
 # Set to 1 only after migration 0030 and verified sender setup (docs/notifications.md).
 NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""
@@ -186,6 +192,7 @@ EVENT_END_MS = "1777183200000"
 
 # Secrets (set via `npx wrangler secret put <NAME>`):
 # - JWT_SECRET
+# - LOG_FINGERPRINT_KEY         (optional; keys log fingerprints, falls back to JWT_SECRET — plan 029, 8.11)
 # - GOOGLE_CLIENT_ID
 # - GOOGLE_CLIENT_SECRET
 # - GOOGLE_REDIRECT_URI

@@ -4,6 +4,17 @@ version = "0.2.0"
 edition = "2024"
 publish = false
 
+# EN + TH catalog for `leptos_i18n::load_locales!()` (`src/lib.rs`), read from
+# `locales/{en,th}/<namespace>.json`: one file per page group, so the key
+# `feedback.submit` lives in `locales/*/feedback.json`. Add a namespace here
+# and in both locale directories. The macro path, not a `build.rs` with
+# `leptos_i18n_build`: that crate always pulls ICU datagen with networking
+# (ureq, rustls, webpki-roots), whose ISC / CDLA licences `deny.toml` rejects.
+[package.metadata.leptos-i18n]
+default = "en"
+locales = ["en", "th"]
+namespaces = ["lang", "common", "discover", "login", "status", "series", "feedback", "event", "deposit", "ticket", "claim", "landing", "privacy", "recap", "wallet", "profile"]
+
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false
 
@@ -16,11 +27,20 @@ console_log = ["dep:console_log"]
 # Forces all log macros to compile to no-ops, stripping string data from WASM.
 # Automatically enabled when console_log is disabled.
 release_no_log = ["log/max_level_off"]
+# The staff shell (`dist/staff-app.html`): scanner, admin and organizer pages.
+# Off by default, so the attendee shell never carries them (.issues/169,
+# `src/staff_routes.rs`). `build.sh` builds both.
+staff = []
 
 [dependencies]
 leptos = { version = "0.8", features = ["csr"] }
 leptos_meta = { version = "0.8" }
 leptos_router = { version = "0.8" }
+# EN + TH for attendee pages (.plans/037 §2). Compile-time-checked keys; `csr`
+# only, no ICU formatting data (dates go through the browser's Intl instead),
+# no cookie (the choice persists in localStorage, see `src/locale.rs`).
+# Configured by `[package.metadata.leptos-i18n]` above.
+leptos_i18n = { version = "0.6.2", default-features = false, features = ["csr"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
@@ -86,3 +106,11 @@ lto = true
 strip = true
 codegen-units = 1
 panic = "abort"
+
+# Fast iteration profile for `trunk serve` (see Trunk.toml). Production builds
+# (`build.sh`, size gates) keep using `release`.
+[profile.fast-dev]
+inherits = "release"
+opt-level = 1
+lto = false
+codegen-units = 256

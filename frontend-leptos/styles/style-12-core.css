@@ -25,6 +25,12 @@
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
+    /* Visible at once on open (the fade still runs on opacity) so the close
+       button can take focus as the dialog opens; closing keeps the delayed
+       hide from the base rule so the fade-out still plays. */
+    transition:
+        opacity 200ms ease,
+        visibility 0s;
 }
 .lightbox-card {
     cursor: default;
@@ -458,7 +464,7 @@
     right: 0;
     max-height: 200px;
     overflow-y: auto;
-    background: var(--card-bg, #1a1a2e);
+    background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 0 0 0.5rem 0.5rem;
     z-index: 100;

@@ -29,6 +29,34 @@ pub fn generate_qr_data_url(data: &str, size: u32) -> Option<String> {
     Some(format!("data:image/png;base64,{b64}"))
 }
 
+/// A QR code as one SVG path, for inline `<svg viewBox="0 0 {side} {side}">`.
+///
+/// Returns `(side, d)`: `side` counts modules including the quiet zone, and
+/// each dark module is a unit square in `d`, merged into horizontal runs so the
+/// path stays short. No image request and no PNG encode (.plans/038 P2-a).
+pub fn qr_svg_path(data: &str) -> Option<(u32, String)> {
+    let code = QrCode::new(data.as_bytes()).ok()?;
+    let modules = code.width();
+    let quiet = QUIET_ZONE_MODULES as usize;
+    let mut d = String::new();
+    for y in 0..modules {
+        let mut x = 0;
+        while x < modules {
+            if code[(x, y)] == QrColor::Light {
+                x += 1;
+                continue;
+            }
+            let start = x;
+            while x < modules && code[(x, y)] != QrColor::Light {
+                x += 1;
+            }
+            let (px, py, run) = (start + quiet, y + quiet, x - start);
+            d.push_str(&format!("M{px} {py}h{run}v1h-{run}z"));
+        }
+    }
+    Some(((modules + quiet * 2) as u32, d))
+}
+
 /// Encode a QR code to PNG bytes with the given pixel scale.
 fn encode_qr_png(code: &QrCode, pixels_per_module: u32) -> Option<Vec<u8>> {
     let modules = code.width() as u32;

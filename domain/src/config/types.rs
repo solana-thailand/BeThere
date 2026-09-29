@@ -232,6 +232,10 @@ pub struct AppConfig {
     pub service_account: GoogleServiceAccountConfig,
     pub sheets: SheetsConfig,
     pub jwt_secret: String,
+    /// Key for the one-way fingerprints that stand in for personal identifiers
+    /// in logs (plan 029, ISO 27001 8.11). `LOG_FINGERPRINT_KEY` when set,
+    /// otherwise `jwt_secret`, which is what every fingerprint used before it.
+    pub log_fingerprint_key: String,
     pub staff_emails: HashSet<String>,
     pub super_admin_emails: HashSet<String>,
     pub server: ServerConfig,
@@ -257,6 +261,16 @@ pub struct AppConfig {
     /// Telegram bot username (without `@`) for rendering the Login Widget.
     /// Public value; empty disables the widget (falls back to manual handle input).
     pub telegram_bot_username: String,
+    /// Slug of a seeded demo event for the landing's "View a sample event"
+    /// (.plans/038 P2-f). Public; empty hides the button.
+    pub sample_event_slug: String,
+    // ---- Bot check (.issues/170) ----
+    /// Cloudflare Turnstile site key. Public; the frontend renders the widget
+    /// with it. Empty (or an empty secret) turns the check off.
+    pub turnstile_site_key: String,
+    /// Cloudflare Turnstile secret for siteverify. Set with
+    /// `wrangler secret put TURNSTILE_SECRET_KEY`.
+    pub turnstile_secret_key: String,
     // ---- Observability ----
     /// Slack incoming-webhook URL for server-error (5xx) alerts. Empty disables
     /// alerting (the middleware becomes a no-op). Best-effort, fire-and-forget.
@@ -276,6 +290,7 @@ impl fmt::Debug for AppConfig {
             .field("service_account", &self.service_account)
             .field("sheets", &self.sheets)
             .field("jwt_secret", &"***REDACTED***")
+            .field("log_fingerprint_key", &"***REDACTED***")
             .field("staff_emails", &self.staff_emails)
             .field("super_admin_emails", &self.super_admin_emails)
             .field("server", &self.server)
@@ -288,6 +303,8 @@ impl fmt::Debug for AppConfig {
             .field("github_client_secret", &"***REDACTED***")
             .field("telegram_bot_token", &"***REDACTED***")
             .field("telegram_bot_username", &self.telegram_bot_username)
+            .field("turnstile_site_key", &self.turnstile_site_key)
+            .field("turnstile_secret_key", &"***REDACTED***")
             .finish()
     }
 }

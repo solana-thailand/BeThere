@@ -36,24 +36,32 @@ pub async fn mark_checked_in(
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
-    let col_checked_in_at = mapping.column_letter(CK::CheckedInAt);
-    let col_checked_in_by = mapping.column_letter(CK::CheckedInBy);
-    let col_claim_token = mapping.column_letter(CK::ClaimToken);
-
-    let data = vec![
-        ValueRange {
-            range: format!("{sheet_ref}!{col_checked_in_at}{row_index}"),
-            values: vec![vec![timestamp.clone()]],
-        },
-        ValueRange {
-            range: format!("{sheet_ref}!{col_checked_in_by}{row_index}"),
-            values: vec![vec![staff_email.to_string()]],
-        },
-        ValueRange {
-            range: format!("{sheet_ref}!{col_claim_token}{row_index}"),
-            values: vec![vec![claim_token.to_string()]],
-        },
-    ];
+    let data: Vec<ValueRange> = [
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::CheckedInAt,
+            row_index,
+            timestamp.clone(),
+        ),
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::CheckedInBy,
+            row_index,
+            staff_email.to_string(),
+        ),
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::ClaimToken,
+            row_index,
+            claim_token.to_string(),
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let url =
         format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
@@ -94,19 +102,25 @@ pub async fn mark_virtual_checked_in(
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
-    let col_checked_in_at = mapping.column_letter(CK::CheckedInAt);
-    let col_checked_in_by = mapping.column_letter(CK::CheckedInBy);
-
-    let data = vec![
-        ValueRange {
-            range: format!("{sheet_ref}!{col_checked_in_at}{row_index}"),
-            values: vec![vec![timestamp.clone()]],
-        },
-        ValueRange {
-            range: format!("{sheet_ref}!{col_checked_in_by}{row_index}"),
-            values: vec![vec!["virtual".to_string()]],
-        },
-    ];
+    let data: Vec<ValueRange> = [
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::CheckedInAt,
+            row_index,
+            timestamp.clone(),
+        ),
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::CheckedInBy,
+            row_index,
+            "virtual".to_string(),
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let url =
         format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
@@ -149,29 +163,33 @@ pub async fn clear_checked_in(
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
-    let col_checked_in_at = mapping.column_letter(CK::CheckedInAt);
-    let col_checked_in_by = mapping.column_letter(CK::CheckedInBy);
-    let col_claim_token = mapping.column_letter(CK::ClaimToken);
-    let col_claimed_at = mapping.column_letter(CK::ClaimedAt);
-
-    let data = vec![
-        ValueRange {
-            range: format!("{sheet_ref}!{col_checked_in_at}{row_index}"),
-            values: vec![vec![String::new()]],
-        },
-        ValueRange {
-            range: format!("{sheet_ref}!{col_checked_in_by}{row_index}"),
-            values: vec![vec![String::new()]],
-        },
-        ValueRange {
-            range: format!("{sheet_ref}!{col_claim_token}{row_index}"),
-            values: vec![vec![String::new()]],
-        },
-        ValueRange {
-            range: format!("{sheet_ref}!{col_claimed_at}{row_index}"),
-            values: vec![vec![String::new()]],
-        },
-    ];
+    let data: Vec<ValueRange> = [
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::CheckedInAt,
+            row_index,
+            String::new(),
+        ),
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::CheckedInBy,
+            row_index,
+            String::new(),
+        ),
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::ClaimToken,
+            row_index,
+            String::new(),
+        ),
+        a1::cell(&sheet_ref, mapping, CK::ClaimedAt, row_index, String::new()),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let url =
         format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
@@ -213,24 +231,32 @@ pub async fn mark_claimed(
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
-    let col_solana = mapping.column_letter(CK::SolanaAddress);
-    let col_claimed_at = mapping.column_letter(CK::ClaimedAt);
-    let col_nft_proof_url = mapping.column_letter(CK::NftProofUrl);
-
-    let data = vec![
-        ValueRange {
-            range: format!("{sheet_ref}!{col_solana}{row_index}"),
-            values: vec![vec![wallet_address.to_string()]],
-        },
-        ValueRange {
-            range: format!("{sheet_ref}!{col_claimed_at}{row_index}"),
-            values: vec![vec![claimed_at.to_string()]],
-        },
-        ValueRange {
-            range: format!("{sheet_ref}!{col_nft_proof_url}{row_index}"),
-            values: vec![vec![nft_proof_url.to_string()]],
-        },
-    ];
+    let data: Vec<ValueRange> = [
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::SolanaAddress,
+            row_index,
+            wallet_address.to_string(),
+        ),
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::ClaimedAt,
+            row_index,
+            claimed_at.to_string(),
+        ),
+        a1::cell(
+            &sheet_ref,
+            mapping,
+            CK::NftProofUrl,
+            row_index,
+            nft_proof_url.to_string(),
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
 
     let url =
         format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
@@ -271,14 +297,12 @@ pub async fn update_qr_urls(
     let updates = resolve_rows(updates.to_vec(), sheet_id, &sheet_ref, &access_token).await?;
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
-    let col_qr = mapping.column_letter(CK::QrCodeUrl);
 
     // Build batch update with individual value ranges
     let data: Vec<ValueRange> = updates
         .iter()
-        .map(|(row_index, url)| ValueRange {
-            range: format!("{sheet_ref}!{col_qr}{row_index}"),
-            values: vec![vec![url.clone()]],
+        .filter_map(|(row_index, url)| {
+            a1::cell(&sheet_ref, mapping, CK::QrCodeUrl, *row_index, url.clone())
         })
         .collect();
 

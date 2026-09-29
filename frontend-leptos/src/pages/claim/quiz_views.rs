@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::{self, ClaimLookupData, QuizQuestionsData, QuizSubmitData};
+use crate::i18n::{t, use_i18n};
 use crate::utils::escape_html;
 
 use super::helpers::*;
@@ -34,8 +35,15 @@ pub(super) fn QuizView(
     let passing = quiz_data.passing_score_percent;
     let max_att = quiz_data.max_attempts;
     let questions_clone = quiz_data.questions.clone();
-    let attempts_label = format!("{max_att} attempt{}", if max_att != 1 { "s" } else { "" });
+    let i18n = use_i18n();
+    let attempts_label = match max_att {
+        1 => {
+            crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.attempts_single)).into_any()
+        }
+        n => t!(i18n, claim.quiz.attempts_count, n).into_any(),
+    };
     let claim_token = claim_data.claim_token.clone();
+    let welcome_name = escape_html(&claim_data.name);
 
     // Pre-render question cards to avoid nested view! macro issues
     let question_views = build_quiz_questions(
@@ -50,7 +58,7 @@ pub(super) fn QuizView(
             // Attendee welcome
             <div class="claim-welcome-card">
                 <ParticipantAvatar name=claim_data.name.clone() />
-                <h3>"Welcome, "{escape_html(&claim_data.name)}"!"</h3>
+                <h3>{t!(i18n, claim.welcome, name = welcome_name)}</h3>
                 <p class="checked-in-label">{checked_in_display}</p>
             </div>
 
@@ -63,13 +71,17 @@ pub(super) fn QuizView(
                         <line x1="12" y1="17" x2="12.01" y2="17"></line>
                     </svg>
                 </div>
-                <h3>"Complete the Quiz"</h3>
+                <h3>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.title))}</h3>
                 <p class="claim-quiz-desc">
-                    "Answer all questions to unlock your badge. You need "
-                    <strong>{passing}"%"</strong>" correct to pass."
+                    {t!(
+                        i18n,
+                        claim.quiz.intro,
+                        <strong> = |children: ChildrenFn| view! { <strong>{children()}</strong> },
+                        passing
+                    )}
                 </p>
                 <p class="claim-quiz-meta">
-                    <span>{total_q}" questions"</span>
+                    <span>{t!(i18n, claim.quiz.questions, n = total_q)}</span>
                     {
                         let mut seen = std::collections::HashSet::new();
                         for q in &quiz_data.questions {
@@ -82,7 +94,7 @@ pub(super) fn QuizView(
                             view! {
                                 <>
                                     <span class="claim-quiz-sep">"·"</span>
-                                    <span>{format!("{session_count} sessions")}</span>
+                                    <span>{t!(i18n, claim.quiz.sessions, n = session_count)}</span>
                                 </>
                             }.into_any()
                         } else {
@@ -129,7 +141,7 @@ pub(super) fn QuizView(
                     });
                 }
             >
-                "Submit Answers"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.submit))}
                 <span class="claim-quiz-submit-count">
                     "("{answered}"/"{total_q}")"
                 </span>
@@ -168,11 +180,16 @@ pub(super) fn QuizSubmittedView(
     let claim_data_for_retry = claim_data.clone();
     let claim_data_for_claim = claim_data.clone();
     let claim_token = claim_data.claim_token.clone();
+    let i18n = use_i18n();
     let retry_info = match remaining {
-        0 => "No attempts remaining. Contact event staff for help.".to_string(),
-        n => format!("{n} attempt{} left.", if n != 1 { "s" } else { "" }),
+        0 => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.no_attempts_left))
+            .into_any(),
+        1 => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.attempt_left_single))
+            .into_any(),
+        n => t!(i18n, claim.quiz.attempts_left, n).into_any(),
     };
-    let score_label = format!("{score}% — {correct} of {total_q} correct");
+    let score_label = t!(i18n, claim.quiz.score, score, correct, total = total_q);
+    let welcome_name = escape_html(&claim_data.name);
     let action = match passed {
         true => QuizAction::Passed,
         false if remaining > 0 => QuizAction::Retry,
@@ -212,10 +229,13 @@ pub(super) fn QuizSubmittedView(
         }.into_any(),
     };
 
-    let result_title: &str = match passed {
-        true => "Quiz Passed!",
-        false => "Not Quite...",
-    };
+    let result_title =
+        match passed {
+            true => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.passed_title))
+                .into_any(),
+            false => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.failed_title))
+                .into_any(),
+        };
 
     let retry_info_view: AnyView = match passed {
         true => view! { <div></div> }.into_any(),
@@ -248,7 +268,7 @@ pub(super) fn QuizSubmittedView(
             // Attendee welcome
             <div class="claim-welcome-card">
                 <ParticipantAvatar name=claim_data.name.clone() />
-                <h3>"Welcome, "{escape_html(&claim_data.name)}"!"</h3>
+                <h3>{t!(i18n, claim.welcome, name = welcome_name)}</h3>
                 <p class="checked-in-label">{checked_in_display}</p>
             </div>
 

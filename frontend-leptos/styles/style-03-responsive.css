@@ -635,7 +635,7 @@
     margin: 0.75rem 0 0.5rem;
     font-size: 1.15rem;
     font-weight: 600;
-    color: var(--fg);
+    color: var(--text-primary);
 }
 .claim-quiz-icon {
     display: inline-flex;
@@ -649,23 +649,23 @@
 .claim-quiz-icon svg {
     width: 26px;
     height: 26px;
-    color: var(--primary);
+    color: var(--accent);
 }
 .claim-quiz-desc {
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 0.9rem;
     line-height: 1.5;
     margin: 0.5rem 0;
 }
 .claim-quiz-desc strong {
-    color: var(--primary);
+    color: var(--accent);
 }
 .claim-quiz-meta {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.4rem;
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 0.8rem;
     margin-top: 0.5rem;
 }
@@ -684,18 +684,18 @@
 .claim-quiz-q-num {
     font-size: 0.8rem;
     font-weight: 700;
-    color: var(--primary);
+    color: var(--accent);
 }
 .claim-quiz-q-of {
     font-size: 0.75rem;
-    color: var(--muted);
+    color: var(--text-muted);
 }
 .claim-quiz-q-text {
     font-size: 0.95rem;
     font-weight: 500;
     line-height: 1.5;
     margin: 0 0 0.85rem;
-    color: var(--fg);
+    color: var(--text-primary);
 }
 .claim-quiz-options {
     display: flex;
@@ -710,33 +710,33 @@
     padding: 0.7rem 0.9rem;
     border: 1.5px solid var(--border);
     border-radius: var(--radius);
-    background: var(--bg);
-    color: var(--fg);
+    background: var(--bg-primary);
+    color: var(--text-primary);
     font-size: 0.88rem;
     text-align: left;
     cursor: pointer;
     transition: all 0.15s ease;
 }
 .claim-quiz-opt:hover {
-    border-color: var(--primary);
+    border-color: var(--accent);
     background: rgba(255, 92, 57, 0.04);
 }
 .claim-quiz-opt-selected {
-    border-color: var(--primary);
+    border-color: var(--accent);
     background: rgba(255, 92, 57, 0.08);
-    color: var(--primary);
+    color: var(--accent);
     font-weight: 500;
 }
 .claim-quiz-opt-radio {
     flex-shrink: 0;
     font-size: 0.75rem;
     line-height: 1;
-    color: var(--muted);
+    color: var(--text-muted);
     width: 16px;
     text-align: center;
 }
 .claim-quiz-opt-selected .claim-quiz-opt-radio {
-    color: var(--primary);
+    color: var(--accent);
 }
 .claim-quiz-submit {
     margin-top: 0.5rem;
@@ -815,32 +815,32 @@
 }
 .claim-quiz-score-detail {
     font-size: 0.88rem;
-    color: var(--muted);
+    color: var(--text-muted);
     margin: 0.25rem 0 0.5rem;
 }
 .claim-quiz-retry-info {
     font-size: 0.85rem;
-    color: var(--muted);
+    color: var(--text-muted);
     margin-top: 0.5rem;
     padding-top: 0.5rem;
     border-top: 1px solid var(--border);
 }
 .claim-quiz-retry-btn {
     margin-top: 0.75rem;
-    background: var(--bg);
-    color: var(--fg);
+    background: var(--bg-primary);
+    color: var(--text-primary);
     border: 1.5px solid var(--border);
 }
 .claim-quiz-retry-btn:hover:not(:disabled) {
-    border-color: var(--primary);
-    color: var(--primary);
+    border-color: var(--accent);
+    color: var(--accent);
 }
 .claim-quiz-exhausted {
     text-align: center;
     padding: 1.25rem;
 }
 .claim-quiz-exhausted p {
-    color: var(--muted);
+    color: var(--text-muted);
     font-size: 0.9rem;
 }
 .claim-quiz-explanations {
@@ -850,7 +850,7 @@
     font-size: 0.95rem;
     font-weight: 600;
     margin: 0 0 0.75rem;
-    color: var(--fg);
+    color: var(--text-primary);
 }
 .claim-quiz-exp-item {
     padding: 0.65rem 0;
@@ -877,12 +877,12 @@
 }
 .claim-quiz-exp-q {
     font-size: 0.85rem;
-    color: var(--fg);
+    color: var(--text-primary);
     line-height: 1.4;
 }
 .claim-quiz-exp-text {
     font-size: 0.82rem;
-    color: var(--muted);
+    color: var(--text-muted);
     margin: 0.3rem 0 0 1.4rem;
     line-height: 1.45;
 }

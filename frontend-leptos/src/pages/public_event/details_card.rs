@@ -1,132 +1,190 @@
 use super::types::*;
+use crate::api::EventFormat;
+use crate::i18n::{Locale, td_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use event_checkin_domain::models::event::safe_map_url;
 use leptos::prelude::*;
+
+/// The format badge text. `EventFormat::label()` stays English for staff pages.
+fn format_label(locale: Locale, format: &EventFormat) -> &'static str {
+    match format {
+        EventFormat::InPerson => td_string!(locale, event.format_in_person),
+        EventFormat::Online => td_string!(locale, event.format_online),
+        EventFormat::Hybrid => td_string!(locale, event.format_hybrid),
+    }
+}
 
 pub fn details_card(
     data: &PublicEventData,
     countdown: ReadSignal<String>,
     event_completed: ReadSignal<bool>,
 ) -> AnyView {
+    let i18n = use_i18n();
     let has_location = !data.location.is_empty();
     let location = data.location.clone();
     // The Worker already filters to https; re-check since this becomes an href.
     let location_map_url = data.location_map_url.as_deref().and_then(safe_map_url);
-    let date_str = format_event_date(data.event_start_ms);
-    let time_str = if data.time_tba {
-        "Time TBA".to_string()
-    } else {
+    let (start_ms, end_ms, time_tba) = (data.event_start_ms, data.event_end_ms, data.time_tba);
+    // EN keeps its long weekday form; TH uses the shared Intl helper (Thai
+    // month names, Buddhist-era year). Closures, so both follow a switch.
+    let date_str = move || match i18n.get_locale() {
+        Locale::en => format_event_date(start_ms),
+        Locale::th => crate::utils::format_event_day(start_ms),
+    };
+    let time_str = move || {
+        let locale = i18n.get_locale();
+        if time_tba {
+            return td_string!(locale, event.time_tba).to_string();
+        }
         format!(
-            "{} — {}",
-            format_event_time(data.event_start_ms),
-            format_event_time(data.event_end_ms)
+            "{} — {}{}",
+            format_event_time(start_ms, locale),
+            format_event_time(end_ms, locale),
+            td_string!(locale, event.time_unit)
         )
     };
 
-    let (badge_bg, badge_border, badge_color, badge_icon) = match data.event_format {
-        crate::api::EventFormat::Online => (
-            "rgba(99,102,241,0.12)",
-            "rgba(99,102,241,0.3)",
-            "#818cf8",
-            IconName::Globe,
-        ),
-        crate::api::EventFormat::Hybrid => (
-            "rgba(52,211,153,0.12)",
-            "rgba(52,211,153,0.3)",
-            "#34d399",
-            IconName::Ticket,
-        ),
-        crate::api::EventFormat::InPerson => (
-            "rgba(96,165,250,0.12)",
-            "rgba(96,165,250,0.3)",
-            "#60a5fa",
-            IconName::Pin,
-        ),
+    let format_icon = match data.event_format {
+        crate::api::EventFormat::Online => IconName::Globe,
+        // Pin is the Where row and Ticket the Capacity row: no icon twice.
+        crate::api::EventFormat::Hybrid => IconName::Link,
+        crate::api::EventFormat::InPerson => IconName::User,
     };
-    let fmt_label = data.event_format.label();
+    let event_format = data.event_format.clone();
+    let fmt_label = move || format_label(i18n.get_locale(), &event_format);
+    // Times render in the viewer's zone; name it so a visitor abroad knows.
+    let tz_label = crate::utils::local_tz_label(start_ms);
+    let time_line = move || match (time_tba, tz_label.is_empty()) {
+        (false, false) => format!("{} ({tz_label})", time_str()),
+        _ => time_str(),
+    };
+    // The organizer's map link when set, otherwise a search for the venue text.
+    let map_href = location_map_url.clone().unwrap_or_else(|| {
+        let query = js_sys::encode_uri_component(&location);
+        format!("https://www.google.com/maps/search/?api=1&query={query}")
+    });
+    let capacity = capacity_line(data);
 
     view! {
-        <div class="pe-card">
-            // Format badge
-            <div class="pe-badge-row">
-                <div style=format!("display:inline-flex;align-items:center;gap:0.4rem;background:{};border:1px solid {};border-radius:9999px;padding:0.25rem 0.75rem;font-size:0.8rem;font-weight:600;color:{};", badge_bg, badge_border, badge_color)>
-                    <Icon icon=badge_icon class="icon-sm" />
-                    {fmt_label}
+        <div class="pe-card pe-meta">
+            // When
+            <div class="pe-meta-row">
+                <Icon icon=IconName::Calendar class="icon-sm icon-muted" />
+                <div class="pe-meta-body">
+                    <span class="pe-meta-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.meta_when))}</span>
+                    <span class="pe-detail-text">{date_str}</span>
+                    <span class="pe-detail-secondary">{time_line}</span>
+                    {move || {
+                        if event_completed.get() {
+                            return view! {
+                                <span class="pe-text-success">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.event_completed))}</span>
+                            }.into_any();
+                        }
+                        let cd = countdown.get();
+                        match cd.is_empty() {
+                            // Countdown ended but event not marked completed: it is live.
+                            true => view! {
+                                <span class="pe-text-accent-bold">"🔴 "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.happening_now))}</span>
+                            }.into_any(),
+                            false => view! {
+                                <span class="pe-countdown-capsule">
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, event.starts_in))}" "{cd}
+                                </span>
+                            }.into_any(),
+                        }
+                    }}
                 </div>
             </div>
 
-            // Location — only render when an actual location string exists.
-            // For online-only events without a location, the format badge above
-            // already says "Online", so a redundant "Virtual Event" row here
-            // would just be noise.
-            {if has_location {
-                let loc = location.clone();
-                let map_link = location_map_url.clone().map(|href| view! {
-                    <a
-                        href=href
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="pe-map-link"
-                    >
-                        "Open in Google Maps ↗"
-                    </a>
-                });
-                view! {
-                    <div class="pe-detail-row">
-                        <span><Icon icon=IconName::Pin class="icon-sm icon-muted" /></span>
-                        <span class="pe-detail-text">
-                            {loc}
-                            {map_link}
-                        </span>
+            // Where: only with a real location. An online-only event says so in
+            // the format row, so a "Virtual Event" row would be noise.
+            {has_location.then(|| view! {
+                <div class="pe-meta-row">
+                    <Icon icon=IconName::Pin class="icon-sm icon-muted" />
+                    <div class="pe-meta-body">
+                        <span class="pe-meta-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.meta_where))}</span>
+                        <span class="pe-detail-text">{location.clone()}</span>
+                        <a href=map_href.clone() target="_blank" rel="noopener noreferrer" class="pe-map-link">
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, event.open_in_maps))}
+                        </a>
                     </div>
-                }.into_any()
-            } else {
-                ().into_any()
-            }}
+                </div>
+            })}
 
-            // Date
-            <div class="pe-detail-row">
-                <span><Icon icon=IconName::Calendar class="icon-sm icon-muted" /></span>
-                <span class="pe-detail-text">{date_str}</span>
+            // Format
+            <div class="pe-meta-row">
+                <Icon icon=format_icon class="icon-sm icon-muted" />
+                <div class="pe-meta-body">
+                    <span class="pe-meta-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.meta_format))}</span>
+                    <span class="pe-detail-text">{fmt_label}</span>
+                </div>
             </div>
 
-            // Time
-            <div class="pe-time-indent">
-                <span class="pe-detail-secondary">{time_str}</span>
-            </div>
-
-            // Countdown / Completed / Live
-            {move || {
-                let completed = event_completed.get();
-                if completed {
-                    view! {
-                        <div class="pe-detail-row">
-                            <span><Icon icon=IconName::Party class="icon-sm icon-success" /></span>
-                            <span class="pe-text-success">"Event Completed"</span>
+            // Capacity: open seats while the event is ahead; nothing once it ended.
+            {capacity.map(|lines| view! {
+                <Show when=move || !event_completed.get() fallback=|| ()>
+                    <div class="pe-meta-row">
+                        <Icon icon=IconName::Ticket class="icon-sm icon-muted" />
+                        <div class="pe-meta-body">
+                            <span class="pe-meta-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.meta_capacity))}</span>
+                            {lines.iter().map(|line| {
+                                let line = *line;
+                                view! {
+                                    <span class="pe-detail-text" class:pe-meta-full=line.full>
+                                        {move || line.render(i18n.get_locale())}
+                                    </span>
+                                }
+                            }).collect::<Vec<_>>()}
                         </div>
-                    }.into_any()
-                } else {
-                    let cd = countdown.get();
-                    if cd.is_empty() {
-                        // Countdown ended but event not marked completed — event is live
-                        view! {
-                            <div class="pe-detail-row">
-                                <span class="pe-emoji-icon">"🔴"</span>
-                                <span class="pe-text-accent-bold">"Happening now!"</span>
-                            </div>
-                        }.into_any()
-                    } else {
-                        view! {
-                            <div class="pe-detail-row">
-                                <span><Icon icon=IconName::Timer class="icon-sm icon-muted" /></span>
-                                <span class="pe-countdown-capsule">
-                                    "Starts in "{cd}
-                                </span>
-                            </div>
-                        }.into_any()
-                    }
-                }
-            }}
+                    </div>
+                </Show>
+            })}
         </div>
     }.into_any()
+}
+
+/// One capacity line: a track, and how many seats it has left.
+#[derive(Clone, Copy)]
+struct CapacityLine {
+    online: bool,
+    remaining: u32,
+    full: bool,
+}
+
+impl CapacityLine {
+    fn render(self, locale: Locale) -> String {
+        match (self.online, self.full) {
+            (false, true) => td_string!(locale, event.capacity_in_person_full).to_string(),
+            (true, true) => td_string!(locale, event.capacity_online_full).to_string(),
+            (false, false) => format!(
+                "{} · {}",
+                self.remaining,
+                td_string!(locale, event.capacity_in_person_left)
+            ),
+            (true, false) => format!(
+                "{} · {}",
+                self.remaining,
+                td_string!(locale, event.capacity_online_left)
+            ),
+        }
+    }
+}
+
+/// The capacity lines for an event, or `None` when neither track is capped.
+fn capacity_line(data: &PublicEventData) -> Option<Vec<CapacityLine>> {
+    let in_person = data.in_person_capacity.map(|_| {
+        let remaining = data.in_person_remaining.unwrap_or(0);
+        CapacityLine {
+            online: false,
+            remaining,
+            full: remaining == 0,
+        }
+    });
+    let online = data.online_remaining.map(|remaining| CapacityLine {
+        online: true,
+        remaining,
+        full: remaining == 0,
+    });
+    let lines: Vec<CapacityLine> = in_person.into_iter().chain(online).collect();
+    (!lines.is_empty()).then_some(lines)
 }

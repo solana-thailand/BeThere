@@ -115,3 +115,7 @@ rustc-ice-*.txt
 # commits by `git add -A`.
 worker/test-results/
 e2e/test-results/
+worker/playwright-report/
+# Visual baselines are committed for Linux only (CI's platform, .plans/038
+# P0-3); a Mac run writes its own -darwin copies, which stay local.
+e2e/__screenshots__/*-darwin.png

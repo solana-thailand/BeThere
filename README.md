@@ -54,7 +54,7 @@ cargo install wasm-bindgen-cli --version 0.2.100
 cd worker && npm install && cd ..
 
 # 2. Build frontend
-cd frontend-leptos && trunk build && cd ..
+cd frontend-leptos && bash build.sh && cd ..
 
 # 3. Configure secrets (first time only)
 cd worker

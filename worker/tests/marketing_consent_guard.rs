@@ -187,3 +187,28 @@ fn withdrawal_clears_the_developer_profile_too() {
         );
     }
 }
+
+/// .plans/038 P2-e. Unticking "contact me" on the profile and saving is a
+/// withdrawal too, so it must clear the attendee rows as the unsubscribe does,
+/// and only rows that change are rewritten (consent_marketing_at is the
+/// moment consent changed).
+#[test]
+fn profile_save_without_consent_withdraws_everywhere() {
+    let profile = read("src/handlers/profile.rs");
+    let handler = &profile[profile
+        .find("pub async fn update_my_profile(")
+        .expect("update_my_profile exists")..];
+    assert!(
+        handler.contains("if !body.consent_outreach {")
+            && handler.contains(
+                "db::attendees::set_marketing_consent(d1, &claims.email.to_lowercase(), false)"
+            ),
+        "an unticked profile box must also clear attendees.consent_marketing"
+    );
+    let management = read("src/db/attendees/management.rs");
+    let body = function(&management, "set_marketing_consent");
+    assert!(
+        body.contains("AND consent_marketing <> {consent}"),
+        "set_marketing_consent must skip rows that already hold the value"
+    );
+}

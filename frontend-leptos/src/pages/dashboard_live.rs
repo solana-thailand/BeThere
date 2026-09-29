@@ -2,7 +2,9 @@
 //!
 //! Route: `/dashboard/live?event_id={id}`
 //!
-//! Polls `GET /api/dashboard/live` every 2.5 seconds and renders:
+//! Polls `GET /api/dashboard/live` every 2.5 seconds while the event is on
+//! (cadence rules in [`crate::utils::poll_policy`]; `?poll_ms=` overrides them)
+//! and renders:
 //!   - Headline tiles: registered, deposits, USDC locked, checked-in, NFT claims
 //!   - A registration → deposit → check-in → claim funnel
 //!   - A live activity feed sourced from the audit log
@@ -26,16 +28,10 @@ use crate::api::{
     self, ActivityEntry, DashboardTotals, FunnelStage, LiveDashboardResponse, action_emoji,
     format_usdc,
 };
+use crate::utils::poll_policy;
 use wasm_bindgen::JsValue;
 
-/// Poll interval for the live dashboard. Tuned for "feels live" UX without
-/// hammering D1 — a demo room of 40 people produces <1 mutation/sec, so 2.5s
-/// polling catches every meaningful state change within one render frame.
-const POLL_INTERVAL_MS: u32 = 2500;
-const IDLE_POLL_INTERVAL_MS: u32 = 5000;
-const POLLS_BEFORE_IDLE: u8 = 3;
-
-/// Coarse tick for "Xs ago" badge refresh. Decoupled from `POLL_INTERVAL_MS`
+/// Coarse tick for "Xs ago" badge refresh. Decoupled from the poll cadence
 /// so the age badge visibly updates between polls (otherwise a 4s-old poll
 /// would display "0s" until the next fetch lands).
 const AGE_TICK_MS: u32 = 1000;
@@ -61,7 +57,7 @@ enum DashboardLoadState {
 
 /// Live aggregate dashboard page — `/dashboard/live`.
 ///
-/// Polls the backend every `POLL_INTERVAL_MS` and renders the demo room's
+/// Polls the backend on the `poll_policy` cadence and renders the demo room's
 /// big-screen view. The route is registered behind `ProtectedRoute` in
 /// `lib.rs`, so staff auth is enforced before this component mounts.
 #[component]
@@ -87,6 +83,7 @@ pub fn DashboardLive() -> impl IntoView {
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
     let (event_id, _set_event_id) = signal(initial_event_id);
+    let poll_override_ms = poll_policy::parse_override(query.get().get("poll_ms").as_deref());
 
     let (data, set_data) = signal(Option::<LiveDashboardResponse>::None);
     let (load_state, set_load_state) = signal(DashboardLoadState::Idle);
@@ -95,7 +92,7 @@ pub fn DashboardLive() -> impl IntoView {
     // Tracks the wall-clock time so "Xs ago" badges refresh between polls.
     let (now_ms, set_now_ms) = signal(js_sys::Date::now());
 
-    // Polling loop — fires immediately, then every POLL_INTERVAL_MS while active.
+    // Polling loop — fires immediately, then on the `poll_policy` cadence while active.
     // The Effect body captures signals by value (they are Copy) and does not
     // read them synchronously, so toggling `polling_active` does not re-fire
     // the Effect (which would spawn duplicate loops).
@@ -118,7 +115,7 @@ pub fn DashboardLive() -> impl IntoView {
             // (`fetch_dashboard` never clears `set_d` on error), so this
             // initial transition is the only place Loading is entered.
             set_ls.set(DashboardLoadState::Loading);
-            // First poll fires immediately so the room doesn't wait 2.5s.
+            // First poll fires immediately so the room doesn't wait a cycle.
             fetch_dashboard(
                 eid.as_deref(),
                 data,
@@ -140,10 +137,19 @@ pub fn DashboardLive() -> impl IntoView {
                     }
                     let wait = if !polling.get() {
                         500
-                    } else if unchanged_polls >= POLLS_BEFORE_IDLE {
-                        IDLE_POLL_INTERVAL_MS
                     } else {
-                        POLL_INTERVAL_MS
+                        let (start_ms, end_ms) = data.with_untracked(|snapshot| {
+                            snapshot.as_ref().map_or((0, 0), |resp| {
+                                (resp.event.event_start_ms, resp.event.event_end_ms)
+                            })
+                        });
+                        poll_policy::next_poll_ms(
+                            js_sys::Date::now() as i64,
+                            start_ms,
+                            end_ms,
+                            unchanged_polls,
+                            poll_override_ms,
+                        )
                     };
                     gloo_timers::future::TimeoutFuture::new(wait).await;
                     if disposed.load(Ordering::Relaxed) {
@@ -313,7 +319,7 @@ pub fn DashboardLive() -> impl IntoView {
             </header>
 
             // ---------- Initial loading state ----------
-            <Show when=move || is_initial_loading() fallback=|| view! { <div></div> }>
+            <Show when=move || is_initial_loading() fallback=|| ()>
                 <div class="dashboard-state dashboard-state-loading">
                     <div class="dashboard-spinner"></div>
                     <p>"Loading live data…"</p>
@@ -321,7 +327,7 @@ pub fn DashboardLive() -> impl IntoView {
             </Show>
 
             // ---------- Hard failure state (no cached data yet) ----------
-            <Show when=move || is_hard_failure() fallback=|| view! { <div></div> }>
+            <Show when=move || is_hard_failure() fallback=|| ()>
                 <div class="dashboard-state dashboard-state-error">
                     <p>"Failed to load dashboard data."</p>
                     <p class="dashboard-state-error-detail">
@@ -337,7 +343,7 @@ pub fn DashboardLive() -> impl IntoView {
             </Show>
 
             // ---------- Main content (cached data on screen) ----------
-            <Show when=move || has_data() fallback=|| view! { <div></div> }>
+            <Show when=move || has_data() fallback=|| ()>
                 {move || {
                     let resp = data.get().unwrap_or_default();
                     let totals = resp.totals.clone();

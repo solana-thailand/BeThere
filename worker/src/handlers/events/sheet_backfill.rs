@@ -48,6 +48,8 @@ pub struct SheetBackfillResponse {
     pub already_filled: usize,
     pub row_missing: usize,
     pub row_duplicated: usize,
+    /// Cells whose kind has no column on this sheet; skipped.
+    pub column_missing: usize,
     /// Cells actually written (0 on a dry run).
     pub written: usize,
 }
@@ -203,6 +205,7 @@ pub async fn sheet_backfill(
         already_filled = plan.already_filled,
         row_missing = plan.row_missing,
         row_duplicated = plan.row_duplicated,
+        column_missing = plan.column_missing,
         "sheet backfill done"
     );
 
@@ -217,6 +220,7 @@ pub async fn sheet_backfill(
         already_filled: plan.already_filled,
         row_missing: plan.row_missing,
         row_duplicated: plan.row_duplicated,
+        column_missing: plan.column_missing,
         written,
     }))
 }

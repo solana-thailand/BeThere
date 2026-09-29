@@ -5,6 +5,7 @@ use leptos_router::params::Params;
 use leptos_router::params::ParamsError;
 
 use crate::api::DepositStatusResponse;
+use crate::i18n::{Locale, td_string};
 
 // ---------------------------------------------------------------------------
 // Thai banks (2c2p payout codes)
@@ -67,7 +68,7 @@ pub enum DepositPageState {
     /// Loading deposit status from backend.
     Loading,
     /// API or param error.
-    Error(String),
+    Error(DepositError),
     /// Deposits not enabled for the resolved event.
     /// Carries the full response so the view can surface the resolved
     /// event name/slug — critical for diagnosing the "no event_id → wrong
@@ -117,6 +118,21 @@ pub enum DepositPageState {
     CloseDepositSigning(DepositStatusResponse, String, String),
     /// Close deposit — confirmed.
     CloseDepositConfirmed(DepositStatusResponse, String),
+}
+
+/// Why the page shows its error card. Typed rather than a sentence so the
+/// card renders in the reader's current language; only a server error text
+/// (`LoadFailed`) is carried through as-is.
+#[derive(Clone, Debug)]
+pub enum DepositError {
+    /// The URL has no attendee id.
+    InvalidLink,
+    /// The event is over and there is no deposit on file.
+    EndedNoDeposit,
+    /// `get_deposit_status` failed; carries the API error text.
+    LoadFailed(String),
+    /// Re-reading the status after a failed slip upload failed.
+    ReloadFailed,
 }
 
 /// Which deposit flow the user is in.
@@ -251,39 +267,34 @@ pub fn refund_window_open_at(
     refund_deadline_ms > 0 && now < refund_deadline_ms
 }
 
-/// Format epoch ms to a short readable date for the refund deadline.
+/// Format epoch ms for the refund deadline: `29 Sep 2026, 13:00` in the
+/// attendee's language. It was `09/29 13:00`, which reads as a nonsense date
+/// to the day-first audience (.plans/037).
 pub fn format_refund_deadline(ms: i64) -> String {
-    let date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(ms as f64));
-    let month = date.get_month() + 1;
-    let day = date.get_date();
-    let hours = date.get_hours();
-    let minutes = date.get_minutes();
-    format!("{:02}/{:02} {:02}:{:02}", month, day, hours, minutes)
+    crate::utils::format_event_datetime(ms)
 }
 
-/// Format hours into a human-friendly duration label (e.g. "7 days", "3d 12h").
-pub fn format_duration_label(hours: u32) -> String {
-    if hours >= 24 {
-        let days = hours / 24;
-        let remaining = hours % 24;
-        if remaining == 0 {
-            if days == 1 {
-                "1 day".to_string()
-            } else {
-                format!("{days} days")
-            }
-        } else {
-            format!("{days}d {remaining}h")
-        }
-    } else {
-        format!("{hours}h")
+/// Format hours into a human-friendly duration label (e.g. "7 days", "3d 12h";
+/// TH "7 วัน", "3 วัน 12 ชม."). The unit strings carry their own spacing.
+pub fn format_duration_label(locale: Locale, hours: u32) -> String {
+    let d = td_string!(locale, deposit.unit.d);
+    let h = td_string!(locale, deposit.unit.h);
+    if hours < 24 {
+        return format!("{hours}{h}");
+    }
+    let days = hours / 24;
+    let remaining = hours % 24;
+    match (remaining, days) {
+        (0, 1) => format!("1{}", td_string!(locale, deposit.unit.day)),
+        (0, _) => format!("{days}{}", td_string!(locale, deposit.unit.days)),
+        _ => format!("{days}{d} {remaining}{h}"),
     }
 }
 
 /// Format remaining seconds into a compact countdown string.
 /// Shows days/hours/minutes if > 1 day, hours/minutes/seconds if < 1 day,
 /// just minutes/seconds if < 1 hour.
-pub fn format_countdown(seconds: i64) -> String {
+pub fn format_countdown(locale: Locale, seconds: i64) -> String {
     if seconds <= 0 {
         return String::new();
     }
@@ -291,12 +302,14 @@ pub fn format_countdown(seconds: i64) -> String {
     let hours = (seconds % 86400) / 3600;
     let mins = (seconds % 3600) / 60;
     let secs = seconds % 60;
-    if days > 0 {
-        format!("{days}d {hours}h {mins}m {secs}s")
-    } else if hours > 0 {
-        format!("{hours}h {mins}m {secs}s")
-    } else {
-        format!("{mins}m {secs}s")
+    let d = td_string!(locale, deposit.unit.d);
+    let h = td_string!(locale, deposit.unit.h);
+    let m = td_string!(locale, deposit.unit.m);
+    let s = td_string!(locale, deposit.unit.s);
+    match (days > 0, hours > 0) {
+        (true, _) => format!("{days}{d} {hours}{h} {mins}{m} {secs}{s}"),
+        (false, true) => format!("{hours}{h} {mins}{m} {secs}{s}"),
+        (false, false) => format!("{mins}{m} {secs}{s}"),
     }
 }
 
@@ -344,12 +357,16 @@ pub fn extract_event_context(state: &DepositPageState) -> Option<(String, String
     }
 }
 
-/// Compute refund deadline info from deposit data.
-pub fn compute_refund_info(data: &DepositStatusResponse) -> Option<(String, String)> {
+/// Compute refund deadline info from deposit data. Call it inside a view
+/// closure with the current locale so the duration follows a language switch.
+pub fn compute_refund_info(
+    locale: Locale,
+    data: &DepositStatusResponse,
+) -> Option<(String, String)> {
     if data.event_end_ms > 0 && data.refund_deadline_hours > 0 {
         let deadline_ms = data.event_end_ms + (i64::from(data.refund_deadline_hours) * 3_600_000);
         let deadline_date = format_refund_deadline(deadline_ms);
-        let duration_label = format_duration_label(data.refund_deadline_hours);
+        let duration_label = format_duration_label(locale, data.refund_deadline_hours);
         Some((deadline_date, duration_label))
     } else {
         None
@@ -391,16 +408,26 @@ pub fn extract_event_id_from_url() -> Option<String> {
     url.search_params().get("event_id")
 }
 
-/// Get the (method_icon, method_label) pair for a deposit method.
+/// Get the (method_icon, method_label) pair for a deposit method. The label
+/// is for display only; the method itself travels as the typed enum.
 pub fn deposit_method_display(
+    locale: Locale,
     method: &crate::api::DepositMethod,
 ) -> (crate::icons::IconName, &'static str) {
     use crate::icons::IconName;
     match method {
-        crate::api::DepositMethod::Usdc => (IconName::Coin, "USDC (Solana)"),
-        crate::api::DepositMethod::Thb => (IconName::Baht, "THB (PromptPay)"),
-        crate::api::DepositMethod::CreditThb => (IconName::Baht, "THB Credit (held deposit)"),
-        crate::api::DepositMethod::CreditUsdc => (IconName::Coin, "USDC Credit (held deposit)"),
+        crate::api::DepositMethod::Usdc => {
+            (IconName::Coin, td_string!(locale, deposit.method.usdc))
+        }
+        crate::api::DepositMethod::Thb => (IconName::Baht, td_string!(locale, deposit.method.thb)),
+        crate::api::DepositMethod::CreditThb => (
+            IconName::Baht,
+            td_string!(locale, deposit.method.credit_thb),
+        ),
+        crate::api::DepositMethod::CreditUsdc => (
+            IconName::Coin,
+            td_string!(locale, deposit.method.credit_usdc),
+        ),
     }
 }
 

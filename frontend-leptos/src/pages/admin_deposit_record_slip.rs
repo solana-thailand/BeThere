@@ -208,7 +208,7 @@ pub fn AdminRecordSlipModal(
                     // ── Header ─────────────────────────────────────────────
                     <div
                         class="admin-modal-header"
-                        style="display:flex;justify-content:space-between;align-items:center;padding-bottom:0.75rem;border-bottom:1px solid var(--border-muted, #e5e7eb);"
+                        style="display:flex;justify-content:space-between;align-items:center;padding-bottom:0.75rem;border-bottom:1px solid var(--border);"
                     >
                         <h3 style="margin:0;display:flex;align-items:center;gap:0.4rem;">
                             <Icon icon=IconName::Ticket class="icon-sm" />
@@ -365,7 +365,7 @@ pub fn AdminRecordSlipModal(
                     // ── Footer ────────────────────────────────────────────
                     <div
                         class="admin-modal-footer"
-                        style="display:flex;justify-content:flex-end;gap:0.5rem;padding-top:0.75rem;margin-top:0.75rem;border-top:1px solid var(--border-muted, #e5e7eb);"
+                        style="display:flex;justify-content:flex-end;gap:0.5rem;padding-top:0.75rem;margin-top:0.75rem;border-top:1px solid var(--border);"
                     >
                         <button
                             class="btn btn-outline"

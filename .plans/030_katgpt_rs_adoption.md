@@ -186,6 +186,35 @@ owner decision.
 - [ ] **Toolchain pin.** Add `rust-toolchain.toml`, listing `targets`
   explicitly (the katgpt wasm32 trap), plus a weekly `RUSTUP_TOOLCHAIN=stable`
   rot lane. **After RTM#6**, because it can change builds.
+  **Built on branch `feature/030-toolchain-pin` (worktree `/tmp/ec-pin`, cut
+  from `develop` `83241bd9`, 2026-09-28, session `event-checkin-00`), not
+  committed yet and not merged** (RTM #6 hold; merge after the remap and
+  build-stamp branches, which also edit `build.sh`).
+  - [x] `rust-toolchain.toml`: `channel = "1.98.1"`, clippy + rustfmt,
+    `targets = ["wasm32-unknown-unknown"]`, `profile = "minimal"`.
+  - [x] `scripts/pinned_toolchain.sh`, sourced by `worker/deploy.sh` and
+    `frontend-leptos/build.sh`: unsets `RUSTUP_TOOLCHAIN` (the agent-shell
+    export outranks the toml) and prints `rustc --version`. Proven in the A/B
+    lane: with the env var set to 1.97.1 and the toml at 1.97.1, the build log
+    opened with `rustc 1.97.1`; the toml, not the env, chose.
+  - [x] CI: all six `dtolnay/rust-toolchain` steps say `toolchain: 1.98.1`.
+  - [x] `scripts/verify/toolchain_pin_gate.py` (CI step): the toml channel is
+    an exact `x.y.z` with wasm32, and every workflow `toolchain:` equals it
+    (`toolchain-rot.yml` must say `stable`). `--self-test` 7/7; setting the CI
+    lines back to `stable` gave 6 errors and exit 1.
+  - [x] `.github/workflows/toolchain-rot.yml`: weekly + manual, clippy
+    `-D warnings` on `stable` for workspace, worker (wasm32) and frontend
+    (wasm32); non-blocking.
+  - [x] Size A/B, 1.97.1 vs 1.98.1 (`.benchmarks/006`, 2026-09-28, lanes
+    A, B, A in one session; the lane-A-only first try is `.benchmarks/005`).
+    1.98.1 is size-neutral. Frontend first load at br4: 1,826,829 B on
+    1.98.1 vs 1,827,599 B on 1.97.1 (−770 B), 87.10% of budget. Worker gzip:
+    1,662,521 B vs 1,662,356 B (+165 B), 52.85% of the free-plan ceiling.
+    Both gates exit 0 on both lanes. Builds are not fully reproducible:
+    Trunk reorders `modulepreload` links, so `index.html` and the SW
+    `CACHE_VERSION` change on every rebuild, and the worker wasm hash
+    changes; that is a few bytes of noise.
+  - [ ] Commit on the branch (owner, pending); merge after RTM #6.
 
   **Version check, 2026-09-24.**
   - Latest stable is 1.98.1 (`rustup check`). CI's `toolchain: stable` resolves to it.

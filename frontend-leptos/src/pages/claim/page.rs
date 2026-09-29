@@ -5,8 +5,9 @@ use leptos_meta::Title;
 use leptos_router::hooks::use_params;
 
 use crate::api::{self, AdventureStatusType, QuizStatus};
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName, wallet_icon_name};
-use crate::utils::{escape_html, orb_nft_url};
+use crate::utils::escape_html;
 
 use super::helpers::*;
 use super::interop::*;
@@ -44,7 +45,6 @@ pub fn Claim() -> impl IntoView {
     let (evt_end, set_evt_end) = signal(0i64);
 
     // Share feedback
-    let (share_copied, set_share_copied) = signal(false);
 
     // Claim counter (fetched from backend on initial lookup)
     let (_total_checked_in, set_total_checked_in) = signal(0usize);
@@ -90,17 +90,13 @@ pub fn Claim() -> impl IntoView {
         let token = match params.get() {
             Ok(p) => p.token.unwrap_or_default(),
             Err(_) => {
-                set_state.set(ClaimState::NotFound(
-                    "Invalid claim link — missing token.".to_string(),
-                ));
+                set_state.set(ClaimState::NotFound(ClaimNotFound::MissingToken));
                 return;
             }
         };
 
         if token.is_empty() {
-            set_state.set(ClaimState::NotFound(
-                "Invalid claim link — missing token.".to_string(),
-            ));
+            set_state.set(ClaimState::NotFound(ClaimNotFound::MissingToken));
             return;
         }
 
@@ -211,8 +207,8 @@ pub fn Claim() -> impl IntoView {
                 }
                 Err(e) => {
                     log::warn!("[claim] lookup failed for token {token}: {e}");
-                    set_state.set(ClaimState::NotFound(format!(
-                        "Claim token not found or lookup failed: {e}"
+                    set_state.set(ClaimState::NotFound(ClaimNotFound::LookupFailed(
+                        e.to_string(),
                     )));
                 }
             }
@@ -304,16 +300,17 @@ pub fn Claim() -> impl IntoView {
     let set_w_for_connect = set_wallet_input;
     let set_cw_for_connect = set_connected_wallet;
 
+    let i18n = use_i18n();
     view! {
         <div class="center-page">
-            <Title text="Claim Your NFT — BeThere" />
+            <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, claim.page_title)) />
             <div class="container claim-container">
                 // Brand header
                 <div class="brand-logo">"BeThere"</div>
-                <div class="brand-logo-sub">"Proof of Attendance"</div>
+                <div class="brand-logo-sub">{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.proof_of_attendance))}</div>
 
                 // Title
-                <h1 class="claim-title">"Claim Your NFT"</h1>
+                <h1 class="claim-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.title))}</h1>
 
                 <p class="claim-subtitle">
                     {move || evt_name.get()}
@@ -397,15 +394,22 @@ pub fn Claim() -> impl IntoView {
                         }
 
                         // ---- Not Found / Error ----
-                        ClaimState::NotFound(msg) => {
+                        ClaimState::NotFound(reason) => {
+                            let msg = match reason {
+                                ClaimNotFound::MissingToken => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.invalid_link)).into_any(),
+                                ClaimNotFound::LookupFailed(e) => {
+                                    let error = escape_html(&e);
+                                    t!(i18n, claim.lookup_failed, error).into_any()
+                                }
+                            };
                             view! {
                                 <div class="claim-error">
-                                    <h2>"Claim Not Found"</h2>
+                                    <h2>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.not_found_title))}</h2>
                                     <div class="result-details">
-                                        <p>{escape_html(&msg)}</p>
+                                        <p>{msg}</p>
                                     </div>
                                     <a href="/" class="btn btn-outline claim-retry-btn">
-                                        "Go to Home"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.go_home))}
                                     </a>
                                 </div>
                             }
@@ -419,15 +423,15 @@ pub fn Claim() -> impl IntoView {
                             let (card_title, card_msg, card_detail) = if data.nft_available {
                                 // NFT tech is ready but quiz blocks claiming
                                 (
-                                    "Waiting for Quiz Setup",
-                                    "Your organizer is preparing a quiz for this event. You’ll be able to claim your NFT badge once it’s ready.",
-                                    "Please check back soon or remind your organizer to set up the quiz!"
+                                    crate::locale::tr(|l| crate::i18n::td_string!(l, claim.soon.quiz_title)).into_any(),
+                                    crate::locale::tr(|l| crate::i18n::td_string!(l, claim.soon.quiz_msg)).into_any(),
+                                    crate::locale::tr(|l| crate::i18n::td_string!(l, claim.soon.quiz_detail)).into_any(),
                                 )
                             } else {
                                 (
-                                    "NFT Badge Coming Soon",
-                                    "Your proof-of-attendance NFT badge is being prepared.",
-                                    "You will receive a compressed NFT on Solana — a permanent, on-chain proof that you attended this event."
+                                    crate::locale::tr(|l| crate::i18n::td_string!(l, claim.soon.nft_title)).into_any(),
+                                    crate::locale::tr(|l| crate::i18n::td_string!(l, claim.soon.nft_msg)).into_any(),
+                                    crate::locale::tr(|l| crate::i18n::td_string!(l, claim.soon.nft_detail)).into_any(),
                                 )
                             };
                             view! {
@@ -435,7 +439,10 @@ pub fn Claim() -> impl IntoView {
                                     // Attendee welcome
                                     <div class="claim-welcome-card">
                                         <ParticipantAvatar name=data.name.clone() />
-                                        <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
+                                        <h3>{
+                                            let name = escape_html(&data.name);
+                                            t!(i18n, claim.welcome, name)
+                                        }</h3>
                                         <p class="checked-in-label">{checked_in_display}</p>
                                     </div>
 
@@ -444,10 +451,12 @@ pub fn Claim() -> impl IntoView {
 
                                     // Status card — quiz pending or NFT coming soon
                                     <div class="claim-nft-soon-card">
-                                        <crate::components::StatusBadge
-                                            tone=crate::components::StatusTone::Pending
-                                            label="Pending"
-                                        />
+                                        {move || view! {
+                                            <crate::components::StatusBadge
+                                                tone=crate::components::StatusTone::Pending
+                                                label=t_string!(i18n, claim.pending)
+                                            />
+                                        }}
                                         <h3>{card_title}</h3>
                                         <p>{card_msg}</p>
                                         <div class="nft-description">
@@ -457,9 +466,13 @@ pub fn Claim() -> impl IntoView {
 
                                     // Compact wallet hint
                                     <p class="claim-bookmark-hint">
-                                        "Get a "
-                                        <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer">"Solana wallet"</a>
-                                        " ready — bookmark this page to claim your NFT later."
+                                        {t!(
+                                            i18n,
+                                            claim.bookmark_hint,
+                                            <wallet> = |children: ChildrenFn| view! {
+                                                <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer">{children()}</a>
+                                            }
+                                        )}
                                     </p>
                                 </div>
                             }
@@ -510,7 +523,10 @@ pub fn Claim() -> impl IntoView {
                                     // Attendee welcome
                                     <div class="claim-welcome-card">
                                         <ParticipantAvatar name=data.name.clone() />
-                                        <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
+                                        <h3>{
+                                            let name = escape_html(&data.name);
+                                            t!(i18n, claim.welcome, name)
+                                        }</h3>
                                         <p class="checked-in-label">{checked_in_display}</p>
                                     </div>
 
@@ -520,7 +536,7 @@ pub fn Claim() -> impl IntoView {
                                     // Wallet input — wallet adapter + manual fallback
                                     <div class="card">
                                         <label class="claim-wallet-label">
-                                            "Solana Wallet Address"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.address_label))}
                                         </label>
 
                                         // Locked wallet pill + wallet adapter section (single reactive closure)
@@ -563,17 +579,17 @@ pub fn Claim() -> impl IntoView {
                                                             </svg>
                                                         </span>
                                                         <div class="wallet-info-left">
-                                                            <div class="wallet-label">"Your linked wallet"</div>
+                                                            <div class="wallet-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.linked_label))}</div>
                                                             <div class="wallet-address-bold">{truncated}</div>
                                                         </div>
-                                                        <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Linked"</span>
+                                                        <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.linked))}</span>
                                                     </div>
                                                     <button
                                                         class="btn btn-outline btn-sm claim-disconnect-btn"
                                                         on:click=move |_| set_change_wallet.set(true)
                                                         type="button"
                                                     >
-                                                        "Use a different wallet"
+                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.use_different))}
                                                     </button>
                                                 }.into_any()
                                             } else {
@@ -591,17 +607,20 @@ pub fn Claim() -> impl IntoView {
                                                             <div class="wallet-connected-bar">
                                                                 <span class="wallet-icon-lg"><Icon icon=wallet_icon class="icon-lg" /></span>
                                                                 <div class="wallet-info-left">
-                                                                    <div class="wallet-label">"Connected via " {wallet_name.clone()}</div>
+                                                                    <div class="wallet-label">{
+                                                                        let wallet = wallet_name.clone();
+                                                                        t!(i18n, claim.wallet.connected_via, wallet)
+                                                                    }</div>
                                                                     <div class="wallet-address-bold">{pk_short}</div>
                                                                 </div>
-                                                                <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Connected"</span>
+                                                                <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.connected))}</span>
                                                             </div>
                                                             <button
                                                                 class="btn btn-outline btn-sm claim-disconnect-btn"
                                                                 on:click=move |_| { set_cw_for_connect.set(None); }
                                                                 type="button"
                                                             >
-                                                                "Disconnect"
+                                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.disconnect))}
                                                             </button>
                                                         }.into_any()
                                                     }
@@ -622,7 +641,7 @@ pub fn Claim() -> impl IntoView {
                                                                     <div class="wallet-list">
                                                                         <p class="wallet-prompt">
                                                                             <Icon icon=IconName::Link class="icon-sm"/>
-                                                                            " Connect your Solana wallet:"
+                                                                            " "{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.connect_prompt))}
                                                                         </p>
                                                                         {wallets_for_click.into_iter().map(|w| {
                                                                             let w_clone = w.clone();
@@ -668,7 +687,10 @@ pub fn Claim() -> impl IntoView {
                                                                                     }
                                                                                 >
                                                                                     <span><Icon icon=wallet_icon class="icon-sm" /></span>
-                                                                                    <span>{format!("Connect {}", w_clone)}</span>
+                                                                                    <span>{
+                                                                                        let wallet = w_clone.clone();
+                                                                                        t!(i18n, claim.wallet.connect_named, wallet)
+                                                                                    }</span>
                                                                                 </button>
                                                                             }
                                                                         }).collect::<Vec<_>>()}
@@ -682,7 +704,7 @@ pub fn Claim() -> impl IntoView {
                                                             {if has_wallets {
                                                                 view! {
                                                                     <div class="claim-wallet-divider">
-                                                                        <span>"or enter manually"</span>
+                                                                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.or_manual))}</span>
                                                                     </div>
                                                                 }.into_any()
                                                             } else {
@@ -694,7 +716,7 @@ pub fn Claim() -> impl IntoView {
                                                                 <input
                                                                     class="claim-wallet-input"
                                                                     type="text"
-                                                                    placeholder="Enter your Solana wallet address"
+                                                                    placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.placeholder))
                                                                     prop:value=move || wallet_input.get()
                                                                     on:input=move |ev| {
                                                                         let val = event_target_value(&ev);
@@ -706,15 +728,15 @@ pub fn Claim() -> impl IntoView {
                                                                     on:click=handle_paste
                                                                     type="button"
                                                                 >
-                                                                    "Paste"
+                                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.paste))}
                                                                 </button>
                                                             </div>
                                                             <p class="claim-wallet-hint">
                                                                 {
                                                                     match &locked_wallet {
-                                                                        Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.",
-                                                                        _ if has_suggested_wallet => "Connect or enter the wallet you'd like the badge sent to instead of your linked one.",
-                                                                        _ => "Tap Paste or type your Phantom, Solflare, or Backpack address.",
+                                                                        Some(w) if !w.is_empty() => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.hint_locked)).into_any(),
+                                                                        _ if has_suggested_wallet => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.hint_elsewhere)).into_any(),
+                                                                        _ => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.wallet.hint_paste)).into_any(),
                                                                     }
                                                                 }
                                                             </p>
@@ -743,7 +765,7 @@ pub fn Claim() -> impl IntoView {
                                             w_trimmed.is_empty() || !(32..=44).contains(&w_trimmed.len())
                                         }
                                     >
-                                        "Claim NFT Badge"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_cta))}
                                     </button>
                                 </div>
                             }
@@ -762,28 +784,34 @@ pub fn Claim() -> impl IntoView {
                                 format!("/adventure?token={token_val}&event_id={}", data.event_id)
                             };
                             let status_msg = match adv_status {
-                                AdventureStatusType::NotStarted => "You haven't started the Rust Adventure yet. Complete it to unlock your NFT!",
-                                AdventureStatusType::InProgress => "You're making progress! Keep going to complete the adventure.",
-                                _ => "Complete the Rust Adventure to unlock your NFT!",
+                                AdventureStatusType::NotStarted => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.adventure.not_started)).into_any(),
+                                AdventureStatusType::InProgress => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.adventure.in_progress)).into_any(),
+                                _ => crate::locale::tr(|l| crate::i18n::td_string!(l, claim.adventure.complete_it)).into_any(),
                             };
+                            let adventure_name = escape_html(&data.name);
                             view! {
                                 <div class="claim-adventure-gate">
                                     <ParticipantAvatar name=data.name.clone() />
-                                    <h2><Icon icon=IconName::Crab class="icon-md" />" Rust Adventure Required"</h2>
+                                    <h2><Icon icon=IconName::Crab class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.adventure.title))}</h2>
                                     <p class="claim-adventure-status">{status_msg}</p>
                                     <div class="claim-adventure-info">
                                         <p>
-                                            <strong>{escape_html(&data.name)}</strong>", complete the Rust Adventures game to earn your NFT badge."
+                                            {t!(
+                                                i18n,
+                                                claim.adventure.info,
+                                                <strong> = |children: ChildrenFn| view! { <strong>{children()}</strong> },
+                                                name = adventure_name
+                                            )}
                                         </p>
                                         <p class="claim-adventure-hint">
-                                            "Learn Rust basics by solving coding puzzles in a fun tile-based game!"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.adventure.hint))}
                                         </p>
                                     </div>
                                     <a
                                         class="btn btn-primary claim-adventure-btn"
                                         href={adventure_url}
                                     >
-                                        "🎮 Start Adventure"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.adventure.start))}
                                     </a>
                                 </div>
                             }
@@ -799,12 +827,15 @@ pub fn Claim() -> impl IntoView {
                                         <div class="shimmer claim-minting-shimmer"></div>
                                         <span class="spinner spinner-lg"></span>
                                     </div>
-                                    <h3 class="claim-minting-title">"Minting your NFT..."</h3>
+                                    <h3 class="claim-minting-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.minting.title))}</h3>
                                     <p class="claim-minting-detail">
-                                        "Minting for "{escape_html(&data.name)}
+                                        {
+                                            let name = escape_html(&data.name);
+                                            t!(i18n, claim.minting.detail, name)
+                                        }
                                     </p>
                                     <p class="claim-minting-hint">
-                                        "This can take longer during provider delays. You may safely close this page and reopen the same claim link; the same claim cannot mint twice."
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.minting.hint))}
                                     </p>
                                 </div>
                             }
@@ -813,181 +844,27 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- Success! ----
                         ClaimState::Success(data) => {
-                            let orb_url = orb_nft_url(&data.asset_id, &data.cluster);
-                            let asset_id_display = {
-                                let id = &data.asset_id;
-                                if id.len() > 12 {
-                                    format!("{}...{}", &id[..6], &id[id.len()-4..])
-                                } else {
-                                    id.clone()
-                                }
+                            let api_id = deposit_api_id.get();
+                            let event_id = deposit_event_id.get();
+                            let ticket_href = match event_id.is_empty() {
+                                true => format!("/ticket/{api_id}"),
+                                false => format!("/ticket/{api_id}?event_id={event_id}"),
                             };
-                            let asset_id_full = data.asset_id.clone();
-
-                            // Build share text & URL
-                            let tweet_text = {
-                                let event = evt_name.get();
-                                if event.is_empty() {
-                                    "I just claimed my attendance NFT on BeThere! 🎫✨\n\nProof I showed up. On-chain.\n\n#BeThere #Solana".to_string()
-                                } else {
-                                    format!("I just earned my POAP at {event}! 🎫✨\n\nShowed up, proved I was there, got my NFT badge.\n\n#BeThere #Solana")
-                                }
-                            };
-                            let share_to_x_url = format!(
-                                "https://twitter.com/intent/tweet?text={}",
-                                js_sys::encode_uri_component(&tweet_text)
-                            );
-                            let claim_page_url = format!(
-                                "https://bethere.solana-thailand.workers.dev/claim/{}",
-                                match params.get() {
-                                    Ok(p) => p.token.unwrap_or_default(),
-                                    Err(_) => String::new(),
-                                }
-                            );
-
-                            let solscan_url = if data.signature.is_empty() {
-                                format!("https://solscan.io/account/{}?cluster={}", data.asset_id, data.cluster)
-                            } else {
-                                format!("https://solscan.io/tx/{}?cluster={}", data.signature, data.cluster)
-                            };
-
+                            let claim_token = params
+                                .get()
+                                .ok()
+                                .and_then(|p| p.token)
+                                .unwrap_or_default();
                             view! {
-                                <div class="claim-success">
-                                    // 1. Celebration
-                                    <div class="claim-success-rings">
-                                        <div class="claim-success-ring claim-success-ring-3"></div>
-                                        <div class="claim-success-ring claim-success-ring-2"></div>
-                                        <div class="claim-success-ring claim-success-ring-1"></div>
-                                        <div class="success-check">
-                                            <svg viewBox="0 0 24 24">
-                                                <polyline points="20 6 9 17 4 12"></polyline>
-                                            </svg>
-                                        </div>
-                                    </div>
-                                    <h2>"NFT Claimed!"</h2>
-
-                                    // 2. Asset ID + View NFT
-                                    <div class="claim-asset-card">
-                                        <div class="claim-asset-header">
-                                            <span class="claim-asset-label">"Asset ID"</span>
-                                            <span class="claim-asset-status">
-                                                <span class="claim-asset-status-dot"></span>
-                                                "On-Chain"
-                                            </span>
-                                        </div>
-                                        <div class="claim-asset-value-row">
-                                            <span class="claim-asset-code">{asset_id_display}</span>
-                                            <button
-                                                class="claim-copy-btn"
-                                                type="button"
-                                                title="Copy Asset ID"
-                                                on:click=move |_| {
-                                                    let _ = copy_to_clipboard_js(&asset_id_full);
-                                                }
-                                            >
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div class="success-actions" style="display: flex; flex-direction: column; gap: 10px;">
-                                        <a
-                                            href=orb_url
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="btn btn-primary btn-block"
-                                        >
-                                            "View NFT on Orb ↗"
-                                        </a>
-                                        <a
-                                            href=solscan_url
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="btn btn-outline btn-block"
-                                            style="border-color: rgba(20, 241, 149, 0.4); color: #14F195; background: rgba(20, 241, 149, 0.06);"
-                                        >
-                                            "🔍 View Transaction on Solscan ↗"
-                                        </a>
-                                    </div>
-
-                                    // 3. Share (compact row)
-                                    <div class="claim-share-section">
-                                    <div class="claim-share-buttons">
-                                        <a
-                                            href=share_to_x_url
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="claim-share-x-btn"
-                                        >
-                                            <svg viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                                            </svg>
-                                            "Post to X"
-                                        </a>
-                                        <button
-                                            class="claim-share-copy-btn"
-                                            type="button"
-                                            title="Copy claim link"
-                                            on:click=move |_| {
-                                                let _ = copy_to_clipboard_js(&claim_page_url);
-                                                set_share_copied.set(true);
-                                                leptos::task::spawn_local(async move {
-                                                    gloo_timers::future::TimeoutFuture::new(2000).await;
-                                                    set_share_copied.set(false);
-                                                });
-                                            }
-                                        >
-                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <div class={move || {
-                                        if share_copied.get() {
-                                            "claim-share-copied visible".to_string()
-                                        } else {
-                                            "claim-share-copied".to_string()
-                                        }
-                                    }}>
-                                        "Link copied!"
-                                    </div>
-                                    </div>
-
-                                    // 4. Ticket link — the ticket page is the hub for
-                                    // deposit & refund status (per-method actions live there;
-                                    // the deposit page is only for PAYING a deposit, so linking
-                                    // there post-claim dead-ended non-depositors on a pay form).
-                                    {
-                                        let api_id = deposit_api_id.get();
-                                        let event_id = deposit_event_id.get();
-                                        let ticket_href = if event_id.is_empty() {
-                                            format!("/ticket/{api_id}")
-                                        } else {
-                                            format!("/ticket/{api_id}?event_id={event_id}")
-                                        };
-                                        let label = if deposit_enabled.get() {
-                                            "View ticket & deposit / refund →"
-                                        } else {
-                                            "← Back to Ticket"
-                                        };
-                                        view! {
-                                            <div class="success-actions claim-success-actions-spaced">
-                                                <a
-                                                    href=ticket_href
-                                                    class="btn btn-outline btn-block"
-                                                >
-                                                    {label}
-                                                </a>
-                                            </div>
-                                        }.into_any()
-                                    }
-                                </div>
+                                <super::success::ClaimSuccess
+                                    data=data
+                                    event_name=evt_name.get()
+                                    claim_token=claim_token
+                                    ticket_href=ticket_href
+                                    deposit_enabled=deposit_enabled.get()
+                                />
                             }
-                                .into_any()
+                            .into_any()
                         }
 
                         // ---- Already claimed ---- redirect to ticket page
@@ -1012,15 +889,15 @@ pub fn Claim() -> impl IntoView {
                             view! {
                                 <div class="claim-state-full claim-redirect-center">
                                                                     <span class="spinner spinner-lg claim-redirect-spinner"></span>
-                                                                    <h3 class="claim-redirect-title">"Already Claimed"</h3>
+                                                                    <h3 class="claim-redirect-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.already.title))}</h3>
                                                                     <p class="claim-redirect-desc">
-                                                                        "Redirecting to your ticket..."
+                                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.already.redirecting))}
                                                                     </p>
                                                                     <a
                                                                         href=ticket_href
                                                                         class="btn btn-outline claim-redirect-btn"
                                     >
-                                        "Go to Ticket"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.already.go_to_ticket))}
                                     </a>
                                 </div>
                             }
@@ -1031,15 +908,17 @@ pub fn Claim() -> impl IntoView {
                         ClaimState::MintError(data, error) => {
                             view! {
                                 <div class="claim-error">
-                                    <crate::components::StatusBadge
-                                        tone=crate::components::StatusTone::Failed
-                                        label="Action failed"
-                                    />
-                                    <h2>"Minting Failed"</h2>
+                                    {move || view! {
+                                        <crate::components::StatusBadge
+                                            tone=crate::components::StatusTone::Failed
+                                            label=t_string!(i18n, claim.mint_error.badge)
+                                        />
+                                    }}
+                                    <h2>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_error.title))}</h2>
                                     <div class="result-details">
                                         <p>{escape_html(&error)}</p>
                                         <p>
-                                            "Retrying uses the same protected claim request. If the provider already accepted it, BeThere resumes that result instead of minting another NFT."
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_error.retry_note))}
                                         </p>
                                     </div>
                                     <button
@@ -1048,7 +927,7 @@ pub fn Claim() -> impl IntoView {
                                             set_state.set(ClaimState::Ready(data.clone()));
                                         }
                                     >
-                                        "Check Status or Retry"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_error.retry))}
                                     </button>
                                 </div>
                             }

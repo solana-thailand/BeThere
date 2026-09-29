@@ -1,0 +1,11 @@
+{
+  "subtitle": "Choose your sign-in method to access BeThere Protocol.",
+  "subtitle_feedback": "Use Google with the email you registered with — the survey is tied to that email",
+  "wallet_note_feedback": "A wallet can't answer the survey, because the survey is tied to the email you registered with",
+  "title": "Sign In",
+  "powered_by": "Powered by Solana",
+  "redirecting": " Redirecting to Google...",
+  "google": "Sign in with Google",
+  "back_home": "← Back to home",
+  "connect_failed": "Failed to connect to the server. Please try again."
+}

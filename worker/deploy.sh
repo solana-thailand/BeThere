@@ -258,6 +258,21 @@ verify_content_types() {
     fi
   fi
 
+  # The staff shell (.issues/169): _redirects must serve staff-app.html for
+  # /admin. The attendee shell there renders "could not be loaded", with 200
+  # and text/html, so compare which bundle the page references.
+  local staff_html="${DIST_DIR}/staff-app.html" staff_js served_js
+  if [ -f "$staff_html" ]; then
+    staff_js=$(grep -o 'event-checkin-frontend-[a-z0-9]*\.js' "$staff_html" | head -1)
+    served_js=$(curl -s "${base}/admin" | grep -o 'event-checkin-frontend-[a-z0-9]*\.js' | head -1)
+    if [ -n "$staff_js" ] && [ "$served_js" = "$staff_js" ]; then
+      echo "   ✅ /admin → staff shell (${staff_js})"
+    else
+      echo "   ❌ /admin → ${served_js:-<none>} (expected the staff shell ${staff_js:-<none>}; check _redirects)"
+      bad=1
+    fi
+  fi
+
   if [ "$bad" -ne 0 ]; then
     echo ""
     echo "❌ DEPLOY SERVED an invalid Content-Type — the site may download or render HTML for an asset." >&2

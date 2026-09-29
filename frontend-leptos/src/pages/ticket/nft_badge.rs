@@ -26,7 +26,7 @@ pub fn NftClaimedBadge(
     view! {
         <div class="ticket-nft-claimed">
             <div class="ticket-nft-claimed-title">
-                "✓ NFT Badge Claimed!"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nft.claimed))}
             </div>
             {if !asset_id_short.is_empty() {
                 let full = asset_id_full.clone();
@@ -35,7 +35,7 @@ pub fn NftClaimedBadge(
                         <code>{asset_id_short.clone()}</code>
                         <button
                             class="ticket-nft-copy-btn"
-                            title="Copy Asset ID"
+                            title=crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nft.copy_asset_id))
                             on:click=move |_| {
                                 let _ = on_copy(&full);
                             }
@@ -55,7 +55,7 @@ pub fn NftClaimedBadge(
                         rel="noopener noreferrer"
                         class="btn btn-primary ticket-nft-view-btn"
                     >
-                        "View NFT on Orb ↗"
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nft.view_on_orb))}
                     </a>
                 }.into_any()
             } else {

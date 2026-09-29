@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::{self, ConfirmDepositResponse, DepositStatusResponse};
 use crate::components::{self as app_components, ToastType};
+use crate::i18n::{td_string, use_i18n};
 
 use crate::pages::deposit::types::*;
 
@@ -112,7 +113,9 @@ pub fn make_poll_confirmation(
     set_state: WriteSignal<DepositPageState>,
     set_toast: WriteSignal<Option<app_components::ToastMessage>>,
 ) -> impl Fn(String, String, String) + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move |event_id: String, attendee_id: String, _tx_sig: String| {
+        let locale = i18n.get_locale_untracked();
         let set_state = set_state;
         let set_toast = set_toast;
         leptos::task::spawn_local(async move {
@@ -133,7 +136,7 @@ pub fn make_poll_confirmation(
             if matches!(outcome, PollOutcome::Timeout) {
                 app_components::show_toast(
                     &set_toast,
-                    "Confirmation is taking longer than expected. Your deposit may still be processing.",
+                    td_string!(locale, deposit.toast.slow_confirm),
                     ToastType::Warning,
                 );
             }

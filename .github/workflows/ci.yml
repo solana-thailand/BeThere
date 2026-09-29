@@ -238,6 +238,11 @@ jobs:
       - name: cargo clippy (frontend, wasm32, -D warnings)
         run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
 
+      - name: cargo clippy (frontend staff shell, wasm32, -D warnings)
+        # The default build is the attendee shell; `staff` compiles the staff
+        # route wrappers it leaves out (src/staff_routes.rs, .issues/169).
+        run: cargo clippy --locked --target wasm32-unknown-unknown --features staff -- -D warnings
+
       - name: cargo test (frontend, host target)
         # Host target on purpose: these are plain #[test] cases, and the wasm32
         # target has no test runner on the runner box.
@@ -262,9 +267,12 @@ jobs:
     # answers both the app and /api. That means /claim/<bad-token> gets a real 404
     # from a real handler instead of a proxy error, which is what claim.spec.ts asserts.
     #
-    # No secrets: every spec is unauthenticated, `wrangler dev --local` simulates
-    # D1/KV/R2 in-process, and `.dev.vars` is absent. Verified locally that the run
-    # makes zero `sheets::` calls — nothing in this job can reach a live Google Sheet.
+    # No secrets: `wrangler dev --local` simulates D1/KV/R2 in-process and
+    # `.dev.vars` is absent, so nothing in this job can reach a live Google Sheet.
+    # The visual + a11y specs (.plans/038 P0-3) also cover authed pages: DEV_MODE
+    # accepts the literal "dev-token" as a synthetic example.com super admin, and
+    # e2e/fixtures/seed.sql gives them a fixed event. DEV_MODE here is local-only;
+    # the worker refuses it when the OAuth redirect points at the prod domain.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -289,10 +297,19 @@ jobs:
         with:
           tool: trunk@0.21.7,wasm-bindgen-cli@0.2.118
 
-      - name: Build frontend (trunk)
+      - name: Build frontend (build.sh)
         # Trunk.toml sets release = true, so this is the shipped artifact.
+        # build.sh, not a bare `trunk build`: it also builds the staff shell
+        # (staff-app.html, .issues/169) that /staff, /admin and
+        # /dashboard/live load, which the e2e specs below exercise.
         working-directory: frontend-leptos
-        run: trunk build
+        run: bash build.sh
+
+      - name: Self-test the inline-script externalizer
+        # Trunk's post_build hook (Trunk.toml) runs it on every build and fails
+        # the build if an inline script remains; this proves the detector can fail.
+        working-directory: frontend-leptos
+        run: python3 externalize_inline_scripts.py --self-test
 
       - name: Frontend first-load size budget
         # The sibling of wasm-build's worker size gate. This is the only job
@@ -308,6 +325,16 @@ jobs:
         # measure within 4 bytes of each other, so the baseline recorded from
         # build.sh does not spuriously red this step.
         run: bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
+
+      - name: Staff-only stylesheet fence
+        # The attendee shell does not link styles/*.staff.css. An attendee page
+        # that starts using one of their classes would render unstyled there
+        # while the staff shell still looks right (.issues/169). build.sh runs
+        # the fence too; the self-test proves it can fail.
+        run: |
+          set -euo pipefail
+          python3 scripts/verify/staff_css_fence.py --self-test
+          python3 scripts/verify/staff_css_fence.py
 
       - name: Frontend wasm leak scan (report-only)
         # .plans/031: build-host paths (/home/runner/... here, /Users/... on a
@@ -337,12 +364,25 @@ jobs:
         working-directory: worker
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Local D1 schema + e2e fixture
+        working-directory: worker
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: |
+          pnpm exec wrangler d1 migrations apply bethere-db --local
+          pnpm exec wrangler d1 execute bethere-db --local --file ../e2e/fixtures/seed.sql
+
       - name: Start worker (wrangler dev --local)
         working-directory: worker
         env:
           WRANGLER_SEND_METRICS: "false"
         run: |
-          nohup pnpm exec wrangler dev --local --port 8788 > /tmp/wrangler-dev.log 2>&1 &
+          nohup pnpm exec wrangler dev --local --port 8788 \
+            --var DEV_MODE:1 --var SERVER_URL:http://localhost:8788 \
+            --var SUPER_ADMIN_EMAILS:e2e-admin@example.com \
+            --var STAFF_EMAILS:e2e-admin@example.com \
+            --var DEV_EMAIL:e2e-admin@example.com \
+            > /tmp/wrangler-dev.log 2>&1 &
           for _ in $(seq 1 150); do
             if curl -sf http://localhost:8788/api/health > /dev/null; then
               echo "worker ready"
@@ -354,11 +394,30 @@ jobs:
           cat /tmp/wrangler-dev.log
           exit 1
 
+      - name: Copy the fixture event into KV
+        # The event read path is KV-first; the fixture only wrote D1.
+        run: |
+          curl -sf -X POST -H "Cookie: event_checkin_token=dev-token" \
+            http://localhost:8788/api/events/reseed-kv | tee /dev/stderr | grep -q '"synced":1'
+
       - name: Run Playwright specs
         working-directory: worker
         env:
           BASE_URL: http://localhost:8788
-        run: pnpm exec playwright test
+        # `missing`: a page with no committed Linux baseline gets one written
+        # (uploaded below) instead of failing; committed baselines are compared.
+        run: pnpm exec playwright test --update-snapshots=missing
+
+      - name: Upload visual baselines
+        # Commit the -linux PNGs from this artifact to add or refresh a baseline
+        # (update command in e2e/visual.spec.ts).
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: visual-baselines
+          path: e2e/__screenshots__/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload Playwright report on failure
         if: failure()

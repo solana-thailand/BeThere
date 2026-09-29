@@ -35,6 +35,8 @@ pub struct EventDashboardMeta {
     pub deposit_amount_usdc: i64,
     #[serde(default)]
     pub event_start_ms: i64,
+    #[serde(default)]
+    pub event_end_ms: i64,
 }
 
 /// Aggregate counts for the dashboard's headline tiles.

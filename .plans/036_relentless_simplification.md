@@ -33,15 +33,15 @@ places that drifted.
 | # | Candidate | Measure now | Target | When |
 |---|---|---|---|---|
 | S1 | Attendees: D1 is the only store; the Sheet becomes a one-way export, never read back | 2 sources (`sheets::get_attendees_inner` falls back to Sheets on an empty D1) | 1 | after 12 Oct (L) |
-| S2 | Hide the USDC rail in the UI while escrow is devnet-only and off for every event | `show_usdc` / `escrow_closed` branches on the event page, registration and landing | 0 USDC branches on THB-only events | after 4 Oct (S–M) |
+| S2 | Hide the USDC rail in the UI while escrow is devnet-only and off for every event | `show_usdc` / `escrow_closed` branches on the event page, registration and landing | 0 USDC branches on THB-only events | **after 12 Oct** (S–M). Moved 2026-09-28 (`event-checkin-cf`): the W2 on-chain demo take (8 Oct) films the USDC rail, so no edits to it before the submission |
 | S3 | `notifications::dispatch` (email sending): wire it or delete it | defined in `worker/src/notifications/mod.rs:71`, 0 callers; sending off (`NOTIFICATIONS_ENABLED = "0"`) | 0 dead entry points | after 12 Oct, owner call (email is a product decision) |
 | S4 | `slip_vision.rs` (Anthropic vision), dormant under the 0-THB running-cost rule | off in prod and staging (no `ANTHROPIC_API_KEY`) | keep dormant with a test, or delete | owner call; not before the submission (the AI story names it) |
 | S5 | `scripts/make_pitch_deck.py`, legacy deck copy that contradicts D1/D4/D5 | stale | deleted, or aligned | before 12 Oct only if the submission uses it; else after |
 | S6 | `worker/scripts/preflight.sh` + flow-harness as a gate | no longer gates (`37bc4764`) | keep as a manual tool, or delete if unused by 31 Oct | after 12 Oct |
 | S7 | Consent: 4 signals behind 1 checkbox | 1 checkbox → 4 consents | 1 checkbox per consent | after 4 Oct (`.issues/161`) |
 | S8 | Unmerged branches waiting on one date | 5 (W3, W4, W5, log key, CSP) | 0 on 5 Oct; then branches live ≤ ~1 day | 5 Oct |
-| S9 | Issue ledger heuristics for legacy (≤144) free-text statuses | classifier word lists growing | freeze ≤144 as legacy, stop parsing them | any time (S) |
-| S10 | Plan 028 bullets of 300+ words | unreadable | status table + separate log | any time (S) |
+| S9 | ~~Issue ledger heuristics for legacy (≤144) free-text statuses~~ | — | **Declined 2026-09-28:** that parsing found a real stale claim the same day (#121 said "awaiting deploy" while in every prod tag). Removing a check that just caught something is not simplification. Keep it; stop only if it produces noise. | — |
+| S10 | Plan 028 bullets of 300+ words | — | **Done 2026-09-28:** a status-at-a-glance table on top; the detail stays below as the log. | — |
 
 Remote branches were 9 after `git fetch --prune` (an earlier "~70" count
 included stale refs), so branch cleanup is not a candidate.

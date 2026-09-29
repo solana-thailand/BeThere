@@ -84,6 +84,10 @@ def unsupported_config(config: dict, include_ratelimits: bool) -> list[str]:
     # 'max-age=0, must-revalidate' — always revalidates, never stale, just not
     # maximally cacheable. Perf-only, and only under the fallback.
     warnings.append("_headers: not representable; assets get max-age=0, must-revalidate")
+    # .issues/169: the staff shell is reached through `_redirects` 200 rewrites.
+    # Without them /staff, /admin, … load the attendee shell, which says the
+    # staff app could not be loaded instead of looping.
+    warnings.append("_redirects: not representable; staff pages get the attendee shell")
     return warnings
 
 

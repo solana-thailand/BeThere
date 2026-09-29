@@ -113,3 +113,27 @@ pub async fn unsubscribe_marketing() -> Result<UnsubscribeMarketingResponse, Api
         status: 0,
     })
 }
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct MarketingConsentState {
+    #[serde(default)]
+    consented: bool,
+}
+
+/// GET /api/privacy/marketing-consent
+/// Whether the signed-in person has marketing consent on anywhere.
+pub async fn get_marketing_consent() -> Result<bool, ApiError> {
+    let response = super::api_get_no_cache("/privacy/marketing-consent").await?;
+    if !response.ok() {
+        return Err(ApiError {
+            message: "Could not load marketing preference".to_string(),
+            status: response.status(),
+        });
+    }
+    let wrapper: ApiResponse<MarketingConsentState> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse marketing preference: {e}"),
+            status: 0,
+        })?;
+    Ok(wrapper.data.is_some_and(|d| d.consented))
+}

@@ -27,7 +27,7 @@ pub use handlers::{
 // the only implementation carrying the F1 and double-registration guards.
 // Widening them again is how a second, unguarded verification path gets built.
 pub(crate) use confirm::verify_and_confirm_deposit;
-pub(crate) use gating::{check_and_switch_deadline, check_in_person_capacity};
+pub(crate) use gating::check_and_switch_deadline;
 pub(crate) use recover::recover_and_verify_deposit;
 pub use types::{
     ConfirmDepositQuery, ConfirmDepositResponse, DepositTxQuery, DepositTxResponse,

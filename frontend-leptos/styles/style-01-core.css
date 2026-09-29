@@ -13,7 +13,8 @@
     --bg-hover: #232a52;
     --text-primary: #e9e4d3;
     --text-secondary: #9ba0b4;
-    --text-muted: #7a7f96;
+    /* ≥ 4.5:1 on every dark surface up to --bg-hover (axe gate, .plans/038). */
+    --text-muted: #8e93aa;
     --accent: #ff5c39;
     --accent-hover: #ff7b5c;
     --accent-bg: rgba(255, 92, 57, 0.08);
@@ -45,6 +46,8 @@
     --border: #2a3052;
     --radius: 10px;
     --radius-sm: 6px;
+    --radius-md: 8px;
+    --font-mono: "SF Mono", "Fira Code", ui-monospace, monospace;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
     --text-heading: #f4f0e4;
     --bg-void: #0b0d1c;
@@ -65,6 +68,23 @@
     /* Typography scale tokens */
     --text-xs: 0.7rem;
     --text-sm: 0.8rem;
+    /* Fluid type + space scale (.plans/038 P3-d), Utopia-style: linear from
+       a 320px to a 1440px viewport. Type: 16px ratio 1.2 -> 18px ratio 1.25.
+       Space: multiples of the step-1 size. Migrate one page at a time;
+       these do not replace --text-* in bulk. */
+    --font-size-0: clamp(0.8333rem, 0.8143rem + 0.0952vw, 0.9rem); /* 13.3 -> 14.4px */
+    --font-size-1: clamp(1rem, 0.9643rem + 0.1786vw, 1.125rem); /* 16 -> 18px */
+    --font-size-2: clamp(1.2rem, 1.141rem + 0.2946vw, 1.406rem); /* 19.2 -> 22.5px */
+    --font-size-3: clamp(1.44rem, 1.349rem + 0.454vw, 1.758rem); /* 23 -> 28.1px */
+    --font-size-4: clamp(1.728rem, 1.594rem + 0.6704vw, 2.197rem); /* 27.6 -> 35.2px */
+    --font-size-5: clamp(2.074rem, 1.881rem + 0.9614vw, 2.747rem); /* 33.2 -> 43.9px */
+    --size-1: clamp(0.25rem, 0.2411rem + 0.0446vw, 0.2812rem); /* 4 -> 4.5px */
+    --size-2: clamp(0.5rem, 0.4821rem + 0.0893vw, 0.5625rem); /* 8 -> 9px */
+    --size-3: clamp(0.75rem, 0.7232rem + 0.1339vw, 0.8438rem); /* 12 -> 13.5px */
+    --size-4: clamp(1rem, 0.9643rem + 0.1786vw, 1.125rem); /* 16 -> 18px */
+    --size-5: clamp(1.5rem, 1.446rem + 0.2679vw, 1.688rem); /* 24 -> 27px */
+    --size-6: clamp(2rem, 1.929rem + 0.3571vw, 2.25rem); /* 32 -> 36px */
+    --size-7: clamp(3rem, 2.893rem + 0.5357vw, 3.375rem); /* 48 -> 54px */
 }
 
 html {
@@ -126,7 +146,9 @@ body {
 .center-page::before {
     content: "";
     position: absolute;
-    top: -10%;
+    /* vh, not %: a % top follows the page height, so the glow moved (a
+       layout shift) whenever loaded content grew the page (.issues/175). */
+    top: -10vh;
     left: 50%;
     transform: translateX(-50%);
     width: 600px;
@@ -162,7 +184,11 @@ body {
 /* The decorative background layer sits behind everything.
    Override the global `.center-page > * { z-index: 1 }` rule. */
 .pe-bg-anim > .pe-bg-layer {
-    position: absolute;
+    /* Fixed, not absolute: the orbs and aurora are sized in % of this box.
+       Anchored to the page they moved when the loaded event replaced the
+       skeleton, a ~0.95 layout shift (.issues/175). The viewport never
+       changes size with the content. */
+    position: fixed;
     inset: 0;
     z-index: 0;
     overflow: hidden;
@@ -408,6 +434,10 @@ body {
 
 /* Accessibility: respect reduced-motion preference — freeze all motion. */
 @media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
     .pe-bg-nebula,
     .pe-bg-orb,
     .pe-bg-aurora,

@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::{self, AdventureStatusType, ClaimLookupData};
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 
 use super::interop::*;
@@ -20,6 +21,7 @@ pub(super) fn build_quiz_questions(
     quiz_answers: ReadSignal<QuizAnswers>,
     set_quiz_answers: WriteSignal<QuizAnswers>,
 ) -> Vec<AnyView> {
+    let i18n = use_i18n();
     let mut views = Vec::new();
     let mut last_session_id: Option<String> = None;
     let mut first_session = true;
@@ -86,7 +88,7 @@ pub(super) fn build_quiz_questions(
                 <div class="card claim-quiz-question">
                     <div class="claim-quiz-q-header">
                         <span class="claim-quiz-q-num">{format!("{q_num}")}</span>
-                        <span class="claim-quiz-q-of">"of "{total_q}</span>
+                        <span class="claim-quiz-q-of">{t!(i18n, claim.quiz.of_total, total = total_q)}</span>
                     </div>
                     <p class="claim-quiz-q-text">{q_text}</p>
                     <div class="claim-quiz-options">{option_views}</div>
@@ -175,7 +177,7 @@ pub(super) fn build_quiz_explanations(
 
     view! {
         <div class="card claim-quiz-explanations">
-            <h4>"Answer Review"</h4>
+            <h4>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.review))}</h4>
             {items}
         </div>
     }
@@ -268,7 +270,7 @@ pub(super) fn build_quiz_action(
                 <NftBadgePreview />
 
                 <div class="card claim-quiz-adventure-check">
-                    <p class="claim-quiz-passed-msg"><Icon icon=IconName::Check class="icon-sm icon-success" />" Quiz passed! Verifying adventure progress..."</p>
+                    <p class="claim-quiz-passed-msg"><Icon icon=IconName::Check class="icon-sm icon-success" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.passed_verifying))}</p>
                 </div>
 
                 <button
@@ -277,7 +279,7 @@ pub(super) fn build_quiz_action(
                         check_adventure_and_proceed();
                     }
                 >
-                    "Continue to Claim"
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.continue_to_claim))}
                 </button>
             }.into_any()
         }
@@ -292,14 +294,14 @@ pub(super) fn build_quiz_action(
                         set_state.set(ClaimState::Quiz(claim_d.clone(), quiz_d.clone()));
                     }
                 >
-                    "Try Again"
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.try_again))}
                 </button>
             }
             .into_any()
         }
         QuizAction::Exhausted => view! {
             <div class="card claim-quiz-exhausted">
-                <p>"You've used all your attempts. Please contact event staff for assistance."</p>
+                <p>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.quiz.exhausted))}</p>
             </div>
         }
         .into_any(),

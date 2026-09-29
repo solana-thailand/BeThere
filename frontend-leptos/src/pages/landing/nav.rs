@@ -45,9 +45,8 @@ pub fn SiteHeader(
                     </span>
                 </a>
                 <div class="landing-nav-links">
-                    <a href="/#how-it-works">"How it works"</a>
-                    <a href="/#faq">"FAQ"</a>
-                    <a href="/#waitlist">"For Organizers"</a>
+                    <a href="/#how-it-works">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.how_it_works))}</a>
+                    <a href="/#waitlist">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.for_organizers))}</a>
                 </div>
                 <div class="landing-nav-right" style="display:flex;align-items:center;gap:8px;">
                     <div class="landing-nav-actions">
@@ -61,7 +60,7 @@ pub fn SiteHeader(
                                             class="btn btn-outline btn-sm"
                                             on:click=move |_| trigger_landing_oauth()
                                         >
-                                            "Sign In"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.sign_in))}
                                         </button>
                                     }.into_any()
                                 }
@@ -83,13 +82,13 @@ pub fn SiteHeader(
                                         {if is_admin_role(&role) {
                                             view! {
                                                 <A href="/admin" attr:class="btn btn-outline btn-xs landing-desktop-only-btn">
-                                                    "Dashboard"
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.dashboard))}
                                                 </A>
                                             }.into_any()
                                         } else if role == "staff" {
                                             view! {
                                                 <A href="/staff" attr:class="btn btn-outline btn-xs landing-desktop-only-btn">
-                                                    "Scanner"
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.scanner))}
                                                 </A>
                                             }.into_any()
                                         } else {
@@ -99,9 +98,9 @@ pub fn SiteHeader(
                                             class="btn btn-outline btn-xs landing-desktop-only-btn"
                                             style="color:#94a3b8;border-color:rgba(255,255,255,0.15);"
                                             on:click=move |_| trigger_landing_signout()
-                                            title="Sign Out"
+                                            title=crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.sign_out))
                                         >
-                                            "Sign Out"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.sign_out))}
                                         </button>
                                     }.into_any()
                                 }
@@ -112,6 +111,14 @@ pub fn SiteHeader(
                     // Hamburger button — visible only on mobile
                     <button
                         class="landing-nav-hamburger"
+                        aria-expanded=move || mobile_menu_open.get().to_string()
+                        aria-label=move || {
+                            let locale = crate::i18n::use_i18n().get_locale();
+                            match mobile_menu_open.get() {
+                                true => crate::i18n::td_string!(locale, landing.nav.menu_close),
+                                false => crate::i18n::td_string!(locale, landing.nav.menu_open),
+                            }
+                        }
                         on:click=move |_| set_mobile_menu_open.update(|v| *v = !*v)
                     >
                         {move || {
@@ -142,12 +149,11 @@ pub fn SiteHeader(
                 if open {
                     view! {
                         <div class="landing-nav-mobile-menu">
-                            <a href="/#how-it-works" on:click=move |_| set_mobile_menu_open.set(false)>"How it works"</a>
-                            <a href="/#faq" on:click=move |_| set_mobile_menu_open.set(false)>"FAQ"</a>
-                            <a href="/#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"For Organizers"</a>
+                            <a href="/#how-it-works" on:click=move |_| set_mobile_menu_open.set(false)>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.how_it_works))}</a>
+                            <a href="/#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.for_organizers))}</a>
                             <A href="/profile" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
                                 <Icon icon=IconName::User class="icon-sm" />
-                                "Developer Profile"
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.developer_profile))}
                             </A>
                             {move || match auth_state.get() {
                                 AuthState::NotSignedIn | AuthState::Checking => {
@@ -159,7 +165,7 @@ pub fn SiteHeader(
                                                 trigger_landing_oauth();
                                             }
                                         >
-                                            "Sign In"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.sign_in))}
                                         </button>
                                     }.into_any()
                                 }
@@ -170,14 +176,14 @@ pub fn SiteHeader(
                                             view! {
                                                 <A href="/admin" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
                                                     <Icon icon=IconName::Chart class="icon-sm" />
-                                                    "Dashboard"
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.dashboard))}
                                                 </A>
                                             }.into_any()
                                         } else if role == "staff" {
                                             view! {
                                                 <A href="/staff" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
                                                     <Icon icon=IconName::Camera class="icon-sm" />
-                                                    "Scanner"
+                                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.scanner))}
                                                 </A>
                                             }.into_any()
                                         } else {
@@ -193,7 +199,7 @@ pub fn SiteHeader(
                                                 trigger_landing_signout();
                                             }
                                         >
-                                            "Sign Out"
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.sign_out))}
                                         </button>
                                     }.into_any()
                                 }

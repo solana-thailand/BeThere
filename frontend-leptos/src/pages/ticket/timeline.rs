@@ -3,18 +3,20 @@
 use leptos::prelude::*;
 
 /// A single timeline step.
-#[derive(Clone, PartialEq)]
+///
+/// Text fields are views so catalog text follows a language switch.
+#[derive(Clone)]
 pub struct TimelineStep {
     /// Whether this step is completed
     pub done: bool,
     /// Step number (for display when not done)
     pub number: u32,
     /// Step title
-    pub title: String,
+    pub title: ViewFn,
     /// Step description
-    pub desc: String,
+    pub desc: ViewFn,
     /// Optional action link (href, label)
-    pub link: Option<(String, String)>,
+    pub link: Option<(String, ViewFn)>,
 }
 
 /// Progress timeline for online attendees — shows "What's Next?" steps.
@@ -26,7 +28,7 @@ pub fn Timeline(
 ) -> impl IntoView {
     view! {
         <div class="ticket-timeline">
-            <h3 class="ticket-timeline-heading">"What's Next?"</h3>
+            <h3 class="ticket-timeline-heading">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.heading))}</h3>
             <div class="ticket-timeline-steps">
                 {steps.into_iter().map(|step| {
                     let dot_class = if step.done {
@@ -43,15 +45,15 @@ pub fn Timeline(
                         <div class="ticket-timeline-step">
                             <div class=dot_class>{dot_content}</div>
                             <div class="ticket-timeline-content">
-                                <div class="ticket-timeline-title">{step.title}</div>
-                                <div class="ticket-timeline-desc">{step.desc}</div>
+                                <div class="ticket-timeline-title">{step.title.run()}</div>
+                                <div class="ticket-timeline-desc">{step.desc.run()}</div>
                                 {if let Some((href, label)) = step.link {
                                     view! {
                                         <a
                                             href=href
                                             class="ticket-timeline-link"
                                         >
-                                            {label}
+                                            {label.run()}
                                         </a>
                                     }.into_any()
                                 } else {

@@ -7,6 +7,7 @@ use serde::Deserialize;
 use super::notifications::NotificationInbox;
 use crate::api::ApiResponse;
 use crate::components::{StatusBadge, StatusTone};
+use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use crate::pages::ticket::credit_chip::CreditWallet;
 
@@ -23,6 +24,9 @@ struct MyRegistrationItem {
     /// "checked in", "nft claimed".
     status: String,
     next_step: NextStepData,
+    /// The check-in URL, present when the ticket would show its QR.
+    #[serde(default)]
+    qr_url: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -36,6 +40,7 @@ struct NextStepData {
 /// If not signed in, renders nothing.
 #[component]
 pub(super) fn MyRegistrations() -> impl IntoView {
+    let i18n = use_i18n();
     let (registrations, set_registrations) = signal(None::<Vec<MyRegistrationItem>>);
     let (email, set_email) = signal(None::<String>);
     let (email_verified, set_email_verified) = signal(false);
@@ -118,17 +123,17 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                 <div class="landing-passport-info">
                                     <div class="landing-passport-title-row">
                                         <span class="landing-passport-name">{user_email.clone()}</span>
-                                        <span class="landing-passport-verified-badge">"✓ Verified Passport"</span>
+                                        <span class="landing-passport-verified-badge">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.verified))}</span>
                                     </div>
                                     <div class="landing-passport-sub">
-                                        "Solana Thailand Developer Community Member"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.member))}
                                     </div>
                                 </div>
                             </div>
                             <div class="landing-passport-actions">
                                 <A href="/profile" attr:class="btn btn-primary btn-sm landing-passport-btn">
                                     <Icon icon=IconName::Settings class="icon-sm" />
-                                    " Edit Profile"
+                                    " "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.edit_profile))}
                                 </A>
                                 <button
                                     class="btn btn-outline btn-xs"
@@ -140,7 +145,7 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                         });
                                     }
                                 >
-                                    "Sign out"
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.sign_out))}
                                 </button>
                             </div>
                         </div>
@@ -158,18 +163,21 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                             view! {
                                 <div class="landing-reg-header" style="margin-top: 24px;">
                                     <h2 class="landing-reg-title">
-                                        "Your Events"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.your_events))}
                                     </h2>
                                 </div>
                                 <div class="landing-reg-grid">
                                     {refs.into_iter().map(|reg| {
                                         let event_url = format!("/e/{}", reg.event_slug);
-                                        let step_label = match reg.next_step.step_type.as_str() {
-                                            "claim" => "Claim Badge",
-                                            "deposit" => "Complete Deposit",
-                                            "quest" => "Start Quest",
-                                            "ticket" => "View Ticket",
-                                            _ => "View",
+                                        // `step_type` is a server code; only the
+                                        // label is translated.
+                                        let step_type = reg.next_step.step_type.clone();
+                                        let step_label = move || match step_type.as_str() {
+                                            "claim" => t_string!(i18n, landing.reg.step.claim),
+                                            "deposit" => t_string!(i18n, landing.reg.step.deposit),
+                                            "quest" => t_string!(i18n, landing.reg.step.quest),
+                                            "ticket" => t_string!(i18n, landing.reg.step.ticket),
+                                            _ => t_string!(i18n, landing.reg.step.view),
                                         };
                                         // Third copy of this, and the third to
                                         // be wrong. `to_locale_string` with no
@@ -178,9 +186,12 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                         // event date, and a month/day order that
                                         // is ambiguous to a Thai-majority
                                         // audience. Shared helper (.issues/104).
-                                        let date_str = match reg.event_start_ms > 0 {
-                                            true => crate::utils::format_event_datetime(reg.event_start_ms),
-                                            false => "TBA".to_string(),
+                                        // A closure so the date follows a language
+                                        // switch.
+                                        let start_ms = reg.event_start_ms;
+                                        let date_str = move || match start_ms > 0 {
+                                            true => crate::utils::format_event_datetime(start_ms),
+                                            false => t_string!(i18n, landing.reg.tba).to_string(),
                                         };
                                         let next_url = reg.next_step.url.clone();
                                         let status_tone = match reg.status.as_str() {
@@ -199,10 +210,19 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                                 <div class="landing-reg-identity">
                                                     <span class="landing-reg-identity-label">{user.clone()}</span>
                                                 </div>
-                                                <StatusBadge tone=status_tone label=reg.status.clone() />
+                                                // The status is a server code: compared
+                                                // above, labelled here in the reader's
+                                                // language.
+                                                {
+                                                    let status = reg.status.clone();
+                                                    move || view! {
+                                                        <StatusBadge tone=status_tone label=crate::locale::status_label(&status) />
+                                                    }
+                                                }
                                                 <a href=next_url class="btn btn-primary btn-sm landing-reg-action">
                                                     {step_label}" →"
                                                 </a>
+                                                {reg.qr_url.as_deref().and_then(crate::utils::qr_gen::qr_svg_path).map(|qr| view! { <InlineTicketQr qr /> })}
                                             </div>
                                         }
                                     }).collect::<Vec<_>>()}
@@ -212,7 +232,7 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                             view! {
                                 <div class="landing-reg-empty" style="margin-top: 16px;">
                                     <p class="landing-reg-empty-text">
-                                        "You haven't registered for any events yet. Check out upcoming events below!"
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.empty))}
                                     </p>
                                 </div>
                             }.into_any()
@@ -221,5 +241,45 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                 }.into_any()
             }
         }
+    }
+}
+
+/// The ticket QR, expanded in place on the landing (.plans/038 P2-a): one tap
+/// from the landing to a scannable code, drawn as SVG (no image request). The
+/// full ticket page, with deposit status, badge and the fullscreen QR, stays
+/// one more tap away through the card's action link.
+#[component]
+fn InlineTicketQr(qr: (u32, String)) -> impl IntoView {
+    let (open, set_open) = signal(false);
+    let (side, path) = qr;
+    let view_box = format!("0 0 {side} {side}");
+    view! {
+        <button
+            class="btn btn-outline btn-sm landing-reg-qr-toggle"
+            aria-expanded=move || open.get().to_string()
+            on:click=move |_| set_open.update(|o| *o = !*o)
+        >
+            {move || match open.get() {
+                true => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.hide_ticket)).into_any(),
+                false => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.show_ticket)).into_any(),
+            }}
+        </button>
+        <Show when=move || open.get() fallback=|| ()>
+            <div class="landing-reg-qr">
+                <svg
+                    class="landing-reg-qr-svg"
+                    viewBox=view_box.clone()
+                    role="img"
+                    aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.qr_alt))
+                    shape-rendering="crispEdges"
+                >
+                    <rect width="100%" height="100%" fill="#fff" />
+                    <path d=path.clone() fill="#000" />
+                </svg>
+                <p class="landing-reg-qr-hint">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.qr_hint))}
+                </p>
+            </div>
+        </Show>
     }
 }

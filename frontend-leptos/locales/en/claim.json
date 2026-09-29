@@ -1,0 +1,120 @@
+{
+  "page_title": "Claim Your NFT — BeThere",
+  "proof_of_attendance": "Proof of Attendance",
+  "title": "Claim Your NFT",
+  "welcome": "Welcome, {{ name }}!",
+  "registered": "Registered",
+  "not_checked_in": "Not yet checked in",
+  "checked_in_at": "Checked in {{ time }}",
+  "not_found_title": "Claim Not Found",
+  "invalid_link": "Invalid claim link — missing token.",
+  "lookup_failed": "Claim token not found or lookup failed: {{ error }}",
+  "go_home": "Go to Home",
+  "pending": "Pending",
+  "preview_sub": "Compressed NFT on Solana",
+  "bookmark_hint": "Get a <wallet>Solana wallet</wallet> ready — bookmark this page to claim your NFT later.",
+  "mint_cta": "Claim NFT Badge",
+  "unit": {
+    "h": "h",
+    "m": "m",
+    "s": "s"
+  },
+  "timer": {
+    "starts_in": "Starts in",
+    "live": "Live",
+    "ended": "Ended",
+    "thanks": "Thanks for coming!"
+  },
+  "step": {
+    "verified": "Verified",
+    "quiz": "Quiz",
+    "claim": "Claim"
+  },
+  "soon": {
+    "quiz_title": "Waiting for Quiz Setup",
+    "quiz_msg": "Your organizer is preparing a quiz for this event. You’ll be able to claim your NFT badge once it’s ready.",
+    "quiz_detail": "Please check back soon or remind your organizer to set up the quiz!",
+    "nft_title": "NFT Badge Coming Soon",
+    "nft_msg": "Your proof-of-attendance NFT badge is being prepared.",
+    "nft_detail": "You will receive a compressed NFT on Solana — a permanent, on-chain proof that you attended this event."
+  },
+  "wallet": {
+    "address_label": "Solana Wallet Address",
+    "linked_label": "Your linked wallet",
+    "linked": "Linked",
+    "use_different": "Use a different wallet",
+    "connected_via": "Connected via {{ wallet }}",
+    "connected": "Connected",
+    "disconnect": "Disconnect",
+    "connect_prompt": "Connect your Solana wallet:",
+    "connect_named": "Connect {{ wallet }}",
+    "or_manual": "or enter manually",
+    "placeholder": "Enter your Solana wallet address",
+    "paste": "Paste",
+    "hint_locked": "Use the pre-filled wallet address to claim.",
+    "hint_elsewhere": "Connect or enter the wallet you'd like the badge sent to instead of your linked one.",
+    "hint_paste": "Tap Paste or type your Phantom, Solflare, or Backpack address."
+  },
+  "quiz": {
+    "title": "Complete the Quiz",
+    "intro": "Answer all questions to unlock your badge. You need <strong>{{ passing }}%</strong> correct to pass.",
+    "questions": "{{ n }} questions",
+    "sessions": "{{ n }} sessions",
+    "attempts_single": "1 attempt",
+    "attempts_count": "{{ n }} attempts",
+    "submit": "Submit Answers",
+    "of_total": "of {{ total }}",
+    "passed_title": "Quiz Passed!",
+    "failed_title": "Not Quite...",
+    "score": "{{ score }}% — {{ correct }} of {{ total }} correct",
+    "no_attempts_left": "No attempts remaining. Contact event staff for help.",
+    "attempt_left_single": "1 attempt left.",
+    "attempts_left": "{{ n }} attempts left.",
+    "review": "Answer Review",
+    "passed_verifying": "Quiz passed! Verifying adventure progress...",
+    "continue_to_claim": "Continue to Claim",
+    "try_again": "Try Again",
+    "exhausted": "You've used all your attempts. Please contact event staff for assistance."
+  },
+  "adventure": {
+    "title": "Rust Adventure Required",
+    "not_started": "You haven't started the Rust Adventure yet. Complete it to unlock your NFT!",
+    "in_progress": "You're making progress! Keep going to complete the adventure.",
+    "complete_it": "Complete the Rust Adventure to unlock your NFT!",
+    "info": "<strong>{{ name }}</strong>, complete the Rust Adventures game to earn your NFT badge.",
+    "hint": "Learn Rust basics by solving coding puzzles in a fun tile-based game!",
+    "start": "🎮 Start Adventure"
+  },
+  "minting": {
+    "title": "Minting your NFT...",
+    "detail": "Minting for {{ name }}",
+    "hint": "This can take longer during provider delays. You may safely close this page and reopen the same claim link; the same claim cannot mint twice."
+  },
+  "success": {
+    "title": "NFT Claimed!",
+    "asset_id": "Asset ID",
+    "on_chain": "On-Chain",
+    "copy_asset_id": "Copy Asset ID",
+    "view_on_orb": "View NFT on Orb ↗",
+    "view_solscan": "🔍 View Transaction on Solscan ↗",
+    "post_to_x": "Post to X",
+    "copy_link": "Copy claim link",
+    "link_copied": "Link copied!",
+    "ticket_with_deposit": "View ticket & deposit / refund →",
+    "back_to_ticket": "← Back to Ticket",
+    "tweet_generic": "I just claimed my attendance NFT on BeThere! 🎫✨\n\nProof I showed up. On-chain.\n\n#BeThere #Solana",
+    "tweet_event_before": "I just earned my POAP at ",
+    "tweet_event_after": "! 🎫✨\n\nShowed up, proved I was there, got my NFT badge.\n\n#BeThere #Solana"
+  },
+  "already": {
+    "title": "Already Claimed",
+    "redirecting": "Redirecting to your ticket...",
+    "go_to_ticket": "Go to Ticket"
+  },
+  "mint_error": {
+    "badge": "Action failed",
+    "title": "Minting Failed",
+    "retry_note": "Retrying uses the same protected claim request. If the provider already accepted it, BeThere resumes that result instead of minting another NFT.",
+    "retry": "Check Status or Retry"
+  }
+}

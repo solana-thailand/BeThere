@@ -738,22 +738,11 @@ async fn enforce_walkin_capacity(
 
     let kv = state.events_kv.as_ref();
 
-    // Count sheet-based in-person attendees
-    let attendees = crate::sheets::get_attendees_for_event(
-        state,
-        &config.sheet_id,
-        &config.sheet_name,
-        kv,
-        &config.id,
-    )
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to check capacity: {e}")))?;
-
-    let mut in_person_count: u32 = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
-
-    // Count walk-in attendees from D1. Fails closed when a cap is set — see
+    // Sheet, D1 and walk-in attendees in one count. Fails closed — see
     // `handlers::capacity`.
-    in_person_count += crate::handlers::capacity::count_walkins_against_cap(state, config).await?;
+    let in_person_count = crate::handlers::capacity::count_tracks_for_cap(state, config, kv)
+        .await?
+        .in_person;
 
     tracing::info!(
         event_id = %config.id,

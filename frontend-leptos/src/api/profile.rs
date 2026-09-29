@@ -165,38 +165,6 @@ pub async fn get_linked_emails() -> Result<Vec<String>, ApiError> {
     Ok(result.data.map(|d| d.emails).unwrap_or_default())
 }
 
-/// Human message for the `?email_link=` result the link callback redirects
-/// with. `(is_success, message)`.
-pub fn email_link_result_message(result: &str) -> (bool, String) {
-    let (ok, msg) = match result {
-        "linked" => (
-            true,
-            "Email linked. Your deposit credit is now shared across your emails.",
-        ),
-        "already" => (true, "That email is already linked to you."),
-        "same" => (
-            false,
-            "That is the email you are signed in with — pick your other Google account.",
-        ),
-        "conflict" => (
-            false,
-            "That email is already linked to a different person. Please contact the organizer.",
-        ),
-        "session_mismatch" => (
-            false,
-            "Link cancelled: sign in again with your main email, then add the other one.",
-        ),
-        "needs_google" => (
-            false,
-            "Sign in with Google first — wallet sessions can't link emails.",
-        ),
-        "expired" => (false, "The link request expired — please try again."),
-        "cancelled" => (false, "Google sign-in was cancelled."),
-        _ => (false, "Could not link that email. Please try again."),
-    };
-    (ok, msg.to_string())
-}
-
 /// PUT /api/my-profile — update the current user's developer profile.
 pub async fn update_my_profile(body: &UpdateProfileBody) -> Result<DeveloperProfile, ApiError> {
     api_put_json("/my-profile", body).await

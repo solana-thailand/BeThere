@@ -1,9 +1,11 @@
 use super::types::*;
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
-use crate::utils::deposit_copy::{NEVER_FORFEITED, THB_REFUND_WINDOW};
+use crate::utils::deposit_copy::{never_forfeited, thb_refund_window};
 use leptos::prelude::*;
 
 pub fn deposit_section(data: &PublicEventData) -> AnyView {
+    let i18n = use_i18n();
     let is_online_only = data.event_format == crate::api::EventFormat::Online;
     let is_hybrid = data.event_format == crate::api::EventFormat::Hybrid;
     let has_deposit =
@@ -23,7 +25,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
     } else {
         None
     };
-    let refund_label = format_refund_deadline(data.refund_deadline_hours);
+    let refund_hours = data.refund_deadline_hours;
 
     let show_usdc = data.deposit_amount_usdc > 0 && !escrow_closed;
     let show_thb = data.deposit_amount_thb > 0;
@@ -32,29 +34,33 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
     // "Free" is the net cost of attending, so every line must also say that the
     // deposit is paid first, or people reach the payment step surprised.
     let pay_label = match (show_thb, show_usdc) {
-        (true, _) => format!("Pay {} ฿", thb_display.clone().unwrap_or_default()),
-        (false, true) => format!("Pay {usdc_display}"),
-        (false, false) => "Pay deposit".to_string(),
-    };
-    let back_label = if show_thb {
-        "Refund or credit"
-    } else {
-        "Claim to wallet"
-    };
-    let free_detail = match (show_thb, show_usdc) {
-        (true, true) => {
-            "Attend and the whole deposit comes back: PromptPay as a refund or as credit for your next event, USDC claimed back to your wallet."
+        (true, _) => {
+            let amount = thb_display.clone().unwrap_or_default();
+            view! { {t!(i18n, event.pay_thb, amount)} }.into_any()
         }
-        (true, false) => {
-            "Attend and the whole deposit comes back, as a refund or as credit for your next event."
+        (false, true) => {
+            let amount = usdc_display.clone();
+            view! { {t!(i18n, event.pay_usdc, amount)} }.into_any()
         }
-        (false, _) => "Attend and claim the whole deposit back to your wallet after the event.",
+        (false, false) => {
+            view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, event.pay_deposit))} }
+                .into_any()
+        }
+    };
+    let back_label = move || match show_thb {
+        true => t_string!(i18n, event.back_refund_or_credit),
+        false => t_string!(i18n, event.back_claim_to_wallet),
+    };
+    let free_detail = move || match (show_thb, show_usdc) {
+        (true, true) => t_string!(i18n, event.free_detail_both),
+        (true, false) => t_string!(i18n, event.free_detail_thb),
+        (false, _) => t_string!(i18n, event.free_detail_usdc),
     };
 
     view! {
         <div class="pe-card pe-deposit-card">
             <h2 class="pe-section-title">
-                <Icon icon=IconName::Coin class="icon-md" />" Deposit Commitment"
+                <Icon icon=IconName::Coin class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.deposit_title))}
             </h2>
             // Dual Payment Methods Grid (PromptPay & Solana USDC)
             <div class="pe-deposit-methods-grid">
@@ -67,7 +73,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                                 <span class="pe-method-amount-val">{thb}" ฿"</span>
                             </div>
                             <div class="pe-method-subtext">
-                                "Off-Chain deposit via PromptPay QR Code using any Thai banking app."
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.promptpay_subtext))}
                             </div>
                         </div>
                     }.into_any()
@@ -83,7 +89,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                                 <span class="pe-method-amount-val">{usdc}</span>
                             </div>
                             <div class="pe-method-subtext">
-                                "On-chain deposit held by a Solana escrow program, claimed back from your wallet."
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.usdc_subtext))}
                             </div>
                         </div>
                     }.into_any()
@@ -92,11 +98,11 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     view! {
                         <div class="pe-method-card pe-method-card--solana" style="opacity: 0.6;">
                             <div class="pe-method-header">
-                                <span class="pe-method-badge pe-method-badge--solana">"Solana (Closed)"</span>
+                                <span class="pe-method-badge pe-method-badge--solana">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.solana_closed))}</span>
                                 <span class="pe-method-amount-val">{usdc}</span>
                             </div>
                             <div class="pe-method-subtext">
-                                "Escrow pool for this event is closed."
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.escrow_closed))}
                             </div>
                         </div>
                     }.into_any()
@@ -109,16 +115,19 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
             <div class="pe-refund-list">
                 <div class="pe-refund-item">
                     <span class="pe-check">"✓"</span>
-                    <span class="pe-refund-text">"100% back when you attend the event."</span>
+                    <span class="pe-refund-text">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.refund_attend))}</span>
                 </div>
                 // Deposit model D1 (owner, 2026-09-28): nothing is forfeited.
                 // Ask for notice, threaten nothing (docs/deposit-commitment-model.md §5).
+                // The promise itself lives in `utils::deposit_copy` (one home,
+                // EN and TH); the catalog carries the words around it.
                 {if show_thb {
+                    let promise = move || never_forfeited(i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>
                             <span class="pe-refund-text">
-                                {format!("Can't make it? {NEVER_FORFEITED} Tell the organizer, and it's refunded or kept as credit for your next event.")}
+                                {t!(i18n, event.refund_cant_make_it, promise)}
                             </span>
                         </div>
                     }.into_any()
@@ -126,12 +135,12 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     view! { <div></div> }.into_any()
                 }}
                 {if show_usdc {
-                    let refund = refund_label.clone();
+                    let deadline = move || format_refund_deadline(refund_hours, i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>
                             <span class="pe-refund-text">
-                                "USDC: claim it back from the Solana escrow after the event ends (no-shows have "{refund}" to claim)."
+                                {t!(i18n, event.refund_usdc, deadline)}
                             </span>
                         </div>
                     }.into_any()
@@ -139,11 +148,12 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     view! { <div></div> }.into_any()
                 }}
                 {if show_thb {
+                    let window = move || thb_refund_window(i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
                             <span class="pe-check">"✓"</span>
                             <span class="pe-refund-text">
-                                {format!("PromptPay: the organizer transfers it back {THB_REFUND_WINDOW}, or you keep it as credit for your next event.")}
+                                {t!(i18n, event.refund_thb, window)}
                             </span>
                         </div>
                     }.into_any()
@@ -156,28 +166,28 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
             <div class="pe-journey-timeline">
                 <div>
                     <div class="pe-journey-step-num" style="background: rgba(153,69,255,0.2); border: 1px solid rgba(153,69,255,0.5); color: #fff;">"1"</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">"Reserve"</div>
+                    <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_reserve))}</div>
                     <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{pay_label}</div>
                 </div>
                 <div>
                     <div class="pe-journey-step-num" style="background: rgba(20,241,149,0.2); border: 1px solid rgba(20,241,149,0.5); color: #14F195;">"2"</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">"Show Up"</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">"At the venue"</div>
+                    <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_show_up))}</div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_at_venue))}</div>
                 </div>
                 <div>
                     <div class="pe-journey-step-num" style="background: rgba(153,69,255,0.2); border: 1px solid rgba(153,69,255,0.5); color: #fff;">"3"</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">"Scan QR"</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">"Check in"</div>
+                    <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_scan_qr))}</div>
+                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_check_in))}</div>
                 </div>
                 <div>
                     <div class="pe-journey-step-num" style="background: rgba(20,241,149,0.25); border: 1px solid #14F195; color: #14F195;">"4"</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #14F195;">"100% Back"</div>
+                    <div style="font-size: 0.8rem; font-weight: 700; color: #14F195;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_back))}</div>
                     <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{back_label}</div>
                 </div>
             </div>
             <div class="pe-journey-total" role="note">
                 <span class="pe-journey-total-sum">
-                    <span aria-hidden="true">"= "</span>"FREE"
+                    <span aria-hidden="true">"= "</span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.free))}
                 </span>
                 <span class="pe-journey-total-detail">{free_detail}</span>
             </div>
@@ -187,7 +197,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                 view! {
                     <div class="pe-hybrid-note" style="margin-top: 16px;">
                         <span>"💡"</span>
-                        <span>"Deposit applies to In-Person track only. Online participants are exempt."</span>
+                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.hybrid_deposit_note))}</span>
                     </div>
                 }.into_any()
             } else {

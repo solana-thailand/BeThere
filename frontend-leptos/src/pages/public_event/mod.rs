@@ -1,4 +1,3 @@
-pub mod capacity_indicator;
 pub mod deposit_section;
 pub mod details_card;
 pub mod event_hero;

@@ -1,0 +1,120 @@
+{
+  "page_title": "รับ NFT ของคุณ — BeThere",
+  "proof_of_attendance": "หลักฐานการเข้าร่วมงาน",
+  "title": "รับ NFT ของคุณ",
+  "welcome": "ยินดีต้อนรับ {{ name }}!",
+  "registered": "ลงทะเบียนแล้ว",
+  "not_checked_in": "ยังไม่ได้เช็คอิน",
+  "checked_in_at": "เช็คอินเมื่อ {{ time }}",
+  "not_found_title": "ไม่พบสิทธิ์รับ NFT",
+  "invalid_link": "ลิงก์รับ NFT ไม่ถูกต้อง — ไม่มีโทเคน",
+  "lookup_failed": "ไม่พบโทเคนรับ NFT หรือค้นหาไม่สำเร็จ: {{ error }}",
+  "go_home": "กลับหน้าหลัก",
+  "pending": "รอดำเนินการ",
+  "preview_sub": "NFT แบบ compressed บน Solana",
+  "bookmark_hint": "เตรียม<wallet>กระเป๋าเงิน Solana</wallet>ไว้ — บุ๊กมาร์กหน้านี้เพื่อกลับมารับ NFT ภายหลัง",
+  "mint_cta": "รับ NFT badge",
+  "unit": {
+    "h": " ชม.",
+    "m": " นาที",
+    "s": " วินาที"
+  },
+  "timer": {
+    "starts_in": "เริ่มในอีก",
+    "live": "กำลังไลฟ์",
+    "ended": "จบแล้ว",
+    "thanks": "ขอบคุณที่มาร่วมงาน!"
+  },
+  "step": {
+    "verified": "ยืนยันแล้ว",
+    "quiz": "แบบทดสอบ",
+    "claim": "รับ NFT"
+  },
+  "soon": {
+    "quiz_title": "รอผู้จัดงานตั้งค่าแบบทดสอบ",
+    "quiz_msg": "ผู้จัดงานกำลังเตรียมแบบทดสอบสำหรับงานนี้ คุณจะรับ NFT badge ได้เมื่อแบบทดสอบพร้อม",
+    "quiz_detail": "กรุณากลับมาดูอีกครั้งเร็ว ๆ นี้ หรือเตือนผู้จัดงานให้ตั้งค่าแบบทดสอบ!",
+    "nft_title": "NFT badge พร้อมเร็ว ๆ นี้",
+    "nft_msg": "กำลังเตรียม NFT badge ยืนยันการเข้าร่วมงานของคุณ",
+    "nft_detail": "คุณจะได้รับ NFT แบบ compressed บน Solana — หลักฐานถาวรบนเชนว่าคุณเข้าร่วมงานนี้"
+  },
+  "wallet": {
+    "address_label": "ที่อยู่กระเป๋าเงิน Solana",
+    "linked_label": "กระเป๋าเงินที่คุณเชื่อมไว้",
+    "linked": "เชื่อมแล้ว",
+    "use_different": "ใช้กระเป๋าเงินอื่น",
+    "connected_via": "เชื่อมต่อผ่าน {{ wallet }}",
+    "connected": "เชื่อมต่อแล้ว",
+    "disconnect": "ยกเลิกการเชื่อมต่อ",
+    "connect_prompt": "เชื่อมต่อกระเป๋าเงิน Solana ของคุณ:",
+    "connect_named": "เชื่อมต่อ {{ wallet }}",
+    "or_manual": "หรือกรอกเอง",
+    "placeholder": "กรอกที่อยู่กระเป๋าเงิน Solana ของคุณ",
+    "paste": "วาง",
+    "hint_locked": "ใช้ที่อยู่กระเป๋าเงินที่กรอกไว้ให้แล้วเพื่อรับ NFT",
+    "hint_elsewhere": "เชื่อมต่อหรือกรอกกระเป๋าเงินที่ต้องการให้ส่ง badge ไป แทนกระเป๋าเงินที่เชื่อมไว้",
+    "hint_paste": "แตะ วาง หรือพิมพ์ที่อยู่ Phantom, Solflare หรือ Backpack ของคุณ"
+  },
+  "quiz": {
+    "title": "ทำแบบทดสอบ",
+    "intro": "ตอบให้ครบทุกข้อเพื่อปลดล็อก badge ต้องตอบถูก <strong>{{ passing }}%</strong> จึงจะผ่าน",
+    "questions": "{{ n }} ข้อ",
+    "sessions": "{{ n }} เซสชัน",
+    "attempts_single": "ทำได้ 1 ครั้ง",
+    "attempts_count": "ทำได้ {{ n }} ครั้ง",
+    "submit": "ส่งคำตอบ",
+    "of_total": "จาก {{ total }}",
+    "passed_title": "ผ่านแบบทดสอบแล้ว!",
+    "failed_title": "ยังไม่ผ่าน...",
+    "score": "{{ score }}% — ถูก {{ correct }} จาก {{ total }} ข้อ",
+    "no_attempts_left": "ไม่เหลือสิทธิ์ทำแล้ว ติดต่อทีมงานเพื่อขอความช่วยเหลือ",
+    "attempt_left_single": "เหลืออีก 1 ครั้ง",
+    "attempts_left": "เหลืออีก {{ n }} ครั้ง",
+    "review": "เฉลยคำตอบ",
+    "passed_verifying": "ผ่านแบบทดสอบแล้ว! กำลังตรวจสอบความคืบหน้า adventure...",
+    "continue_to_claim": "ไปรับ NFT ต่อ",
+    "try_again": "ลองอีกครั้ง",
+    "exhausted": "คุณใช้สิทธิ์ทำแบบทดสอบครบแล้ว กรุณาติดต่อทีมงานเพื่อขอความช่วยเหลือ"
+  },
+  "adventure": {
+    "title": "ต้องเล่น Rust Adventure ก่อน",
+    "not_started": "คุณยังไม่ได้เริ่ม Rust Adventure เล่นให้จบเพื่อปลดล็อก NFT ของคุณ!",
+    "in_progress": "คุณทำได้ดีแล้ว! เล่นต่อให้จบ adventure",
+    "complete_it": "เล่น Rust Adventure ให้จบเพื่อปลดล็อก NFT ของคุณ!",
+    "info": "<strong>{{ name }}</strong> เล่นเกม Rust Adventures ให้จบเพื่อรับ NFT badge ของคุณ",
+    "hint": "เรียนพื้นฐาน Rust ผ่านการแก้โจทย์โค้ดในเกมแบบช่องตารางสนุก ๆ!",
+    "start": "🎮 เริ่ม Adventure"
+  },
+  "minting": {
+    "title": "กำลังมิ้นต์ NFT ของคุณ...",
+    "detail": "กำลังมิ้นต์ให้ {{ name }}",
+    "hint": "ขั้นตอนนี้อาจใช้เวลานานขึ้นหากผู้ให้บริการล่าช้า คุณปิดหน้านี้แล้วเปิดลิงก์รับ NFT เดิมอีกครั้งได้อย่างปลอดภัย สิทธิ์เดียวกันจะมิ้นต์ซ้ำสองครั้งไม่ได้"
+  },
+  "success": {
+    "title": "รับ NFT แล้ว!",
+    "asset_id": "Asset ID",
+    "on_chain": "อยู่บนเชนแล้ว",
+    "copy_asset_id": "คัดลอก Asset ID",
+    "view_on_orb": "ดู NFT บน Orb ↗",
+    "view_solscan": "🔍 ดูธุรกรรมบน Solscan ↗",
+    "post_to_x": "โพสต์ลง X",
+    "copy_link": "คัดลอกลิงก์รับ NFT",
+    "link_copied": "คัดลอกลิงก์แล้ว!",
+    "ticket_with_deposit": "ดูตั๋ว และมัดจำ / การคืนเงิน →",
+    "back_to_ticket": "← กลับไปที่ตั๋ว",
+    "tweet_generic": "เพิ่งรับ NFT ยืนยันการเข้าร่วมงานบน BeThere! 🎫✨\n\nหลักฐานว่ามาจริง บนเชน\n\n#BeThere #Solana",
+    "tweet_event_before": "เพิ่งได้ POAP จากงาน ",
+    "tweet_event_after": "! 🎫✨\n\nมาจริง พิสูจน์ได้ว่าอยู่ที่นั่น ได้ NFT badge มาแล้ว\n\n#BeThere #Solana"
+  },
+  "already": {
+    "title": "รับไปแล้ว",
+    "redirecting": "กำลังพาไปที่ตั๋วของคุณ...",
+    "go_to_ticket": "ไปที่ตั๋ว"
+  },
+  "mint_error": {
+    "badge": "ดำเนินการไม่สำเร็จ",
+    "title": "มิ้นต์ไม่สำเร็จ",
+    "retry_note": "การลองใหม่จะใช้คำขอรับ NFT เดิมที่มีการป้องกันไว้ หากผู้ให้บริการรับคำขอไปแล้ว BeThere จะดึงผลลัพธ์นั้นกลับมาแทนการมิ้นต์ NFT ใหม่",
+    "retry": "ตรวจสอบสถานะหรือลองใหม่"
+  }
+}

@@ -283,6 +283,10 @@ pub(crate) async fn upsert_attendee_full(
 /// The match is case-insensitive on both sides, like every other
 /// attendee-by-email path (`idx_attendees_email_nocase`): a withdrawal that
 /// misses a mixed-case row reports success while the opt-in stays on (#116).
+///
+/// Only rows whose value changes are touched, so `consent_marketing_at` keeps
+/// recording when consent changed, and the count is the rows that changed
+/// (the profile save calls this on every save with the box unticked).
 pub(crate) async fn set_marketing_consent(
     db: &D1Database,
     email: &str,
@@ -293,7 +297,7 @@ pub(crate) async fn set_marketing_consent(
          consent_marketing = {consent}, \
          consent_marketing_at = datetime('now'), \
          updated_at = datetime('now') \
-         WHERE LOWER(email) = LOWER(?)"
+         WHERE LOWER(email) = LOWER(?) AND consent_marketing <> {consent}"
     );
     let result = db
         .prepare(&sql)
@@ -309,6 +313,26 @@ pub(crate) async fn set_marketing_consent(
         .and_then(|m| m.changes)
         .unwrap_or(0);
     Ok(count)
+}
+
+/// Whether this person has marketing consent on anywhere: any attendee row,
+/// or the developer profile (the two stores the opt-out clears, #117).
+/// Case-insensitive, like every other attendee-by-email path.
+pub(crate) async fn marketing_consent_on(db: &D1Database, email: &str) -> Result<bool, String> {
+    let stmt = db
+        .prepare(
+            "SELECT (EXISTS(SELECT 1 FROM attendees WHERE LOWER(email) = LOWER(?1) AND consent_marketing = 1) \
+             OR EXISTS(SELECT 1 FROM developer_profiles WHERE LOWER(email) = LOWER(?1) AND consent_outreach = 1)) \
+             AS consented",
+        )
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 marketing_consent_on bind: {e:?}"))?;
+    let rows = crate::db::d1_safe::safe_all_rows(&stmt).await?;
+    Ok(rows
+        .first()
+        .and_then(|row| row.get("consented"))
+        .and_then(serde_json::Value::as_i64)
+        .is_some_and(|v| v != 0))
 }
 
 /// Repair attendees with empty or NULL claim_tokens by generating new UUID v7s.

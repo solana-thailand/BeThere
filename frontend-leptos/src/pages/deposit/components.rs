@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use super::types::DepositFlow;
 use crate::components::{self, ToastType};
+use crate::i18n::{Locale, t, td_string, use_i18n};
 use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::{get_cluster, solscan_tx_url};
 
@@ -12,6 +13,7 @@ pub fn wallet_list_view(
     wallets: &[String],
     on_click: impl Fn(String) + Clone + 'static,
 ) -> AnyView {
+    let i18n = use_i18n();
     let wallets_for_click = wallets.to_vec();
     view! {
         <div class="wallet-list">
@@ -28,7 +30,7 @@ pub fn wallet_list_view(
                         }
                     >
                         <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                        <span>{format!("Connect {}", w_clone)}</span>
+                        <span>{t!(i18n, deposit.connect_wallet, wallet = w_clone)}</span>
                     </button>
                 }
             }).collect::<Vec<_>>()}
@@ -42,28 +44,30 @@ pub fn wallet_fallback_view() -> AnyView {
     view! {
         <div class="wallet-fallback-box">
             <p class="wallet-fallback-text">
-                "No Solana wallet detected. Please install a wallet extension (Phantom, Backpack, Solflare) and refresh."
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.wallet_fallback))}
             </p>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 /// Wallet connected bar (shows wallet icon, name, address, connected badge).
 pub fn wallet_connected_bar(wallet_name: &str, public_key: &str) -> AnyView {
+    let i18n = use_i18n();
     let wallet_icon = wallet_icon_name(wallet_name);
     let pk_short = super::types::truncate_pk(public_key);
+    let wallet = wallet_name.to_string();
     view! {
         <div class="wallet-connected-bar">
             <span class="wallet-icon-lg"><Icon icon=wallet_icon class="icon-lg wallet-icon-white" /></span>
             <div class="wallet-info-left">
-                <div class="wallet-label">"Connected via " {wallet_name.to_string()}</div>
+                <div class="wallet-label">{t!(i18n, deposit.connected_via, wallet)}</div>
                 <div class="wallet-address-bold">{pk_short}</div>
             </div>
-            <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Connected"</span>
+            <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.connected))}</span>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 /// Generic "Go Back" button that transitions to a target state.
@@ -95,7 +99,7 @@ pub fn solscan_link(tx_sig: &str) -> AnyView {
     let url = solscan_tx_url(tx_sig, &get_cluster());
     view! {
         <a href=&url target="_blank" class="tx-explorer-link">
-            "View on Solscan ↗"
+            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.view_solscan))}
         </a>
     }
     .into_any()
@@ -121,12 +125,12 @@ pub fn spinner_loading(text: &str) -> AnyView {
     .into_any()
 }
 
-/// Back to event link.
+/// "Back to event" link, or "Back to home" when the event slug is unknown.
 pub fn back_to_event_link(event_slug: &str) -> AnyView {
     if event_slug.is_empty() {
         view! {
             <a href="/" class="link-back-home">
-                "← Back to home"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_home))}
             </a>
         }
         .into_any()
@@ -134,7 +138,7 @@ pub fn back_to_event_link(event_slug: &str) -> AnyView {
         let slug = event_slug.to_string();
         view! {
             <a href=format!("/e/{slug}") class="link-back-home">
-                "← Back to event"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_event))}
             </a>
         }
         .into_any()
@@ -152,21 +156,21 @@ pub fn back_to_event_link(event_slug: &str) -> AnyView {
 /// banner. Returns the view unconditionally; caller is responsible for gating
 /// on `cluster != "mainnet-beta"` and non-THB-only states.
 pub fn cluster_warning_banner(cluster: &str) -> AnyView {
-    let label = cluster_display_label(cluster);
+    let i18n = use_i18n();
+    let network = cluster_display_label(cluster).to_string();
     view! {
         <div class="dep2-deadline dep2-deadline--warning">
             <Icon icon=IconName::Warning class="icon-sm" />
             <p class="dep2-deadline-text">
-                {format!(
-                    "This event runs on Solana {label}. Switch your wallet to {label} before paying with USDC — funds sent on another network won't reach this escrow."
-                )}
+                {t!(i18n, deposit.cluster_warning, network)}
             </p>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 /// Human-readable Solana cluster name used in transaction review surfaces.
+/// Network names are product names and stay untranslated.
 pub fn cluster_display_label(cluster: &str) -> &str {
     match cluster {
         "mainnet-beta" => "Mainnet Beta",
@@ -182,8 +186,18 @@ pub fn cluster_display_label(cluster: &str) -> &str {
 /// Accepts owned values so callers can derive product truth from the current
 /// event and cluster without this presentational component knowing API rules.
 pub fn transaction_review(rows: Vec<(&'static str, String)>) -> AnyView {
+    transaction_review_views(
+        rows.into_iter()
+            .map(|(label, value)| (label.into_any(), value.into_any()))
+            .collect(),
+    )
+}
+
+/// [`transaction_review`] with rendered cells, so a caller can pass catalog
+/// text (`t!`) that follows a language switch.
+pub fn transaction_review_views(rows: Vec<(AnyView, AnyView)>) -> AnyView {
     view! {
-        <div class="dep2-receipt" aria-label="Transaction review">
+        <div class="dep2-receipt" aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.aria))>
             {rows.into_iter().map(|(label, value)| view! {
                 <div class="dep2-receipt-row">
                     <span class="dep2-receipt-label">{label}</span>
@@ -210,20 +224,29 @@ pub fn show_success(set_toast: &WriteSignal<Option<components::ToastMessage>>, m
     components::show_toast(set_toast, msg, ToastType::Success);
 }
 
-/// Step labels per flow.
-fn flow_steps(flow: DepositFlow) -> Vec<&'static str> {
+/// Step labels per flow, in `locale`.
+fn flow_steps(locale: Locale, flow: DepositFlow) -> Vec<&'static str> {
+    let choose = td_string!(locale, deposit.step.choose);
+    let connect = td_string!(locale, deposit.step.connect);
+    let pay = td_string!(locale, deposit.step.pay);
+    let upload = td_string!(locale, deposit.step.upload);
+    let sign = td_string!(locale, deposit.step.sign);
+    let done = td_string!(locale, deposit.step.done);
     match flow {
-        DepositFlow::Usdc => vec!["Choose", "Connect", "Pay", "Done"],
-        DepositFlow::Thb => vec!["Choose", "Upload", "Done"],
-        DepositFlow::Refund => vec!["Connect", "Sign", "Done"],
-        DepositFlow::CloseDeposit => vec!["Connect", "Sign", "Done"],
+        DepositFlow::Usdc => vec![choose, connect, pay, done],
+        DepositFlow::Thb => vec![choose, upload, done],
+        DepositFlow::Refund => vec![connect, sign, done],
+        DepositFlow::CloseDeposit => vec![connect, sign, done],
         DepositFlow::None => vec![],
     }
 }
 
 /// Progress stepper showing where the user is in the deposit flow.
+///
+/// Reads the locale tracked: the caller renders it inside a view closure, so
+/// a language switch redraws the stepper, which holds no state of its own.
 pub fn deposit_stepper(flow: DepositFlow, current: usize, _total: usize) -> AnyView {
-    let steps = flow_steps(flow);
+    let steps = flow_steps(use_i18n().get_locale(), flow);
     // Reuse the claim-stepper CSS classes.
     view! {
         <div class="claim-stepper">
@@ -262,7 +285,7 @@ pub fn deposit_stepper(flow: DepositFlow, current: usize, _total: usize) -> AnyV
             </div>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 #[cfg(test)]

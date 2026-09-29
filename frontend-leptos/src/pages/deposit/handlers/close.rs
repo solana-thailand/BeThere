@@ -4,6 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::{self, CloseDepositRequest};
 use crate::components::{self as app_components, ToastType};
+use crate::i18n::{td_string, use_i18n};
 
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
@@ -18,7 +19,9 @@ pub fn make_close_deposit_connect_wallet(
     set_state: WriteSignal<DepositPageState>,
     set_toast: WriteSignal<Option<app_components::ToastMessage>>,
 ) -> impl Fn(String) + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move |wallet_name: String| {
+        let locale = i18n.get_locale_untracked();
         let deposit_data = match &state.get() {
             DepositPageState::CloseDepositChooseWallet(d) => Some(d.clone()),
             _ => None,
@@ -52,14 +55,14 @@ pub fn make_close_deposit_connect_wallet(
                     );
                     app_components::show_toast(
                         &set_toast,
-                        &crate::wallet_error::user_friendly_message(&e),
+                        &crate::wallet_error::user_friendly_message(&e, locale),
                         ToastType::Error,
                     );
                 }
                 crate::wallet_error::WalletResult::UnknownFailure => {
                     app_components::show_toast(
                         &set_toast,
-                        "Failed to connect wallet. Please try again.",
+                        td_string!(locale, deposit.toast.connect_failed),
                         ToastType::Error,
                     );
                 }
@@ -79,7 +82,9 @@ pub fn make_close_deposit(
     set_toast: WriteSignal<Option<app_components::ToastMessage>>,
     params: DepositParamsSignal,
 ) -> impl Fn(String, String) + Clone + Send + Sync + 'static {
+    let i18n = use_i18n();
     move |wallet_name: String, public_key: String| {
+        let locale = i18n.get_locale_untracked();
         let current_state = state.get();
         let deposit_data = match &current_state {
             DepositPageState::CloseDepositWalletConnected(d, _, _) => d.clone(),
@@ -114,7 +119,10 @@ pub fn make_close_deposit(
                     log::error!("[deposit] close-deposit TX build failed: {e}");
                     app_components::show_toast(
                         &set_toast,
-                        &format!("Failed to build close-deposit transaction: {e}"),
+                        &format!(
+                            "{} {e}",
+                            td_string!(locale, deposit.toast.close_build_failed)
+                        ),
                         ToastType::Error,
                     );
                     set_state.set(DepositPageState::CloseDepositWalletConnected(
@@ -131,7 +139,7 @@ pub fn make_close_deposit(
                 log::error!("[deposit] close-deposit TX is empty");
                 app_components::show_toast(
                     &set_toast,
-                    "Close-deposit transaction was empty. Please try again later.",
+                    td_string!(locale, deposit.toast.close_empty),
                     ToastType::Error,
                 );
                 set_state.set(DepositPageState::CloseDepositWalletConnected(
@@ -150,6 +158,7 @@ pub fn make_close_deposit(
             )
             .await
             {
+                let cluster_err = cluster_err.message(locale);
                 log::error!("[deposit] cluster mismatch (close): {cluster_err}");
                 app_components::show_toast(&set_toast, &cluster_err, ToastType::Error);
                 return;
@@ -160,11 +169,13 @@ pub fn make_close_deposit(
             {
                 Ok(sim) if sim.ok => {}
                 Ok(sim) => {
-                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                    let err_msg = sim.error.unwrap_or_else(|| {
+                        td_string!(locale, deposit.toast.simulation_failed).to_string()
+                    });
                     log::error!("[deposit] close simulation failed: {err_msg}");
                     app_components::show_toast(
                         &set_toast,
-                        &format!("Transaction would fail: {err_msg}"),
+                        &format!("{} {err_msg}", td_string!(locale, deposit.toast.would_fail)),
                         ToastType::Error,
                     );
                     return;
@@ -190,7 +201,7 @@ pub fn make_close_deposit(
                     );
                     app_components::show_toast(
                         &set_toast,
-                        &crate::wallet_error::user_friendly_message(&e),
+                        &crate::wallet_error::user_friendly_message(&e, locale),
                         ToastType::Error,
                     );
                     set_state.set(DepositPageState::CloseDepositWalletConnected(
@@ -203,7 +214,7 @@ pub fn make_close_deposit(
                     log::error!("[deposit] close-deposit wallet sign+send failed");
                     app_components::show_toast(
                         &set_toast,
-                        "Close-deposit transaction failed. Please try again.",
+                        td_string!(locale, deposit.toast.close_failed),
                         ToastType::Error,
                     );
                     set_state.set(DepositPageState::CloseDepositWalletConnected(

@@ -118,6 +118,7 @@ that cannot fail is not a gate.
 | `wasm_leak_scan.sh` | build-host paths (report-only) and secrets in shipped wasm/js |
 | `domain_import_fence.py` | `domain`'s wasm32 graph reaching app/platform crates; JS bridge pinned both ways |
 | `third_party_licenses.sh` | `THIRD_PARTY_LICENSES.md` drift vs. the lockfiles (licence gate itself: `cargo deny check licenses`) |
+| `staff_css_fence.py` | a `styles/*.staff.css` selector the attendee wasm can match (it would render unstyled in the attendee shell) |
 | `bench_records.py` | `.benchmarks/` record headers (green gate, interleaved lanes, retractions) and citations that resolve |
 
 ## Deploy (owner-gated)

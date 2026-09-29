@@ -35,15 +35,32 @@ pub fn OnchainEventsPanel(event_id: String) -> impl IntoView {
         });
     };
 
+    // Shared by click and keyboard activation.
+    let toggle = std::rc::Rc::new(move || {
+        let was_open = open.get();
+        set_open.set(!was_open);
+        if !was_open && events.get().is_empty() {
+            load_events();
+        }
+    });
     view! {
         <div class="form-section onchain-panel">
-            <div class="form-section-header" on:click=move |_| {
-                let was_open = open.get();
-                set_open.set(!was_open);
-                if !was_open && events.get().is_empty() {
-                    load_events();
+            <div
+                class="form-section-header"
+                role="button"
+                tabindex="0"
+                aria-expanded=move || open.get().to_string()
+                on:click={
+                    let toggle = toggle.clone();
+                    move |_| toggle()
                 }
-            }>
+                on:keydown=move |ev| {
+                    if crate::utils::is_activation_key(&ev) {
+                        ev.prevent_default();
+                        toggle();
+                    }
+                }
+            >
                 <span class="form-section-icon onchain-icon">"⛓"</span>
                 <span class="form-section-title">"On-Chain Events"</span>
                 <span class="form-section-badge onchain-badge-count">

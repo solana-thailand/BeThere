@@ -15,6 +15,7 @@ use super::qr_section::QrSection;
 use super::video_section::VideoSection;
 use super::view_data::TicketViewData;
 use crate::api::DepositMethod;
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use crate::utils;
 
@@ -22,6 +23,15 @@ use crate::utils;
 extern "C" {
     #[wasm_bindgen(js_name = "copyToClipboard")]
     fn copy_to_clipboard_js(text: &str) -> bool;
+}
+
+/// Which status the in-person hero shows.
+#[derive(Clone, Copy)]
+enum HeroKind {
+    CheckedIn,
+    PendingApproval,
+    AwaitingDeposit,
+    Ready,
 }
 
 /// In-person attendee view component.
@@ -51,7 +61,8 @@ pub fn InPersonView(
         is_approved,
         claimed,
         claimed_asset_id,
-        status_detail,
+        checked_in_at,
+        checked_in_by,
         claim_href,
         has_claim,
         deposit_enabled,
@@ -89,35 +100,45 @@ pub fn InPersonView(
         .into_iter()
         .partition(|l| l.platform == super::access_logistics::GUIDE_PLATFORM);
 
+    let i18n = use_i18n();
+
     // Determine hero variant
-    let (hero_variant, hero_icon, hero_title, hero_subtitle) = if is_checked_in {
-        (
-            "ticket-hero--checked-in".to_string(),
-            IconName::Check,
-            "Checked In".to_string(),
-            status_detail.clone(),
-        )
+    let hero_kind = if is_checked_in {
+        HeroKind::CheckedIn
     } else if !is_approved {
-        (
-            "ticket-hero--pending".to_string(),
-            IconName::Clock,
-            "Pending Approval".to_string(),
-            String::new(),
-        )
+        HeroKind::PendingApproval
     } else if deposit_info.as_ref().is_some_and(|d| !d.verified) {
-        (
-            "ticket-hero--pending".to_string(),
-            IconName::Hourglass,
-            "Awaiting Deposit Verification".to_string(),
-            String::new(),
-        )
+        HeroKind::AwaitingDeposit
     } else {
-        (
-            "ticket-hero--ready".to_string(),
-            IconName::QrCode,
-            "Ready for Check-In".to_string(),
-            String::new(),
-        )
+        HeroKind::Ready
+    };
+    let (hero_variant, hero_icon) = match hero_kind {
+        HeroKind::CheckedIn => ("ticket-hero--checked-in", IconName::Check),
+        HeroKind::PendingApproval => ("ticket-hero--pending", IconName::Clock),
+        HeroKind::AwaitingDeposit => ("ticket-hero--pending", IconName::Hourglass),
+        HeroKind::Ready => ("ticket-hero--ready", IconName::QrCode),
+    };
+    let hero_title = move || match hero_kind {
+        HeroKind::CheckedIn => t_string!(i18n, ticket.hero.checked_in),
+        HeroKind::PendingApproval => t_string!(i18n, ticket.hero.pending_approval),
+        HeroKind::AwaitingDeposit => t_string!(i18n, ticket.hero.awaiting_deposit),
+        HeroKind::Ready => t_string!(i18n, ticket.hero.ready),
+    };
+    // Checked-in detail: "<time> by <staff>", either part may be missing.
+    let check_in_time = checked_in_at.filter(|ts| !ts.is_empty());
+    let check_in_by = checked_in_by
+        .filter(|by| !by.is_empty())
+        .map(|by| utils::escape_html(&by));
+    let hero_subtitle: Option<ViewFn> = match (is_checked_in, check_in_time, check_in_by) {
+        (false, _, _) | (true, None, None) => None,
+        (true, time, by) => Some(ViewFn::from(move || {
+            let time = time.clone();
+            let by = by.clone();
+            view! {
+                {move || time.as_deref().map(super::view_data::format_check_in_time)}
+                {by.map(|name| t!(i18n, ticket.hero.checked_in_by, name))}
+            }
+        })),
     };
 
     // NFT hero section (pre-computed to avoid FnOnce issues)
@@ -132,12 +153,19 @@ pub fn InPersonView(
 
     view! {
         // 1. Hero banner
-        <super::hero::TicketHero
-            variant=hero_variant
-            icon=hero_icon
-            title=hero_title
-            subtitle=hero_subtitle
-        />
+        {match hero_subtitle {
+            Some(sub) => view! {
+                <super::hero::TicketHero
+                    variant=hero_variant
+                    icon=hero_icon
+                    title=hero_title
+                    subtitle=sub
+                />
+            }.into_any(),
+            None => view! {
+                <super::hero::TicketHero variant=hero_variant icon=hero_icon title=hero_title />
+            }.into_any(),
+        }}
 
         // 2. Main card
         <div class="ticket-main-card">
@@ -193,7 +221,7 @@ pub fn InPersonView(
             // ── Attendee info ──
             <div class="ticket-info">
                 <div class="ticket-info-row">
-                    <span class="ticket-info-label">"Name"</span>
+                    <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.name))}</span>
                     <span class="ticket-info-value">
                         {utils::escape_html(&utils::capitalize_name(&name))}
                     </span>
@@ -202,7 +230,7 @@ pub fn InPersonView(
                     let email = masked_email;
                     view! {
                         <div class="ticket-info-row">
-                            <span class="ticket-info-label">"Email"</span>
+                            <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.email))}</span>
                             <span class="ticket-info-value">
                                 {utils::escape_html(&email)}
                             </span>
@@ -215,7 +243,7 @@ pub fn InPersonView(
                     let tn = ticket_name;
                     view! {
                         <div class="ticket-info-row">
-                            <span class="ticket-info-label">"Ticket"</span>
+                            <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.ticket))}</span>
                             <span class="ticket-info-value">
                                 {utils::escape_html(&tn)}
                             </span>
@@ -225,10 +253,17 @@ pub fn InPersonView(
                     view! { <div></div> }.into_any()
                 }}
                 {if !participation.is_empty() {
-                    let pt = ParticipationType::parse(&participation).display();
+                    // Display label only; the stored value stays `participation`.
+                    let kind = ParticipationType::parse(&participation);
+                    let pt = move || match kind {
+                        ParticipationType::InPerson => t_string!(i18n, ticket.participation.in_person),
+                        ParticipationType::Online => t_string!(i18n, ticket.participation.online),
+                        ParticipationType::Retrospective => t_string!(i18n, ticket.participation.retrospective),
+                        ParticipationType::Other => t_string!(i18n, ticket.participation.other),
+                    };
                     view! {
                         <div class="ticket-info-row">
-                            <span class="ticket-info-label">"Type"</span>
+                            <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.kind))}</span>
                             <span class="ticket-info-value">
                                 {pt}
                             </span>
@@ -273,20 +308,21 @@ pub fn InPersonView(
                                     <div class="ticket-action-card ticket-action-card--info">
                                         <div class="ticket-action-icon"><Icon icon=IconName::Wallet class="icon-sm" /></div>
                                         <div>
-                                            <div class="ticket-action-title">"Deposit Refund"</div>
-                                            <p class="ticket-action-desc">"Your USDC deposit is held in escrow and can be returned to your wallet after the event ends. Open the refund page to claim it once the refund window opens."</p>
-                                            <a href=href class="btn btn-outline btn-sm ticket-action-btn">"View refund options →"</a>
+                                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.usdc_refund.title))}</div>
+                                            <p class="ticket-action-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.usdc_refund.body))}</p>
+                                            <a href=href class="btn btn-outline btn-sm ticket-action-btn">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.usdc_refund.cta))}</a>
                                         </div>
                                     </div>
                                 }.into_any()
                             }
                             DepositMethod::Thb if !dep.held_as_credit => {
+                                let amount = deposit_amount_thb;
                                 view! {
                                     <div class="ticket-action-card ticket-action-card--info">
                                         <div class="ticket-action-icon"><Icon icon=IconName::Info class="icon-sm" /></div>
                                         <div>
-                                            <div class="ticket-action-title">"Your Deposit — Two Options"</div>
-                                            <p class="ticket-action-desc">{format!("Keep your ฿{deposit_amount_thb} as credit toward your next event (see below), or ask the organizer for a cash refund.")}</p>
+                                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.thb_options.title))}</div>
+                                            <p class="ticket-action-desc">{t!(i18n, ticket.thb_options.body, amount)}</p>
                                         </div>
                                     </div>
                                 }.into_any()
@@ -392,14 +428,14 @@ pub fn InPersonView(
                                 <Icon icon=IconName::Link class="icon-sm" />
                             </div>
                             <div>
-                                <div class="ticket-action-title">"Organizer Refund Link"</div>
+                                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.organizer_refund.title))}</div>
                                 <a
                                     href=link
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     class="ticket-action-link"
                                 >
-                                    "View Refund Details →"
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.organizer_refund.cta))}
                                 </a>
                             </div>
                         </div>
@@ -419,9 +455,9 @@ pub fn InPersonView(
                             <Icon icon=IconName::Clock class="icon-sm" />
                         </div>
                         <div>
-                            <div class="ticket-action-title">"Pending Approval"</div>
+                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.pending_approval))}</div>
                             <div class="ticket-action-desc">
-                                "Your registration is being reviewed."
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.pending_desc))}
                             </div>
                         </div>
                     </div>
@@ -434,9 +470,9 @@ pub fn InPersonView(
                             <Icon icon=IconName::QrCode class="icon-sm" />
                         </div>
                         <div>
-                            <div class="ticket-action-title">"Ready for Check-In"</div>
+                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.ready))}</div>
                             <div class="ticket-action-desc">
-                                "Show this QR code to staff at the event."
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.ready_desc))}
                             </div>
                         </div>
                     </div>
@@ -467,25 +503,25 @@ pub fn InPersonView(
         // 6. Footer
         <div class="ticket-footer">
             <div class="ticket-nav">
-                <A href="/">"← Home"</A>
-                <A href="/profile">"Edit Profile"</A>
+                <A href="/">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_home))}</A>
+                <A href="/profile">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_profile))}</A>
             </div>
             {if is_checked_in {
                 view! {
                     <p class="ticket-footer-hint">
-                        "You're checked in! Enjoy the event."
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_checked_in))}
                     </p>
                 }.into_any()
             } else if !is_approved {
                 view! {
                     <p class="ticket-footer-hint">
-                        "Your registration is being reviewed. You'll receive a QR code once approved."
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_pending))}
                     </p>
                 }.into_any()
             } else {
                 view! {
                     <p class="ticket-footer-hint">
-                        "Present this ticket at the registration desk for check-in."
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_ready))}
                     </p>
                 }.into_any()
             }}

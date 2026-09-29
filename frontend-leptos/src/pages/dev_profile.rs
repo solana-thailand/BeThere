@@ -2,13 +2,19 @@
 //!
 //! Allows authenticated attendees to view and edit their developer profile:
 //! display name, social handles, interests, tech stack, and role.
+//!
+//! Attendee-facing, so bilingual (`locales/*/profile.json`). The interest
+//! tags and role options are stored values and stay as they are.
 
 use leptos::prelude::*;
 use leptos_meta::Title;
 use wasm_bindgen::prelude::*;
 
 use crate::api::{self, DeveloperProfile, INTEREST_OPTIONS, ROLE_OPTIONS, UpdateProfileBody};
+use crate::i18n::{td_string, use_i18n};
 use crate::icons::{Icon, IconName};
+use crate::locale::{fill, tr};
+use crate::pages::profile_link_result::LinkResult;
 
 // ---------------------------------------------------------------------------
 // JS Interop
@@ -124,54 +130,16 @@ pub fn DevProfile() -> impl IntoView {
     // Emails linked to this person (plan 025) — they share rolling credit.
     let (linked_emails, set_linked_emails) = signal(Vec::<String>::new());
 
-    // Social-link result banner, fed by ?linked= / ?error= from the OAuth
-    // callback redirect. (is_success, message)
-    let (link_banner, set_link_banner) = signal(None::<(bool, String)>);
+    // Social-link result banner, fed by ?email_link= / ?linked= / ?error= from
+    // the link callback redirect. Translated at render time (see LinkResult).
+    let (link_banner, set_link_banner) = signal(None::<LinkResult>);
     if let Some(win) = web_sys::window()
         && let Ok(href) = win.location().href()
         && let Ok(url) = web_sys::Url::new(&href)
     {
         let params = url.search_params();
-        let banner = if let Some(result) = params.get("email_link") {
-            Some(api::email_link_result_message(&result))
-        } else if let Some(linked) = params.get("linked") {
-            let msg = match linked.as_str() {
-                "github" => "GitHub account linked and verified!".to_string(),
-                "telegram" => "Telegram account linked and verified!".to_string(),
-                other => format!("{other} account linked!"),
-            };
-            Some((true, msg))
-        } else {
-            params.get("error").map(|err| {
-                let msg = match err.as_str() {
-                    "github_denied" => "GitHub authorization was cancelled.".to_string(),
-                    "github_state_expired" => "GitHub link expired — please try again.".to_string(),
-                    "github_no_code" | "github_no_state" | "github_invalid_state" => {
-                        "GitHub link failed (invalid response). Please try again.".to_string()
-                    }
-                    "github_token_failed" => {
-                        "GitHub link failed during sign-in. Please try again.".to_string()
-                    }
-                    "github_user_failed" => {
-                        "Could not fetch your GitHub username. Please try again.".to_string()
-                    }
-                    "github_save_failed" | "db_unavailable" => {
-                        "Could not save your GitHub handle. Please try again.".to_string()
-                    }
-                    "telegram_bad_signature" | "telegram_invalid" => {
-                        "Telegram verification failed. Please try again.".to_string()
-                    }
-                    "telegram_expired" => "Telegram login expired — please try again.".to_string(),
-                    "telegram_save_failed" | "telegram_unconfigured" => {
-                        "Could not save your Telegram link. Please try again.".to_string()
-                    }
-                    other => format!("Account linking failed ({other}). Please try again."),
-                };
-                (false, msg)
-            })
-        };
-        if banner.is_some() {
-            set_link_banner.set(banner);
+        if let Some(result) = LinkResult::from_query(|name| params.get(name)) {
+            set_link_banner.set(Some(result));
             // Strip the query string so a refresh doesn't re-show the banner
             if let Ok(history) = win.history() {
                 let _ = history.replace_state_with_url(
@@ -187,6 +155,7 @@ pub fn DevProfile() -> impl IntoView {
     // Use API-based auth check (GET /api/auth/me) instead of localStorage-only check.
     // The localStorage token may be missing/expired while the HttpOnly cookie is still
     // valid — using the API avoids a false redirect to /login → /admin for staff users.
+    let i18n = use_i18n();
     {
         leptos::task::spawn_local(async move {
             // Verify auth via cookie-based API call
@@ -210,10 +179,8 @@ pub fn DevProfile() -> impl IntoView {
                     set_state.set(ProfileState::Editing(profile));
                 }
                 Err(e) => {
-                    set_state.set(ProfileState::Error(format!(
-                        "Failed to load profile: {}",
-                        e.message
-                    )));
+                    let text = td_string!(i18n.get_locale_untracked(), profile.load_failed);
+                    set_state.set(ProfileState::Error(fill(text, &[("error", &e.message)])));
                 }
             }
         });
@@ -237,10 +204,8 @@ pub fn DevProfile() -> impl IntoView {
                     set_state.set(ProfileState::Saved(updated));
                 }
                 Err(e) => {
-                    set_state.set(ProfileState::Error(format!(
-                        "Failed to save: {}",
-                        e.message
-                    )));
+                    let text = td_string!(i18n.get_locale_untracked(), profile.save_failed);
+                    set_state.set(ProfileState::Error(fill(text, &[("error", &e.message)])));
                 }
             }
         });
@@ -310,23 +275,24 @@ pub fn DevProfile() -> impl IntoView {
     };
 
     view! {
-        <Title text="Developer Profile — BeThere" />
+        <Title text=tr(|l| td_string!(l, profile.page_title)) />
         <div class="dev-profile-page">
             <div class="dev-profile-header">
                 <a href="/" class="btn btn-outline btn-sm dev-profile-back-btn">
-                    "← Back"
+                    {tr(|l| td_string!(l, profile.back))}
                 </a>
                 <h1 class="dev-profile-title">
                     <Icon icon=IconName::Star class="icon-lg" />
-                    " Developer Profile"
+                    " " {tr(|l| td_string!(l, profile.title))}
                 </h1>
                 <p class="dev-profile-subtitle">
-                    "Tell us about yourself — your interests and skills help us improve events."
+                    {tr(|l| td_string!(l, profile.subtitle))}
                 </p>
             </div>
 
             {move || {
-                link_banner.get().map(|(ok, msg)| {
+                link_banner.get().map(|result| {
+                    let (ok, msg) = result.message(i18n.get_locale());
                     let style = if ok {
                         ""
                     } else {
@@ -353,7 +319,7 @@ pub fn DevProfile() -> impl IntoView {
                         view! {
                             <div class="dev-loading">
                                 <div class="spinner"></div>
-                                <p>"Loading profile..."</p>
+                                <p>{tr(|l| td_string!(l, profile.loading))}</p>
                             </div>
                         }.into_any()
                     }
@@ -362,7 +328,7 @@ pub fn DevProfile() -> impl IntoView {
                             <div class="dev-error">
                                 <Icon icon=IconName::Warning class="icon-lg icon-warning" />
                                 <p>{msg}</p>
-                                <a href="/login" class="btn btn-primary btn-sm">"Sign In"</a>
+                                <a href="/login" class="btn btn-primary btn-sm">{tr(|l| td_string!(l, profile.sign_in))}</a>
                             </div>
                         }.into_any()
                     }
@@ -370,7 +336,7 @@ pub fn DevProfile() -> impl IntoView {
                         view! {
                             <div class="dev-profile-saved-banner">
                                 <Icon icon=IconName::Check class="icon-sm icon-success" />
-                                " Profile saved!"
+                                " " {tr(|l| td_string!(l, profile.saved))}
                             </div>
                         }.into_any()
                     }
@@ -392,9 +358,9 @@ pub fn DevProfile() -> impl IntoView {
                 let is_wallet_identity = raw_email.starts_with("wallet:");
                 let (email_label, email) = if is_wallet_identity {
                     let addr = raw_email.trim_start_matches("wallet:");
-                    ("Wallet Identity", crate::api::short_wallet(addr))
+                    (tr(|l| td_string!(l, profile.wallet_identity)), crate::api::short_wallet(addr))
                 } else {
-                    ("Email", raw_email.clone())
+                    (tr(|l| td_string!(l, profile.email)), raw_email.clone())
                 };
                 let display_name = profile.display_name.clone();
                 let github = profile.github_handle.clone().unwrap_or_default();
@@ -421,7 +387,7 @@ pub fn DevProfile() -> impl IntoView {
                             <label class="dev-profile-label">{email_label}</label>
                             <div class="dev-profile-readonly">{email}</div>
                             {if is_wallet_identity {
-                                view! { <span class="dev-profile-hint">"Reserve a spot with your email to link it to this wallet."</span> }.into_any()
+                                view! { <span class="dev-profile-hint">{tr(|l| td_string!(l, profile.wallet_identity_hint))}</span> }.into_any()
                             } else {
                                 ().into_any()
                             }}
@@ -433,7 +399,7 @@ pub fn DevProfile() -> impl IntoView {
                         } else {
                             view! {
                                 <div class="dev-profile-field">
-                                    <label class="dev-profile-label">"Other emails"</label>
+                                    <label class="dev-profile-label">{tr(|l| td_string!(l, profile.other_emails))}</label>
                                     {move || {
                                         let others: Vec<String> = linked_emails
                                             .get()
@@ -442,7 +408,7 @@ pub fn DevProfile() -> impl IntoView {
                                             .collect();
                                         match others.is_empty() {
                                             true => view! {
-                                                <span class="dev-profile-hint">"None linked."</span>
+                                                <span class="dev-profile-hint">{tr(|l| td_string!(l, profile.none_linked))}</span>
                                             }.into_any(),
                                             false => others
                                                 .into_iter()
@@ -452,7 +418,7 @@ pub fn DevProfile() -> impl IntoView {
                                         }
                                     }}
                                     <span class="dev-profile-hint">
-                                        "Registered with another email too, like a work address? Link it so your deposit credit works with both."
+                                        {tr(|l| td_string!(l, profile.other_emails_hint))}
                                     </span>
                                     <div class="dev-profile-social-actions">
                                         <a href="/api/auth/email-link" rel="external" class="dev-profile-social-connect-btn"
@@ -463,7 +429,7 @@ pub fn DevProfile() -> impl IntoView {
                                                 }
                                             }
                                         >
-                                            "Add another email (Google) →"
+                                            {tr(|l| td_string!(l, profile.add_email))}
                                         </a>
                                     </div>
                                 </div>
@@ -472,11 +438,11 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Display Name
                         <div class="dev-profile-field">
-                            <label class="dev-profile-label">"Display Name"</label>
+                            <label class="dev-profile-label">{tr(|l| td_string!(l, profile.display_name))}</label>
                             <input
                                 class="dev-profile-input"
                                 type="text"
-                                placeholder="How should we call you?"
+                                placeholder=tr(|l| td_string!(l, profile.display_name_placeholder))
                                 prop:value=display_name.clone()
                                 on:input=move |ev| {
                                     update_field("display_name", event_target_value(&ev));
@@ -486,7 +452,7 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Role
                         <div class="dev-profile-field">
-                            <label class="dev-profile-label">"Primary Role"</label>
+                            <label class="dev-profile-label">{tr(|l| td_string!(l, profile.role))}</label>
                             <select
                                 class="dev-profile-select"
                                 prop:value=role.clone()
@@ -494,7 +460,7 @@ pub fn DevProfile() -> impl IntoView {
                                     update_field("primary_role", event_target_value(&ev));
                                 }
                             >
-                                <option value="">"— Select role —"</option>
+                                <option value="">{tr(|l| td_string!(l, profile.role_placeholder))}</option>
                                 {ROLE_OPTIONS.iter().map(|r| {
                                     view! {
                                         <option value={*r}>{*r}</option>
@@ -505,11 +471,11 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Company/Org
                         <div class="dev-profile-field">
-                            <label class="dev-profile-label">"Company / Organization"</label>
+                            <label class="dev-profile-label">{tr(|l| td_string!(l, profile.company))}</label>
                             <input
                                 class="dev-profile-input"
                                 type="text"
-                                placeholder="Where do you work?"
+                                placeholder=tr(|l| td_string!(l, profile.company_placeholder))
                                 prop:value=company.clone()
                                 on:input=move |ev| {
                                     update_field("company_org", event_target_value(&ev));
@@ -519,11 +485,11 @@ pub fn DevProfile() -> impl IntoView {
 
                         // City
                         <div class="dev-profile-field">
-                            <label class="dev-profile-label">"City"</label>
+                            <label class="dev-profile-label">{tr(|l| td_string!(l, profile.city))}</label>
                             <input
                                 class="dev-profile-input"
                                 type="text"
-                                placeholder="e.g. Bangkok"
+                                placeholder=tr(|l| td_string!(l, profile.city_placeholder))
                                 prop:value=city.clone()
                                 on:input=move |ev| {
                                     update_field("location_city", event_target_value(&ev));
@@ -533,8 +499,8 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Social handles section
                         <div class="dev-profile-section">
-                            <h3 class="dev-profile-section-title">"Social Links"
-                                <span style="font-size:0.7rem;font-weight:400;color:#94a3b8;margin-left:8px;">"— Connect accounts to verify them"</span>
+                            <h3 class="dev-profile-section-title">{tr(|l| td_string!(l, profile.social_title))}
+                                <span style="font-size:0.7rem;font-weight:400;color:#94a3b8;margin-left:8px;">{tr(|l| td_string!(l, profile.social_hint))}</span>
                             </h3>
 
                             // Accounts & sign-in explainer — shown when signed in via a
@@ -542,8 +508,8 @@ pub fn DevProfile() -> impl IntoView {
                             {if is_wallet_identity {
                                 view! {
                                     <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.8rem;line-height:1.45;color:#cbd5e1;">
-                                        <strong style="color:#fff;">"Accounts & sign-in: "</strong>
-                                        "You can sign in with Google or a Solana wallet — they become the same account once linked. If you already registered with Google, sign in with Google and press \"Connect Wallet\" to merge this wallet into that account."
+                                        <strong style="color:#fff;">{tr(|l| td_string!(l, profile.accounts_title))}</strong>
+                                        {tr(|l| td_string!(l, profile.accounts_body))}
                                     </div>
                                 }.into_any()
                             } else {
@@ -557,7 +523,7 @@ pub fn DevProfile() -> impl IntoView {
                                     <span class="dev-profile-label">"GitHub"</span>
                                     {if github_verified {
                                         view! {
-                                            <span class="dev-profile-verified-badge">"✓ Verified"</span>
+                                            <span class="dev-profile-verified-badge">{tr(|l| td_string!(l, profile.verified))}</span>
                                         }.into_any()
                                     } else {
                                         ().into_any()
@@ -581,7 +547,7 @@ pub fn DevProfile() -> impl IntoView {
                                                    });
                                                }
                                             >
-                                                "Unlink"
+                                                {tr(|l| td_string!(l, profile.unlink))}
                                             </a>
                                         </div>
                                     }.into_any()
@@ -596,7 +562,7 @@ pub fn DevProfile() -> impl IntoView {
                                                     }
                                                 }
                                             >
-                                                "Connect GitHub →"
+                                                {tr(|l| td_string!(l, profile.connect_github))}
                                             </a>
                                         </div>
                                     }.into_any()
@@ -610,7 +576,7 @@ pub fn DevProfile() -> impl IntoView {
                                     <span class="dev-profile-label">"Telegram"</span>
                                     {if telegram_verified {
                                         view! {
-                                            <span class="dev-profile-verified-badge">"✓ Verified"</span>
+                                            <span class="dev-profile-verified-badge">{tr(|l| td_string!(l, profile.verified))}</span>
                                         }.into_any()
                                     } else {
                                         ().into_any()
@@ -669,7 +635,7 @@ pub fn DevProfile() -> impl IntoView {
                                     <span class="dev-profile-label">"Discord"</span>
                                     {if discord_verified {
                                         view! {
-                                            <span class="dev-profile-verified-badge">"✓ Verified"</span>
+                                            <span class="dev-profile-verified-badge">{tr(|l| td_string!(l, profile.verified))}</span>
                                         }.into_any()
                                     } else {
                                         ().into_any()
@@ -686,7 +652,7 @@ pub fn DevProfile() -> impl IntoView {
                                             <input
                                                 class="dev-profile-input dev-profile-social-input"
                                                 type="text"
-                                                placeholder="@username (manual)"
+                                                placeholder=tr(|l| td_string!(l, profile.discord_placeholder))
                                                 prop:value=discord.clone()
                                                 on:input=move |ev| {
                                                     update_field("discord_handle", event_target_value(&ev));
@@ -743,10 +709,10 @@ pub fn DevProfile() -> impl IntoView {
                             <div class="dev-profile-social-row">
                                 <div class="dev-profile-social-info">
                                     <span class="dev-profile-social-icon"><Icon icon=IconName::Solana /></span>
-                                    <span class="dev-profile-label">"Solana Wallet"</span>
+                                    <span class="dev-profile-label">{tr(|l| td_string!(l, profile.solana_wallet))}</span>
                                     {if profile.wallet_address.is_some() {
                                         view! {
-                                            <span class="dev-profile-verified-badge">"✓ On-Chain"</span>
+                                            <span class="dev-profile-verified-badge">{tr(|l| td_string!(l, profile.on_chain))}</span>
                                         }.into_any()
                                     } else {
                                         ().into_any()
@@ -770,7 +736,7 @@ pub fn DevProfile() -> impl IntoView {
                                                 </a>
                                                 <button type="button" class="dev-profile-social-link-btn" style="color:#94a3b8;border-color:rgba(255,255,255,0.15);"
                                                         on:click=move |_| { let _ = copy_to_clipboard_js(&copy_addr); }>
-                                                    "Copy"
+                                                    {tr(|l| td_string!(l, profile.copy))}
                                                 </button>
                                             </div>
                                         }.into_any()
@@ -780,7 +746,7 @@ pub fn DevProfile() -> impl IntoView {
                                         // real merge path instead of offering a pointless bind.
                                         view! {
                                             <span class="dev-profile-hint" style="max-width:240px;text-align:right;line-height:1.4;">
-                                                "You're signed in with this wallet. To attach it to your main account, sign in with Google, then use Connect Wallet here."
+                                                {tr(|l| td_string!(l, profile.wallet_session_hint))}
                                             </span>
                                         }.into_any()
                                     } else {
@@ -789,7 +755,7 @@ pub fn DevProfile() -> impl IntoView {
                                                 flow=crate::wallet_signin::WalletFlow::Bind
                                                 class="dev-profile-social-connect-btn"
                                                 style="background: linear-gradient(135deg, #9945FF 0%, #14F195 100%);"
-                                                label="Connect Wallet →"
+                                                label=tr(|l| td_string!(l, profile.connect_wallet))
                                                 on_success=Callback::new(move |addr: String| {
                                                     // Attach the bound wallet to the in-memory
                                                     // profile without a reload (preserves edits).
@@ -807,8 +773,8 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Interests
                         <div class="dev-profile-section">
-                            <h3 class="dev-profile-section-title">"Interests"</h3>
-                            <p class="dev-profile-hint">"Select topics you're interested in."</p>
+                            <h3 class="dev-profile-section-title">{tr(|l| td_string!(l, profile.interests))}</h3>
+                            <p class="dev-profile-hint">{tr(|l| td_string!(l, profile.interests_hint))}</p>
                             <div class="dev-profile-tags">
                                 {INTEREST_OPTIONS.iter().map(|tag| {
                                     let tag_str = tag.to_string();
@@ -835,9 +801,9 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Tech Stack (free text, comma-separated)
                         <div class="dev-profile-section">
-                            <h3 class="dev-profile-section-title">"Tech Stack"</h3>
+                            <h3 class="dev-profile-section-title">{tr(|l| td_string!(l, profile.tech_stack))}</h3>
                             <p class="dev-profile-hint">
-                                "Technologies you use (comma-separated)."
+                                {tr(|l| td_string!(l, profile.tech_stack_hint))}
                             </p>
                             <input
                                 class="dev-profile-input"
@@ -865,10 +831,10 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Learning Goals
                         <div class="dev-profile-field">
-                            <label class="dev-profile-label">"Learning Goals"</label>
+                            <label class="dev-profile-label">{tr(|l| td_string!(l, profile.learning_goals))}</label>
                             <textarea
                                 class="dev-profile-textarea"
-                                placeholder="What do you want to learn?"
+                                placeholder=tr(|l| td_string!(l, profile.learning_goals_placeholder))
                                 rows="3"
                                 prop:value=goals.clone()
                                 on:input=move |ev| {
@@ -881,23 +847,25 @@ pub fn DevProfile() -> impl IntoView {
                         {if events > 0 {
                             view! {
                                 <div class="dev-profile-section">
-                                    <h3 class="dev-profile-section-title">"Your Activity"</h3>
+                                    <h3 class="dev-profile-section-title">{tr(|l| td_string!(l, profile.activity))}</h3>
                                     <div class="dev-profile-stat-card">
                                         <span class="dev-profile-stat-number">{format!("{events}")}</span>
-                                        <span class="dev-profile-stat-label">{if events == 1 { "Event Joined" } else { "Events Joined" }}</span>
+                                        <span class="dev-profile-stat-label">{if events == 1 { tr(|l| td_string!(l, profile.event_joined)) } else { tr(|l| td_string!(l, profile.events_joined)) }}</span>
                                     </div>
                                 </div>
                             }.into_any()
                         } else {
                             view! {
                                 <div class="dev-profile-section">
-                                    <h3 class="dev-profile-section-title">"Your Activity"</h3>
+                                    <h3 class="dev-profile-section-title">{tr(|l| td_string!(l, profile.activity))}</h3>
                                     <p class="dev-profile-hint">
-                                        "You haven't joined any events yet. Register for an event to see your stats here!"
+                                        {tr(|l| td_string!(l, profile.no_events))}
                                     </p>
                                 </div>
                             }.into_any()
                         }}
+
+                        <crate::pages::marketing_preference::MarketingPreference />
 
                         // Consent
                         <div class="dev-profile-field">
@@ -909,7 +877,7 @@ pub fn DevProfile() -> impl IntoView {
                                         toggle_consent();
                                     }
                                 />
-                                " I consent to being contacted about future events and opportunities"
+                                {tr(|l| td_string!(l, profile.consent))}
                             </label>
                         </div>
 
@@ -921,9 +889,9 @@ pub fn DevProfile() -> impl IntoView {
                                 on:click=move |_| on_save()
                             >
                                 {if is_saving {
-                                    "Saving..."
+                                    tr(|l| td_string!(l, profile.saving))
                                 } else {
-                                    "Save Profile"
+                                    tr(|l| td_string!(l, profile.save))
                                 }}
                             </button>
                         </div>

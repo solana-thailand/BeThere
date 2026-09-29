@@ -1,0 +1,11 @@
+{
+  "admin": {
+    "color-contrast .header-nav-label": "Light text on --accent (2.69:1) in the active header pill. Brand CTA contrast is an owner decision: .issues/171."
+  },
+  "staff": {
+    "color-contrast .header-nav-label": "Light text on --accent (2.69:1) in the active header pill. Brand CTA contrast is an owner decision: .issues/171."
+  },
+  "ticket": {
+    "color-contrast .ticket-action-btn": "White on --warning (2.14:1) on the Pay Deposit button. Brand CTA contrast is an owner decision: .issues/171."
+  }
+}

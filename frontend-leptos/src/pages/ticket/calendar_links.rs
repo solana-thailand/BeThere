@@ -26,7 +26,7 @@ pub fn CalendarLinks(
                 class="ticket-calendar-link"
             >
                 <Icon icon=IconName::Calendar class="icon-sm" />
-                "📅 Our Event Calendar"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.calendar))}
             </a>
         </div>
     }

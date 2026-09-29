@@ -133,35 +133,24 @@ pub fn show_mutation_toast(
 /// Bind to a signal: `<Toast toast_signal=toast />`
 #[component]
 pub fn Toast(toast_signal: ReadSignal<Option<ToastMessage>>) -> impl IntoView {
+    // The live region is always in the DOM and only its content changes:
+    // screen readers announce changes to an existing region, and a region
+    // inserted together with its text is often read late or not at all
+    // (.plans/037 §5).
     view! {
-        <Show
-            when=move || toast_signal.get().is_some()
-            fallback=|| view! { <div></div> }
-        >
+        <div class="toast-region" role="status" aria-live="polite" aria-atomic="true">
             {move || {
-                let msg = toast_signal.get();
-                match msg {
-                    Some(m) => {
-                        let bg_style = match m.toast_type {
-                            ToastType::Success => "background:rgba(34,197,94,0.15);border:1px solid rgba(34,197,94,0.4);color:#22c55e;",
-                            ToastType::Error => "background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;",
-                            ToastType::Warning => "background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.4);color:#f59e0b;",
-                            ToastType::Info => "background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.4);color:#3b82f6;",
-                        };
-                        let full_style = format!(
-                            "position:fixed;top:1rem;right:1rem;padding:0.85rem 1.25rem;border-radius:8px;font-size:0.9rem;font-weight:500;z-index:9999;max-width:360px;{bg_style}",
-                        );
-                        view! {
-                            <div style=full_style>
-                                {m.text}
-                            </div>
-                        }
-                            .into_any()
-                    }
-                    None => view! { <div></div> }.into_any(),
-                }
+                toast_signal.get().map(|m| {
+                    let class = match m.toast_type {
+                        ToastType::Success => "toast toast-success",
+                        ToastType::Error => "toast toast-error",
+                        ToastType::Warning => "toast toast-warning",
+                        ToastType::Info => "toast toast-info",
+                    };
+                    view! { <div class=class>{m.text}</div> }
+                })
             }}
-        </Show>
+        </div>
     }
 }
 
@@ -217,7 +206,7 @@ pub fn AppHeader(
                     <div class="header-user-avatar" title=move || user_email.get()>
                         {move || user_email.get().chars().next().unwrap_or('?').to_uppercase().to_string()}
                     </div>
-                    <button class="btn btn-outline btn-sm header-sign-out" on:click=on_sign_out>
+                    <button class="btn btn-outline btn-sm header-sign-out" aria-label="Sign Out" on:click=on_sign_out>
                         <span class="header-sign-out-icon"><Icon icon=IconName::SignOut class="icon-sm" /></span>
                         <span class="header-sign-out-label">"Sign Out"</span>
                     </button>
@@ -353,21 +342,51 @@ pub fn ImageLightbox(
         LightboxSizing::Square => "lightbox-img lightbox-img--square",
     };
 
-    // Escape closes the overlay — register only while visible to avoid
-    // stealing Escape from other handlers on the page.
+    // A modal dialog (.plans/037 §6): on open, focus moves to the close
+    // button (the card's only control) and Tab stays there; Escape closes; on
+    // close, focus returns to whatever opened it. Listeners are registered only
+    // while visible so they never steal keys from the page.
+    let close_ref = NodeRef::<leptos::html::Button>::new();
+    let opener = StoredValue::new_local(None::<web_sys::HtmlElement>);
     Effect::new(move |_| {
         if !visible.get() {
+            if let Some(el) = opener.get_value() {
+                let _ = el.focus();
+                opener.set_value(None);
+            }
             return;
         }
-        let cleanup =
-            window_event_listener(leptos::ev::keydown, move |ev: web_sys::KeyboardEvent| {
-                if ev.key() == "Escape" {
-                    set_visible.set(false);
+        use wasm_bindgen::JsCast;
+        opener.set_value(
+            web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.active_element())
+                .and_then(|el| el.dyn_into::<web_sys::HtmlElement>().ok()),
+        );
+        // Next frame: the overlay is `visibility: hidden` until `.is-visible`
+        // applies, and a hidden element cannot take focus.
+        request_animation_frame(move || {
+            if let Some(btn) = close_ref.get_untracked() {
+                let _ = btn.focus();
+            }
+        });
+        let cleanup = window_event_listener(
+            leptos::ev::keydown,
+            move |ev: web_sys::KeyboardEvent| match ev.key().as_str() {
+                "Escape" => set_visible.set(false),
+                "Tab" => {
+                    ev.prevent_default();
+                    if let Some(btn) = close_ref.get() {
+                        let _ = btn.focus();
+                    }
                 }
-            });
+                _ => {}
+            },
+        );
         // Dropping a `WindowListenerHandle` does not remove the listener.
         on_cleanup(move || cleanup.remove());
     });
+    let label = alt.clone();
 
     view! {
         <div
@@ -377,6 +396,9 @@ pub fn ImageLightbox(
         >
             <div
                 class="lightbox-card"
+                role="dialog"
+                aria-modal="true"
+                aria-label=label
                 on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
             >
                 <div class="lightbox-header">
@@ -388,6 +410,7 @@ pub fn ImageLightbox(
                     </span>
                     <button
                         class="lightbox-close"
+                        node_ref=close_ref
                         aria-label="Close"
                         on:click=move |_| set_visible.set(false)
                     >
@@ -481,6 +504,11 @@ pub fn LightboxImage(
 
 // ===== Postponed notice (migration 0053) =====
 
+/// "Postponed" in the attendee's language (`status.postponed`).
+fn postponed_label() -> Signal<&'static str> {
+    crate::locale::tr(|l| crate::i18n::td_string!(l, status.postponed))
+}
+
 /// "Postponed" banner for the public event page and the ticket, or nothing
 /// when the organizer has not written a notice (empty = not postponed).
 ///
@@ -497,7 +525,7 @@ pub fn postponed_banner(note: &str) -> AnyView {
         <div class="postponed-banner" role="note">
             <div class="postponed-banner-title">
                 <Icon icon=IconName::Calendar class="icon-sm" />
-                <span>"Postponed"</span>
+                <span>{postponed_label()}</span>
             </div>
             <p class="postponed-banner-body">{note}</p>
         </div>
@@ -510,7 +538,7 @@ pub fn postponed_banner(note: &str) -> AnyView {
 pub fn postponed_badge(note: &str) -> AnyView {
     match note.trim().is_empty() {
         true => ().into_any(),
-        false => view! { <span class="badge badge-warning">"Postponed"</span> }.into_any(),
+        false => view! { <span class="badge badge-warning">{postponed_label()}</span> }.into_any(),
     }
 }
 

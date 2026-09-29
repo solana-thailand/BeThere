@@ -17,6 +17,7 @@
 use leptos::prelude::*;
 use serde::Deserialize;
 
+use crate::i18n::{Locale, t_string, td_string, use_i18n};
 use crate::pages::landing::{AuthState, SiteHeader};
 
 #[derive(Clone, Deserialize)]
@@ -84,6 +85,9 @@ struct Row {
     time_tba: bool,
     location: String,
     image: String,
+    /// The image is the organizer's poster (not the badge fallback): the row
+    /// renders as a card with the poster (.plans/038 P3-b).
+    has_poster: bool,
     /// Right-hand pill: registration status for my events, nothing for public.
     status: Option<String>,
     past: bool,
@@ -131,10 +135,11 @@ pub fn Discover() -> impl IntoView {
                         time_tba: e.time_tba,
                         location: e.location,
                         image: pick_image(&e.poster_url, &e.nft_image_url),
+                        has_poster: !e.poster_url.is_empty(),
                         // Public rows have no registration status, so the
                         // pill is free to flag a postponed event.
                         status: (!e.postponed_note.trim().is_empty())
-                            .then(|| "Postponed".to_string()),
+                            .then(|| "postponed".to_string()),
                         past: false,
                     })
                     .collect(),
@@ -185,6 +190,7 @@ pub fn Discover() -> impl IntoView {
                             time_tba: r.time_tba,
                             location: r.location,
                             image: pick_image(&r.poster_url, &r.nft_image_url),
+                            has_poster: !r.poster_url.is_empty(),
                             status: Some(r.status),
                             past: ends < now_ms,
                         },
@@ -226,6 +232,10 @@ pub fn Discover() -> impl IntoView {
         set_loaded.set(true);
     });
 
+    let i18n = use_i18n();
+    let text =
+        move |key: fn(Locale) -> &'static str| Signal::derive(move || key(i18n.get_locale()));
+
     view! {
         // Outside the container for the same reason as `/feedback`: the nav
         // wraps when squeezed into the reading width (`.issues/108`).
@@ -233,31 +243,40 @@ pub fn Discover() -> impl IntoView {
         <div class="container dv-page">
 
             <header class="dv-head">
-                <h1>"ค้นพบอีเวนต์"</h1>
-                <p class="subtitle">"ดูงานที่กำลังจะมาถึง และงานที่คุณลงทะเบียนไว้"</p>
+                <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, discover.title))}</h1>
+                <p class="subtitle">{crate::locale::tr(|l| crate::i18n::td_string!(l, discover.subtitle))}</p>
             </header>
 
             <Show when=move || loaded.get() && !signed_in.get() fallback=|| ()>
                 <p class="dv-signin-hint">
-                    "เข้าสู่ระบบเพื่อดูงานที่คุณลงทะเบียนไว้ และงานที่ผ่านมา"
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, discover.signin_hint))}
                 </p>
             </Show>
 
-            <Show when=move || loaded.get() fallback=|| view! { <p class="page-loading">"กำลังโหลด…"</p> }>
-                <Section title="เร็ว ๆ นี้" rows=upcoming empty="ยังไม่มีงานที่เปิดรับอยู่ตอนนี้" />
-                <Section title="งานของฉัน" rows=mine_now empty="" />
-                <Section title="งานที่ผ่านมา" rows=mine_past empty="" />
+            <Show when=move || loaded.get() fallback=move || view! { <p class="page-loading">{crate::locale::tr(|l| crate::i18n::td_string!(l, common.loading))}</p> }>
+                <Section
+                    title=text(|l| td_string!(l, discover.upcoming))
+                    rows=upcoming
+                    empty=text(|l| td_string!(l, discover.upcoming_empty))
+                />
+                <Section title=text(|l| td_string!(l, discover.mine)) rows=mine_now empty=text(|_| "") />
+                <Section title=text(|l| td_string!(l, discover.past)) rows=mine_past empty=text(|_| "") />
             </Show>
         </div>
     }
 }
 
 /// A titled list. Renders nothing at all when it is empty and has no empty text —
-/// an empty "งานของฉัน" heading tells a new visitor only that they are missing out.
+/// an empty "My events" heading tells a new visitor only that they are missing out.
 #[component]
-fn Section(title: &'static str, rows: ReadSignal<Vec<Row>>, empty: &'static str) -> impl IntoView {
+fn Section(
+    title: Signal<&'static str>,
+    rows: ReadSignal<Vec<Row>>,
+    empty: Signal<&'static str>,
+) -> impl IntoView {
+    let i18n = use_i18n();
     view! {
-        <Show when=move || !rows.get().is_empty() || !empty.is_empty() fallback=|| ()>
+        <Show when=move || !rows.get().is_empty() || !empty.get().is_empty() fallback=|| ()>
             <section class="dv-section">
                 <h2 class="dv-section-title">{title}</h2>
                 <Show
@@ -265,29 +284,51 @@ fn Section(title: &'static str, rows: ReadSignal<Vec<Row>>, empty: &'static str)
                     fallback=move || view! { <p class="dv-empty">{empty}</p> }
                 >
                     <For each=move || rows.get() key=|r| format!("{}|{}", r.title, r.href) let:row>
-                        <a class="dv-row" href=row.href.clone()>
+                        <a class="dv-row" class:dv-card=row.has_poster href=row.href.clone()>
+                            // A poster makes the row a card: the poster leads,
+                            // with the date chip on its corner (.plans/038 P3-b).
+                            {row.has_poster.then(|| view! {
+                                <div class="dv-card-media">
+                                    <img
+                                        class="dv-card-poster"
+                                        src=row.image.clone()
+                                        alt=""
+                                        width="88"
+                                        height="110"
+                                        loading="lazy"
+                                    />
+                                </div>
+                            })}
                             <DateChip ms=row.start_ms past=row.past />
                             <div class="dv-row-body">
                                 <span class="dv-row-title">{row.title.clone()}</span>
                                 <span class="dv-row-meta">
                                     {
-                                        let when = match row.time_tba {
-                                            true => "เวลาแจ้งภายหลัง".to_string(),
-                                            false => crate::utils::format_event_day(row.start_ms),
-                                        };
-                                        [when, row.location.clone()]
-                                            .into_iter()
-                                            .filter(|p| !p.is_empty())
-                                            .collect::<Vec<_>>()
-                                            .join(" · ")
+                                        // A closure so the date and "time TBA" follow a
+                                        // language switch.
+                                        let (time_tba, start_ms, location) =
+                                            (row.time_tba, row.start_ms, row.location.clone());
+                                        move || {
+                                            let when = match time_tba {
+                                                true => t_string!(i18n, common.time_tba).to_string(),
+                                                false => crate::utils::format_event_day(start_ms),
+                                            };
+                                            [when, location.clone()]
+                                                .into_iter()
+                                                .filter(|p| !p.is_empty())
+                                                .collect::<Vec<_>>()
+                                                .join(" · ")
+                                        }
                                     }
                                 </span>
                             </div>
                             {match row.status.clone() {
-                                Some(status) => view! { <span class="dv-pill">{status}</span> }.into_any(),
+                                Some(status) => view! {
+                                    <span class="dv-pill">{move || crate::locale::status_label(&status)}</span>
+                                }.into_any(),
                                 None => view! { <div></div> }.into_any(),
                             }}
-                            {match row.image.is_empty() {
+                            {match row.image.is_empty() || row.has_poster {
                                 true => view! { <div></div> }.into_any(),
                                 false => view! {
                                     <img class="dv-thumb" src=row.image.clone() alt="" />
@@ -307,7 +348,10 @@ fn Section(title: &'static str, rows: ReadSignal<Vec<Row>>, empty: &'static str)
 /// the reader parsing a date, which is what makes a mixed page scannable.
 #[component]
 fn DateChip(ms: i64, past: bool) -> impl IntoView {
-    let (day, month) = crate::utils::format_event_day_parts(ms);
+    // Reactive, so the month follows a language switch.
+    let parts = Memo::new(move |_| crate::utils::format_event_day_parts(ms));
+    let day = move || parts.get().0;
+    let month = move || parts.get().1;
     view! {
         <div class=match past {
             true => "dv-chip is-past",

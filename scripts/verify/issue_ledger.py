@@ -168,6 +168,10 @@ def vocab_flags(path: Path, block: str) -> list[Flag]:
 
 
 def classify(block: str) -> Claim:
+    # A leading open-work verdict is the claim; later prose ("W5 stays as
+    # built") describes context, not a fix.
+    if verdict_word(block) in ("open", "in progress", "parked"):
+        return Claim.OPEN
     low = " ".join(block.lower().split())
     match low:
         case "":
@@ -269,6 +273,8 @@ def self_test() -> int:
         ("legacy completion word", "> **Status: ✅ Phase 1 + Phase 2 COMPLETE**", Claim.FIXED),
         ("legacy prod phrasing", "**Status:** live in prod 2026-09-14", Claim.DEPLOYED),
         ("completion word inside another word", "## Status: incomplete, undone", Claim.OTHER),
+        ("open verdict beats a later fix word", "**Status:** open (2026-09-28). W5 stays as built.", Claim.OPEN),
+        ("parked verdict beats a later fix word", "**Status:** parked. Merged code stays. Reopen trigger: RTM#7.", Claim.OPEN),
     ]
     block_failures = 0
     for label, text, want in blocks:

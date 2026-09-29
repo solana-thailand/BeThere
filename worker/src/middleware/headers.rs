@@ -9,6 +9,7 @@
 //! - `Content-Security-Policy` — restrict resource loading
 //!   - `connect-src 'self' https: wss:` — allows Solana RPC, wallet extensions (Phantom/Solflare/Backpack), and WebSocket connections
 //!   - `frame-src https://www.youtube.com https://www.youtube-nocookie.com` — allows YouTube iframe embeds on ticket pages
+//!   - `https://challenges.cloudflare.com` in `script-src` and `frame-src` — the Turnstile widget on the waitlist and register forms (.issues/170)
 //! - `Permissions-Policy` — limit browser feature access
 //! - `Cross-Origin-Opener-Policy` — isolate window origin
 //! - `Cross-Origin-Resource-Policy` — prevent cross-origin resource leaks
@@ -38,12 +39,12 @@ pub const SECURITY_HEADERS: [(&str, &str); 9] = [
     (
         "content-security-policy",
         "default-src 'self'; \
-         script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://telegram.org; \
+         script-src 'self' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://telegram.org https://challenges.cloudflare.com; \
          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
          img-src 'self' data: blob: https:; \
          media-src 'self' blob:; \
          object-src 'none'; \
-         frame-src https://www.youtube.com https://www.youtube-nocookie.com https://oauth.telegram.org; \
+         frame-src https://www.youtube.com https://www.youtube-nocookie.com https://oauth.telegram.org https://challenges.cloudflare.com; \
          connect-src 'self' https: wss:; \
          font-src 'self' https://fonts.gstatic.com; \
          frame-ancestors 'none'; \

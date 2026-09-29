@@ -1,6 +1,6 @@
 # 157: Walk-ins take an online spot, and some capacity checks ignore them
 
-**Status:** in progress — fixed on branch `feature/028-w3-track-counts` (commit 2e44acd1, session `event-checkin-f2`, 2026-09-28), deliberately not merged: it rides with plan 028 W3, which §5 holds off `develop` until after RTM #6 on 2026-10-04. Merge after that, with a staging rehearsal. Found while building W3.
+**Status:** fixed on develop — `8f3a005c` (plan 028 W3), merged via `604cd993` on 2026-09-29 (owner chose plan 028 option A) and on staging `53de706d`. Rehearsed there (session `event-checkin-f6`): 3 walk-ins on a capacity-10 event read `in_person_count` 3, `in_person_remaining` 7, `online_count` 0, matching D1. Prod ships with the next owner-gated deploy. First built on `feature/028-w3-track-counts` by session `event-checkin-f2` (2026-09-28), rebased before the merge. Walk-ins outside capacity: `.issues/162`.
 
 ## What happens
 

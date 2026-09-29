@@ -211,16 +211,13 @@ pub async fn hold_deposit_handler(
 
     // 10. Get updated balance from the ledger (source of truth).
     let (credit_thb, credit_usdc) = match d1 {
-        Some(db) => (
-            crate::db::credit_ledger::balance(db, &claims.email, &event.organization_id, "thb")
-                .await
-                .unwrap_or(0)
-                .max(0) as u64,
-            crate::db::credit_ledger::balance(db, &claims.email, &event.organization_id, "usdc")
-                .await
-                .unwrap_or(0)
-                .max(0) as u64,
-        ),
+        Some(db) => {
+            let credit =
+                crate::db::credit_ledger::balances(db, &claims.email, &event.organization_id)
+                    .await
+                    .unwrap_or_default();
+            (credit.thb.max(0) as u64, credit.usdc.max(0) as u64)
+        }
         None => (held_amount, 0),
     };
 

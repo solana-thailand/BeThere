@@ -200,8 +200,9 @@ pub fn EventsPage(
                                 let status_text = status_label(&evt.status);
                                 let start = format_date_display(evt.event_start_ms);
                                 let end = format_date_display(evt.event_end_ms);
-                                let sheet_preview: String = evt.sheet_id.chars().take(16).collect();
-                                let organizers_count = evt.organizer_emails.len();
+                                let sheet_id_copy = evt.sheet_id.clone();
+                                let has_sheet = !evt.sheet_id.trim().is_empty();
+                                let organizers = organizers_label(&evt.organizer_emails);
                                 let deposit_text = if evt.deposit_enabled { "Enabled" } else { "Disabled" };
                                 let escrow_display = if evt.escrow_address.is_empty() {
                                     "Not set".to_string()
@@ -479,9 +480,30 @@ pub fn EventsPage(
                                                 <span class="quiz-setting-label">"End"</span>
                                                 <span class="setting-value">{end}</span>
                                             </div>
+                                            // The raw ID is only ever pasted somewhere, so it is
+                                            // a copy action, not 16 characters of noise
+                                            // (.plans/037 §4). "View Google Sheet" in the
+                                            // sidebar opens it.
                                             <div class="quiz-setting-item">
-                                                <span class="quiz-setting-label">"Sheet ID"</span>
-                                                <span class="setting-value-mono">{sheet_preview}"…"</span>
+                                                <span class="quiz-setting-label">"Sheet"</span>
+                                                {if has_sheet {
+                                                    view! {
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-outline btn-xs"
+                                                            on:click=move |_| {
+                                                                if let Some(w) = web_sys::window() {
+                                                                    let _ = w.navigator().clipboard().write_text(&sheet_id_copy);
+                                                                }
+                                                                components::show_toast(&set_toast, "Sheet ID copied", components::ToastType::Success);
+                                                            }
+                                                        >
+                                                            "Copy sheet ID"
+                                                        </button>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <span class="setting-value">"—"</span> }.into_any()
+                                                }}
                                             </div>
                                             <div class="quiz-setting-item">
                                                 <span class="quiz-setting-label">"Deposit"</span>
@@ -493,9 +515,7 @@ pub fn EventsPage(
                                             </div>
                                             <div class="quiz-setting-item">
                                                 <span class="quiz-setting-label">"Organizers"</span>
-                                                <span class="setting-value">
-                                                    {if organizers_count == 0 { "—".to_string() } else { format!("{organizers_count}") }}
-                                                </span>
+                                                <span class="setting-value">{organizers}</span>
                                             </div>
                                         </div>
                                         {if can_manage {view! {<super::notifications::NotificationPanel event_id=notification_event_id/>}.into_any()} else {view!{<span></span>}.into_any()}}
@@ -538,15 +558,19 @@ pub fn EventsPage(
                     {move || {
                         let query = search_query.get().to_lowercase();
                         let events_list = events.get();
-                        let filtered: Vec<_> = if query.is_empty() {
-                            events_list.iter().collect()
-                        } else {
-                            events_list.iter().filter(|e| {
-                                e.name.to_lowercase().contains(&query)
+                        // The selected event already has the detail card above;
+                        // listing it again showed it twice (.plans/037 §4).
+                        let selected = active_event_id.get();
+                        let filtered: Vec<_> = events_list
+                            .iter()
+                            .filter(|e| selected.as_deref() != Some(e.id.as_str()))
+                            .filter(|e| {
+                                query.is_empty()
+                                    || e.name.to_lowercase().contains(&query)
                                     || e.slug.to_lowercase().contains(&query)
                                     || e.sheet_id.to_lowercase().contains(&query)
-                            }).collect()
-                        };
+                            })
+                            .collect();
                         filtered.iter().map(|event| {
                             let edit_id = event.id.clone();
                             let archive_id = event.id.clone();
@@ -556,10 +580,9 @@ pub fn EventsPage(
                             let status_text = status_label(&event.status);
                             let start = format_date_display(event.event_start_ms);
                             let end = format_date_display(event.event_end_ms);
-                            let sheet_preview: String = event.sheet_id.chars().take(16).collect();
                             let is_archived = event.status == api::EventStatus::Archived;
                             let is_draft = event.status == api::EventStatus::Draft;
-                            let organizers_count = event.organizer_emails.len();
+                            let organizers = organizers_label(&event.organizer_emails);
                             let ename = event.name.clone();
                             let can_manage = components::can_manage_events(&user_role.get());
                             let needs_escrow = event.deposit_enabled && event.escrow_address.is_empty();
@@ -779,14 +802,8 @@ pub fn EventsPage(
                                             <span class="setting-value">{end}</span>
                                         </div>
                                         <div class="quiz-setting-item">
-                                            <span class="quiz-setting-label">"Sheet ID"</span>
-                                            <span class="setting-value-mono">{sheet_preview}"…"</span>
-                                        </div>
-                                        <div class="quiz-setting-item">
                                             <span class="quiz-setting-label">"Organizers"</span>
-                                            <span class="setting-value">
-                                                                                            {if organizers_count == 0 { "—".to_string() } else { format!("{organizers_count}") }}
-                                                                                        </span>
+                                            <span class="setting-value">{organizers}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -932,5 +949,16 @@ pub fn EventsPage(
                 />
             </Show>
         </div>
+    }
+}
+
+/// Who organizes an event, readable at a glance: up to two addresses, then
+/// "+N more". A bare count ("4") told the reader nothing (.plans/037 §4).
+pub fn organizers_label(emails: &[String]) -> String {
+    const SHOWN: usize = 2;
+    match emails.len() {
+        0 => "—".to_string(),
+        n if n <= SHOWN => emails.join(", "),
+        n => format!("{}, +{} more", emails[..SHOWN].join(", "), n - SHOWN),
     }
 }

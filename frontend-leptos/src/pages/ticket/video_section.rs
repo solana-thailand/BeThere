@@ -67,7 +67,7 @@ pub fn VideoSection(
     view! {
         <div class=wrapper_class>
             <h3 class="ticket-video-heading">
-                "📺 Livestream / Recording"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.video.heading))}
             </h3>
             {if has_embed {
                 let link = video_url.clone();
@@ -78,7 +78,7 @@ pub fn VideoSection(
                             class="ticket-video-iframe"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                             allowfullscreen=true
-                            title="Event video"
+                            title=crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.video.iframe_title))
                         />
                     </div>
                     <a
@@ -87,7 +87,7 @@ pub fn VideoSection(
                         rel="noopener noreferrer"
                         class="btn btn-outline btn-sm ticket-video-link"
                     >
-                        "Watch on YouTube →"
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.video.watch_youtube))}
                     </a>
                 }.into_any()
             } else {
@@ -98,7 +98,7 @@ pub fn VideoSection(
                         rel="noopener noreferrer"
                         class="btn btn-outline btn-sm ticket-video-link"
                     >
-                        "Watch Video →"
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.video.watch))}
                     </a>
                 }.into_any()
             }}

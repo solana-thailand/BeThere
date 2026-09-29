@@ -11,6 +11,7 @@ use super::nft_badge::NftClaimedBadge;
 use super::timeline::{Timeline, TimelineStep};
 use super::video_section::VideoSection;
 use super::view_data::TicketViewData;
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 use crate::utils;
 
@@ -58,36 +59,39 @@ pub fn OnlineView(
         ..
     } = view_data;
 
-    // Live countdown: reactive signal updated every 60s
-    let (countdown_text, set_countdown_text) = signal(String::new());
+    let i18n = use_i18n();
+
+    // Live countdown: the clock is a signal updated every 60s; the words are
+    // rendered from it in the view, so they follow a language switch.
+    let (now_ms, set_now_ms) = signal(js_sys::Date::now() as i64);
     let (event_ended, set_event_ended) =
         signal(event_end_ms > 0 && js_sys::Date::now() as i64 >= event_end_ms);
 
-    let fmt_remaining = move |now_ms: i64| -> String {
-        if event_end_ms <= 0 || now_ms >= event_end_ms {
-            return String::new();
+    // "2d 3h remaining" / "3h 20m remaining", or `None` once the event is over.
+    let countdown = move || -> Option<AnyView> {
+        let now = now_ms.get();
+        if event_end_ms <= 0 || now >= event_end_ms {
+            return None;
         }
-        let diff_ms = event_end_ms - now_ms;
+        let diff_ms = event_end_ms - now;
         let days = diff_ms / (1000 * 60 * 60 * 24);
         let hours = (diff_ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60);
-        if days > 0 {
-            format!("{days}d {hours}h remaining")
-        } else {
-            let mins = (diff_ms % (1000 * 60 * 60)) / (1000 * 60);
-            format!("{hours}h {mins}m remaining")
-        }
+        let mins = (diff_ms % (1000 * 60 * 60)) / (1000 * 60);
+        Some(match days > 0 {
+            true => t!(i18n, ticket.timeline.remaining_days, days, hours).into_any(),
+            false => t!(i18n, ticket.timeline.remaining_hours, hours, mins).into_any(),
+        })
     };
-
-    // Initial value
-    set_countdown_text.set(fmt_remaining(js_sys::Date::now() as i64));
 
     // Start a 60s interval to refresh countdown
     Effect::new(move |_| {
         let cb = Closure::<dyn Fn()>::new(move || {
-            let now_ms = js_sys::Date::now() as i64;
-            let ended = event_end_ms > 0 && now_ms >= event_end_ms;
-            set_event_ended.set(ended);
-            set_countdown_text.set(fmt_remaining(now_ms));
+            let now = js_sys::Date::now() as i64;
+            let ended = event_end_ms > 0 && now >= event_end_ms;
+            if event_ended.get_untracked() != ended {
+                set_event_ended.set(ended);
+            }
+            set_now_ms.set(now);
         });
         let interval_id = web_sys::window()
             .unwrap()
@@ -107,12 +111,24 @@ pub fn OnlineView(
     // Build timeline quest link — only show when quest is actually configured
     // If we have a claim token, link to /claim/{token} which handles quiz gate.
     // If no claim token (e.g. D1 missing claim_token), link to /adventure directly.
-    let quest_link = if !is_checked_in && quiz_enabled {
+    let quest_link: Option<(String, ViewFn)> = if !is_checked_in && quiz_enabled {
         if has_claim {
-            Some((claim_href.clone(), "\u{2192} Go to Quest".to_string()))
+            Some((
+                claim_href.clone(),
+                ViewFn::from(move || {
+                    crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.go_to_quest))
+                }),
+            ))
         } else {
             let adventure_href = format!("/adventure?event_id={}", event_id);
-            Some((adventure_href, "\u{2192} Start Adventure".to_string()))
+            Some((
+                adventure_href,
+                ViewFn::from(move || {
+                    crate::locale::tr(|l| {
+                        crate::i18n::td_string!(l, ticket.timeline.start_adventure)
+                    })
+                }),
+            ))
         }
     } else {
         None
@@ -123,8 +139,8 @@ pub fn OnlineView(
         <super::hero::TicketHero
             variant="ticket-hero--online"
             icon=IconName::Globe
-            title="Online Registration"
-            badge="Online Track".to_string()
+            title=move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.online_title))
+            badge=ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.online_badge)))
         />
 
         // 2. Main card
@@ -145,7 +161,7 @@ pub fn OnlineView(
             // Attendee info
             <div class="ticket-info">
                 <div class="ticket-info-row">
-                    <span class="ticket-info-label">"Name"</span>
+                    <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.name))}</span>
                     <span class="ticket-info-value">
                         {utils::escape_html(&name)}
                     </span>
@@ -154,7 +170,7 @@ pub fn OnlineView(
                     let email = masked_email;
                     view! {
                         <div class="ticket-info-row">
-                            <span class="ticket-info-label">"Email"</span>
+                            <span class="ticket-info-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.info.email))}</span>
                             <span class="ticket-info-value">
                                 {utils::escape_html(&email)}
                             </span>
@@ -184,57 +200,73 @@ pub fn OnlineView(
         </div>
 
         // 3. Timeline — "What's Next?"
-        <Timeline steps=vec![
-            TimelineStep {
-                done: true,
-                number: 1,
-                title: "Register".into(),
-                desc: "You're all signed up!".into(),
-                link: None,
-            },
-            TimelineStep {
-                done: event_ended.get(),
-                number: 2,
-                title: if event_ended.get() { "Event Ended" } else { "Wait for Event" }.into(),
-                desc: if event_ended.get() {
-                    "The event has ended — you can proceed to claim.".to_string()
-                } else {
-                    let ct = countdown_text.get();
-                    if !ct.is_empty() { ct } else { "Claims open after the event ends.".to_string() }
-                },
-                link: None,
-            },
-            TimelineStep {
-                done: is_checked_in,
-                number: 3,
-                title: if is_checked_in {
-                    "Quest Completed"
-                } else if quiz_enabled {
-                    "Complete Quest"
-                } else {
-                    "Virtual Check-in"
-                }.into(),
-                desc: if is_checked_in {
-                    "Virtual check-in complete!".into()
-                } else if quiz_enabled {
-                    "Pass the quiz or adventure to virtually check in.".into()
-                } else {
-                    "Claim opens after the event ends.".into()
-                },
-                link: quest_link,
-            },
-            TimelineStep {
-                done: claimed,
-                number: 4,
-                title: if claimed { "Badge Claimed!" } else { "Claim Your Badge" }.into(),
-                desc: if claimed {
-                    "Your compressed NFT attendance proof has been minted.".into()
-                } else {
-                    "Mint your compressed NFT attendance proof.".into()
-                },
-                link: None,
-            },
-        ] />
+        // Rebuilt when the event ends; the countdown inside ticks on its own.
+        {move || {
+            let ended = event_ended.get();
+            let quest_link = quest_link.clone();
+            view! {
+                <Timeline steps=vec![
+                    TimelineStep {
+                        done: true,
+                        number: 1,
+                        title: ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.register))),
+                        desc: ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.register_done))),
+                        link: None,
+                    },
+                    TimelineStep {
+                        done: ended,
+                        number: 2,
+                        title: ViewFn::from(move || match ended {
+                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.event_ended)).into_any(),
+                            false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.wait_for_event)).into_any(),
+                        }),
+                        desc: ViewFn::from(move || match ended {
+                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.event_ended_desc)).into_any(),
+                            false => (move || countdown().unwrap_or_else(|| {
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claims_open_after)).into_any()
+                            })).into_any(),
+                        }),
+                        link: None,
+                    },
+                    TimelineStep {
+                        done: is_checked_in,
+                        number: 3,
+                        title: ViewFn::from(move || {
+                            if is_checked_in {
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.quest_completed)).into_any()
+                            } else if quiz_enabled {
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.complete_quest)).into_any()
+                            } else {
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.virtual_check_in)).into_any()
+                            }
+                        }),
+                        desc: ViewFn::from(move || {
+                            if is_checked_in {
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.virtual_check_in_done)).into_any()
+                            } else if quiz_enabled {
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.pass_quiz)).into_any()
+                            } else {
+                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claim_opens_after)).into_any()
+                            }
+                        }),
+                        link: quest_link,
+                    },
+                    TimelineStep {
+                        done: claimed,
+                        number: 4,
+                        title: ViewFn::from(move || match claimed {
+                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.badge_claimed)).into_any(),
+                            false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claim_badge)).into_any(),
+                        }),
+                        desc: ViewFn::from(move || match claimed {
+                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.badge_minted)).into_any(),
+                            false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.mint_badge)).into_any(),
+                        }),
+                        link: None,
+                    },
+                ] />
+            }
+        }}
 
         // 4. NFT section
         {if claimed {
@@ -260,9 +292,9 @@ pub fn OnlineView(
                             <Icon icon=IconName::Clock class="icon-sm" />
                         </div>
                         <div>
-                            <div class="ticket-action-title">"Claim Available Soon"</div>
+                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_soon))}</div>
                             <div class="ticket-action-desc">
-                                "Claim link will be available after the event ends."
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_soon_desc))}
                             </div>
                         </div>
                     </div>
@@ -276,9 +308,9 @@ pub fn OnlineView(
                                 <Icon icon=IconName::Gift class="icon-sm" />
                             </div>
                             <div>
-                                <div class="ticket-action-title">"Badge Claim Pending"</div>
+                                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_pending))}</div>
                                 <div class="ticket-action-desc">
-                                    "Your quest is complete! Your NFT badge claim link is being prepared — please check back shortly."
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_pending_desc))}
                                 </div>
                             </div>
                         </div>
@@ -290,9 +322,9 @@ pub fn OnlineView(
                                 <Icon icon=IconName::Clock class="icon-sm" />
                             </div>
                             <div>
-                                <div class="ticket-action-title">"Claim Available Soon"</div>
+                                <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.claim_soon))}</div>
                                 <div class="ticket-action-desc">
-                                    "Quest complete! Claim link will be available after the event ends."
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.online.quest_done_claim_soon))}
                                 </div>
                             </div>
                         </div>
@@ -324,8 +356,8 @@ pub fn OnlineView(
         // 6. Footer
         <div class="ticket-footer">
             <div class="ticket-nav">
-                <A href="/">"← Home"</A>
-                <A href="/profile">"Edit Profile"</A>
+                <A href="/">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_home))}</A>
+                <A href="/profile">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_profile))}</A>
             </div>
         </div>
     }

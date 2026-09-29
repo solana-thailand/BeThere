@@ -9,9 +9,11 @@
 use leptos::prelude::*;
 
 use crate::api::{EventSeries, SeriesEvent, get_event_series};
+use crate::i18n::{t, t_string, use_i18n};
 use crate::utils;
 
-/// Compact, locale-aware date label for a neighbor card (e.g. "Jun 26").
+/// Compact date label for a neighbor card in the attendee's language
+/// (e.g. "26 Jun", "26 มิ.ย.").
 /// Returns an em dash when the timestamp is missing/zero (matches the
 /// codebase convention in `event_form::format_date_display`).
 fn short_date(ms: i64) -> String {
@@ -19,7 +21,7 @@ fn short_date(ms: i64) -> String {
         return "\u{2014}".to_string();
     }
     let date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(ms as f64));
-    let locale = "en-US";
+    let locale = crate::locale::current_date_tag();
     let opts = js_sys::Object::new();
     let _ = js_sys::Reflect::set(
         &opts,
@@ -72,6 +74,7 @@ pub fn SeriesNav(
         });
     });
 
+    let i18n = use_i18n();
     view! {
         <Show
             when=move || series.get().is_some()
@@ -84,30 +87,25 @@ pub fn SeriesNav(
                 let campaign_title = s.campaign.title.clone();
                 let campaign_desc = s.campaign.description.clone();
                 let total = s.events.len();
-                let position = if s.current_index >= 0 && total > 0 {
-                    // 1-indexed "x of n" for display.
-                    format!("{} of {}", s.current_index + 1, total)
-                } else {
-                    String::new()
-                };
+                // 1-indexed "x of n" for display; `None` when not in the list.
+                let position = (s.current_index >= 0 && total > 0).then_some(s.current_index + 1);
                 let prev = s.previous.clone();
                 let nxt = s.next.clone();
 
                 view! {
                     <div class="ticket-series-nav">
                         <div class="ticket-series-badge">
-                            <span class="ticket-series-badge-label">"Part of"</span>
+                            <span class="ticket-series-badge-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, series.part_of))}</span>
                             <span class="ticket-series-badge-title">
                                 {utils::escape_html(&campaign_title)}
                             </span>
-                            {if !position.is_empty() {
-                                view! {
+                            {match position {
+                                Some(n) => view! {
                                     <span class="ticket-series-badge-position">
-                                        {position}
+                                        {t!(i18n, series.position, n, total)}
                                     </span>
-                                }.into_any()
-                            } else {
-                                view! { <div></div> }.into_any()
+                                }.into_any(),
+                                None => view! { <div></div> }.into_any(),
                             }}
                         </div>
                         {if !campaign_desc.is_empty() {
@@ -141,13 +139,18 @@ fn SeriesNeighborCard(
     #[prop(into)]
     direction: String,
 ) -> impl IntoView {
+    let i18n = use_i18n();
     let is_next = direction == "next";
-    let label = if is_next { "Up next" } else { "Previous" };
+    let label = move || match is_next {
+        true => t_string!(i18n, series.up_next),
+        false => t_string!(i18n, series.previous),
+    };
 
     match event {
         Some(e) => {
             let href = format!("/e/{}", e.slug);
-            let date = short_date(e.event_start_ms);
+            let start_ms = e.event_start_ms;
+            let date = move || short_date(start_ms);
             let name = e.name;
             view! {
                 <a class="ticket-series-card" href=href>
@@ -168,10 +171,9 @@ fn SeriesNeighborCard(
         // Keep the grid balanced with an inert spacer (no link affordance —
         // a real <a href=""> would navigate and confuse screen readers).
         None => {
-            let label = if is_next {
-                "Last in series"
-            } else {
-                "First in series"
+            let label = move || match is_next {
+                true => t_string!(i18n, series.last),
+                false => t_string!(i18n, series.first),
             };
             view! {
                 <div class="ticket-series-card ticket-series-card--empty">

@@ -437,7 +437,7 @@ pub fn AdminEscrow(
                 crate::wallet_error::WalletResult::Error(e) => {
                     components::show_toast(
                         &set_t,
-                        &crate::wallet_error::user_friendly_message(&e),
+                        &crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en),
                         ToastType::Error,
                     );
                 }
@@ -554,6 +554,7 @@ pub fn AdminEscrow(
             if let Err(cluster_err) =
                 crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await
             {
+                let cluster_err = cluster_err.message(crate::i18n::Locale::en);
                 log::error!("[admin-escrow] cluster mismatch: {cluster_err}");
                 components::show_toast(&set_t, &cluster_err, ToastType::Error);
                 set_init.set(false);
@@ -625,7 +626,8 @@ pub fn AdminEscrow(
                     }
                 }
                 crate::wallet_error::WalletResult::Error(e) => {
-                    let msg = crate::wallet_error::user_friendly_message(&e);
+                    let msg =
+                        crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en);
                     log::error!(
                         "[admin-escrow] init TX error: code={:?} msg={}",
                         e.code,
@@ -708,8 +710,9 @@ pub fn AdminEscrow(
                         crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster)
                             .await
                     {
+                        let cluster_err = cluster_err.message(crate::i18n::Locale::en);
                         log::error!("[admin-escrow] cluster mismatch: {cluster_err}");
-                        set_ar.update(|v| v.push((action, Err(cluster_err.clone()))));
+                        set_ar.update(|v| v.push((action, Err(cluster_err))));
                         return;
                     }
                     log::info!("[admin-escrow] {} TX built, signing...", action.label());
@@ -763,7 +766,10 @@ pub fn AdminEscrow(
                             );
                         }
                         crate::wallet_error::WalletResult::Error(e) => {
-                            let msg = crate::wallet_error::user_friendly_message(&e);
+                            let msg = crate::wallet_error::user_friendly_message(
+                                &e,
+                                crate::i18n::Locale::en,
+                            );
                             log::error!(
                                 "[admin-escrow] {} TX error: code={:?} msg={}",
                                 action.label(),

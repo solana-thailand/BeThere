@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::get_cluster;
 
@@ -19,6 +20,7 @@ pub fn wallet_connected_view(
     set_state: WriteSignal<DepositPageState>,
     set_payment_choice: WriteSignal<Option<PaymentChoice>>,
 ) -> AnyView {
+    let i18n = use_i18n();
     let wallet_name_send = wallet_name.to_string();
     let pk_send = public_key.to_string();
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
@@ -28,17 +30,21 @@ pub fn wallet_connected_view(
     let pk_short = truncate_pk(public_key);
     let cluster = get_cluster();
     let network = format!("Solana {}", components::cluster_display_label(&cluster));
-    let refund_condition = match compute_refund_info(data) {
-        Some((deadline, _)) => format!(
-            "Eligible deposits can be claimed after the event; no-show claims close {deadline}. Final eligibility appears on the deposit receipt."
-        ),
-        None => "Eligible deposits can be claimed after the event. Final eligibility appears on the deposit receipt.".to_string(),
+    // The deadline is a numeric date, the same in every language.
+    let refund_condition = match compute_refund_info(i18n.get_locale_untracked(), data) {
+        Some((deadline, _)) => {
+            view! { {t!(i18n, deposit.usdc.refund_condition_deadline, deadline)} }.into_any()
+        }
+        None => view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.refund_condition))} }.into_any(),
     };
+    let wallet = wallet_name.to_string();
+    let authorize_amount = usdc_fmt.clone();
+    let send_amount = usdc_fmt.clone();
 
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">"USDC Deposit"</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.title))}</span>
                 <span class="badge badge-info">{format!("{usdc_fmt} USDC")}</span>
             </div>
             <div class="dep2-amount-hero">
@@ -48,23 +54,29 @@ pub fn wallet_connected_view(
             <div class="dep2-wallet-bar">
                 <Icon icon=wallet_icon class="dep2-wallet-bar-icon wallet-icon-white" />
                 <div class="dep2-wallet-bar-info">
-                    <div class="dep2-wallet-bar-name">{format!("Connected via {wallet_name}")}</div>
+                    <div class="dep2-wallet-bar-name">{t!(i18n, deposit.connected_via, wallet)}</div>
                     <div class="dep2-wallet-bar-pk">{pk_short}</div>
                 </div>
-                <span class="dep2-wallet-bar-badge">"Connected"</span>
+                <span class="dep2-wallet-bar-badge">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.connected))}</span>
             </div>
-            {components::transaction_review(vec![
-                ("You authorize", format!("Deposit {usdc_fmt} USDC")),
-                ("Network", network),
-                ("Refund", refund_condition),
-                ("Network fee", "Paid in SOL by this connected wallet".to_string()),
+            {components::transaction_review_views(vec![
+                (
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.authorize))} }.into_any(),
+                    view! { {t!(i18n, deposit.usdc.authorize_value, amount = authorize_amount)} }.into_any(),
+                ),
+                (view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.network))} }.into_any(), network.into_any()),
+                (view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.refund))} }.into_any(), refund_condition),
+                (
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.fee))} }.into_any(),
+                    view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review.fee_value))} }.into_any(),
+                ),
             ])}
-            <p class="hint-desc">"Review these details, then approve in your wallet."</p>
+            <p class="hint-desc">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.review_then_approve))}</p>
             <button
                 class="btn btn-success btn-block"
                 on:click=move |_| handle_send_deposit(wallet_name_send.clone(), pk_send.clone())
             >
-                {format!("Send {usdc_fmt} USDC")}
+                {t!(i18n, deposit.usdc.send, amount = send_amount)}
             </button>
             <button
                 class="btn btn-outline btn-sm"
@@ -73,7 +85,7 @@ pub fn wallet_connected_view(
                     set_state.set(DepositPageState::ChoosePayment(data_clone.clone()));
                 }
             >
-                "← Go Back"
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.go_back))}
             </button>
         </div>
     }
@@ -118,7 +130,7 @@ pub fn awaiting_confirmation_view(
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">"Confirming Deposit..."</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.confirming_title))}</span>
                 <span class="badge badge-info">{format!("{usdc_fmt} USDC")}</span>
             </div>
             <div class="dep2-confirming">
@@ -127,9 +139,9 @@ pub fn awaiting_confirmation_view(
                     <span class="dep2-confirming-dot"></span>
                     <span class="dep2-confirming-dot"></span>
                 </div>
-                <p>"Waiting for on-chain confirmation..."</p>
+                <p>{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.waiting))}</p>
                 <p class="hint-xs">
-                    "Your payment signature is recorded. You may safely close this page and reopen the same deposit link; do not send another payment."
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.recorded))}
                 </p>
             </div>
             <div class="tx-hash-box-top">
@@ -146,9 +158,10 @@ pub fn deposit_confirmed_view(
     tx_sig: &str,
     params: DepositParamsSignal,
 ) -> AnyView {
+    let i18n = use_i18n();
     let sig_display = truncate_sig(tx_sig);
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
-    let refund_info = compute_refund_info(data);
+    let data_for_refund = data.clone();
 
     let ticket_attendee_id = match params.get() {
         Ok(p) => p.attendee_id.unwrap_or_default(),
@@ -167,38 +180,48 @@ pub fn deposit_confirmed_view(
             </div>
             <div class="dep2-amount-hero">
                 {usdc_fmt.to_string()}
-                <span class="dep2-amount-unit">" USDC deposited"</span>
+                <span class="dep2-amount-unit">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.deposited_unit))}</span>
             </div>
             <p class="hint-desc">
-                "You're confirmed! Your spot is secured on Solana."
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.confirmed_body))}
             </p>
             <div class="dep2-receipt">
                 {
                     let status = &data_clone.status;
 
                     match status {
-                        Some(s) if !s.refundable => view! {
-                            <div class="dep2-receipt-row">
-                                <span class="dep2-receipt-label">"Status"</span>
-                                <span class="dep2-receipt-value">
-                                    <crate::components::StatusBadge
-                                        tone=crate::components::StatusTone::Blocked
-                                        label=format!("Non-refundable (#{})", s.deposit_order)
-                                    />
-                                </span>
-                            </div>
-                        }.into_any(),
-                        Some(s) => view! {
-                            <div class="dep2-receipt-row">
-                                <span class="dep2-receipt-label">"Status"</span>
-                                <span class="dep2-receipt-value">
-                                    <crate::components::StatusBadge
-                                        tone=crate::components::StatusTone::Refundable
-                                        label=format!("Refundable (#{})", s.deposit_order)
-                                    />
-                                </span>
-                            </div>
-                        }.into_any(),
+                        Some(s) if !s.refundable => {
+                            let order = s.deposit_order;
+                            view! {
+                                <div class="dep2-receipt-row">
+                                    <span class="dep2-receipt-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.status))}</span>
+                                    <span class="dep2-receipt-value">
+                                        {move || view! {
+                                            <crate::components::StatusBadge
+                                                tone=crate::components::StatusTone::Blocked
+                                                label=format!("{} (#{order})", t_string!(i18n, deposit.usdc.badge_non_refundable))
+                                            />
+                                        }}
+                                    </span>
+                                </div>
+                            }.into_any()
+                        }
+                        Some(s) => {
+                            let order = s.deposit_order;
+                            view! {
+                                <div class="dep2-receipt-row">
+                                    <span class="dep2-receipt-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.already.status))}</span>
+                                    <span class="dep2-receipt-value">
+                                        {move || view! {
+                                            <crate::components::StatusBadge
+                                                tone=crate::components::StatusTone::Refundable
+                                                label=format!("{} (#{order})", t_string!(i18n, deposit.usdc.badge_refundable))
+                                            />
+                                        }}
+                                    </span>
+                                </div>
+                            }.into_any()
+                        }
                         _ => view! { <div></div> }.into_any(),
                     }
                 }
@@ -209,23 +232,23 @@ pub fn deposit_confirmed_view(
             </div>
             {components::solscan_link(tx_sig)}
             // Refund deadline info
-            {match refund_info {
-                Some((deadline_date, duration_label)) => view! {
+            {move || match compute_refund_info(i18n.get_locale(), &data_for_refund) {
+                Some((deadline, duration)) => view! {
                     <div class="dep2-deadline--warning">
                         <p class="hint-note">
-                            {format!("Refund window: {duration_label} after the event ends ({deadline_date}). Don't lose your deposit — claim it back.")}
+                            {t!(i18n, deposit.usdc.refund_window_claim, duration, deadline)}
                         </p>
                     </div>
                 }.into_any(),
                 None => view! {
                     <div class="dep2-deadline--warning">
-                        <p class="hint-note">"Refund will be available after the event."</p>
+                        <p class="hint-note">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.refund_after))}</p>
                     </div>
                 }.into_any(),
             }}
             <div class="action-row-top-lg">
-                <a href=ticket_href class="btn btn-primary">"View Your Ticket →"</a>
-                <a href=if data_clone_slug.event_slug.is_empty() { "/".to_string() } else { format!("/e/{}", data_clone_slug.event_slug) } class="btn btn-outline">"← Back to event"</a>
+                <a href=ticket_href class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.view_ticket))}</a>
+                <a href=if data_clone_slug.event_slug.is_empty() { "/".to_string() } else { format!("/e/{}", data_clone_slug.event_slug) } class="btn btn-outline">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_event))}</a>
             </div>
         </div>
     }
@@ -241,6 +264,7 @@ pub fn usdc_qr_ready_view(
     handle_copy_url: impl Fn(String) + Clone + 'static,
     handle_qr_poll: impl Fn() + Clone + 'static,
 ) -> AnyView {
+    let i18n = use_i18n();
     let _pay_url_display = pay_url.to_string();
     let pay_url_copy = pay_url.to_string();
     let pay_url_qr = pay_url.to_string();
@@ -261,7 +285,7 @@ pub fn usdc_qr_ready_view(
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">"Scan to Pay"</span>
+                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.scan_title))}</span>
                 <span class="badge badge-info">{format!("{usdc_fmt} USDC")}</span>
             </div>
             <div class="dep2-qr-primary">
@@ -280,20 +304,20 @@ pub fn usdc_qr_ready_view(
                     on:click=move |_| handle_copy_url(pay_url_copy.clone())
                 >
                     {move || view! { <Icon icon=if pay_url_copied.get() { IconName::Check } else { IconName::Copy } class="icon-sm" /> }}
-                    " " {move || if pay_url_copied.get() { "Copied!" } else { "Copy Link" }}
+                    " " {move || if pay_url_copied.get() { t_string!(i18n, deposit.usdc.copied) } else { t_string!(i18n, deposit.usdc.copy_link) }}
                 </button>
             </div>
             <div class="dep2-qr-polling">
                 <span class="spinner spinner-sm"></span>
-                " Checking for payment..."
+                " "{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.checking))}
             </div>
             <p class="hint-2xs u-mt-1rem">
-                "After payment, your deposit will be verified automatically."
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.usdc.auto_verify))}
             </p>
         </div>
 
         <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") } class="dep2-back">
-            "← Back to event"
+            {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.back_event))}
         </a>
     }
         .into_any()
