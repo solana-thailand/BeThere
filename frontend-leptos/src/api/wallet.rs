@@ -77,13 +77,15 @@ impl Tier {
         }
     }
 
-    pub fn emoji(&self) -> &'static str {
+    /// The tier's mark, drawn from the SVG icon set (no emoji, F1-c).
+    pub fn icon(&self) -> crate::icons::IconName {
+        use crate::icons::IconName;
         match self {
-            Self::Newcomer => "🌱",
-            Self::Participant => "⭐",
-            Self::Collector => "🏆",
-            Self::Dedicated => "💎",
-            Self::Legend => "👑",
+            Self::Newcomer => IconName::Sun,
+            Self::Participant => IconName::Star,
+            Self::Collector => IconName::Trophy,
+            Self::Dedicated => IconName::Target,
+            Self::Legend => IconName::Planet,
         }
     }
 

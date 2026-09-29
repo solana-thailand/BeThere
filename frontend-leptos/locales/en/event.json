@@ -25,7 +25,7 @@
   "reserve_title": "Reserve Your Spot",
   "signin_prompt": "Sign in with Google or your Solana Wallet to register for this event.",
   "checking_registration": "Checking registration...",
-  "credit_have": "💳 You have ฿{{ amount }} deposit credit from a previous event.",
+  "credit_have": "You have ฿{{ amount }} deposit credit from a previous event.",
   "credit_applied": "It's applied automatically when you register if it covers this event's deposit — you may not need to pay again.",
   "credit_wallet_hint": "Have deposit credit from a previous event? Credit is tied to your email — sign in with Google, or connect this wallet from your Profile, to apply it.",
   "about_title": "About this Event",
@@ -58,7 +58,7 @@
   "countdown_sec": "s",
 
   "share_event": "Share Event",
-  "add_to_calendar": "📅 Add to Calendar ↗",
+  "add_to_calendar": "Add to Calendar ↗",
   "link_copied": "Link copied!",
 
   "capacity_title": "Capacity",
@@ -100,7 +100,7 @@
   "already_registered": "You're already registered!",
   "welcome_back": "Welcome back, {{ name }}!",
   "signed_in_as": "Signed in as {{ email }}",
-  "quest_complete": "✅ Quest complete — ready to claim your badge!",
+  "quest_complete": "Quest complete — ready to claim your badge!",
   "next_claim": "Claim Your Badge →",
   "next_deposit": "Complete Deposit →",
   "next_ticket": "View My Ticket →",

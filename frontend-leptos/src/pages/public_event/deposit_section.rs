@@ -87,7 +87,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
             // Refund policy checklist
             <div class="pe-refund-list">
                 <div class="pe-refund-item">
-                    <span class="pe-check">"✓"</span>
+                    <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
                     <span class="pe-refund-text">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.refund_attend))}</span>
                 </div>
                 // Deposit model D1 (owner, 2026-09-28): nothing is forfeited.
@@ -98,7 +98,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     let promise = move || never_forfeited(i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
-                            <span class="pe-check">"✓"</span>
+                            <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
                             <span class="pe-refund-text">
                                 {t!(i18n, event.refund_cant_make_it, promise)}
                             </span>
@@ -111,7 +111,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     let deadline = move || format_refund_deadline(refund_hours, i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
-                            <span class="pe-check">"✓"</span>
+                            <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
                             <span class="pe-refund-text">
                                 {t!(i18n, event.refund_usdc, deadline)}
                             </span>
@@ -124,7 +124,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     let window = move || thb_refund_window(i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
-                            <span class="pe-check">"✓"</span>
+                            <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
                             <span class="pe-refund-text">
                                 {t!(i18n, event.refund_thb, window)}
                             </span>
@@ -139,7 +139,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
             {if is_hybrid {
                 view! {
                     <div class="pe-hybrid-note" style="margin-top: 16px;">
-                        <span>"💡"</span>
+                        <Icon icon=IconName::Lightbulb class="icon-sm" />
                         <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.hybrid_deposit_note))}</span>
                     </div>
                 }.into_any()

@@ -148,8 +148,8 @@ pub(super) fn build_quiz_explanations(
             .map(|q| q.text.clone())
             .unwrap_or_default();
         let icon = match exp.correct {
-            true => "✓",
-            _ => "✗",
+            true => IconName::Check,
+            _ => IconName::Cross,
         };
         let exp_class = match exp.correct {
             true => "claim-quiz-exp-correct",
@@ -162,7 +162,7 @@ pub(super) fn build_quiz_explanations(
             view! {
                 <div class="claim-quiz-exp-item">
                     <div class="claim-quiz-exp-header">
-                        <span class=exp_class>{icon}</span>
+                        <span class=exp_class><Icon icon=icon class="icon-xs" /></span>
                         <span class="claim-quiz-exp-q">{format!("{num}. {q_text}")}</span>
                     </div>
                     {match exp_text {

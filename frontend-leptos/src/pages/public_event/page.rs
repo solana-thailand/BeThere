@@ -817,7 +817,7 @@ fn render_loaded_event(
                                             view! {
                                                 <div class="pe-card" style="background:rgba(20,241,149,0.08);border:1px solid rgba(20,241,149,0.3);">
                                                     <p class="pe-detail-secondary" style="margin:0;color:#14F195;font-weight:600;">
-                                                        {t!(i18n, event.credit_have, amount = credit_amt)}
+                                                        <Icon icon=IconName::CreditCard class="icon-sm" />" "{t!(i18n, event.credit_have, amount = credit_amt)}
                                                     </p>
                                                     <p class="pe-detail-secondary" style="margin:4px 0 0;">
                                                         {crate::locale::tr(|l| crate::i18n::td_string!(l, event.credit_applied))}

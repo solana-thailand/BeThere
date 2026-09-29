@@ -214,7 +214,7 @@ pub fn NfcCheckin() -> impl IntoView {
                                     "Tx: " <a href={crate::utils::solscan_tx_url(&sig, &crate::utils::get_cluster())} target="_blank" style="color:#38bdf8;">{sig.clone()}</a>
                                 </div>
                             })}
-                            <A href="/" attr:class="btn btn-outline btn-sm">"Back to Home ➔"</A>
+                            <A href="/" attr:class="btn btn-outline btn-sm">"Back to Home →"</A>
                         </div>
                     }.into_any(),
 

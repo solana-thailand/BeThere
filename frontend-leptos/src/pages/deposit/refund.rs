@@ -4,7 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
 use crate::i18n::{t, use_i18n};
-use crate::icons::{Icon, wallet_icon_name};
+use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::get_cluster;
 
 use super::components;
@@ -193,7 +193,7 @@ pub fn refund_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) -> AnyV
 
     view! {
         <div class="dep2-card">
-            <div class="dep2-success-icon">"✓"</div>
+            <div class="dep2-success-icon"><Icon icon=IconName::Check class="icon-lg" /></div>
             <p class="dep2-amount-hero">
                 {t!(i18n, deposit.refund.returned, amount = usdc_fmt)}
             </p>

@@ -490,6 +490,17 @@
     font-size: 0.95rem;
 }
 
+/* "Happening now" marker (was a red-circle emoji, F1-c). */
+.pe-live-dot {
+    display: inline-block;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin-right: 0.375rem;
+    border-radius: 50%;
+    background: var(--danger);
+    vertical-align: middle;
+}
+
 /* Countdown capsule badge */
 .pe-countdown-capsule {
     display: inline-flex;

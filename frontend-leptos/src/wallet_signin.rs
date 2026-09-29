@@ -485,7 +485,7 @@ pub fn WalletSignInButton(
                                 aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, common.close))
                                 on:click=move |_| set_show_modal.set(false)
                             >
-                                "✕"
+                                <Icon icon=IconName::Cross class="icon-sm" />
                             </button>
                         </div>
 

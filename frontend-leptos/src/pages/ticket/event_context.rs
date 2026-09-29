@@ -5,6 +5,8 @@ use crate::utils;
 use event_checkin_domain::models::event::safe_map_url;
 use leptos::prelude::*;
 
+use crate::icons::{Icon, IconName};
+
 /// Event context card showing event badge image, tagline, location, and sessions link.
 #[component]
 pub fn EventContext(
@@ -95,7 +97,7 @@ pub fn EventContext(
                 });
                 view! {
                     <p class="ticket-event-location">
-                        "📍 " {utils::escape_html(&loc)} {map_link}
+                        <Icon icon=IconName::Pin class="icon-xs" />" " {utils::escape_html(&loc)} {map_link}
                     </p>
                 }.into_any()
             } else {
@@ -110,7 +112,7 @@ pub fn EventContext(
                         rel="noopener noreferrer"
                         class="ticket-event-link"
                     >
-                        {link_label}
+                        <Icon icon=IconName::Calendar class="icon-xs" />" "{link_label}
                     </a>
                 }.into_any()
             } else {

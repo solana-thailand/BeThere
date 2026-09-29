@@ -2,6 +2,8 @@
 
 use leptos::prelude::*;
 
+use crate::icons::{Icon, IconName};
+
 use crate::api::{self, DepositMethod, DepositStatusResponse};
 use crate::i18n::{t, t_string, use_i18n};
 use crate::utils::format_timestamp;
@@ -208,7 +210,7 @@ pub fn already_deposited_view(
             // Success icon (only if verified)
             {if info.verified {
                 view! {
-                    <div class="dep2-success-icon">"✓"</div>
+                    <div class="dep2-success-icon"><Icon icon=IconName::Check class="icon-lg" /></div>
                 }.into_any()
             } else {
                 ().into_any()

@@ -5,6 +5,8 @@
 
 use leptos::prelude::*;
 
+use crate::icons::{Icon, IconName};
+
 use super::js_interop;
 use super::types::*;
 use crate::api::DepositStatusResponse;
@@ -362,7 +364,7 @@ pub fn thb_uploaded_view(attendee_id: &str, event_id: &str) -> AnyView {
     });
     view! {
         <div class="dep2-card">
-            <div class="dep2-success-icon">"✓"</div>
+            <div class="dep2-success-icon"><Icon icon=IconName::Check class="icon-lg" /></div>
             <h2 class="dep2-card-title" style="text-align:center;margin-top:0.75rem">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.submitted_title))}</h2>
             <p class="hint-desc" style="text-align:center">
                 {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.thb.submitted_body))}

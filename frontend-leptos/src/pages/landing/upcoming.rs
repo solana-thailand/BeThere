@@ -122,7 +122,7 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                     <section id="events" class="landing-section-sm">
                         {heading}
                         <div class="landing-sandbox-card">
-                            <div class="landing-sandbox-icon">{"🎟️"}</div>
+                            <div class="landing-sandbox-icon"><Icon icon=IconName::Ticket class="icon-lg" /></div>
                             <div class="landing-sandbox-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_title))}</div>
                             <div class="landing-sandbox-desc">
                                 {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_desc))}

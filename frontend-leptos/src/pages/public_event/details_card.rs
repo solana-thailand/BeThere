@@ -84,7 +84,7 @@ pub fn details_card(
                         match cd.is_empty() {
                             // Countdown ended but event not marked completed: it is live.
                             true => view! {
-                                <span class="pe-text-accent-bold">"🔴 "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.happening_now))}</span>
+                                <span class="pe-text-accent-bold"><span class="pe-live-dot" aria-hidden="true"></span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.happening_now))}</span>
                             }.into_any(),
                             false => view! {
                                 <span class="pe-countdown-capsule">

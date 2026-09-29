@@ -84,7 +84,7 @@
     "complete_it": "เล่น Rust Adventure ให้จบเพื่อปลดล็อก NFT ของคุณ!",
     "info": "<strong>{{ name }}</strong> เล่นเกม Rust Adventures ให้จบเพื่อรับ NFT badge ของคุณ",
     "hint": "เรียนพื้นฐาน Rust ผ่านการแก้โจทย์โค้ดในเกมแบบช่องตารางสนุก ๆ!",
-    "start": "🎮 เริ่ม Adventure"
+    "start": "เริ่ม Adventure"
   },
   "minting": {
     "title": "กำลังมิ้นต์ NFT ของคุณ...",
@@ -97,15 +97,15 @@
     "on_chain": "อยู่บนเชนแล้ว",
     "copy_asset_id": "คัดลอก Asset ID",
     "view_on_orb": "ดู NFT บน Orb ↗",
-    "view_solscan": "🔍 ดูธุรกรรมบน Solscan ↗",
+    "view_solscan": "ดูธุรกรรมบน Solscan ↗",
     "post_to_x": "โพสต์ลง X",
     "copy_link": "คัดลอกลิงก์รับ NFT",
     "link_copied": "คัดลอกลิงก์แล้ว!",
     "ticket_with_deposit": "ดูตั๋ว และมัดจำ / การคืนเงิน →",
     "back_to_ticket": "← กลับไปที่ตั๋ว",
-    "tweet_generic": "เพิ่งรับ NFT ยืนยันการเข้าร่วมงานบน BeThere! 🎫✨\n\nหลักฐานว่ามาจริง บนเชน\n\n#BeThere #Solana",
+    "tweet_generic": "เพิ่งรับ NFT ยืนยันการเข้าร่วมงานบน BeThere!\n\nหลักฐานว่ามาจริง บนเชน\n\n#BeThere #Solana",
     "tweet_event_before": "เพิ่งได้ POAP จากงาน ",
-    "tweet_event_after": "! 🎫✨\n\nมาจริง พิสูจน์ได้ว่าอยู่ที่นั่น ได้ NFT badge มาแล้ว\n\n#BeThere #Solana"
+    "tweet_event_after": "!\n\nมาจริง พิสูจน์ได้ว่าอยู่ที่นั่น ได้ NFT badge มาแล้ว\n\n#BeThere #Solana"
   },
   "already": {
     "title": "รับไปแล้ว",

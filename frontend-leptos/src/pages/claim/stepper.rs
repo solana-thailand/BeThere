@@ -54,20 +54,20 @@ pub(super) fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> imp
     // Build step labels based on whether quiz is shown
     let _ = total; // used for context, steps are hardcoded
     let i18n = use_i18n();
-    let steps: Vec<(&'static str, StepLabel, usize)> = if show_quiz {
+    let steps: Vec<(StepLabel, usize)> = if show_quiz {
         vec![
-            ("✓", StepLabel::Verified, 1),
-            ("?", StepLabel::Quiz, 2),
-            ("", StepLabel::Claim, 3),
+            (StepLabel::Verified, 1),
+            (StepLabel::Quiz, 2),
+            (StepLabel::Claim, 3),
         ]
     } else {
-        vec![("✓", StepLabel::Verified, 1), ("", StepLabel::Claim, 2)]
+        vec![(StepLabel::Verified, 1), (StepLabel::Claim, 2)]
     };
 
     view! {
         <div class="claim-stepper">
             <div class="claim-stepper-track">
-                {steps.into_iter().map(|(icon, label, step_num)| {
+                {steps.into_iter().map(|(label, step_num)| {
                     let is_completed = current > step_num;
                     let is_current = current == step_num;
 
@@ -87,7 +87,7 @@ pub(super) fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> imp
                                         </svg>
                                     }.into_any()
                                 } else {
-                                    view! { <span>{icon}</span> }.into_any()
+                                    view! { <span>{step_num}</span> }.into_any()
                                 }}
                             </div>
                             <span class=if is_current || is_completed { "claim-step-label active" } else { "claim-step-label" }>
