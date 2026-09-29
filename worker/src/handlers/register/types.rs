@@ -107,6 +107,11 @@ pub struct MyRegistrationsItem {
     /// "checked in", "nft claimed".
     pub status: String,
     pub next_step: NextStep,
+    /// The check-in URL the ticket's QR encodes, present exactly when the
+    /// ticket page would show a QR. The landing renders it inline as SVG
+    /// (.plans/038 P2-a), so it costs no image request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub qr_url: Option<String>,
 }
 
 /// Request body for `POST /api/public/event/{slug}/register-post-event`.

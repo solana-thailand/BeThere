@@ -867,8 +867,9 @@ pub fn Scanner() -> impl IntoView {
                     let options = active_events.clone();
                     view! {
                         <div class="scanner-event-bar">
-                            <span class="scanner-event-label">"Event:"</span>
+                            <label class="scanner-event-label" for="scanner-event-select">"Event:"</label>
                             <select
+                                id="scanner-event-select"
                                 class="scanner-event-select"
                                 on:change=move |ev| {
                                     let val = event_target_value(&ev);

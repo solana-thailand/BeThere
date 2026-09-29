@@ -101,7 +101,11 @@
       "quest": "Start Quest",
       "ticket": "View Ticket",
       "view": "View"
-    }
+    },
+    "show_ticket": "Show ticket",
+    "hide_ticket": "Hide",
+    "qr_hint": "Show this QR at the entrance",
+    "qr_alt": "Check-in QR code"
   },
   "inbox": {
     "title": "Notifications",

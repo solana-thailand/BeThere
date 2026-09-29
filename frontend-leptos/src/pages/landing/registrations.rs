@@ -24,6 +24,9 @@ struct MyRegistrationItem {
     /// "checked in", "nft claimed".
     status: String,
     next_step: NextStepData,
+    /// The check-in URL, present when the ticket would show its QR.
+    #[serde(default)]
+    qr_url: Option<String>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -219,6 +222,7 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                                                 <a href=next_url class="btn btn-primary btn-sm landing-reg-action">
                                                     {step_label}" →"
                                                 </a>
+                                                {reg.qr_url.as_deref().and_then(crate::utils::qr_gen::qr_svg_path).map(|qr| view! { <InlineTicketQr qr /> })}
                                             </div>
                                         }
                                     }).collect::<Vec<_>>()}
@@ -237,5 +241,45 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                 }.into_any()
             }
         }
+    }
+}
+
+/// The ticket QR, expanded in place on the landing (.plans/038 P2-a): one tap
+/// from the landing to a scannable code, drawn as SVG (no image request). The
+/// full ticket page, with deposit status, badge and the fullscreen QR, stays
+/// one more tap away through the card's action link.
+#[component]
+fn InlineTicketQr(qr: (u32, String)) -> impl IntoView {
+    let (open, set_open) = signal(false);
+    let (side, path) = qr;
+    let view_box = format!("0 0 {side} {side}");
+    view! {
+        <button
+            class="btn btn-outline btn-sm landing-reg-qr-toggle"
+            aria-expanded=move || open.get().to_string()
+            on:click=move |_| set_open.update(|o| *o = !*o)
+        >
+            {move || match open.get() {
+                true => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.hide_ticket)).into_any(),
+                false => crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.show_ticket)).into_any(),
+            }}
+        </button>
+        <Show when=move || open.get() fallback=|| ()>
+            <div class="landing-reg-qr">
+                <svg
+                    class="landing-reg-qr-svg"
+                    viewBox=view_box.clone()
+                    role="img"
+                    aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.qr_alt))
+                    shape-rendering="crispEdges"
+                >
+                    <rect width="100%" height="100%" fill="#fff" />
+                    <path d=path.clone() fill="#000" />
+                </svg>
+                <p class="landing-reg-qr-hint">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.qr_hint))}
+                </p>
+            </div>
+        </Show>
     }
 }

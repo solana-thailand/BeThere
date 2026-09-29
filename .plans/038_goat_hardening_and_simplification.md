@@ -87,8 +87,19 @@ Wave 1 (`.plans/037`).
 
 ## P2: add
 
-- [ ] **P2-a:** inline ticket expand with SVG QR (QR only; the short-code
-  column gets its own issue).
+- [x] **P2-a:** "Show ticket / Hide" on each ready registration on the
+  landing (1 tap from the landing).
+  - The QR is an inline SVG path from `utils::qr_gen::qr_svg_path`: no
+    image request.
+  - The API adds `qr_url` exactly when the ticket page would show a QR.
+  - Verified: jsQR decodes the rendered SVG to the exact check-in URL (EN and
+    TH), no overflow at 390 px, and both states have snapshots and an axe
+    pass.
+  - Cost: +3,319 B br4.
+  - Found and fixed: `.issues/174` (free events sent attendees to "Complete
+    Deposit") and an unnamed scanner `<select>` (surfaced by the second
+    fixture event).
+  - The short display code still needs its own issue (not filed yet).
 - [ ] **P2-b:** event page meta rows.
 - [ ] **P2-c:** TH/EN toggle. Wave 1 already ships `LanguageSwitch` on
   attendee routes. Verify placement and the 390 px overflow only.

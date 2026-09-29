@@ -837,3 +837,31 @@
         padding: 1rem 1.25rem;
     }
 }
+
+/* Inline ticket QR on the landing (.plans/038 P2-a). White quiet zone so a
+   scanner reads it on the dark theme. */
+.landing-reg-qr-toggle {
+    grid-column: 1 / -1;
+    justify-self: start;
+}
+
+.landing-reg-qr {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.landing-reg-qr-svg {
+    width: min(240px, 70vw);
+    height: auto;
+    border-radius: var(--radius-sm);
+}
+
+.landing-reg-qr-hint {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-align: center;
+}

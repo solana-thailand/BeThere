@@ -89,7 +89,7 @@ pub async fn my_registration(
         &config.id,
         &attendee.api_id,
         &claim_token,
-        &state,
+        config.deposit_enabled,
         deposit.as_ref(),
         &attendee.participation_type,
         is_checked_in,
@@ -130,7 +130,7 @@ pub async fn my_registrations(
     // attendee list. The legacy KV/Sheets path below remains as a failover for
     // environments without D1.
     if let Some(db) = d1 {
-        let results = my_registrations_from_d1(db, &claims.email, &state)
+        let results = my_registrations_from_d1(db, &claims.email)
             .await
             .map_err(AppError::Internal)?;
         tracing::info!(
@@ -238,7 +238,7 @@ pub async fn my_registrations(
                         &event_id,
                         &attendee.api_id,
                         &claim_token,
-                        &state,
+                        config.deposit_enabled,
                         deposit.as_ref(),
                         &attendee.participation_type,
                         is_checked_in,
@@ -287,6 +287,7 @@ pub async fn my_registrations(
                         participation_type: attendee.participation_type.clone(),
                         status,
                         next_step,
+                        qr_url: attendee.qr_code_url.clone().filter(|url| !url.is_empty()),
                     })
                 }
             },
@@ -329,17 +330,20 @@ struct RegistrationSnapshot {
     name: String,
     participation_type: String,
     claim_token: Option<String>,
+    #[serde(default)]
+    qr_url: Option<String>,
     checked_in: i64,
     claimed: i64,
     deposit_exists: i64,
     deposit_verified: i64,
     real_deposit: i64,
+    #[serde(default)]
+    deposit_enabled: i64,
 }
 
 async fn my_registrations_from_d1(
     db: &worker::D1Database,
     email: &str,
-    state: &AppState,
 ) -> Result<Vec<MyRegistrationsItem>, String> {
     let stmt = db
         .prepare(include_str!("../sql/my_registrations.sql"))
@@ -362,7 +366,7 @@ async fn my_registrations_from_d1(
                 &row.event_id,
                 &row.attendee_id,
                 row.claim_token.as_deref().unwrap_or(""),
-                state,
+                row.deposit_enabled != 0,
                 row.real_deposit != 0,
                 &row.participation_type,
                 is_checked_in,
@@ -394,6 +398,7 @@ async fn my_registrations_from_d1(
                 participation_type: row.participation_type,
                 status: status.into(),
                 next_step,
+                qr_url: row.qr_url.filter(|url| !url.is_empty()),
             })
         })
         .collect()
@@ -414,7 +419,7 @@ pub(super) fn build_next_step(
     event_id: &str,
     api_id: &str,
     claim_token: &str,
-    state: &AppState,
+    deposit_required: bool,
     deposit: Option<&event_checkin_domain::models::deposit::DepositStatus>,
     participation_type: &str,
     is_checked_in: bool,
@@ -433,7 +438,7 @@ pub(super) fn build_next_step(
         event_id,
         api_id,
         claim_token,
-        state,
+        deposit_required,
         real_deposit,
         participation_type,
         is_checked_in,
@@ -447,65 +452,35 @@ fn build_next_step_from_presence(
     event_id: &str,
     api_id: &str,
     claim_token: &str,
-    state: &AppState,
+    deposit_required: bool,
     real_deposit: bool,
     participation_type: &str,
     is_checked_in: bool,
     is_claimed: bool,
 ) -> NextStep {
-    let _claim_base = &state.config.server.claim_base_url;
-
-    // Already claimed NFT — go to ticket page (final state)
-    if is_claimed {
-        return NextStep {
-            step_type: "ticket".to_string(),
-            url: format!("/ticket/{api_id}?event_id={event_id}"),
-        };
-    }
-
-    // Checked in but not yet claimed — go directly to claim page if token exists
-    if is_checked_in && !claim_token.is_empty() {
-        return NextStep {
-            step_type: "claim".to_string(),
-            url: format!("/claim/{claim_token}"),
-        };
-    }
-
-    // Online attendees never need deposit — skip straight to waiting/ticket.
-    // Quest completion (quiz/adventure) serves as virtual check-in at claim time.
-    if is_online_participation(participation_type) {
-        return NextStep {
-            step_type: "waiting".to_string(),
-            url: format!("/ticket/{api_id}?event_id={event_id}"),
-        };
-    }
-
-    if format.has_in_person() {
-        // A USDC deposit initiation that was never signed is an orphan
-        // (user rejected the wallet prompt after `deposit_usdc` saved a
-        // pending record). Treat it as "no deposit" so the attendee is sent
-        // back to the deposit page to retry, not to the ticket page.
-        // Real deposits (verified, or carrying a tx_signature) count.
-        if real_deposit {
-            // Deposit exists (verified or pending with a TX) — show ticket page
-            NextStep {
-                step_type: "ticket".to_string(),
-                url: format!("/ticket/{api_id}?event_id={event_id}"),
-            }
-        } else {
-            // No real deposit yet — go to deposit page
-            NextStep {
-                step_type: "deposit".to_string(),
-                url: format!("/deposit/{api_id}?event_id={event_id}"),
-            }
-        }
-    } else {
-        // Online-only event format (shouldn't reach here for in-person attendees,
-        // but kept as fallback)
-        NextStep {
-            step_type: "waiting".to_string(),
-            url: format!("/ticket/{api_id}?event_id={event_id}"),
-        }
+    use event_checkin_domain::models::next_step::{NextStepFacts, NextStepKind, next_step_kind};
+    let kind = next_step_kind(NextStepFacts {
+        is_claimed,
+        is_checked_in,
+        has_claim_token: !claim_token.is_empty(),
+        is_online_participant: is_online_participation(participation_type),
+        format_has_in_person: format.has_in_person(),
+        deposit_required,
+        real_deposit,
+    });
+    // A USDC deposit initiation that was never signed is an orphan (the user
+    // rejected the wallet prompt): `real_deposit` is false for it, so the
+    // attendee goes back to the deposit page to retry. A free event
+    // (`deposit_required == false`) never sends anyone there (.issues/174).
+    let (step_type, url) = match kind {
+        NextStepKind::Ticket => ("ticket", format!("/ticket/{api_id}?event_id={event_id}")),
+        NextStepKind::Claim => ("claim", format!("/claim/{claim_token}")),
+        NextStepKind::Deposit => ("deposit", format!("/deposit/{api_id}?event_id={event_id}")),
+        NextStepKind::Waiting => ("waiting", format!("/ticket/{api_id}?event_id={event_id}")),
+    };
+    NextStep {
+        step_type: step_type.to_string(),
+        url,
     }
 }
 

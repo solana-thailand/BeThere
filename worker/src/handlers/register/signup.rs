@@ -342,7 +342,7 @@ pub async fn register_attendee(
                 &event_id,
                 &existing.api_id,
                 &claim_token,
-                &state,
+                config.deposit_enabled,
                 deposit.as_ref(),
                 &existing.participation_type,
                 is_checked_in,
@@ -777,7 +777,7 @@ pub async fn register_attendee(
             &event_id,
             &api_id,
             &claim_token,
-            &state,
+            config.deposit_enabled,
             None,
             &participation_type,
             false, // new registration, not checked in

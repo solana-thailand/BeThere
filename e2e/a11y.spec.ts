@@ -70,3 +70,11 @@ test("a11y gate self-test: injected violations are caught", async ({ page, conte
   const ids = results.violations.filter(v => GATED.has(v.impact ?? "")).map(v => v.id).sort();
   expect(ids).toEqual(["button-name", "image-alt"]);
 });
+
+test("a11y: landing signed in, inline ticket expanded", async ({ page, context, baseURL }) => {
+  await openPage(page, context, { name: "landing-authed", path: "/", authed: true, ready: ".landing-reg-qr-toggle" }, baseURL!);
+  await page.locator(".landing-reg-qr-toggle").click();
+  const results = await new AxeBuilder({ page }).include(".landing-reg-section").withTags(TAGS).analyze();
+  const gated = results.violations.filter(v => GATED.has(v.impact ?? "")).map(v => `${v.id}: ${v.nodes.map(n => n.target.join(" ")).join(" | ")}`);
+  expect(gated).toEqual([]);
+});

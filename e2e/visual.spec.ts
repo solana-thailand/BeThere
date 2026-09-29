@@ -27,3 +27,14 @@ for (const target of PAGES) {
     });
   }
 }
+
+// Inline ticket on the signed-in landing (.plans/038 P2-a), both states.
+test("visual: landing signed in, inline ticket collapsed and expanded", async ({ page, context, baseURL }) => {
+  await page.setViewportSize(VIEWPORTS[0]);
+  await openPage(page, context, { name: "landing-authed", path: "/", authed: true, ready: ".landing-reg-qr-toggle" }, baseURL!);
+  const section = page.locator(".landing-reg-section");
+  await expect(section).toHaveScreenshot("landing-ticket-collapsed-mobile.png", { animations: "disabled" });
+  await page.locator(".landing-reg-qr-toggle").click();
+  await expect(page.locator(".landing-reg-qr-svg")).toBeVisible();
+  await expect(section).toHaveScreenshot("landing-ticket-expanded-mobile.png", { animations: "disabled" });
+});
