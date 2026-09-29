@@ -44,3 +44,58 @@ P2-d cookie banner, P3-a FAQ). Each addition moves the first load toward the
 2 MiB fail line, so the budget is now the binding constraint for that work.
 P1-1 (landing cuts) and P3-c (jsQR lazy-load) help only a little: jsQR is not
 in the first-load set that the gate measures.
+
+## Update 2026-09-29, later: measured where the wasm goes
+
+**Current state:** first load 1,989,103 B br4. The GOAT package added
++18.7 KB (Turnstile, inline QR, meta rows, privacy notice, consent, FAQ,
+cards), and P1-1 cut −7 KB. The warn line needs −101.7 KB.
+
+**wasm-opt is not the answer.** `frontend-leptos/optimize-wasm.sh` records
+that `-O2` saves 8.9 KB br4 and that `-Oz` makes the transfer worse.
+
+**Attribution:**
+- **Method:** a release build with symbol names kept
+  (`CARGO_PROFILE_RELEASE_STRIP=false`, a separate target dir), then
+  `twiggy top`, with items grouped by the frontend module they name.
+- **Units:** raw bytes, before wasm-bindgen and brotli.
+
+| Bucket | Raw bytes | Share |
+|---|---|---|
+| `pages::*` render code | 3,185,384 | 60.1% |
+| `api::*` (types, serde) | 584,356 | 11.0% |
+| `.rodata` (strings: both catalogs, adventure levels, …) | 559,695 | 10.6% |
+| reactive_graph / tachys / std / serde | ≈ 0.5 MB | ≈ 10% |
+
+**Pages only staff or admins can open:** 1,531,084 B, 48% of page code and
+about 29% of the attributed wasm. The largest are:
+
+| Page | Raw bytes |
+|---|---|
+| `event_form` | 272,722 |
+| `admin` | 224,110 |
+| `campaigns_page` | 179,616 |
+| `scanner` | 112,969 |
+| `admin_deposit` | 110,796 |
+| `events_page` | 80,392 |
+| `escrow_init` | 61,506 |
+| `form_builder` | 59,654 |
+| `admin_escrow` | 57,016 |
+
+`quiz_editor` (95,394) is organizer-only too, but was not counted above. So
+every attendee downloads the whole admin app. Assuming it compresses like
+the rest, that share is on the order of 0.5 MB br4, about 5× the gap.
+
+## Recommendation
+
+Split the staff/admin routes out of the attendee bundle. That clears the
+warn line with room to spare, and it helps the ticket page on venue data,
+which is the moment the budget exists for. It is an architectural decision
+(owner):
+- (a) a second Trunk app for `/admin`, `/staff` and `/dashboard` with its
+  own `index.html`, sharing `domain` + `api`; or
+- (b) a toolchain that supports wasm splitting (Leptos `#[lazy]` routes via
+  cargo-leptos `--split`; Trunk has no equivalent today).
+
+Until then the choices are to raise `CEILING_BYTES` (an owner call; see
+Options) or to leave develop red.
