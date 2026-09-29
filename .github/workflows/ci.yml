@@ -324,7 +324,13 @@ jobs:
         # Verified locally that a plain `trunk build` dist and a `build.sh` dist
         # measure within 4 bytes of each other, so the baseline recorded from
         # build.sh does not spuriously red this step.
-        run: bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
+        #
+        # Both shells: the attendee index.html and the staff-app.html that
+        # build.sh adds (.issues/169), each against its own baseline.
+        run: |
+          set -euo pipefail
+          bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
+          bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist --shell staff
 
       - name: Staff-only stylesheet fence
         # The attendee shell does not link styles/*.staff.css. An attendee page
