@@ -434,37 +434,22 @@ pub async fn get_assets_by_owner(
 ) -> Result<DasAssetsResponse, String> {
     let url = format!("{}/?api-key={}", rpc_url, api_key);
 
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-das",
-        "method": "getAssetsByOwner",
-        "params": {
-            "ownerAddress": wallet_address,
-            "page": page,
-            "limit": limit,
-            "displayOptions": {
-                "showFungible": false,
-                "showNativeBalance": false,
-                "showInscription": false
-            }
+    let params = serde_json::json!({
+        "ownerAddress": wallet_address,
+        "page": page,
+        "limit": limit,
+        "displayOptions": {
+            "showFungible": false,
+            "showNativeBalance": false,
+            "showInscription": false
         }
     });
-
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| format!("failed to serialize DAS request: {e}"))?;
-
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = Request::new_with_init(&url, &init)
-        .map_err(|e| format!("failed to create DAS request: {e:?}"))?;
+    let request = crate::solana_escrow::json_rpc::post_request(
+        &url,
+        "bethere-das",
+        "getAssetsByOwner",
+        params,
+    )?;
 
     let mut response = Fetch::Request(request)
         .send()

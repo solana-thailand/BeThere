@@ -58,3 +58,42 @@ fn rpc_readers_do_not_read_result_by_hand() {
         );
     }
 }
+
+fn rust_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(dir).expect("read src dir") {
+        let path = entry.expect("dir entry").path();
+        match path.is_dir() {
+            true => rust_sources(&path, out),
+            false if path.extension().is_some_and(|e| e == "rs") => out.push(path),
+            false => {}
+        }
+    }
+}
+
+/// Every Solana JSON-RPC request is built by `json_rpc::post_request`; a
+/// hand-rolled envelope elsewhere is a second copy of the request plumbing.
+#[test]
+fn json_rpc_envelope_is_built_in_one_place() {
+    let mut files = Vec::new();
+    rust_sources(std::path::Path::new("src"), &mut files);
+    assert!(files.len() > 50, "walked too few files: {}", files.len());
+    let owner = std::path::Path::new("src/solana_escrow/json_rpc.rs");
+    let offenders: Vec<_> = files
+        .iter()
+        .filter(|p| p.as_path() != owner)
+        .filter(|p| {
+            std::fs::read_to_string(p)
+                .expect("read source")
+                .contains(r#""jsonrpc": "2.0""#)
+        })
+        .collect();
+    assert!(
+        offenders.is_empty(),
+        "build JSON-RPC requests with json_rpc::post_request: {offenders:?}"
+    );
+    assert!(
+        std::fs::read_to_string(owner)
+            .expect("read json_rpc.rs")
+            .contains(r#""jsonrpc": "2.0""#)
+    );
+}

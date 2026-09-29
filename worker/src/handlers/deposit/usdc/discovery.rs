@@ -83,39 +83,15 @@ pub(crate) async fn discover_deposit_tx_on_chain(
         "Querying getSignaturesForAddress for AttendeeDeposit PDA"
     );
 
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-discover",
-        "method": "getSignaturesForAddress",
-        "params": [
-            deposit_pda_b58,
-            { "limit": 5 }
-        ]
-    });
-
-    let json_body = match serde_json::to_string(&body) {
-        Ok(b) => b,
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to serialize getSignaturesForAddress request");
-            return None;
-        }
-    };
-
-    let headers = worker::Headers::new();
-    if let Err(e) = headers.set("Content-Type", "application/json") {
-        tracing::warn!(error = ?e, "failed to set header");
-        return None;
-    }
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = match worker::Request::new_with_init(rpc_url, &init) {
+    let request = match crate::solana_escrow::json_rpc::post_request(
+        rpc_url,
+        "bethere-discover",
+        "getSignaturesForAddress",
+        serde_json::json!([deposit_pda_b58, { "limit": 5 }]),
+    ) {
         Ok(r) => r,
         Err(e) => {
-            tracing::warn!(error = ?e, "failed to create RPC request");
+            tracing::warn!(error = %e, "failed to build RPC request");
             return None;
         }
     };

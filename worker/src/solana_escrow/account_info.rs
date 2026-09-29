@@ -29,27 +29,13 @@ pub(crate) async fn get_account_info(
     request_id: &str,
     account_b58: &str,
 ) -> Result<Option<serde_json::Value>, EscrowError> {
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": request_id,
-        "method": "getAccountInfo",
-        "params": [account_b58, { "encoding": "base64", "commitment": "confirmed" }]
-    });
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(rpc_url, &init)
-        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
+    let request = super::json_rpc::post_request(
+        rpc_url,
+        request_id,
+        "getAccountInfo",
+        serde_json::json!([account_b58, { "encoding": "base64", "commitment": "confirmed" }]),
+    )
+    .map_err(EscrowError::RpcFailed)?;
 
     let mut response = worker::Fetch::Request(request)
         .send()

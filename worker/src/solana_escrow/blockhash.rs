@@ -74,27 +74,13 @@ async fn fetch_blockhash_with_retry(rpc_url: &str) -> Result<RecentBlockhash, Es
 /// One `getLatestBlockhash` call to the Solana JSON-RPC endpoint.
 async fn fetch_blockhash_from_rpc(rpc_url: &str) -> Result<RecentBlockhash, BlockhashFetchFailure> {
     let fail = |msg: String| BlockhashFetchFailure::Final(EscrowError::RpcFailed(msg));
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-deposit",
-        "method": "getLatestBlockhash",
-        "params": [{ "commitment": "finalized" }]
-    });
-
-    let json_body = serde_json::to_string(&body).map_err(|e| fail(format!("serialize: {e}")))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| fail(format!("headers: {e:?}")))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(rpc_url, &init)
-        .map_err(|e| fail(format!("request: {e:?}")))?;
+    let request = super::json_rpc::post_request(
+        rpc_url,
+        "bethere-deposit",
+        "getLatestBlockhash",
+        serde_json::json!([{ "commitment": "finalized" }]),
+    )
+    .map_err(fail)?;
 
     let mut response = worker::Fetch::Request(request).send().await.map_err(|e| {
         BlockhashFetchFailure::Transient(EscrowError::RpcFailed(format!("fetch: {e:?}")))

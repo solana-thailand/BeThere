@@ -10,31 +10,15 @@ pub(crate) async fn resolve_wallet_from_tx(
     rpc_url: &str,
     tx_signature: &str,
 ) -> Result<String, String> {
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-backfill",
-        "method": "getTransaction",
-        "params": [
+    let request = crate::solana_escrow::json_rpc::post_request(
+        rpc_url,
+        "bethere-backfill",
+        "getTransaction",
+        serde_json::json!([
             tx_signature,
             { "encoding": "json", "maxSupportedTransactionVersion": 0 }
-        ]
-    });
-
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| format!("failed to serialize getTransaction request: {e}"))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set header: {e:?}"))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(rpc_url, &init)
-        .map_err(|e| format!("failed to create RPC request: {e:?}"))?;
+        ]),
+    )?;
 
     let mut response = worker::Fetch::Request(request)
         .send()
