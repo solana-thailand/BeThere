@@ -64,30 +64,57 @@ pub const REASON_REFUND: &str = "refund";
 /// the earlier "no-show forfeits" Model B silently took ฿500 from two people).
 pub const REASON_RETURN: &str = "return";
 
-/// Set-based, idempotent release of every applied credit whose event has ended
-/// and has no `return` yet. Shared by [`release_ended_applies`] and the atomic
-/// apply batch (`db::credit_coverage`), so a spend always sees released credit.
+/// Set-based, idempotent release of applied credit whose event has ended and
+/// has no `return` yet. `$apply` is the predicate that picks the `apply` rows
+/// (alias `a`); the two constants below differ only there.
 ///
 /// `INSERT … SELECT` with an upsert needs the `WHERE` it has here (SQLite parse
 /// rule). An event with no end time, or whose row is gone, stays locked: an
 /// unknown end is not a past end.
-pub(crate) const RELEASE_ENDED_APPLIES_SQL: &str = "INSERT INTO credit_ledger \
-     (email, organization_id, currency, delta, reason, event_id, deposit_id, note) \
-     SELECT a.email, a.organization_id, a.currency, -a.delta, 'return', a.event_id, \
-            'return:' || a.event_id || ':' || a.email, 'event_ended' \
-     FROM credit_ledger a JOIN events e ON e.id = a.event_id \
-     WHERE a.reason = 'apply' AND a.delta < 0 \
-       AND e.event_end_ms > 0 \
-       AND e.event_end_ms <= CAST(strftime('%s', 'now') AS INTEGER) * 1000 \
-       AND NOT EXISTS (SELECT 1 FROM credit_ledger r WHERE r.reason = 'return' \
-                       AND r.event_id = a.event_id AND r.email = a.email) \
-     ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING";
+macro_rules! release_ended_applies_sql {
+    ($($apply:tt)+) => {
+        concat!(
+            "INSERT INTO credit_ledger \
+             (email, organization_id, currency, delta, reason, event_id, deposit_id, note) \
+             SELECT a.email, a.organization_id, a.currency, -a.delta, 'return', a.event_id, \
+                    'return:' || a.event_id || ':' || a.email, 'event_ended' \
+             FROM credit_ledger a JOIN events e ON e.id = a.event_id \
+             WHERE ",
+            $($apply)+,
+            " AND a.delta < 0 \
+               AND e.event_end_ms > 0 \
+               AND e.event_end_ms <= CAST(strftime('%s', 'now') AS INTEGER) * 1000 \
+               AND NOT EXISTS (SELECT 1 FROM credit_ledger r WHERE r.reason = 'return' \
+                               AND r.event_id = a.event_id AND r.email = a.email) \
+             ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING"
+        )
+    };
+}
+
+/// Release across the whole ledger. For the readers that sum over everyone
+/// (liability, the admin roster, the payout queue, the daily reconcile).
+pub(crate) const RELEASE_ENDED_APPLIES_SQL: &str = release_ended_applies_sql!("a.reason = 'apply'");
+
+/// Release one person's applies only; `?1` is a lowercased email. Shared by
+/// [`release_person_ended_applies`] and the atomic apply batch
+/// (`db::credit_coverage`), so a spend always sees that person's released
+/// credit.
+///
+/// `.issues/163`: the global release costs grow with the whole ledger (18,747
+/// SQLite VM steps at 2,900 rows, 187,047 at 29,000). The unary `+` stops the
+/// planner from walking every `apply` row on the `reason` index and makes it
+/// seek `idx_credit_ledger_bal` by email instead: 107 steps at any ledger size,
+/// with or without `ANALYZE`.
+pub(crate) const RELEASE_PERSON_ENDED_APPLIES_SQL: &str = release_ended_applies_sql!(
+    "+a.reason = 'apply' AND a.email IN ",
+    person_emails_of!("?1")
+);
 
 /// Record the `return` for every applied credit whose event has ended.
 ///
-/// Called at the top of every balance read in this module (and in the payout
-/// queue), so no reader can see a balance that still counts an ended event's
-/// lock — the same number the payout reversal removes. Errors propagate: a
+/// Called at the top of every whole-ledger read in this module (and in the
+/// payout queue); per-person reads call [`release_person_ended_applies`]. So no
+/// reader can see a balance that still counts an ended event's lock — the same number the payout reversal removes. Errors propagate: a
 /// reader that silently skipped this would under-report credit, and the
 /// reversal would then pay out less than the attendee is owed.
 pub async fn release_ended_applies(db: &D1Database) -> Result<usize, String> {
@@ -97,6 +124,29 @@ pub async fn release_ended_applies(db: &D1Database) -> Result<usize, String> {
         .await
         .map_err(|e| format!("D1 credit_ledger release_ended_applies: {e:?}"))?;
     Ok(rows_written(&result))
+}
+
+/// [`release_ended_applies`] for one person (every email linked to
+/// `email_lc`). A per-person balance only counts that person's rows, so this is
+/// all it needs; the global readers and the daily reconcile release the rest.
+/// Errors propagate for the same reason as the global release.
+pub async fn release_person_ended_applies(
+    db: &D1Database,
+    email_lc: &str,
+) -> Result<usize, String> {
+    let result = db
+        .prepare(RELEASE_PERSON_ENDED_APPLIES_SQL)
+        .bind_refs(&[D1Type::Text(email_lc)])
+        .map_err(|e| format!("D1 credit_ledger release_person_ended_applies bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 credit_ledger release_person_ended_applies: {e:?}"))?;
+    Ok(result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0))
 }
 
 /// Record a signed credit movement.
@@ -185,8 +235,8 @@ pub async fn try_spend(
     event_id: &str,
     deposit_id: &str,
 ) -> Result<bool, String> {
-    release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
+    release_person_ended_applies(db, &email_lc).await?;
     let currency_lc = currency.to_lowercase();
     let sql = concat!(
         "INSERT INTO credit_ledger \
@@ -352,8 +402,8 @@ pub async fn balances(
     email: &str,
     organization_id: &str,
 ) -> Result<OrgBalances, String> {
-    release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
+    release_person_ended_applies(db, &email_lc).await?;
     let sql = concat!(
         "SELECT currency, COALESCE(SUM(delta), 0) AS bal FROM credit_ledger WHERE email IN ",
         person_emails_of!("?1"),
@@ -404,8 +454,8 @@ pub struct CreditBucket {
 /// to the payout reversal, so the organizer pays the cash out and the attendee
 /// keeps spendable credit. Enumerate instead of guessing (plan 022 §6).
 pub async fn positive_balances(db: &D1Database, email: &str) -> Result<Vec<CreditBucket>, String> {
-    release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
+    release_person_ended_applies(db, &email_lc).await?;
     let sql = concat!(
         "SELECT organization_id, currency, balance FROM (",
         positive_buckets_of!("?1"),
@@ -433,8 +483,9 @@ pub async fn positive_balances(db: &D1Database, email: &str) -> Result<Vec<Credi
 /// this predicate still matches, so a drifted copy would either strand a
 /// request or let one be cleared against credit that is about to come back.
 ///
-/// [`release_ended_applies`] must run before any of them, or an ended event's
-/// credit still reads as locked.
+/// A release (the global one, or [`release_person_ended_applies`] for the
+/// same person) must run before any of them, or an ended event's credit still
+/// reads as locked.
 macro_rules! unreturned_apply_of {
     ($email:literal) => {
         concat!(
@@ -479,8 +530,8 @@ pub struct LockedCredit {
 /// non-empty result here — the case issue #120 §3 is about, where clearing the
 /// payout request reverses nothing and silently drops the request.
 pub async fn locked_applies(db: &D1Database, email: &str) -> Result<Vec<LockedCredit>, String> {
-    release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
+    release_person_ended_applies(db, &email_lc).await?;
     let sql = concat!(
         "SELECT l.event_id AS event_id, \
                 COALESCE(e.name, '') AS event_name, \

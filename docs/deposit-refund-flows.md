@@ -7,8 +7,9 @@
 > attendee's cash the organizer still holds, so it stays theirs until it is paid
 > back. Registering applies (locks) it for that one event. It comes back as a
 > `return` entry at check-in, or when the event ends, whichever is first
-> (`credit_ledger::release_ended_applies`, run before every balance read and
-> inside the atomic apply). The 2026-08-15 "Model B" in
+> (`credit_ledger::release_ended_applies`, or its per-person form
+> `release_person_ended_applies`: run before every balance read and inside the
+> atomic apply). The 2026-08-15 "Model B" in
 > [HANDOVER-2026-08-15-credit-and-security.md](HANDOVER-2026-08-15-credit-and-security.md)
 > forfeited credit on a no-show; that part no longer holds. The USDC/THB deposit
 > and refund mechanics below still hold.
