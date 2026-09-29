@@ -341,7 +341,7 @@ drill-down. Cosmetic but useful for organizers.
 | `worker/src/handlers/checkin.rs:159` | Calls `on_event_checkin` via `wait_until` (non-blocking) |
 | `worker/src/handlers/wallet.rs` | `classify_nfts()` uses the match set for 3×/1× scoring |
 | `frontend-leptos/src/api/campaign.rs` | Typed API client (all endpoints) |
-| `frontend-leptos/src/pages/campaigns_page.rs` | Admin UI (list, create/edit, detail with Events/Progress/Stats tabs) |
+| `frontend-leptos/src/pages/campaigns_page/` | Admin UI (list, create/edit, detail with Events/Progress/Stats tabs) |
 | `frontend-leptos/src/pages/dev_dashboard.rs` | Attendee progress display (⚠️ no claim button — see §7.1) |
 | `frontend-leptos/src/pages/ticket/series_nav.rs` | Public prev/next navigation within a campaign |
 

@@ -650,7 +650,7 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 > **Status**: Partially implemented — campaign handler and frontend page exist.
 
 ### CAMP-1. Campaign Management UX
-**Status**: ✅ Implemented — `worker/src/handlers/campaigns.rs` + `frontend-leptos/src/pages/campaigns_page.rs`
+**Status**: ✅ Implemented — `worker/src/handlers/campaigns.rs` + `frontend-leptos/src/pages/campaigns_page/`
 **Current**: Campaign CRUD endpoints and campaign page for managing multi-event credential programs.
 **Impact**: Enables structured learning paths across multiple events with credit tracking.
 
