@@ -1,6 +1,6 @@
 # 168: sccache works, but only for the same target-dir path, and `incremental = false` costs the edit loop
 
-**Status:** closed (2026-09-29, session `event-checkin-ba`). Decision: keep sccache and correct the misleading comment in `~/dotfiles/cargo/config.toml`. The global `incremental = false` trade-off is the owner's call (see "Open question"). This was D3 of the GOAT-hardening handoff.
+**Status:** closed (2026-09-29, session `event-checkin-ba`). Decision: keep sccache and correct the misleading comment in `~/dotfiles/cargo/config.toml`. The global `incremental = false` stays (owner, 2026-09-29): cacheable builds over a faster edit loop; `serve.sh` already turns incremental on for itself. This was D3 of the GOAT-hardening handoff.
 
 ## Claim checked
 

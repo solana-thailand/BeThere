@@ -57,3 +57,10 @@ changing anything. Do not bulk-reset (compare handover 137 §4.8).
 ## Staging verification (2026-09-17, `9c73d72c`)
 
 Seeded a `Ratchapon.POC@gmail.com` attendee row (mixed case) plus an opted-in profile for the dev-token identity, then called the endpoint: `{"rows_updated":3,"profiles_updated":1}`. The mixed-case row and the profile were both withdrawn. Test row deleted and the pre-existing staging values restored. Prod smoke: unauthenticated call → 401.
+
+## Owner decision (2026-09-29)
+
+Leave the one row as it is. It cannot be told apart from a valid profile
+opt-in without reading the `MarketingUnsubscribed` audit entries, and no
+bulk reset is allowed. Reopen if an audit entry for that address shows a
+past unsubscribe.

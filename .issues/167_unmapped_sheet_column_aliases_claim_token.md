@@ -113,3 +113,9 @@ To reproduce on staging:
 1. Create an event whose sheet has the Luma header row.
 2. Register with a contact handle.
 3. `GET /api/public/ticket/{id}?event_id=…` and read `claim_token`.
+
+## Part B decision (owner, 2026-09-29)
+
+Skip the sheet fallback for events created in BeThere: an empty D1 roster
+reads as empty, never as another event's sheet rows. Legacy sheet-only
+events keep the fallback. Implementation is still open.
