@@ -135,7 +135,7 @@ by the mechanical technique used above:
 
 | File | Lines | Component starts | `view!` starts | Residual after pulling out all non-component code |
 |---|---|---|---|---|
-| `pages/event_form.rs` | 2499 | 358 | 1002 | ~2142 |
+| ~~`pages/event_form.rs`~~ | 2499 | 358 | 1002 | ~2142 — **split 2026-09-29**, see below |
 | `pages/admin.rs` | 2317 | 195 | 929 | ~2123 |
 | `pages/campaigns_page.rs` | 1845 | 214 | 868 | ~1632 |
 | `pages/adventure/page.rs` | 1433 | 26 | 607 | ~1408 |
@@ -146,6 +146,15 @@ by the mechanical technique used above:
 Line counts re-measured 2026-09-04; every one has grown since the 2026-07 measurement (`event_form.rs`
 +208, `admin.rs` +37), so the residuals are floors, not targets. `adventure/tests/playtest.rs` (1052) is a
 test file and is left alone. `quiz_editor/editor.rs` was listed here at 1013 and is now under the line.
+
+**`event_form.rs` done (2026-09-29, 2,778 lines → `pages/event_form/`, largest file `save.rs` 550).**
+One component per section, a shared `FormSection` frame (header, badge, keyboard toggle; it owns its
+collapse signal), a `Copy` `FormCtx` of the shared signals, and `save_event` as a plain fn. Section
+bodies moved verbatim. Verified by a DOM A/B in headless Chrome against the local e2e worker, create
+and edit mode: identical markup except one latent bug the frame fixed (the Capacity header rendered a
+literal `&▼`); click and Enter toggles identical across all 11 sections. `tests/css_class_audit.rs`
+now reads `icon_class="…"` as a class position so the section icons stay audited. The same pattern
+(ctx struct + section components) applies to the rows below.
 
 Closing these requires **extracting real sub-components with props** — a behaviour-affecting refactor that
 changes reactivity boundaries, not a move. The frontend has ~0 native tests (`#[wasm_bindgen_test]` only),

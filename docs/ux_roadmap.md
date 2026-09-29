@@ -555,7 +555,7 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 **Impact**: Celebration moment stays focused.
 
 ### LM-4. Events Page → Extract Form Component (Phase 2A) ✅
-**Status**: ✅ Implemented — `EventFormComponent` extracted, used by EventsPage (`frontend-leptos/src/pages/event_form.rs`)
+**Status**: ✅ Implemented — `EventFormComponent` extracted, used by EventsPage (`frontend-leptos/src/pages/event_form/`)
 **Current**: 2,572 lines, 35 fields, 9 sections.
 **Target**: `<EventForm>` component, EventsPage ≤1024 lines.
 

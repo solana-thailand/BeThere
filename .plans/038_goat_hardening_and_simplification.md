@@ -47,9 +47,10 @@ Wave 1 (`.plans/037`).
   artifact).
   - Locally: 42/42 green, three runs.
   - The axe self-test proves the gate fails on injected violations.
-  - **Open:** commit the Linux baselines from the first CI run's artifact.
-    This machine has no container runtime, so it cannot render Linux
-    baselines.
+  - Done: the Linux baselines from CI run 36525317862 are committed
+    (`141cd7c5`); run 36526674731 on it is fully green. The `staff-*`
+    snapshots are all magenta (the masked video fills the page), so they
+    check nothing yet.
   - Found and fixed along the way: `.issues/172` (the `/api/auth/me` per-IP
     limit) and the muted-text contrast.
   - Owner decision: `.issues/171` (brand CTA fills).
