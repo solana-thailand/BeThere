@@ -168,6 +168,12 @@ Re-measured 2026-09-29 (`fd -e rs`): over 1024 in `frontend-leptos/src` are only
 (1304), `pages/quiz_editor/editor.rs` (1075) and the test file `adventure/tests/playtest.rs` (1052). The
 scanner is demo-critical, so it waits until after the 6–8 Oct freeze.
 
+Backend re-measure, same day: `worker/src/db/events.rs` is **1114 at HEAD** (1125 with the uncommitted F7
+sponsor edits). The "backend queue is empty" note below is stale. Split it after F7 lands; F7 owns the file
+until then. Also done: `worker/src/sheets/mod.rs` (953 lines of logic behind an index, not over the line
+but against the `mod.rs`-is-an-index rule) became `token/gid/columns/attendees/staff.rs`, and `mod.rs` is now 27
+lines (`bae88287`). That is a pure move with re-exports; verified with clippy `-D warnings` and a full workspace test run.
+
 Closing these requires **extracting real sub-components with props** — a behaviour-affecting refactor that
 changes reactivity boundaries, not a move. The frontend has ~0 native tests (`#[wasm_bindgen_test]` only),
 so `-D warnings` clippy is the only automated check; correctness would have to be confirmed in a browser.
