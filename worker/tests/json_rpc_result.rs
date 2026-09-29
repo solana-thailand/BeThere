@@ -43,12 +43,15 @@ fn rpc_readers_do_not_read_result_by_hand() {
     for path in [
         "src/escrow_indexer/poller.rs",
         "src/solana_escrow/account_info.rs",
+        "src/solana_escrow/blockhash.rs",
     ] {
         let source = std::fs::read_to_string(path).expect(path);
-        assert!(
-            !source.contains(r#".get("result")"#),
-            "{path} reads `result` without checking `error`; use json_rpc::rpc_result"
-        );
+        for by_hand in [r#".get("result")"#, r#"["result"]"#] {
+            assert!(
+                !source.contains(by_hand),
+                "{path} reads `result` without checking `error`; use json_rpc::rpc_result"
+            );
+        }
         assert!(
             source.contains("rpc_result"),
             "{path} no longer uses rpc_result"

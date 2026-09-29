@@ -118,7 +118,10 @@ async fn fetch_blockhash_from_rpc(rpc_url: &str) -> Result<RecentBlockhash, Bloc
     let json: serde_json::Value =
         serde_json::from_str(&text).map_err(|e| fail(format!("parse json: {e}")))?;
 
-    let blockhash = json["result"]["value"]["blockhash"]
+    // An RPC error (HTTP 200) keeps the provider's message instead of reading
+    // as "no blockhash".
+    let result = super::json_rpc::rpc_result(&json).map_err(fail)?;
+    let blockhash = result["value"]["blockhash"]
         .as_str()
         .ok_or_else(|| fail("no blockhash in response".to_string()))?;
 
