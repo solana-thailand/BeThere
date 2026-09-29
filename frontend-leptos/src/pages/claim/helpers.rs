@@ -42,6 +42,13 @@ pub(super) fn is_online_participant(participation_type: &str) -> bool {
     lower.contains("online")
 }
 
+/// An in-person attendee who has not been checked in yet: nothing on the
+/// claim page is actionable until they are (.issues/173 C8).
+pub(super) fn awaiting_check_in(checked_in_at: &str, participation_type: &str) -> bool {
+    (checked_in_at.is_empty() || checked_in_at == "N/A")
+        && !is_online_participant(participation_type)
+}
+
 /// The check-in status line, in the attendee's language.
 /// For online attendees without check-in: "Registered".
 /// For checked-in attendees: "Checked in {timestamp}".

@@ -434,6 +434,28 @@ pub fn Claim() -> impl IntoView {
                                     crate::locale::tr(|l| crate::i18n::td_string!(l, claim.soon.nft_detail)).into_any(),
                                 )
                             };
+                            // Before check-in, one line and the badge to unlock; the
+                            // pending card and wallet hint only once checked in
+                            // (.issues/173 C8).
+                            let awaiting = awaiting_check_in(&data.checked_in_at, &data.participation_type);
+                            if awaiting {
+                                return view! {
+                                    <div class="claim-state-full">
+                                        <div class="claim-welcome-card">
+                                            <ParticipantAvatar name=data.name.clone() />
+                                            <h3>{
+                                                let name = escape_html(&data.name);
+                                                t!(i18n, claim.welcome, name)
+                                            }</h3>
+                                            <p class="checked-in-label">
+                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.check_in_to_unlock))}
+                                            </p>
+                                        </div>
+                                        <NftBadgePreview />
+                                    </div>
+                                }
+                                    .into_any();
+                            }
                             view! {
                                 <div class="claim-state-full">
                                     // Attendee welcome
@@ -446,10 +468,9 @@ pub fn Claim() -> impl IntoView {
                                         <p class="checked-in-label">{checked_in_display}</p>
                                     </div>
 
-                                    // NFT badge preview
-                                    <NftBadgePreview />
-
-                                    // Status card — quiz pending or NFT coming soon
+                                    // Status card (the pending state carries the badge
+                                    // message; the separate preview card is only shown
+                                    // before check-in) — quiz pending or NFT coming soon
                                     <div class="claim-nft-soon-card">
                                         {move || view! {
                                             <crate::components::StatusBadge

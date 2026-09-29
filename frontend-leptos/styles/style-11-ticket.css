@@ -300,7 +300,9 @@
     transition:
         background 0.15s ease,
         opacity 0.15s ease;
-    color: #fff;
+    /* Dark text on every fill (.issues/171): white measured 2.15-3.68:1 on
+       the accent/warning/info/success fills; --bg-primary is 4.90-8.38:1. */
+    color: var(--bg-primary);
     background: var(--accent);
 }
 .ticket-action-btn:hover {
@@ -619,10 +621,6 @@ a.ticket-series-card:hover {
 .ticket-action-card--moved-online {
     border-left: 3px solid var(--danger);
     background: var(--danger-bg);
-}
-.ticket-action-card--ready {
-    border-left: 3px solid var(--info);
-    background: var(--info-bg);
 }
 .ticket-action-link {
     display: inline-block;

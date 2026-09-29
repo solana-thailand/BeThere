@@ -55,7 +55,8 @@ Wave 1 (`.plans/037`).
     are re-taken from CI.
   - Found and fixed along the way: `.issues/172` (the `/api/auth/me` per-IP
     limit) and the muted-text contrast.
-  - Owner decision: `.issues/171` (brand CTA fills).
+  - `.issues/171` (brand CTA fills): owner picked dark text on small fills;
+    applied, and the a11y allowlist is empty.
 
 ## P1: cut
 
@@ -85,8 +86,8 @@ Wave 1 (`.plans/037`).
     page's day-aware formatter) and C2 ("Recommended" on the only payment
     option).
   - `/claim` was added to the visual + a11y page list (45 e2e tests).
-  - **Awaiting owner approval:** C3–C5, C7 (LM-2 ticket banners), C8 (LM-3
-    claim trim). C6 folds into P2-b.
+  - C3–C5, C7 (LM-2 ticket banners) and C8 (LM-3 claim trim): owner
+    approved 2026-09-29, applied (see `.issues/173`). C6 folds into P2-b.
 
 ## P2: add
 
@@ -185,6 +186,7 @@ Wave 1 (`.plans/037`).
   - `/jsqr-1.4.0.js` serves br (33,223 B) and identity when asked.
   - **Early Hints is owner-gated:** it is a Cloudflare zone setting, and the
     site is on workers.dev. Unverified whether it is available there.
+    Owner, 2026-09-29: skip until a custom domain.
 - [x] **P3-d:** `--font-size-0..5` and `--size-1..7` clamp() tokens in
   `style-01-core.css` (Utopia-style, 320→1440).
   - Migrated: the event title, section titles, card padding (`pe-card`, 8

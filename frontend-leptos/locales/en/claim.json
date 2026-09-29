@@ -5,6 +5,7 @@
   "welcome": "Welcome, {{ name }}!",
   "registered": "Registered",
   "not_checked_in": "Not yet checked in",
+  "check_in_to_unlock": "Check in at the door to unlock your badge.",
   "checked_in_at": "Checked in {{ time }}",
   "not_found_title": "Claim Not Found",
   "invalid_link": "Invalid claim link — missing token.",

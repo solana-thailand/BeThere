@@ -972,11 +972,12 @@ h3 {
     font-size: 0.8rem;
 }
 
-/* Active nav link in header */
+/* Active nav link in header. Dark text: the label is small, and light text
+   on --accent is 2.69:1; --bg-primary is 5.87:1 (.issues/171). */
 nav a[aria-current="page"],
 nav a.active {
     background: var(--accent);
-    color: var(--text-heading);
+    color: var(--bg-primary);
     border-color: var(--accent);
 }
 

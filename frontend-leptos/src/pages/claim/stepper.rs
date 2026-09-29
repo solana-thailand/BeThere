@@ -25,6 +25,12 @@ pub(super) fn claim_step(state: &ClaimState) -> (usize, usize) {
         ClaimState::Loading => (0, 3),
         // Step 1: Verified (attendee found + checked in)
         ClaimState::NotFound(_) => (0, 3),
+        // Not checked in yet: "Verified ✓" would contradict the card below.
+        ClaimState::NftComingSoon(d)
+            if super::helpers::awaiting_check_in(&d.checked_in_at, &d.participation_type) =>
+        {
+            (0, 3)
+        }
         ClaimState::NftComingSoon(_) => (1, 3),
         // Step 2: Quiz (if required)
         ClaimState::Quiz(_, _) | ClaimState::QuizSubmitted(_, _, _) => (2, 3),

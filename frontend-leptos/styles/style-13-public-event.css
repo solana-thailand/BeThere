@@ -161,17 +161,10 @@
     line-height: 1.4;
 }
 
-/* Auth bar */
-.pe-auth-bar {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background: var(--bg-card);
-    border-radius: var(--radius);
-    padding: 0.6rem 1rem;
-    margin-bottom: 0.75rem;
-    box-shadow: var(--shadow);
+/* "Sign out" under the locked email: sized to its label, not the column. */
+.pe-field-signout {
+    align-self: flex-start;
+    margin-top: 0.25rem;
 }
 
 /* Form elements */

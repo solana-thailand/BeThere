@@ -85,37 +85,6 @@
     line-height: 1.4 !important;
 }
 
-.pe-journey-timeline {
-    display: grid !important;
-    grid-template-columns: repeat(4, 1fr) !important;
-    gap: 12px !important;
-    margin-top: 20px !important;
-    padding: 16px !important;
-    background: rgba(255, 255, 255, 0.02) !important;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    border-radius: 16px !important;
-    text-align: center !important;
-}
-
-.pe-journey-step-num {
-    width: 32px !important;
-    height: 32px !important;
-    border-radius: 50% !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    margin: 0 auto 8px auto !important;
-    font-size: 0.85rem !important;
-    font-weight: 800 !important;
-}
-
-@media (max-width: 600px) {
-    .pe-journey-timeline {
-        grid-template-columns: repeat(2, 1fr) !important;
-        gap: 16px !important;
-    }
-}
-
 /* ==========================================================================
    Social Account Linking Styling (Developer Profile)
    ========================================================================== */
@@ -454,35 +423,4 @@
 }
 @media (prefers-reduced-motion: reduce) {
     .pe-skel { animation: none; }
-}
-
-/* "= FREE" result bar under the 4-step journey. The steps wrap to a 2x2 grid
-   on mobile, so the total sits on its own row instead of inline "+" signs.
-   "= FREE" is one unbreakable unit; the detail wraps under it when narrow. */
-.pe-journey-total {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px 14px;
-    margin-top: 12px;
-    padding: 14px 18px;
-    background: var(--success-bg);
-    border: 1px solid var(--success-border);
-    border-radius: 16px;
-}
-
-.pe-journey-total-sum {
-    white-space: nowrap;
-    font-size: 2rem;
-    font-weight: 900;
-    line-height: 1;
-    letter-spacing: 0.02em;
-    color: var(--success-bright);
-}
-
-.pe-journey-total-detail {
-    flex: 1 1 220px;
-    font-size: 0.8rem;
-    line-height: 1.4;
-    color: var(--text-secondary);
 }

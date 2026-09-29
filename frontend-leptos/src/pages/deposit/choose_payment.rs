@@ -190,10 +190,15 @@ pub fn choose_payment_view(
                                             <div class="dep2-method-card"
                                                 class:dep2-method-card--recommended=!single_card
                                                 on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Thb))>
-                                                <div class="dep2-method-name">"THB"</div>
-                                                <div class="dep2-method-amount">
-                                                    {format!("฿{} THB", thb_amount)}
-                                                </div>
+                                                // With one method the amount hero above already
+                                                // says it; repeating it here was the third time
+                                                // (.issues/173 C3).
+                                                {(!single_card).then(|| view! {
+                                                    <div class="dep2-method-name">"THB"</div>
+                                                    <div class="dep2-method-amount">
+                                                        {format!("฿{} THB", thb_amount)}
+                                                    </div>
+                                                })}
                                                 <div class="dep2-method-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.via_promptpay))}</div>
                                                 <button class="dep2-method-cta"
                                                     on:click=move |ev| {
@@ -213,10 +218,15 @@ pub fn choose_payment_view(
                                         view! {
                                             <div class="dep2-method-card"
                                                 on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Usdc))>
-                                                <div class="dep2-method-name">"USDC"</div>
-                                                <div class="dep2-method-amount">
-                                                    {format!("{} USDC", usdc_formatted)}
-                                                </div>
+                                                // With one method the amount hero above already
+                                                // says it; repeating it here was the third time
+                                                // (.issues/173 C3).
+                                                {(!single_card).then(|| view! {
+                                                    <div class="dep2-method-name">"USDC"</div>
+                                                    <div class="dep2-method-amount">
+                                                        {format!("{} USDC", usdc_formatted)}
+                                                    </div>
+                                                })}
                                                 <div class="dep2-method-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.choose.via_solana))}</div>
                                                 <button class="dep2-method-cta"
                                                     on:click=move |ev| {

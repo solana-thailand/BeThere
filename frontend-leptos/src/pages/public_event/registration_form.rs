@@ -274,6 +274,21 @@ pub fn registration_form(
                                                 readonly
                                                 class="pe-input pe-input--locked"
                                             />
+                                            // The switch-account exit, next to the one place
+                                            // the email is shown (was a separate card,
+                                            // .issues/173 C5).
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline btn-xs pe-field-signout"
+                                                on:click=move |_| {
+                                                    leptos::task::spawn_local(async move {
+                                                        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
+                                                        let _ = window().location().reload();
+                                                    });
+                                                }
+                                            >
+                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.sign_out))}
+                                            </button>
                                         }.into_any()
                                     }}
                                 </div>

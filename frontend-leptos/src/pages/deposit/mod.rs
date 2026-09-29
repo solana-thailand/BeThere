@@ -19,7 +19,6 @@ use leptos_router::hooks::use_params;
 
 use crate::api;
 use crate::components::{self as app_components, Toast};
-use crate::i18n::{t, use_i18n};
 
 use self::types::*;
 
@@ -29,29 +28,7 @@ use self::types::*;
 /// or THB (PromptPay slip upload).
 #[component]
 pub fn Deposit() -> impl IntoView {
-    let i18n = use_i18n();
     let params = use_params::<DepositParams>();
-
-    // Auth state — check if user is signed in (for logout button visibility)
-    let (signed_in_email, set_signed_in_email) = signal(None::<String>);
-    Effect::new(move |_| {
-        leptos::task::spawn_local(async move {
-            let window = web_sys::window().expect("no window");
-            let origin = window
-                .location()
-                .origin()
-                .unwrap_or_else(|_| "http://localhost:8787".to_string());
-            let url = format!("{origin}/api/auth/me");
-            if let Ok(resp) = crate::api::fetch::get(&url, &[]).await
-                && resp.status() == 200
-                && let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
-                && let Some(email) = data["data"]["email"].as_str()
-                && !email.is_empty()
-            {
-                set_signed_in_email.set(Some(email.to_string()));
-            }
-        });
-    });
 
     // Reactive state
     let (state, set_state) = signal(DepositPageState::Loading);
@@ -190,29 +167,6 @@ pub fn Deposit() -> impl IntoView {
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
 
                 <h1 class="claim-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.title))}</h1>
-
-                // Logout button — only visible when signed in
-                {move || match signed_in_email.get() {
-                    Some(email) => view! {
-                        <div class="logout-btn-wrapper">
-                            <span class="dep-note-text">
-                                {t!(i18n, deposit.welcome, email)}
-                            </span>
-                            <button
-                                class="btn btn-outline btn-xs"
-                                on:click=move |_| {
-                                    leptos::task::spawn_local(async move {
-                                        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
-                                        self::js_interop::navigate_to("/");
-                                    });
-                                }
-                            >
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.sign_out))}
-                            </button>
-                        </div>
-                    }.into_any(),
-                    None => ().into_any(),
-                }}
 
                 // Event context header
                 {move || {

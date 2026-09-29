@@ -5,6 +5,7 @@
   "welcome": "ยินดีต้อนรับ {{ name }}!",
   "registered": "ลงทะเบียนแล้ว",
   "not_checked_in": "ยังไม่ได้เช็คอิน",
+  "check_in_to_unlock": "เช็คอินที่หน้างานเพื่อปลดล็อก badge ของคุณ",
   "checked_in_at": "เช็คอินเมื่อ {{ time }}",
   "not_found_title": "ไม่พบสิทธิ์รับ NFT",
   "invalid_link": "ลิงก์รับ NFT ไม่ถูกต้อง — ไม่มีโทเคน",

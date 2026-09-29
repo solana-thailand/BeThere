@@ -30,6 +30,8 @@ extern "C" {
 enum HeroKind {
     CheckedIn,
     PendingApproval,
+    /// A deposit is required and nothing has been paid yet.
+    DepositDue,
     AwaitingDeposit,
     Ready,
 }
@@ -102,11 +104,21 @@ pub fn InPersonView(
 
     let i18n = use_i18n();
 
-    // Determine hero variant
+    // One status, derived once (.issues/173 C7): the hero is the only status
+    // banner. Before this, an unpaid deposit showed "Ready for Check-In" in the
+    // hero, a "being prepared" QR placeholder, the deposit callout and a second
+    // "Ready" card all at once. Same condition as the `DepositActionCard` branch.
+    let deposit_due = deposit_enabled
+        && deposit_info.is_none()
+        && !is_checked_in
+        && !escrow_closed
+        && !deadline_expired;
     let hero_kind = if is_checked_in {
         HeroKind::CheckedIn
     } else if !is_approved {
         HeroKind::PendingApproval
+    } else if deposit_due {
+        HeroKind::DepositDue
     } else if deposit_info.as_ref().is_some_and(|d| !d.verified) {
         HeroKind::AwaitingDeposit
     } else {
@@ -115,12 +127,14 @@ pub fn InPersonView(
     let (hero_variant, hero_icon) = match hero_kind {
         HeroKind::CheckedIn => ("ticket-hero--checked-in", IconName::Check),
         HeroKind::PendingApproval => ("ticket-hero--pending", IconName::Clock),
+        HeroKind::DepositDue => ("ticket-hero--pending", IconName::Coin),
         HeroKind::AwaitingDeposit => ("ticket-hero--pending", IconName::Hourglass),
         HeroKind::Ready => ("ticket-hero--ready", IconName::QrCode),
     };
     let hero_title = move || match hero_kind {
         HeroKind::CheckedIn => t_string!(i18n, ticket.hero.checked_in),
         HeroKind::PendingApproval => t_string!(i18n, ticket.hero.pending_approval),
+        HeroKind::DepositDue => t_string!(i18n, ticket.action.deposit_required),
         HeroKind::AwaitingDeposit => t_string!(i18n, ticket.hero.awaiting_deposit),
         HeroKind::Ready => t_string!(i18n, ticket.hero.ready),
     };
@@ -130,7 +144,17 @@ pub fn InPersonView(
         .filter(|by| !by.is_empty())
         .map(|by| utils::escape_html(&by));
     let hero_subtitle: Option<ViewFn> = match (is_checked_in, check_in_time, check_in_by) {
-        (false, _, _) | (true, None, None) => None,
+        // The descriptions that used to sit in a second status card below.
+        (false, _, _) => match hero_kind {
+            HeroKind::PendingApproval => Some(ViewFn::from(move || {
+                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.pending_desc))
+            })),
+            HeroKind::Ready => Some(ViewFn::from(move || {
+                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.ready_desc))
+            })),
+            _ => None,
+        },
+        (true, None, None) => None,
         (true, time, by) => Some(ViewFn::from(move || {
             let time = time.clone();
             let by = by.clone();
@@ -204,13 +228,16 @@ pub fn InPersonView(
             // ── Calendar links ──
             <CalendarLinks subscribe_url=calendar_subscribe_url.clone() />
 
-            // ── QR Code section ──
-            <QrSection
-                view_data=qr_view_data
-                show_qr=show_qr
-                set_show_qr=set_show_qr
-                set_fullscreen_qr=set_fullscreen_qr
-            />
+            // ── QR Code section ── (not while the deposit is unpaid: its "being
+            // prepared" placeholder would be a second status next to the hero)
+            {(!deposit_due).then(|| view! {
+                <QrSection
+                    view_data=qr_view_data
+                    show_qr=show_qr
+                    set_show_qr=set_show_qr
+                    set_fullscreen_qr=set_fullscreen_qr
+                />
+            })}
 
             // ── Access & Logistics (in-person only) ──
             // Building access / ID exchange / transportation guides.
@@ -447,39 +474,6 @@ pub fn InPersonView(
                 view! { <div></div> }.into_any()
             }}
 
-            // Status badge (only for non-checked-in states — hero already shows checked-in status)
-            {if !is_approved {
-                view! {
-                    <div class="ticket-action-card ticket-action-card--pending">
-                        <div class="ticket-action-icon">
-                            <Icon icon=IconName::Clock class="icon-sm" />
-                        </div>
-                        <div>
-                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.pending_approval))}</div>
-                            <div class="ticket-action-desc">
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.pending_desc))}
-                            </div>
-                        </div>
-                    </div>
-                }.into_any()
-            } else if !is_checked_in && deposit_info.as_ref().is_none_or(|d| d.verified) {
-                // Ready for check-in: approved + no pending deposit
-                view! {
-                    <div class="ticket-action-card ticket-action-card--ready">
-                        <div class="ticket-action-icon">
-                            <Icon icon=IconName::QrCode class="icon-sm" />
-                        </div>
-                        <div>
-                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.ready))}</div>
-                            <div class="ticket-action-desc">
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.ready_desc))}
-                            </div>
-                        </div>
-                    </div>
-                }.into_any()
-            } else {
-                view! { <div></div> }.into_any()
-            }}
         </div>
 
         // 5. Video section
@@ -506,24 +500,21 @@ pub fn InPersonView(
                 <A href="/">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_home))}</A>
                 <A href="/profile">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.nav_profile))}</A>
             </div>
-            {if is_checked_in {
-                view! {
+            // Follows the hero: while approval or a deposit is outstanding the
+            // hero and its card already say so, and "present this ticket" would
+            // contradict them (.issues/173 C7).
+            {match hero_kind {
+                HeroKind::CheckedIn => Some(view! {
                     <p class="ticket-footer-hint">
                         {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_checked_in))}
                     </p>
-                }.into_any()
-            } else if !is_approved {
-                view! {
-                    <p class="ticket-footer-hint">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_pending))}
-                    </p>
-                }.into_any()
-            } else {
-                view! {
+                }),
+                HeroKind::Ready => Some(view! {
                     <p class="ticket-footer-hint">
                         {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_ready))}
                     </p>
-                }.into_any()
+                }),
+                HeroKind::PendingApproval | HeroKind::DepositDue | HeroKind::AwaitingDeposit => None,
             }}
         </div>
     }

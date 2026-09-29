@@ -1,8 +1,4 @@
 /* ===== Deposit misc ===== */
-.dep-note-text {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-}
 .dep-check-svg {
     width: 14px;
     height: 14px;
