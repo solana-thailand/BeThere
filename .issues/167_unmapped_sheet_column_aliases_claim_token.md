@@ -1,6 +1,6 @@
 # 167: A sheet column with no header borrows the standard-layout slot, and on a Luma sheet that slot is claim_token
 
-**Status:** fixed on develop (part A, 2026-09-29, session `event-checkin-5f`). Part B is still open. The staging repro is not done; see "Staging" below. Reported in the 2026-09-29 UI/UX review handoff (Task 1).
+**Status:** deployed to prod `f02143d4` (2026-09-29, `deploy/production/20260929T050434Z`, session `event-checkin-1b`; staging runs the same tree as `bb8ac906`). Was: fixed on develop (part A, 2026-09-29, session `event-checkin-5f`). Part B is still open. The staging repro is not done; see "Staging" below. Reported in the 2026-09-29 UI/UX review handoff (Task 1).
 
 ## What happens
 

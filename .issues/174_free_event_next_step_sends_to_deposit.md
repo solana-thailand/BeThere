@@ -1,6 +1,6 @@
 # 174: A registered attendee of a free event was sent to "Complete Deposit"
 
-**Status:** fixed on develop (2026-09-29, session `event-checkin-ba`). Not deployed. Found while building P2-a of `.plans/038` (the inline ticket on the landing).
+**Status:** deployed to prod `f02143d4` (2026-09-29, `deploy/production/20260929T050434Z`, session `event-checkin-1b`; staging runs the same tree as `bb8ac906`). Was: fixed on develop (2026-09-29, session `event-checkin-ba`). Found while building P2-a of `.plans/038` (the inline ticket on the landing).
 
 ## What happened
 

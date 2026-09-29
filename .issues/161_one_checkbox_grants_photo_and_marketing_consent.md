@@ -1,6 +1,6 @@
 # 161: One registration checkbox also grants photo and marketing consent
 
-**Status:** fixed on develop — `0d230002`, merged via `604cd993` on 2026-09-29 (owner chose plan 028 option A) and on staging `53de706d`. Checked there (session `event-checkin-f6`, headless Chrome, `/e/slipdemo-1790494035` signed in): the form shows three separate boxes (privacy + deposit, photo, marketing email), all unticked. Prod ships with the next owner-gated deploy. Still the owner's call: clearing the marketing consent already recorded (see "Old consent records"). Found by session `event-checkin-af` while correcting `/privacy` for `.issues/158`. Seen alongside: `.issues/166`.
+**Status:** deployed to prod `f02143d4` (2026-09-29, `deploy/production/20260929T050434Z`, session `event-checkin-1b`; staging runs the same tree as `bb8ac906`). Was: fixed on develop — `0d230002`, merged via `604cd993` on 2026-09-29 (owner chose plan 028 option A) and on staging `53de706d`. Checked there (session `event-checkin-f6`, headless Chrome, `/e/slipdemo-1790494035` signed in): the form shows three separate boxes (privacy + deposit, photo, marketing email), all unticked. Prod ships with the next owner-gated deploy. Still the owner's call: clearing the marketing consent already recorded (see "Old consent records"). Found by session `event-checkin-af` while correcting `/privacy` for `.issues/158`. Seen alongside: `.issues/166`.
 
 ## What happens
 

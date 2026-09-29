@@ -1,6 +1,6 @@
 # 175: The public event page has a load-time layout shift of ~0.95 on about half of loads
 
-**Status:** fixed on develop (2026-09-29, session `event-checkin-42`; measured against `wrangler dev`, not yet on prod). Originally measured 2026-09-29 by session `event-checkin-ba`. Found while proving that the P2-d privacy notice adds no shift.
+**Status:** deployed to prod `f02143d4` (2026-09-29, `deploy/production/20260929T050434Z`, session `event-checkin-1b`; staging runs the same tree as `bb8ac906`). Was: fixed on develop (2026-09-29, session `event-checkin-42`; measured against `wrangler dev`, before this deploy). Originally measured 2026-09-29 by session `event-checkin-ba`. Found while proving that the P2-d privacy notice adds no shift.
 
 ## Measurement
 

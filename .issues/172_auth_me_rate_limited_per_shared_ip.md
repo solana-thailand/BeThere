@@ -1,6 +1,6 @@
 # 172: The session check was rate-limited per IP, so a shared Wi-Fi could bounce signed-in attendees to login
 
-**Status:** fixed on develop (2026-09-29, session `event-checkin-ba`). Not deployed. Prod impact is reasoned from the code, not observed: prod logs were not checked.
+**Status:** deployed to prod `f02143d4` (2026-09-29, `deploy/production/20260929T050434Z`, session `event-checkin-1b`; staging runs the same tree as `bb8ac906`). Was: fixed on develop (2026-09-29, session `event-checkin-ba`). Prod impact is reasoned from the code, not observed: prod logs were not checked.
 
 ## What happened
 

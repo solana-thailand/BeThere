@@ -1,6 +1,6 @@
 # 170: Turnstile bot check on the waitlist and on self-registration
 
-**Status:** fixed on develop (2026-09-29, session `event-checkin-ba`). The check is inert until the owner creates the widget and sets both keys (see "Owner steps"). This is P0-2 of the GOAT-hardening handoff (`.plans/038`).
+**Status:** deployed to prod `f02143d4` (2026-09-29, `deploy/production/20260929T050434Z`, session `event-checkin-1b`; staging runs the same tree as `bb8ac906`). Was: fixed on develop (2026-09-29, session `event-checkin-ba`). The check is inert until the owner creates the widget and sets both keys (see "Owner steps"). This is P0-2 of the GOAT-hardening handoff (`.plans/038`).
 
 ## Scope, and why it is not what the handoff said
 
