@@ -13,30 +13,61 @@ use event_checkin_domain::models::auth::{GoogleUserInfo, TokenRequest, TokenResp
 // Generic HTTP helpers
 // ---------------------------------------------------------------------------
 
-/// Perform a GET request with a Bearer token and parse the JSON response.
-pub async fn get_json<T: DeserializeOwned>(url: &str, access_token: &str) -> Result<T, String> {
+/// Send one request and fail on a non-2xx status. Every helper below goes
+/// through here, so the headers, the body and the status check live in one
+/// place.
+async fn send(
+    method: Method,
+    url: &str,
+    body: Option<(&str, String)>,
+    access_token: Option<&str>,
+) -> Result<Response, String> {
     let headers = Headers::new();
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
+    if let Some(token) = access_token {
+        headers
+            .set("Authorization", &format!("Bearer {token}"))
+            .map_err(|e| format!("failed to set auth header: {e:?}"))?;
+    }
 
+    let verb: &str = method.as_ref();
     let mut init = RequestInit::new();
-    init.with_method(Method::Get).with_headers(headers);
+    init.with_method(method.clone());
+    if let Some((content_type, text)) = body {
+        headers
+            .set("Content-Type", content_type)
+            .map_err(|e| format!("failed to set content-type: {e:?}"))?;
+        init.with_body(Some(wasm_bindgen::JsValue::from_str(&text)));
+    }
+    init.with_headers(headers);
 
     let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create GET request to {url}: {e:?}"))?;
+        .map_err(|e| format!("failed to create {verb} request to {url}: {e:?}"))?;
 
     let mut response = Fetch::Request(request)
         .send()
         .await
-        .map_err(|e| format!("GET {url} failed: {e:?}"))?;
+        .map_err(|e| format!("{verb} {url} failed: {e:?}"))?;
 
     check_status(&mut response, url).await?;
+    Ok(response)
+}
 
+/// Parse a response body as JSON; `verb` and `url` only label the error.
+async fn read_json<T: DeserializeOwned>(
+    mut response: Response,
+    verb: &str,
+    url: &str,
+) -> Result<T, String> {
     response
         .json()
         .await
-        .map_err(|e| format!("failed to parse JSON from GET {url}: {e:?}"))
+        .map_err(|e| format!("failed to parse JSON from {verb} {url}: {e:?}"))
+}
+
+/// Perform a GET request with a Bearer token and parse the JSON response.
+pub async fn get_json<T: DeserializeOwned>(url: &str, access_token: &str) -> Result<T, String> {
+    let response = send(Method::Get, url, None, Some(access_token)).await?;
+    read_json(response, "GET", url).await
 }
 
 /// Perform a POST request with form-encoded body and parse the JSON response.
@@ -47,36 +78,12 @@ pub async fn post_form<T: DeserializeOwned>(
     let body = form_urlencoded::Serializer::new(String::new())
         .extend_pairs(form_data.iter().copied())
         .finish();
-
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/x-www-form-urlencoded")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&body)));
-
-    let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create POST request to {url}: {e:?}"))?;
-
-    let mut response = Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("POST {url} failed: {e:?}"))?;
-
-    check_status(&mut response, url).await?;
-
-    response
-        .json()
-        .await
-        .map_err(|e| format!("failed to parse JSON from POST {url}: {e:?}"))
+    let form = Some(("application/x-www-form-urlencoded", body));
+    let response = send(Method::Post, url, form, None).await?;
+    read_json(response, "POST", url).await
 }
 
-/// Send `body` as JSON, with a Bearer token when given, and fail on a non-2xx
-/// status. Every JSON write below goes through here, so the headers, the
-/// body encoding and the status check live in one place.
+/// Send `body` as JSON, with a Bearer token when given.
 async fn send_json(
     method: Method,
     url: &str,
@@ -85,34 +92,8 @@ async fn send_json(
 ) -> Result<Response, String> {
     let json_body =
         serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
-
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-
-    if let Some(token) = access_token {
-        headers
-            .set("Authorization", &format!("Bearer {token}"))
-            .map_err(|e| format!("failed to set auth header: {e:?}"))?;
-    }
-
-    let verb: &str = method.as_ref();
-    let mut init = RequestInit::new();
-    init.with_method(method.clone())
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create {verb} JSON request to {url}: {e:?}"))?;
-
-    let mut response = Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("{verb} JSON {url} failed: {e:?}"))?;
-
-    check_status(&mut response, url).await?;
-    Ok(response)
+    let json = Some(("application/json", json_body));
+    send(method, url, json, access_token).await
 }
 
 /// Perform a POST request with a JSON body and parse the JSON response.
@@ -122,11 +103,8 @@ pub async fn post_json<T: DeserializeOwned>(
     body: &impl Serialize,
     access_token: Option<&str>,
 ) -> Result<T, String> {
-    send_json(Method::Post, url, body, access_token)
-        .await?
-        .json()
-        .await
-        .map_err(|e| format!("failed to parse JSON from POST {url}: {e:?}"))
+    let response = send_json(Method::Post, url, body, access_token).await?;
+    read_json(response, "POST", url).await
 }
 
 /// POST a JSON body with a Bearer token; only the status matters.
