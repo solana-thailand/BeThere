@@ -1429,6 +1429,12 @@ pub fn EventFormComponent(
                         <div class="hint-info event-form-nft-intro">
                             "Shown at the top of the public event page (/e/{{slug}}). Falls back to the NFT badge if not set."
                         </div>
+                        // Nudge (.plans/038 P3-b): what a poster buys on Discover.
+                        <Show when=move || form.get().poster_url.is_empty() fallback=|| ()>
+                            <div class="hint-info event-form-poster-nudge">
+                                "Add a poster: events with one show as a card on Discover instead of a plain row."
+                            </div>
+                        </Show>
                         // Live preview — mirrors the badge preview pattern
                         <div class="event-form-nft-actions">
                             <Show

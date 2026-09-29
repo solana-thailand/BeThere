@@ -56,3 +56,7 @@ INSERT OR REPLACE INTO attendees (
   ('e2e-att-04', 'e2e-free', 'e2e-admin@example.com', 'Somchai Example', 'approved', 'in-person',
    '0190e2e0-0000-7000-8000-000000000004', 'http://localhost:8788/staff/?scan=e2e-att-04',
    'none', 0, 0, '2029-12-03 10:00:00', '2029-12-03 10:00:00', 0, 'pre_event');
+
+-- A poster (inline SVG, no network) so the /discover card layout and the
+-- event hero image are covered by the snapshots (.plans/038 P3-b).
+UPDATE events SET poster_url = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNTAwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZjVjMzkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMzYjFkNmUiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjUwMCIgZmlsbD0idXJsKCNnKSIvPjx0ZXh0IHg9IjMwIiB5PSI0NDAiIGZvbnQtc2l6ZT0iNTYiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmaWxsPSIjZmZmIj5XT1JLU0hPUDwvdGV4dD48L3N2Zz4=' WHERE id = 'e2e-free';

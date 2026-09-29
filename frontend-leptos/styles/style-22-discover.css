@@ -183,3 +183,50 @@
     border: 1px dashed var(--border);
     border-radius: var(--radius);
 }
+
+/* A row with an organizer poster becomes a card (.plans/038 P3-b): the 4:5
+ * poster leads and the date chip sits on its corner, so the chip column
+ * still lines up with the plain rows below. Fixed size, no layout shift. */
+.dv-row.dv-card {
+    position: relative;
+    align-items: stretch;
+}
+
+.dv-card-media {
+    flex-shrink: 0;
+    width: 88px;
+    height: 110px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--bg-tertiary);
+}
+
+.dv-card-poster {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.dv-card .dv-chip {
+    /* Opaque: the poster behind it can be any colour. */
+    background: var(--bg-primary);
+    position: absolute;
+    top: 1.1rem;
+    left: 1.1rem;
+    width: 40px;
+    height: 40px;
+    box-shadow: var(--shadow);
+}
+
+.dv-card .dv-chip-day {
+    font-size: 1rem;
+}
+
+.dv-card .dv-row-body {
+    justify-content: center;
+}
+
+.event-form-poster-nudge {
+    margin-top: 0.5rem;
+}

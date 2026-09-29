@@ -85,6 +85,9 @@ struct Row {
     time_tba: bool,
     location: String,
     image: String,
+    /// The image is the organizer's poster (not the badge fallback): the row
+    /// renders as a card with the poster (.plans/038 P3-b).
+    has_poster: bool,
     /// Right-hand pill: registration status for my events, nothing for public.
     status: Option<String>,
     past: bool,
@@ -132,6 +135,7 @@ pub fn Discover() -> impl IntoView {
                         time_tba: e.time_tba,
                         location: e.location,
                         image: pick_image(&e.poster_url, &e.nft_image_url),
+                        has_poster: !e.poster_url.is_empty(),
                         // Public rows have no registration status, so the
                         // pill is free to flag a postponed event.
                         status: (!e.postponed_note.trim().is_empty())
@@ -186,6 +190,7 @@ pub fn Discover() -> impl IntoView {
                             time_tba: r.time_tba,
                             location: r.location,
                             image: pick_image(&r.poster_url, &r.nft_image_url),
+                            has_poster: !r.poster_url.is_empty(),
                             status: Some(r.status),
                             past: ends < now_ms,
                         },
@@ -279,7 +284,21 @@ fn Section(
                     fallback=move || view! { <p class="dv-empty">{empty}</p> }
                 >
                     <For each=move || rows.get() key=|r| format!("{}|{}", r.title, r.href) let:row>
-                        <a class="dv-row" href=row.href.clone()>
+                        <a class="dv-row" class:dv-card=row.has_poster href=row.href.clone()>
+                            // A poster makes the row a card: the poster leads,
+                            // with the date chip on its corner (.plans/038 P3-b).
+                            {row.has_poster.then(|| view! {
+                                <div class="dv-card-media">
+                                    <img
+                                        class="dv-card-poster"
+                                        src=row.image.clone()
+                                        alt=""
+                                        width="88"
+                                        height="110"
+                                        loading="lazy"
+                                    />
+                                </div>
+                            })}
                             <DateChip ms=row.start_ms past=row.past />
                             <div class="dv-row-body">
                                 <span class="dv-row-title">{row.title.clone()}</span>
@@ -309,7 +328,7 @@ fn Section(
                                 }.into_any(),
                                 None => view! { <div></div> }.into_any(),
                             }}
-                            {match row.image.is_empty() {
+                            {match row.image.is_empty() || row.has_poster {
                                 true => view! { <div></div> }.into_any(),
                                 false => view! {
                                     <img class="dv-thumb" src=row.image.clone() alt="" />

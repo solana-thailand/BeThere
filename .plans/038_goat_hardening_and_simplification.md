@@ -163,7 +163,16 @@ Wave 1 (`.plans/037`).
     footer links `/faq`. 5 dead CSS classes deleted.
   - Checked EN and TH at 390 px (no overflow). `/faq` joins the visual +
     a11y list (51 e2e). +6,246 B br4.
-- [ ] **P3-b:** discover cards.
+- [x] **P3-b:** on /discover, an event with an organizer poster renders as
+  a card.
+  - The 4:5 poster is 88×110 with the date chip opaque on its corner; rows
+    without a poster stay plain. Fixed size and `loading="lazy"`, so no
+    layout shift.
+  - Create-event shows a nudge while the poster is empty. It makes no OG
+    claim: there is no per-event `og:image` today, so the brief's "feeds OG
+    images" is not true yet.
+  - The fixture gives `e2e-free` an inline-SVG poster, so snapshots cover
+    the card. 51/51 e2e.
 - [x] **P3-c:** no change needed. The premise was stale: `js/lazy_assets.js`
   already loads jsQR only when `BarcodeDetector` is missing.
   - Probe: 0 jsQR requests on /, /discover, /e/…, /ticket, /admin and
