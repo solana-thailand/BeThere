@@ -3,6 +3,7 @@
 pub mod deposit_copy;
 pub mod money;
 pub mod poll_policy;
+pub mod poster;
 pub mod promptpay;
 pub mod qr_gen;
 

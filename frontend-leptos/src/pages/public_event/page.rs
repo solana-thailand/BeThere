@@ -571,7 +571,7 @@ fn render_loaded_event(
         }}
 
         // Event hero — prefer marketing poster, fall back to NFT badge image, then Ticket icon.
-        {event_hero(&poster_url, &nft_image_url)}
+        {event_hero(&poster_url, &nft_image_url, &data.slug)}
 
         // Event Name + Tagline
         <div class="pe-name-block">
@@ -901,7 +901,7 @@ fn completed_event_gateway(
     let community_links = data.community_links.clone();
 
     view! {
-        {event_hero(&poster_url, &nft_image_url)}
+        {event_hero(&poster_url, &nft_image_url, &data.slug)}
 
         <div class="pe-name-block">
             <h1 class="pe-name">{name}</h1>
