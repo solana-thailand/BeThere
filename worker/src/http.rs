@@ -74,14 +74,15 @@ pub async fn post_form<T: DeserializeOwned>(
         .map_err(|e| format!("failed to parse JSON from POST {url}: {e:?}"))
 }
 
-/// Perform a POST request with a JSON body and parse the JSON response.
-/// Optionally includes a Bearer token for authenticated requests.
-#[allow(dead_code)]
-pub async fn post_json<T: DeserializeOwned>(
+/// Send `body` as JSON, with a Bearer token when given, and fail on a non-2xx
+/// status. Every JSON write below goes through here, so the headers, the
+/// body encoding and the status check live in one place.
+async fn send_json(
+    method: Method,
     url: &str,
     body: &impl Serialize,
     access_token: Option<&str>,
-) -> Result<T, String> {
+) -> Result<Response, String> {
     let json_body =
         serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
 
@@ -96,58 +97,54 @@ pub async fn post_json<T: DeserializeOwned>(
             .map_err(|e| format!("failed to set auth header: {e:?}"))?;
     }
 
+    let verb: &str = method.as_ref();
     let mut init = RequestInit::new();
-    init.with_method(Method::Post)
+    init.with_method(method.clone())
         .with_headers(headers)
         .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
 
     let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create POST JSON request to {url}: {e:?}"))?;
+        .map_err(|e| format!("failed to create {verb} JSON request to {url}: {e:?}"))?;
 
     let mut response = Fetch::Request(request)
         .send()
         .await
-        .map_err(|e| format!("POST JSON {url} failed: {e:?}"))?;
+        .map_err(|e| format!("{verb} JSON {url} failed: {e:?}"))?;
 
     check_status(&mut response, url).await?;
+    Ok(response)
+}
 
-    response
+/// Perform a POST request with a JSON body and parse the JSON response.
+/// Optionally includes a Bearer token for authenticated requests.
+pub async fn post_json<T: DeserializeOwned>(
+    url: &str,
+    body: &impl Serialize,
+    access_token: Option<&str>,
+) -> Result<T, String> {
+    send_json(Method::Post, url, body, access_token)
+        .await?
         .json()
         .await
         .map_err(|e| format!("failed to parse JSON from POST {url}: {e:?}"))
 }
 
-/// Perform a PUT request with a JSON body and a Bearer token.
-/// Returns the raw response text (Google Sheets PUT doesn't always return JSON).
-#[allow(dead_code)]
-pub async fn put_json(url: &str, body: &impl Serialize, access_token: &str) -> Result<(), String> {
-    let json_body =
-        serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
-
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Put)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create PUT request to {url}: {e:?}"))?;
-
-    let mut response = Fetch::Request(request)
-        .send()
+/// POST a JSON body with a Bearer token; only the status matters.
+pub async fn post_json_status(
+    url: &str,
+    body: &impl Serialize,
+    access_token: &str,
+) -> Result<(), String> {
+    send_json(Method::Post, url, body, Some(access_token))
         .await
-        .map_err(|e| format!("PUT {url} failed: {e:?}"))?;
+        .map(drop)
+}
 
-    check_status(&mut response, url).await?;
-
-    Ok(())
+/// PUT a JSON body with a Bearer token; only the status matters.
+pub async fn put_json(url: &str, body: &impl Serialize, access_token: &str) -> Result<(), String> {
+    send_json(Method::Put, url, body, Some(access_token))
+        .await
+        .map(drop)
 }
 
 // ---------------------------------------------------------------------------
@@ -242,32 +239,7 @@ pub async fn batch_update_sheet(
     if body.data.is_empty() {
         return Ok(());
     }
-    // Google Sheets batchUpdate returns JSON but we just need success/failure
-    let json_body = serde_json::to_string(body)
-        .map_err(|e| format!("failed to serialize batch update: {e}"))?;
-
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create batch update request: {e:?}"))?;
-
-    let mut response = Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("batch update request failed: {e:?}"))?;
-
-    check_status(&mut response, url).await
+    post_json_status(url, body, access_token).await
 }
 
 // ---------------------------------------------------------------------------

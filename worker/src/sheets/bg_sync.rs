@@ -543,65 +543,29 @@ pub async fn write_refund_batch(
     tracing::info!(count = rows.len(), "bg_sync: wrote batch refund");
 }
 
-/// Delete a row from the Sheet.
+/// Delete a row from the Sheet. The work is `write::delete_sheet_row`'s; this
+/// is its detached form, which logs instead of returning the error.
 pub async fn delete_sheet_row(
     state: AppState,
     row_index: usize,
-    _mapping: ColumnMapping,
+    mapping: ColumnMapping,
     sheet_id: String,
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
-    let Some(access_token) = access_token(&state, kv.as_ref(), "delete_sheet_row").await else {
-        return;
-    };
-
-    // Resolve the REAL numeric GID for this tab. The old hardcoded map
-    // ("attendees" => 0) was wrong — Google assigns arbitrary GIDs (e.g.
-    // 104609663), so deleting with sheetId=0 was a silent no-op and the row
-    // never disappeared from the sheet.
-    let gid =
-        match super::resolve_sheet_gid(&state, &sheet_id, &sheet_name, kv.as_ref(), &access_token)
-            .await
-        {
-            Ok(g) => g,
-            Err(e) => {
-                tracing::error!(
-                    sheet_id = %sheet_id,
-                    sheet_name = %sheet_name,
-                    error = %e,
-                    "bg_sync delete_sheet_row: failed to resolve gid"
-                );
-                return;
-            }
-        };
-
-    let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchUpdate");
-
-    // Row indices in the Sheets API are 0-based, but our row_index is 1-based (human-readable).
-    // Subtract 1 for the API call.
-    let api_row = row_index.saturating_sub(1);
-
-    let body = serde_json::json!({
-        "requests": [{
-            "deleteDimension": {
-                "range": {
-                    "sheetId": gid,
-                    "dimension": "ROWS",
-                    "startIndex": api_row,
-                    "endIndex": api_row + 1
-                }
-            }
-        }]
-    });
-
-    if let Err(e) =
-        crate::http::post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await
+    if let Err(e) = super::write::delete_sheet_row(
+        row_index,
+        &mapping,
+        &state,
+        &sheet_id,
+        &sheet_name,
+        kv.as_ref(),
+    )
+    .await
     {
-        tracing::error!(row_index = row_index, error = %e, "bg_sync delete_sheet_row: sheet write failed");
+        tracing::error!(row_index = row_index, error = %e, "bg_sync delete_sheet_row failed");
         return;
     }
 
     tracing::info!(row_index = row_index, "bg_sync: deleted sheet row");
-    invalidate_column_map_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }

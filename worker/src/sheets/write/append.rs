@@ -6,6 +6,7 @@ use event_checkin_domain::models::attendee::{
 };
 use worker::KvStore;
 
+use crate::http::post_json_status;
 use crate::state::AppState;
 
 use crate::sheets::locate::resolve_row;
@@ -226,35 +227,9 @@ pub async fn delete_sheet_row(
         }]
     });
 
-    let headers = worker::Headers::new();
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| format!("failed to serialize batch update: {e}"))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(&url, &init)
-        .map_err(|e| format!("failed to create delete request: {e:?}"))?;
-
-    let mut response = worker::Fetch::Request(request)
-        .send()
+    post_json_status(&url, &body, &access_token)
         .await
-        .map_err(|e| format!("failed to send delete request: {e:?}"))?;
-
-    let status = response.status_code();
-    if !(200..300).contains(&status) {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("sheet row delete failed (HTTP {status}): {body}"));
-    }
+        .map_err(|e| format!("sheet row delete failed: {e}"))?;
 
     tracing::info!(
         row_index = row_index,
@@ -343,35 +318,9 @@ pub async fn clear_sheet_cells_batch(
         "ranges": full_ranges
     });
 
-    let headers = worker::Headers::new();
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| format!("failed to serialize batch clear: {e}"))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(&url, &init)
-        .map_err(|e| format!("failed to create batch clear request: {e:?}"))?;
-
-    let mut response = worker::Fetch::Request(request)
-        .send()
+    post_json_status(&url, &body, &access_token)
         .await
-        .map_err(|e| format!("failed to send batch clear request: {e:?}"))?;
-
-    let status = response.status_code();
-    if !(200..300).contains(&status) {
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("sheet batch clear failed (HTTP {status}): {body}"));
-    }
+        .map_err(|e| format!("sheet batch clear failed: {e}"))?;
 
     tracing::info!(ranges = ?full_ranges, "cleared PII cells in sheet");
     Ok(())
