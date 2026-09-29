@@ -124,6 +124,8 @@ Wave 1 (`.plans/037`).
   - Fixed position and after `<main>`; z-index 70, above the sticky CTA.
   - 20 samples show it adds no layout shift. They also exposed a
     pre-existing ~0.95 CLS on the event page (`.issues/175`).
+    Fixed on develop: max 0.0002 over 20 loads (three %-positioned
+    decorative boxes followed the page height; see the issue).
   - `e2e/privacy-notice.spec.ts` covers visibility, the link, axe, a
     snapshot and dismissal across reloads.
   - Every other spec pre-dismisses it. +2,742 B br4.

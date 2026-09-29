@@ -146,7 +146,9 @@ body {
 .center-page::before {
     content: "";
     position: absolute;
-    top: -10%;
+    /* vh, not %: a % top follows the page height, so the glow moved (a
+       layout shift) whenever loaded content grew the page (.issues/175). */
+    top: -10vh;
     left: 50%;
     transform: translateX(-50%);
     width: 600px;
@@ -182,7 +184,11 @@ body {
 /* The decorative background layer sits behind everything.
    Override the global `.center-page > * { z-index: 1 }` rule. */
 .pe-bg-anim > .pe-bg-layer {
-    position: absolute;
+    /* Fixed, not absolute: the orbs and aurora are sized in % of this box.
+       Anchored to the page they moved when the loaded event replaced the
+       skeleton, a ~0.95 layout shift (.issues/175). The viewport never
+       changes size with the content. */
+    position: fixed;
     inset: 0;
     z-index: 0;
     overflow: hidden;

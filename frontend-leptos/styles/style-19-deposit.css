@@ -414,6 +414,10 @@
     flex-direction: column;
     gap: 0.85rem;
     width: 100%;
+    /* Keep the footer below the fold while loading; the loaded page is
+       taller than the viewport, so the footer then never moves in view
+       (.issues/175). */
+    min-height: 100vh;
 }
 .pe-skel {
     border-radius: 12px;
