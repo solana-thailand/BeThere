@@ -5,6 +5,8 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use worker::D1Database;
 
+use crate::solana_escrow::json_rpc::rpc_result;
+
 use super::{
     EscrowInstruction, IndexSummary, OnChainEvent, POLL_BATCH_SIZE, escrow_program_id, save_cursor,
 };
@@ -103,6 +105,9 @@ pub struct RpcInnerInstructions {
 pub(crate) enum FetchOutcome {
     SkippedFailed,
     SkippedNoEvent,
+    /// The RPC could not return the transaction; counted in `errors`, not as
+    /// "no escrow event".
+    RpcFailed,
     Event(OnChainEvent),
 }
 
@@ -164,7 +169,7 @@ pub async fn poll_escrow_events(
                         error = %e,
                         "failed to fetch transaction"
                     );
-                    (sig_info, FetchOutcome::SkippedNoEvent)
+                    (sig_info, FetchOutcome::RpcFailed)
                 }
             }
         }
@@ -184,6 +189,9 @@ pub async fn poll_escrow_events(
             }
             FetchOutcome::SkippedNoEvent => {
                 summary.skipped_no_event += 1;
+            }
+            FetchOutcome::RpcFailed => {
+                summary.errors += 1;
             }
             FetchOutcome::Event(event) => {
                 match super::store::save_onchain_event(db, event_id, event.clone()).await {
@@ -244,9 +252,7 @@ pub(crate) async fn fetch_signatures_for_address(
     let parsed: serde_json::Value = serde_json::from_str(&response_text)
         .map_err(|e| format!("failed to parse signatures response: {e:?}"))?;
 
-    let result = parsed
-        .get("result")
-        .ok_or_else(|| format!("no result in signatures response: {response_text}"))?;
+    let result = rpc_result(&parsed)?;
 
     // The result can be either an array directly or have a signature_infos field
     let infos: Vec<RpcSignatureInfo> = if result.is_array() {
@@ -290,11 +296,11 @@ pub(crate) async fn fetch_transaction(
     let parsed: serde_json::Value = serde_json::from_str(&response_text)
         .map_err(|e| format!("failed to parse transaction response: {e:?}"))?;
 
-    let result = parsed.get("result");
-
-    match result {
-        None | Some(serde_json::Value::Null) => Ok(None),
-        Some(v) => {
+    // A null result is a transaction the node does not have (yet); an RPC
+    // error is a failed read and must not look like one.
+    match rpc_result(&parsed)? {
+        serde_json::Value::Null => Ok(None),
+        v => {
             let tx: RpcTransactionResult = serde_json::from_value(v.clone())
                 .map_err(|e| format!("failed to parse transaction result: {e:?}"))?;
             Ok(Some(tx))

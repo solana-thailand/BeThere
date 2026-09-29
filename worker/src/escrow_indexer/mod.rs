@@ -226,7 +226,7 @@ pub struct IndexSummary {
     pub skipped_failed: usize,
     /// Number of transactions with no escrow event.
     pub skipped_no_event: usize,
-    /// Number of storage errors.
+    /// Number of storage errors and failed transaction reads.
     pub errors: usize,
 }
 

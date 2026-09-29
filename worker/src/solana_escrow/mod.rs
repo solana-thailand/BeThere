@@ -10,6 +10,7 @@
 pub mod account_info;
 pub(crate) mod blockhash;
 pub(crate) mod crypto;
+pub mod json_rpc;
 pub mod rpc_retry;
 pub(crate) mod tx_builders;
 pub(crate) mod wire;

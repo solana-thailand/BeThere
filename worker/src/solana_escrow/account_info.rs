@@ -4,8 +4,8 @@
 //! lived in `wire.rs` and only one checked the `error` field; the other three
 //! read an RPC error (a missing API key, a rate limit) as "account absent".
 //! For the escrow reset in `handlers/events/update.rs` that meant "PDA closed,
-//! reset allowed". Every caller now goes through [`account_value`], so an RPC
-//! error is always an `Err`.
+//! reset allowed". Every caller now goes through [`account_value`], which reads
+//! the response with [`super::json_rpc::rpc_result`].
 //!
 //! Errors never include the RPC URL: it carries the provider API key.
 
@@ -15,14 +15,7 @@ use super::EscrowError;
 /// account does not exist, `Err` when the RPC answered with an error or with
 /// no `result` at all.
 pub fn account_value(json: serde_json::Value) -> Result<Option<serde_json::Value>, EscrowError> {
-    if let Some(error) = json.get("error") {
-        return Err(EscrowError::RpcFailed(format!("RPC error: {error}")));
-    }
-    let Some(result) = json.get("result") else {
-        return Err(EscrowError::RpcFailed(
-            "RPC response has no result".to_string(),
-        ));
-    };
+    let result = super::json_rpc::rpc_result(&json).map_err(EscrowError::RpcFailed)?;
     match result.get("value") {
         None | Some(serde_json::Value::Null) => Ok(None),
         Some(value) => Ok(Some(value.clone())),
