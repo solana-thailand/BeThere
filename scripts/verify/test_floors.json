@@ -37,6 +37,7 @@
     "event_checkin_frontend src/main.rs": 0,
     "generative_poster tests/generative_poster.rs": 5,
     "i18n_catalog tests/i18n_catalog.rs": 6,
+    "inline_text_colour_tokens tests/inline_text_colour_tokens.rs": 3,
     "listener_cleanup tests/listener_cleanup.rs": 4,
     "mirror_field_types tests/mirror_field_types.rs": 8,
     "profile_link_result tests/profile_link_result.rs": 4,

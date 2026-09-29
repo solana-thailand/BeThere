@@ -156,10 +156,10 @@ pub fn NfcCheckin() -> impl IntoView {
                 </div>
 
                 // Event Title
-                <h2 style="font-size: 1.4rem; font-weight: 800; color: #fff; margin-bottom: 8px;">
+                <h2 style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">
                     {move || format!("Check-In: {}", event_slug())}
                 </h2>
-                <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 28px;">
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 28px;">
                     "Tap your device against the Staff Terminal to sign & verify on-chain."
                 </p>
 
@@ -183,7 +183,7 @@ pub fn NfcCheckin() -> impl IntoView {
                                 <Icon icon=IconName::Flash class="icon-sm" />
                                 "Sign Check-In Transaction →"
                             </button>
-                            <p style="font-size: 0.75rem; color: #64748b; margin-top: 12px;">
+                            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 12px;">
                                 "Nonce: " {nonce_val()}
                             </p>
                         </div>
@@ -206,11 +206,11 @@ pub fn NfcCheckin() -> impl IntoView {
                             <h3 style="font-size: 1.2rem; font-weight: 700; color: #4ade80; margin-bottom: 6px;">
                                 "Check-In Verified!"
                             </h3>
-                            <p style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 14px;">
+                            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 14px;">
                                 "Your attendance has been confirmed on-chain."
                             </p>
                             {move || tx_sig.get().map(|sig| view! {
-                                <div style="font-size: 0.75rem; color: #94a3b8; word-break: break-all; margin-bottom: 14px;">
+                                <div style="font-size: 0.75rem; color: var(--text-muted); word-break: break-all; margin-bottom: 14px;">
                                     "Tx: " <a href={crate::utils::solscan_tx_url(&sig, &crate::utils::get_cluster())} target="_blank" style="color:#38bdf8;">{sig.clone()}</a>
                                 </div>
                             })}

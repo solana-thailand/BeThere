@@ -507,15 +507,15 @@ pub fn DevProfile() -> impl IntoView {
                         // Social handles section
                         <div class="dev-profile-section">
                             <h3 class="dev-profile-section-title">{tr(|l| td_string!(l, profile.social_title))}
-                                <span style="font-size:0.7rem;font-weight:400;color:#94a3b8;margin-left:8px;">{tr(|l| td_string!(l, profile.social_hint))}</span>
+                                <span style="font-size:0.7rem;font-weight:400;color:var(--text-muted);margin-left:8px;">{tr(|l| td_string!(l, profile.social_hint))}</span>
                             </h3>
 
                             // Accounts & sign-in explainer — shown when signed in via a
                             // wallet-only session, the moment this is most confusing.
                             {if is_wallet_identity {
                                 view! {
-                                    <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.8rem;line-height:1.45;color:#cbd5e1;">
-                                        <strong style="color:#fff;">{tr(|l| td_string!(l, profile.accounts_title))}</strong>
+                                    <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.8rem;line-height:1.45;color:var(--text-secondary);">
+                                        <strong style="color:var(--text-primary);">{tr(|l| td_string!(l, profile.accounts_title))}</strong>
                                         {tr(|l| td_string!(l, profile.accounts_body))}
                                     </div>
                                 }.into_any()
@@ -741,7 +741,7 @@ pub fn DevProfile() -> impl IntoView {
                                                 <a href=solscan_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn">
                                                     {shortened} " ↗"
                                                 </a>
-                                                <button type="button" class="dev-profile-social-link-btn" style="color:#94a3b8;border-color:rgba(255,255,255,0.15);"
+                                                <button type="button" class="dev-profile-social-link-btn" style="color:var(--text-muted);border-color:rgba(255,255,255,0.15);"
                                                         on:click=move |_| { let _ = copy_to_clipboard_js(&copy_addr); }>
                                                     {tr(|l| td_string!(l, profile.copy))}
                                                 </button>

@@ -306,7 +306,7 @@ pub(super) fn render_velocity(list: &[AttendeeListItem]) -> impl IntoView + use<
     view! {
         <div style="background: rgba(19, 20, 28, 0.6); border: 1px solid rgba(153, 69, 255, 0.25); border-radius: 14px; padding: 14px 18px; margin: 16px 0; backdrop-filter: blur(12px);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <span style="font-weight: 700; color: #fff; font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
+                <span style="font-weight: 700; color: var(--text-primary); font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
                     <span style="color: #14F195;">"⚡"</span>" All tracks checked in"
                 </span>
                 <span style="font-weight: 800; color: #14F195; font-size: 0.88rem;">

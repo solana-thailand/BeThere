@@ -176,8 +176,8 @@ pub fn registration_form(
                                 </p>
                                 {if wallet_not_linked {
                                     view! {
-                                        <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:0.82rem;line-height:1.45;color:#cbd5e1;text-align:left;">
-                                            <strong style="color:#fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.heads_up))}" "</strong>
+                                        <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:0.82rem;line-height:1.45;color:var(--text-secondary);text-align:left;">
+                                            <strong style="color:var(--text-primary);">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.heads_up))}" "</strong>
                                             {crate::locale::tr(|l| crate::i18n::td_string!(l, event.wallet_not_linked))}
                                         </div>
                                         <button class="pe-submit-btn" on:click=move |_| navigateTo(&continue_url)>

@@ -80,7 +80,7 @@ fn wallet_identity(name: &str) -> AnyView {
                 {hint
                     .map(|h| {
                         view! {
-                            <span style="font-size: 0.75rem; font-weight: 400; color: #94a3b8;">
+                            <span style="font-size: 0.75rem; font-weight: 400; color: var(--text-muted);">
                                 {h}
                             </span>
                         }
@@ -183,7 +183,7 @@ fn wallet_deep_link_row(name: &str, base: &str) -> Option<AnyView> {
 /// Caption introducing the hand-off rows.
 fn deep_link_caption() -> AnyView {
     view! {
-        <p style="margin: 8px 0 0; font-size: 0.8rem; color: #94a3b8; line-height: 1.45;">
+        <p style="margin: 8px 0 0; font-size: 0.8rem; color: var(--text-muted); line-height: 1.45;">
             {t!(use_i18n(), wallet.deep_link_caption)}
         </p>
     }
@@ -202,7 +202,7 @@ fn no_wallet_row(mobile: bool) -> AnyView {
     view! {
         <div
             class="siws-wallet-option"
-            style="cursor: default; color: #94a3b8; font-size: 0.85rem; line-height: 1.5;"
+            style="cursor: default; color: var(--text-muted); font-size: 0.85rem; line-height: 1.5;"
         >
             {msg}
         </div>
@@ -476,12 +476,12 @@ pub fn WalletSignInButton(
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <span inner_html=solana_icon()></span>
-                                <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #fff; letter-spacing: -0.01em;">
+                                <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.01em;">
                                     {crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.modal_title))}
                                 </h3>
                             </div>
                             <button
-                                style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: all 0.15s;"
+                                style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: var(--text-muted); width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: all 0.15s;"
                                 aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, common.close))
                                 on:click=move |_| set_show_modal.set(false)
                             >
@@ -489,7 +489,7 @@ pub fn WalletSignInButton(
                             </button>
                         </div>
 
-                        <p style="color: #94a3b8; font-size: 0.88rem; line-height: 1.5; margin-top: 0; margin-bottom: 24px;">
+                        <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.5; margin-top: 0; margin-bottom: 24px;">
                             {crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.modal_desc))}
                         </p>
 
