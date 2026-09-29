@@ -8,14 +8,14 @@
        with more internal padding and inter-card spacing so content breathes. */
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: var(--radius);
-    padding: 1.5rem;
+    padding: var(--size-5);
     margin-bottom: 1.25rem;
     box-shadow: none;
 }
 
 /* Section title */
 .pe-section-title {
-    font-size: 1.05rem;
+    font-size: var(--font-size-1);
     font-weight: 600;
     color: #fff;
     letter-spacing: -0.01em;
@@ -74,7 +74,7 @@
 }
 
 .pe-name {
-    font-size: 1.7rem;
+    font-size: var(--font-size-4);
     font-weight: 700;
     color: #fff;
     /* Tighter tracking reads as more editorial/intentional at display sizes. */

@@ -374,7 +374,7 @@
 }
 
 .claim-title {
-    font-size: 1.75rem;
+    font-size: var(--font-size-4);
     font-weight: 700;
     color: var(--text-heading);
     margin-bottom: 0.25rem;

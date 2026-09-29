@@ -180,7 +180,15 @@ Wave 1 (`.plans/037`).
   - `/jsqr-1.4.0.js` serves br (33,223 B) and identity when asked.
   - **Early Hints is owner-gated:** it is a Cloudflare zone setting, and the
     site is on workers.dev. Unverified whether it is available there.
-- [ ] **P3-d:** fluid type scale.
+- [x] **P3-d:** `--font-size-0..5` and `--size-1..7` clamp() tokens in
+  `style-01-core.css` (Utopia-style, 320→1440).
+  - Migrated: the event title, section titles, card padding (`pe-card`, 8
+    attendee files), the ticket event name and the claim title. Body and
+    secondary text stay fixed: step 0 would shrink them on phones.
+  - `prefers-reduced-motion` now also turns off smooth scrolling.
+  - Probe at 320/390/768/1024/1440 in EN and TH: no page overflow and no
+    element spill on event, ticket or claim. The h1 scales 24–28 → 35 px.
+  - css_class_audit passes. +517 B br4.
 - [ ] **P3-e:** LINE in-app browser auth. Needs staging and a phone, so it is
   owner-run.
 
