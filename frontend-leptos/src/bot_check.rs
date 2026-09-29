@@ -132,24 +132,34 @@ impl BotCheck {
         }
     }
 
+    /// Runs after an await, so the form that owns this check may be gone: a
+    /// re-render disposes its signals while the config request is in flight
+    /// (the register form writes a signal right after `activate`). Every
+    /// access is a `try_`; a write to a disposed signal panics, and with
+    /// `panic = "abort"` that takes the whole app down.
     async fn apply(self, config: Option<TurnstileConfig>, language: &'static str) {
         let check = self;
-        let (Some(config), Some(slot)) = (config, check.slot.get_untracked()) else {
+        let slot = check.slot.try_get_untracked().flatten();
+        let (Some(config), Some(slot)) = (config, slot) else {
             // Fail open on the client only: the worker still decides. An
             // unreachable config endpoint means a submit that the worker will
             // judge, not a form that can never be sent.
-            check.phase.set(Phase::Off);
+            let _ = check.phase.try_set(Phase::Off);
             return;
         };
         if !config.enabled || config.site_key.is_empty() {
-            check.phase.set(Phase::Off);
+            let _ = check.phase.try_set(Phase::Off);
             return;
         }
-        check.phase.set(Phase::On);
+        if check.phase.try_set(Phase::On).is_some() {
+            return; // disposed
+        }
         let on_token = Closure::<dyn Fn(String)>::new(move |token: String| {
-            check.token.set(Some(token));
+            let _ = check.token.try_set(Some(token));
         });
-        let on_clear = Closure::<dyn Fn()>::new(move || check.token.set(None));
+        let on_clear = Closure::<dyn Fn()>::new(move || {
+            let _ = check.token.try_set(None);
+        });
         let id = render_turnstile(
             slot.into(),
             &config.site_key,
@@ -161,9 +171,9 @@ impl BotCheck {
         // The widget calls these for as long as the page lives.
         on_token.forget();
         on_clear.forget();
-        check
+        let _ = check
             .widget_id
-            .set_value(id.as_string().unwrap_or_default());
+            .try_set_value(id.as_string().unwrap_or_default());
     }
 }
 

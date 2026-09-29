@@ -99,3 +99,16 @@ deleting rows from a shared sheet is the owner's call.
    `TURNSTILE_SITE_KEY` (a var or a secret) for each environment.
 3. On staging with `DEV_MODE` on, the gate stays off. To exercise it there,
    either turn `DEV_MODE` off or use a Google sign-in.
+
+## Follow-up: disposed-signal panic (2026-09-29, session `event-checkin-3e`)
+
+The register form calls `BotCheck::activate()` on render, then writes
+`reg_email`, which re-renders the form while the config request is in
+flight. The answer then landed on the first form's disposed signals:
+`At src/bot_check.rs:137:62, you tried to access a reactive value which was
+defined at src/bot_check.rs:65:19, but it has already been disposed.`
+(`RuntimeError: unreachable` in release, since `panic = "abort"`). It fired
+on every signed-in, not-yet-registered visit, with the check on or off. In a
+control run the page stayed usable (validation still ran), so no broken
+registration was observed. `apply` now uses `try_` accessors and stops when
+the form is gone. Verified: no panic on the release build.
