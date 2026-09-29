@@ -193,6 +193,12 @@ pub fn InPersonView(
 
         // 2. Main card
         <div class="ticket-main-card">
+            // The keepsake stamp (F2): lands once the attendee is checked in.
+            {matches!(hero_kind, HeroKind::CheckedIn).then(|| view! {
+                <div class="ticket-stamp" aria-hidden="true">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.checked_in))}
+                </div>
+            })}
 
             // ── NFT/Claim hero section ──
             {match &nft_hero {
@@ -227,6 +233,9 @@ pub fn InPersonView(
 
             // ── Calendar links ──
             <CalendarLinks subscribe_url=calendar_subscribe_url.clone() />
+
+            // Tear line between the event and the admission part (F2).
+            <div class="ticket-perforation" aria-hidden="true"></div>
 
             // ── QR Code section ── (not while the deposit is unpaid: its "being
             // prepared" placeholder would be a second status next to the hero)

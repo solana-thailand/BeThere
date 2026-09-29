@@ -52,6 +52,14 @@
     --text-heading: #f4f0e4;
     --bg-void: #0b0d1c;
     --border-hover: #343b63;
+    /* Type (F2, "the keepsake ticket"): a display face for headings, with a
+       Thai display face behind it (Bricolage has no Thai glyphs, so Thai text
+       falls through to Anuphan and TH/EN stay one brand), and a mono for
+       codes and asset IDs. Inter stays the body face. Google Fonts serves
+       unicode-range subsets, so a face is only fetched when a glyph needs it. */
+    --font-display: "Bricolage Grotesque", "Anuphan", "Inter", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
     /* Night Edition paper tokens — tickets, badges, stamped receipts */
     --paper: #ede7d6;
     --paper-ink: #1e2447;
