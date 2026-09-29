@@ -13,6 +13,16 @@ use event_checkin_domain::models::auth::{GoogleUserInfo, TokenRequest, TokenResp
 // Generic HTTP helpers
 // ---------------------------------------------------------------------------
 
+/// What a non-2xx error carries besides the status and the URL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ErrorBody {
+    /// The response body, for Google APIs whose errors say what went wrong.
+    Echo,
+    /// Nothing: the caller logs the error and the provider body can carry
+    /// tokens or profile data.
+    Omit,
+}
+
 /// Send one request and fail on a non-2xx status. Every helper below goes
 /// through here, so the headers, the body and the status check live in one
 /// place.
@@ -21,12 +31,19 @@ async fn send(
     url: &str,
     body: Option<(&str, String)>,
     access_token: Option<&str>,
+    extra_headers: &[(&str, &str)],
+    error_body: ErrorBody,
 ) -> Result<Response, String> {
     let headers = Headers::new();
     if let Some(token) = access_token {
         headers
             .set("Authorization", &format!("Bearer {token}"))
             .map_err(|e| format!("failed to set auth header: {e:?}"))?;
+    }
+    for (name, value) in extra_headers {
+        headers
+            .set(name, value)
+            .map_err(|e| format!("failed to set {name} header: {e:?}"))?;
     }
 
     let verb: &str = method.as_ref();
@@ -48,7 +65,7 @@ async fn send(
         .await
         .map_err(|e| format!("{verb} {url} failed: {e:?}"))?;
 
-    check_status(&mut response, url).await?;
+    check_status(&mut response, url, error_body).await?;
     Ok(response)
 }
 
@@ -66,7 +83,15 @@ async fn read_json<T: DeserializeOwned>(
 
 /// Perform a GET request with a Bearer token and parse the JSON response.
 pub async fn get_json<T: DeserializeOwned>(url: &str, access_token: &str) -> Result<T, String> {
-    let response = send(Method::Get, url, None, Some(access_token)).await?;
+    let response = send(
+        Method::Get,
+        url,
+        None,
+        Some(access_token),
+        &[],
+        ErrorBody::Echo,
+    )
+    .await?;
     read_json(response, "GET", url).await
 }
 
@@ -79,7 +104,7 @@ pub async fn post_form<T: DeserializeOwned>(
         .extend_pairs(form_data.iter().copied())
         .finish();
     let form = Some(("application/x-www-form-urlencoded", body));
-    let response = send(Method::Post, url, form, None).await?;
+    let response = send(Method::Post, url, form, None, &[], ErrorBody::Echo).await?;
     read_json(response, "POST", url).await
 }
 
@@ -93,7 +118,7 @@ async fn send_json(
     let json_body =
         serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
     let json = Some(("application/json", json_body));
-    send(method, url, json, access_token).await
+    send(method, url, json, access_token, &[], ErrorBody::Echo).await
 }
 
 /// Perform a POST request with a JSON body and parse the JSON response.
@@ -123,6 +148,71 @@ pub async fn put_json(url: &str, body: &impl Serialize, access_token: &str) -> R
     send_json(Method::Put, url, body, Some(access_token))
         .await
         .map(drop)
+}
+
+// ---------------------------------------------------------------------------
+// Quiet helpers: errors never quote the provider's body
+// ---------------------------------------------------------------------------
+
+/// Parse `text` as JSON. The error names the size, not the content: V8's
+/// `JSON.parse` message quotes the text, and serde's does not.
+fn parse_quiet<T: DeserializeOwned>(text: &str, verb: &str, url: &str) -> Result<T, String> {
+    serde_json::from_str(text).map_err(|e| {
+        format!(
+            "failed to parse JSON from {verb} {url} ({} bytes): {e}",
+            text.len()
+        )
+    })
+}
+
+async fn read_text(mut response: Response, verb: &str, url: &str) -> Result<String, String> {
+    response
+        .text()
+        .await
+        .map_err(|e| format!("failed to read body from {verb} {url}: {e:?}"))
+}
+
+/// GET with a Bearer token and extra headers, and parse the JSON response.
+/// No error quotes the response body.
+pub async fn get_json_quiet<T: DeserializeOwned>(
+    url: &str,
+    access_token: &str,
+    extra_headers: &[(&str, &str)],
+) -> Result<T, String> {
+    let response = send(
+        Method::Get,
+        url,
+        None,
+        Some(access_token),
+        extra_headers,
+        ErrorBody::Omit,
+    )
+    .await?;
+    let text = read_text(response, "GET", url).await?;
+    parse_quiet(&text, "GET", url)
+}
+
+/// POST a JSON body with extra headers, and parse the JSON response.
+/// No error quotes the response body.
+pub async fn post_json_quiet<T: DeserializeOwned>(
+    url: &str,
+    body: &impl Serialize,
+    extra_headers: &[(&str, &str)],
+) -> Result<T, String> {
+    let json_body =
+        serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
+    let json = Some(("application/json", json_body));
+    let response = send(
+        Method::Post,
+        url,
+        json,
+        None,
+        extra_headers,
+        ErrorBody::Omit,
+    )
+    .await?;
+    let text = read_text(response, "POST", url).await?;
+    parse_quiet(&text, "POST", url)
 }
 
 // ---------------------------------------------------------------------------
@@ -224,11 +314,19 @@ pub async fn batch_update_sheet(
 // Error checking
 // ---------------------------------------------------------------------------
 
-/// Check HTTP response status and return an error with the body if non-2xx.
-async fn check_status(response: &mut Response, url: &str) -> Result<(), String> {
+/// Check HTTP response status; a non-2xx error carries the body only when
+/// `error_body` is `Echo`.
+async fn check_status(
+    response: &mut Response,
+    url: &str,
+    error_body: ErrorBody,
+) -> Result<(), String> {
     let status = response.status_code();
     if (200..300).contains(&status) {
         return Ok(());
+    }
+    if error_body == ErrorBody::Omit {
+        return Err(format!("HTTP {status} from {url}"));
     }
 
     let body_text = response
