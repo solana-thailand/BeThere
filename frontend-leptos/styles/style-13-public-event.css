@@ -726,3 +726,10 @@
     color: var(--danger-bright);
     font-weight: 600;
 }
+
+/* Build line in the landing footer (.plans/038 P2-f). */
+.landing-footer-version {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}

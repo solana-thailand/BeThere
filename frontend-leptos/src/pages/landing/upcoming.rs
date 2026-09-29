@@ -38,6 +38,9 @@ struct PublicEventItem {
 #[derive(Clone, Deserialize, Default)]
 struct PublicEventsResponse {
     events: Vec<PublicEventItem>,
+    /// A seeded demo event to show when nothing is live; absent until set.
+    #[serde(default)]
+    sample_event_slug: Option<String>,
 }
 
 /// Event cards the landing shows before "See all".
@@ -48,6 +51,7 @@ const LANDING_EVENT_CARDS: usize = 2;
 pub(super) fn UpcomingEvents() -> impl IntoView {
     let i18n = use_i18n();
     let (events, set_events) = signal(Vec::<PublicEventItem>::new());
+    let (sample_slug, set_sample_slug) = signal(None::<String>);
     let (loaded, set_loaded) = signal(false);
 
     // Fetch events on mount
@@ -69,6 +73,8 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                     {
                         Ok(wrapper) => {
                             if let Some(data) = wrapper.data {
+                                set_sample_slug
+                                    .set(data.sample_event_slug.filter(|s| !s.is_empty()));
                                 set_events.set(data.events);
                             }
                         }
@@ -121,9 +127,18 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                             <div class="landing-sandbox-desc">
                                 {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_desc))}
                             </div>
-                            <a href="#how-it-works" class="btn btn-primary btn-sm landing-sandbox-btn">
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.see_how))}
-                            </a>
+                            {match sample_slug.get() {
+                                Some(slug) => view! {
+                                    <a href=format!("/e/{slug}") class="btn btn-primary btn-sm landing-sandbox-btn">
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.sample_event))}
+                                    </a>
+                                }.into_any(),
+                                None => view! {
+                                    <a href="#how-it-works" class="btn btn-primary btn-sm landing-sandbox-btn">
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.see_how))}
+                                    </a>
+                                }.into_any(),
+                            }}
                         </div>
                         <div class="landing-sandbox-secondary">
                             <a href="#waitlist" class="btn btn-outline btn-sm">

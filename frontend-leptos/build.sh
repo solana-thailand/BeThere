@@ -112,6 +112,10 @@ console.log(`🗜️  ${src}.br: ${raw.length} → ${br.length} bytes (brotli q1
 
 build() {
     echo "🏗️  Building Leptos WASM frontend..."
+    # Short commit for the landing footer's build line (.plans/038 P2-f); the
+    # footer hides the line when this is empty (plain `trunk build`, CI).
+    BETHERE_GIT_SHA="$(git rev-parse --short=7 HEAD 2>/dev/null || true)"
+    export BETHERE_GIT_SHA
     ~/.cargo/bin/trunk build --release
 
     # Trunk only copies JS files directly referenced by #[wasm_bindgen(module = "...")].

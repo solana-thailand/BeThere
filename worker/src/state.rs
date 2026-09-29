@@ -314,6 +314,10 @@ impl AppState {
             telegram_bot_username: get_secret(env, "TELEGRAM_BOT_USERNAME")
                 .or_else(|_| get_var(env, "TELEGRAM_BOT_USERNAME"))
                 .unwrap_or_default(),
+            sample_event_slug: get_var(env, "SAMPLE_EVENT_SLUG")
+                .unwrap_or_default()
+                .trim()
+                .to_string(),
             turnstile_site_key: get_secret(env, "TURNSTILE_SITE_KEY")
                 .or_else(|_| get_var(env, "TURNSTILE_SITE_KEY"))
                 .unwrap_or_default(),

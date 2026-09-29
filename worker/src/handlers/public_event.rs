@@ -97,9 +97,13 @@ pub async fn list_public_events(
         "public events listed (upcoming only)"
     );
 
-    Ok(ApiOk::new(json!({
-        "events": public_events,
-    })))
+    // A seeded demo event for "View a sample event" (.plans/038 P2-f); the
+    // field is absent until SAMPLE_EVENT_SLUG is set.
+    let sample = state.config.sample_event_slug.as_str();
+    Ok(ApiOk::new(match sample.is_empty() {
+        true => json!({ "events": public_events }),
+        false => json!({ "events": public_events, "sample_event_slug": sample }),
+    }))
 }
 
 /// `GET /api/public/event/{slug}`

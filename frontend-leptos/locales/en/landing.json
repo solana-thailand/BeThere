@@ -85,7 +85,8 @@
     "free_entry": "Free entry",
     "poster_alt": "Event poster",
     "badge_alt": "Event badge",
-    "see_all": "See all events →"
+    "see_all": "See all events →",
+    "sample_event": "View a sample event →"
   },
   "reg": {
     "verified": "✓ Verified Passport",

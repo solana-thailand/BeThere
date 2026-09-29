@@ -80,6 +80,9 @@ SHIM
 
 # Environment variables (non-secret config)
 [vars]
+# Slug of a seeded demo event; the landing shows "View a sample event" when
+# no event is live. Empty hides the button (.plans/038 P2-f).
+SAMPLE_EVENT_SLUG = ""
 # Set to 1 only after migration 0030 and verified sender setup (docs/notifications.md).
 NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""

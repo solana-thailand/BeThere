@@ -20,8 +20,9 @@ for (const target of PAGES) {
         fullPage: true,
         animations: "disabled",
         caret: "hide",
-        // Content that is correct but not fixed: the clock and camera state.
-        mask: [page.locator(".dashboard-last-updated, video, canvas")],
+        // Content that is correct but not fixed: the clock, camera state and
+        // the build line (commit hash; absent from CI's plain trunk build).
+        mask: [page.locator(".dashboard-last-updated, video, canvas, .landing-footer-version")],
         maxDiffPixelRatio: 0.01,
       });
     });

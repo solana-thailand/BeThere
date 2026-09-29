@@ -712,6 +712,7 @@ mod tests {
             github_redirect_uri: String::new(),
             telegram_bot_token: String::new(),
             telegram_bot_username: String::new(),
+            sample_event_slug: String::new(),
             turnstile_site_key: String::new(),
             turnstile_secret_key: String::new(),
             slack_webhook_url: String::new(),

@@ -261,6 +261,9 @@ pub struct AppConfig {
     /// Telegram bot username (without `@`) for rendering the Login Widget.
     /// Public value; empty disables the widget (falls back to manual handle input).
     pub telegram_bot_username: String,
+    /// Slug of a seeded demo event for the landing's "View a sample event"
+    /// (.plans/038 P2-f). Public; empty hides the button.
+    pub sample_event_slug: String,
     // ---- Bot check (.issues/170) ----
     /// Cloudflare Turnstile site key. Public; the frontend renders the widget
     /// with it. Empty (or an empty secret) turns the check off.

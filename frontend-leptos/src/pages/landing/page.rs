@@ -293,6 +293,11 @@ pub fn Landing() -> impl IntoView {
                 // Bottom row
                 <div class="landing-footer-bottom">
                     <span class="landing-footer-copy">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.copyright))}</span>
+                    // Which build is live (.plans/038 P2-f): set by build.sh,
+                    // absent from builds that do not know their commit.
+                    {option_env!("BETHERE_GIT_SHA").filter(|sha| !sha.is_empty()).map(|sha| view! {
+                        <span class="landing-footer-version">{format!("v{} · {sha}", env!("CARGO_PKG_VERSION"))}</span>
+                    })}
                     <span class="landing-footer-powered">
                         {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.built_on_solana))}
                         <Icon icon=IconName::Solana />

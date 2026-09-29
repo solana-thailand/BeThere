@@ -140,7 +140,15 @@ Wave 1 (`.plans/037`).
   - Opt-in stays at registration (the per-event context).
   - Checked in the browser (EN and TH), and D1 rows were read back.
     +3,328 B br4.
-- [ ] **P2-f:** sample-event button, and the version + commit in the footer.
+- [x] **P2-f:**
+  - "View a sample event →" in the landing's no-live-events state. It links
+    to `SAMPLE_EVENT_SLUG` (a new `[vars]` entry, empty by default, so the
+    button stays hidden). **Owner:** seed a demo event and set the var; none
+    exists today.
+  - The footer shows "v0.2.0 · <sha>" from `build.sh` (`BETHERE_GIT_SHA`
+    via `option_env!`), hidden when unknown.
+  - Both checked in the browser: sha = HEAD; the button appears only with
+    the var set. +898 B br4.
 
 ## P3
 
