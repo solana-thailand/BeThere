@@ -43,6 +43,13 @@ const FORBIDDEN_FIELDS: &[&str] = &[
     // `renders_field` below accepts any `=`.
     "claim_token",
     "token",
+    // Refund bank details. The blocking `write_bank_info` logged all three
+    // raw under `*_val` names that no entry above matched.
+    "bank_account",
+    "bank_account_val",
+    "bank_account_number",
+    "account_name",
+    "account_name_val",
 ];
 
 fn rust_sources(path: &Path, output: &mut Vec<std::path::PathBuf>) {
@@ -223,6 +230,10 @@ const FORBIDDEN_EXPRESSIONS: &[&str] = &[
     ".phone",
     ".contact_handle",
     ".bank_account_number",
+    "?bank_account",
+    "%bank_account",
+    "?account_name",
+    "%account_name",
     ".first_name",
     ".last_name",
     "{email}",

@@ -61,9 +61,6 @@ pub async fn write_bank_info(
         bank_account_col = ?mapping.column_letter(CK::BankAccount),
         bank_name_col = ?mapping.column_letter(CK::BankName),
         account_name_col = ?mapping.column_letter(CK::AccountName),
-        bank_account_val = ?bank_account,
-        bank_name_val = ?bank_name,
-        account_name_val = ?account_name,
         "wrote bank info to google sheet"
     );
 
