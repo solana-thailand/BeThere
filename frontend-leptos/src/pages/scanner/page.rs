@@ -517,7 +517,10 @@ pub fn Scanner() -> impl IntoView {
                     crate::wallet_error::WalletResult::Error(e) => {
                         components::show_toast(
                             &set_t,
-                            &crate::wallet_error::user_friendly_message(&e),
+                            &crate::wallet_error::user_friendly_message(
+                                &e,
+                                crate::i18n::Locale::en,
+                            ),
                             ToastType::Error,
                         );
                     }
@@ -579,6 +582,7 @@ pub fn Scanner() -> impl IntoView {
                     crate::pages::escrow_init::check_wallet_cluster(&wallet_name, &expected_cluster)
                         .await
                 {
+                    let cluster_err = cluster_err.message(crate::i18n::Locale::en);
                     log::error!("[scanner] cluster mismatch: {cluster_err}");
                     set_state.set(CheckInState::EscrowError {
                         check_in_data,
@@ -625,7 +629,8 @@ pub fn Scanner() -> impl IntoView {
                         );
                     }
                     crate::wallet_error::WalletResult::Error(e) => {
-                        let msg = crate::wallet_error::user_friendly_message(&e);
+                        let msg =
+                            crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en);
                         log::error!(
                             "[scanner] wallet sign+send error: code={:?} msg={}",
                             e.code,

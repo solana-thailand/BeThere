@@ -118,9 +118,21 @@ Owner decisions raised by phase 3:
   page says "badge".
 - [ ] `utils::format_timestamp` (receipt "Date") and
   `deposit::types::format_refund_deadline` (`MM/DD`) are still US-style.
-- [ ] Still English on attendee pages, from shared code: `wallet_error.rs`
+- [x] Still English on attendee pages, from shared code: `wallet_error.rs`
   messages, `components::postponed_banner`, the escrow cluster-mismatch
   toast, and `dev_profile.rs` "Connect Wallet →".
+  - Done: wallet messages and the cluster mismatch come from
+    `locales/*/wallet.json` (`tx_*`, `cluster_mismatch`). Staff pages pass
+    `Locale::en`. The postponed banner and badge use `status.postponed`.
+    Guard: `frontend-leptos/tests/wallet_error_messages.rs`.
+  - Checked on the local e2e worker: a postponed event shows "Postponed" /
+    "เลื่อนจัด" on `/e/{slug}` and on the landing card.
+  - Not done: `dev_profile.rs`. `/profile` is not an attendee path
+    (`locale::is_attendee_path`), so it has no language switch. Translating
+    one button there would do nothing. Making the whole page bilingual is its
+    own item (the profile-page strings in `.plans/038`).
+  - Removed `translate_api_error`, `api_error_message` and
+    `wallet_error_message`: they had no callers, only English text.
 
 ## 3. Admin on mobile (390 px)
 

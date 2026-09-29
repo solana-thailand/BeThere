@@ -50,7 +50,7 @@ pub fn make_connect_wallet(
                     );
                     app_components::show_toast(
                         &set_toast,
-                        &crate::wallet_error::user_friendly_message(&e),
+                        &crate::wallet_error::user_friendly_message(&e, locale),
                         ToastType::Error,
                     );
                 }

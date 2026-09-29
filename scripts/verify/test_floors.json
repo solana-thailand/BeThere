@@ -44,6 +44,7 @@
     "ssot_mirror_audit tests/ssot_mirror_audit.rs": 9,
     "sw_storage_passthrough tests/sw_storage_passthrough.rs": 2,
     "walkin_roster_tab tests/walkin_roster_tab.rs": 4,
+    "wallet_error_messages tests/wallet_error_messages.rs": 4,
     "wire tests/wire.rs": 3,
     "wire_nullability tests/wire_nullability.rs": 4
   },

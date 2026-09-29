@@ -344,7 +344,7 @@ pub fn RolloverActionCard(
                     log::error!("[rollover] wallet connect error: {:?}", e.code);
                     components::show_toast(
                         &set_toast,
-                        &wallet_error::user_friendly_message(&e),
+                        &wallet_error::user_friendly_message(&e, i18n.get_locale_untracked()),
                         ToastType::Error,
                     );
                 }
@@ -496,6 +496,7 @@ pub fn RolloverActionCard(
                                         if let Err(cluster_err) =
                                             crate::pages::escrow_init::check_wallet_cluster(&wn_c, &expected_cluster).await
                                         {
+                                            let cluster_err = cluster_err.message(i18n.get_locale_untracked());
                                             log::error!("[rollover] cluster mismatch: {cluster_err}");
                                             ss.set(RolloverState::Error(RolloverError::Message(cluster_err)));
                                             return;
@@ -519,7 +520,7 @@ pub fn RolloverActionCard(
                                             wallet_error::WalletResult::Error(e) => {
                                                 log::error!("[rollover] sign+send error: {:?}", e.code);
                                                 ss.set(RolloverState::Error(RolloverError::Message(
-                                                    wallet_error::user_friendly_message(&e),
+                                                    wallet_error::user_friendly_message(&e, i18n.get_locale_untracked()),
                                                 )));
                                             }
                                             wallet_error::WalletResult::UnknownFailure => {

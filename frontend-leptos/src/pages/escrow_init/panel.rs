@@ -152,7 +152,7 @@ pub fn EscrowInitPanel(
                                                     log::warn!("[escrow-init] wallet connect error: code={:?} msg={}", e.code, e.raw_message);
                                                     components::show_toast(
                                                         &set_t,
-                                                        &crate::wallet_error::user_friendly_message(&e),
+                                                        &crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en),
                                                         components::ToastType::Error,
                                                     );
                                                 }
@@ -272,6 +272,7 @@ pub fn EscrowInitPanel(
                                                     // SEC-014: Verify wallet cluster matches expected network.
                                                     let expected_cluster = crate::utils::get_cluster();
                                                     if let Err(cluster_err) = check_wallet_cluster(&wn, &expected_cluster).await {
+                                                        let cluster_err = cluster_err.message(crate::i18n::Locale::en);
                                                         log::error!("[escrow-init] cluster mismatch: {cluster_err}");
                                                         set_s.set(EscrowInitState::Error {
                                                             message: cluster_err,
@@ -347,7 +348,7 @@ pub fn EscrowInitPanel(
                                                             );
                                                         }
                                                         crate::wallet_error::WalletResult::Error(e) => {
-                                                            let msg = crate::wallet_error::user_friendly_message(&e);
+                                                            let msg = crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en);
                                                             log::error!("[escrow-init] escrow TX error: code={:?} msg={}", e.code, e.raw_message);
                                                             set_s.set(EscrowInitState::Error {
                                                                 message: msg,
@@ -619,7 +620,7 @@ pub fn EscrowInitPanel(
                                                                 }
                                                             }
                                                             crate::wallet_error::WalletResult::Error(e) => {
-                                                                let msg = crate::wallet_error::user_friendly_message(&e);
+                                                                let msg = crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en);
                                                                 log::error!("[escrow] deactivate TX error: code={:?} msg={}", e.code, e.raw_message);
                                                                 set_s.set(EscrowInitState::Error {
                                                                     message: msg,
@@ -674,7 +675,7 @@ pub fn EscrowInitPanel(
                                                                 crate::wallet_error::WalletResult::Error(e) => {
                                                                     components::show_toast(
                                                                         &set_t2,
-                                                                        &crate::wallet_error::user_friendly_message(&e),
+                                                                        &crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en),
                                                                         components::ToastType::Error,
                                                                     );
                                                                 }
@@ -810,7 +811,7 @@ pub fn EscrowInitPanel(
                                                         }
                                                     }
                                                     crate::wallet_error::WalletResult::Error(e) => {
-                                                        let msg = crate::wallet_error::user_friendly_message(&e);
+                                                        let msg = crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en);
                                                         log::error!("[escrow] close_event TX error: code={:?} msg={}", e.code, e.raw_message);
                                                         set_s.set(EscrowInitState::Error {
                                                             message: msg,

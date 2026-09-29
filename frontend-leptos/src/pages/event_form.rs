@@ -764,6 +764,7 @@ pub fn EventFormComponent(
                                 super::escrow_init::check_wallet_cluster(&wn, &expected_cluster)
                                     .await
                             {
+                                let cluster_err = cluster_err.message(crate::i18n::Locale::en);
                                 log::error!("[event-form] cluster mismatch: {cluster_err}");
                                 components::show_toast(
                                     &set_toast,
@@ -836,7 +837,10 @@ pub fn EventFormComponent(
                                     );
                                 }
                                 crate::wallet_error::WalletResult::Error(e) => {
-                                    let msg = crate::wallet_error::user_friendly_message(&e);
+                                    let msg = crate::wallet_error::user_friendly_message(
+                                        &e,
+                                        crate::i18n::Locale::en,
+                                    );
                                     log::error!(
                                         "[event-form] escrow TX error: code={:?} msg={}",
                                         e.code,
@@ -2381,7 +2385,7 @@ pub fn EventFormComponent(
                                                                     set_wp.set(pk);
                                                                 }
                                                                 crate::wallet_error::WalletResult::Error(e) => {
-                                                                    components::show_toast(&set_t, &crate::wallet_error::user_friendly_message(&e), components::ToastType::Error);
+                                                                    components::show_toast(&set_t, &crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en), components::ToastType::Error);
                                                                 }
                                                                 crate::wallet_error::WalletResult::UnknownFailure => {
                                                                     components::show_toast(&set_t, "Wallet connection failed", components::ToastType::Error);

@@ -2,6 +2,9 @@
 
 use wasm_bindgen::prelude::*;
 
+use crate::i18n::{Locale, td_string};
+use crate::locale::fill;
+
 // ===== Solana Wallet JS Interop =====
 
 #[wasm_bindgen(module = "/js/solana_wallet.js")]
@@ -88,24 +91,47 @@ pub async fn get_wallet_cluster_js(wallet_name: &str) -> Option<String> {
     }
 }
 
+/// SEC-014: the wallet is connected to a different cluster than the app.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClusterMismatch {
+    pub wallet_cluster: String,
+    pub expected: String,
+}
+
+impl ClusterMismatch {
+    /// What to tell the user, in `locale`. Staff pages pass `Locale::en`.
+    pub fn message(&self, locale: Locale) -> String {
+        fill(
+            td_string!(locale, wallet.cluster_mismatch),
+            &[
+                ("wallet_cluster", &self.wallet_cluster),
+                ("expected", &self.expected),
+            ],
+        )
+    }
+}
+
 /// SEC-014: Check if the wallet's cluster matches the expected cluster.
-/// Returns Ok(()) if they match, or Err with a descriptive message.
-pub async fn check_wallet_cluster(wallet_name: &str, expected_cluster: &str) -> Result<(), String> {
+/// A wallet that does not expose its cluster passes (logged).
+pub async fn check_wallet_cluster(
+    wallet_name: &str,
+    expected_cluster: &str,
+) -> Result<(), ClusterMismatch> {
     match get_wallet_cluster_js(wallet_name).await {
+        Some(wallet_cluster) if wallet_cluster == expected_cluster => {
+            log::info!(
+                "[escrow-init] cluster check passed: wallet={wallet_cluster}, expected={expected_cluster}"
+            );
+            Ok(())
+        }
         Some(wallet_cluster) => {
-            if wallet_cluster == expected_cluster {
-                log::info!(
-                    "[escrow-init] cluster check passed: wallet={wallet_cluster}, expected={expected_cluster}"
-                );
-                Ok(())
-            } else {
-                let msg = format!(
-                    "Wallet is on {wallet_cluster} but app expects {expected_cluster}. \
-                     Switch your wallet network to {expected_cluster} and try again."
-                );
-                log::error!("[escrow-init] {msg}");
-                Err(msg)
-            }
+            log::error!(
+                "[escrow-init] cluster mismatch: wallet={wallet_cluster}, expected={expected_cluster}"
+            );
+            Err(ClusterMismatch {
+                wallet_cluster,
+                expected: expected_cluster.to_string(),
+            })
         }
         None => {
             // Cannot detect cluster — allow through with a warning log.

@@ -112,6 +112,19 @@ pub fn tr(text: fn(Locale) -> &'static str) -> Signal<&'static str> {
     Signal::derive(move || text(i18n.get_locale()))
 }
 
+/// Fill `{name}` placeholders in a catalog string.
+///
+/// For catalog keys whose text goes into a `String` (toasts, error states).
+/// `td_string!` can only interpolate `{{ name }}` with the crate-wide
+/// `interpolate_display` option, which generates a builder per key; single
+/// braces are plain text to `leptos_i18n`, so they reach this function as-is.
+pub fn fill(template: &str, args: &[(&str, &str)]) -> String {
+    args.iter()
+        .fold(template.to_string(), |text, (name, value)| {
+            text.replace(&format!("{{{name}}}"), value)
+        })
+}
+
 /// BCP 47 tag for `Intl` date formatting in `locale`.
 ///
 /// EN keeps `en-GB` (day first, named month; `.issues/104`). TH uses `th-TH`,

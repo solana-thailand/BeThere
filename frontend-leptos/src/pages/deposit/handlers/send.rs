@@ -86,6 +86,7 @@ pub fn make_send_deposit(
             )
             .await
             {
+                let cluster_err = cluster_err.message(locale);
                 log::error!("[deposit] cluster mismatch: {cluster_err}");
                 app_components::show_toast(&set_toast, &cluster_err, ToastType::Error);
                 return;
@@ -132,7 +133,7 @@ pub fn make_send_deposit(
                     );
                     app_components::show_toast(
                         &set_toast,
-                        &crate::wallet_error::user_friendly_message(&e),
+                        &crate::wallet_error::user_friendly_message(&e, locale),
                         ToastType::Error,
                     );
                 }

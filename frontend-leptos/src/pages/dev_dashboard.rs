@@ -487,7 +487,7 @@ pub fn DevDashboard() -> impl IntoView {
                         let _ = web_sys::window().map(|w| w.open_with_url(url));
                     } else {
                         set_state.set(DashboardState::Error(
-                            crate::wallet_error::user_friendly_message(&e),
+                            crate::wallet_error::user_friendly_message(&e, crate::i18n::Locale::en),
                         ));
                     }
                 }

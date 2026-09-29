@@ -504,6 +504,11 @@ pub fn LightboxImage(
 
 // ===== Postponed notice (migration 0053) =====
 
+/// "Postponed" in the attendee's language (`status.postponed`).
+fn postponed_label() -> Signal<&'static str> {
+    crate::locale::tr(|l| crate::i18n::td_string!(l, status.postponed))
+}
+
 /// "Postponed" banner for the public event page and the ticket, or nothing
 /// when the organizer has not written a notice (empty = not postponed).
 ///
@@ -520,7 +525,7 @@ pub fn postponed_banner(note: &str) -> AnyView {
         <div class="postponed-banner" role="note">
             <div class="postponed-banner-title">
                 <Icon icon=IconName::Calendar class="icon-sm" />
-                <span>"Postponed"</span>
+                <span>{postponed_label()}</span>
             </div>
             <p class="postponed-banner-body">{note}</p>
         </div>
@@ -533,7 +538,7 @@ pub fn postponed_banner(note: &str) -> AnyView {
 pub fn postponed_badge(note: &str) -> AnyView {
     match note.trim().is_empty() {
         true => ().into_any(),
-        false => view! { <span class="badge badge-warning">"Postponed"</span> }.into_any(),
+        false => view! { <span class="badge badge-warning">{postponed_label()}</span> }.into_any(),
     }
 }
 
