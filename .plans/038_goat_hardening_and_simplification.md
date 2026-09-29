@@ -159,6 +159,12 @@ Wave 1 (`.plans/037`).
 - [ ] **P3-e:** LINE in-app browser auth. Needs staging and a phone, so it is
   owner-run.
 
+## Separate design issues (filed; not in this package)
+
+- `.issues/176`: waitlist queue with email auto-promotion.
+- `.issues/177`: public organizer profiles and attribution.
+- `.issues/178`: short booking display code. P2-a is QR-only.
+
 ## Found along the way
 
 - `.issues/169`: `size_budget_guards` is red on develop, because the
