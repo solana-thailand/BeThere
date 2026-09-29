@@ -119,3 +119,11 @@ To reproduce on staging:
 Skip the sheet fallback for events created in BeThere: an empty D1 roster
 reads as empty, never as another event's sheet rows. Legacy sheet-only
 events keep the fallback. Implementation is still open.
+
+Plan: D1 has been the authoritative attendee store since `fa0dca12`
+(2026-08-12, "make D1 attendee write authoritative + fail-closed"). For an
+event whose `created_at` is on or after that date, an empty D1 roster is the
+truth, and the sheet fallback can only return another event's rows. Gate the
+fallback in `sheets::get_attendees_inner` on that, as an explicit option, so
+`handlers/events/sync.rs` (which exists to read the sheet) keeps reading it.
+Test with two events sharing one sheet (compare `.issues/153`).
