@@ -62,6 +62,7 @@ the Linux baselines were re-taken.
   deposit promises (`utils::deposit_copy`) untouched.
 - [ ] `Nº 00123` ticket number: waits for the short-code column
   (`.issues/178`); the brief forbids deriving it from IDs.
+  **Blocked (2026-09-29, `event-checkin-1a`):** `.issues/178` is design-only (owner decision), and the column is a `worker/` migration (peer `event-checkin-16`).
 - Verified at 390×844 EN + TH; a11y allowlist still empty. CI after push:
   only the 2 re-taken ticket baselines failed, as designed.
 
@@ -76,7 +77,9 @@ the Linux baselines were re-taken.
 - [ ] OG image: not done. Social cards need PNG, and SVG→PNG in the Worker
   does not fit the free-plan CPU cap (`free-plan-cpu-cap-is-binding`).
   Options: a build-time/offline render per event, or a paid plan.
+  **Blocked (2026-09-29, `event-checkin-1a`):** owner picks the option (paid plan is a cost call; per-event render needs a pipeline decision).
 
 ## Remaining
 
 - [ ] **F5** LINE in-app browser login on staging — owner phone test.
+  **Blocked (2026-09-29, `event-checkin-1a`):** owner, on a real phone with LINE (same gate as plan 038 P3-e).
