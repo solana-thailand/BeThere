@@ -46,12 +46,37 @@ named files; verify every frontend change at 390×844.
 - Size: attendee first load 1,212,047 B br4 (+401 B vs baseline), staff
   shell 1,990,631 B (+2,397 B). Both gates green.
 
+F1 was pushed 2026-09-29 (owner go in session); CI green at `9de1cfa0` after
+the Linux baselines were re-taken.
+
+## F2 — the keepsake ticket (`295a2a5a`, `d093a803`, pushed)
+
+- [x] Fonts: `--font-display` (Bricolage Grotesque → Anuphan for Thai glyphs)
+  on ticket/claim headings, `--font-mono` (JetBrains Mono) for asset IDs.
+  Google Fonts, already in the CSP; Anuphan confirmed loading on TH pages.
+- [x] Ticket: "Checked In" stamp (scale 2→1, −8°, spring), perforated tear
+  line with notches clipped into the card edge, ~3% feTurbulence grain.
+- [x] Claim: the success mark flips from a `--paper` card back; confetti is
+  one ~1.2 s burst, skipped under `prefers-reduced-motion`.
+- [x] Thai voice: 16 strings on landing/event/ticket/claim, copy only; the
+  deposit promises (`utils::deposit_copy`) untouched.
+- [ ] `Nº 00123` ticket number: waits for the short-code column
+  (`.issues/178`); the brief forbids deriving it from IDs.
+- Verified at 390×844 EN + TH; a11y allowlist still empty. CI after push:
+  only the 2 re-taken ticket baselines failed, as designed.
+
+## F4 — generative posters
+
+- [x] `src/utils/poster.rs`: a risograph-style SVG seeded by FNV-1a of the
+  slug (paper ground, 2–3 brand inks multiplied off-register, grain), as a
+  `data:` URL. Tests: `tests/generative_poster.rs` (determinism, variety,
+  palette-only colours, URL-safe, < 4 KB).
+- [x] Event hero third tier (no poster, no badge) and /discover thumbnails
+  for rows with no image of their own.
+- [ ] OG image: not done. Social cards need PNG, and SVG→PNG in the Worker
+  does not fit the free-plan CPU cap (`free-plan-cpu-cap-is-binding`).
+  Options: a build-time/offline render per event, or a paid plan.
+
 ## Remaining
 
-- [ ] **F2** art pass, ticket + claim first (display + Thai display + mono
-  fonts, CHECKED IN stamp, perforation, `Nº` number, paper grain, claim
-  reveal, Thai copy voice). Land before 6 Oct only if clean.
-- [ ] **F4** generative SVG posters from the event slug (no-poster hero, OG
-  image, discover thumbnail).
 - [ ] **F5** LINE in-app browser login on staging — owner phone test.
-- [ ] Owner: push; then commit the Linux baselines CI writes.
