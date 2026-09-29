@@ -69,16 +69,33 @@ async fn send(
     Ok(response)
 }
 
-/// Parse a response body as JSON; `verb` and `url` only label the error.
+/// Parse `text` as JSON. The error names the size, not the content: V8's
+/// `JSON.parse` message quotes the text, and serde's does not.
+fn parse_quiet<T: DeserializeOwned>(text: &str, verb: &str, url: &str) -> Result<T, String> {
+    serde_json::from_str(text).map_err(|e| {
+        format!(
+            "failed to parse JSON from {verb} {url} ({} bytes): {e}",
+            text.len()
+        )
+    })
+}
+
+async fn read_text(mut response: Response, verb: &str, url: &str) -> Result<String, String> {
+    response
+        .text()
+        .await
+        .map_err(|e| format!("failed to read body from {verb} {url}: {e:?}"))
+}
+
+/// Parse a response body as JSON; `verb` and `url` only label the error,
+/// which never quotes the body.
 async fn read_json<T: DeserializeOwned>(
-    mut response: Response,
+    response: Response,
     verb: &str,
     url: &str,
 ) -> Result<T, String> {
-    response
-        .json()
-        .await
-        .map_err(|e| format!("failed to parse JSON from {verb} {url}: {e:?}"))
+    let text = read_text(response, verb, url).await?;
+    parse_quiet(&text, verb, url)
 }
 
 /// Perform a GET request with a Bearer token and parse the JSON response.
@@ -151,26 +168,8 @@ pub async fn put_json(url: &str, body: &impl Serialize, access_token: &str) -> R
 }
 
 // ---------------------------------------------------------------------------
-// Quiet helpers: errors never quote the provider's body
+// Quiet helpers: a bad status never quotes the provider's body
 // ---------------------------------------------------------------------------
-
-/// Parse `text` as JSON. The error names the size, not the content: V8's
-/// `JSON.parse` message quotes the text, and serde's does not.
-fn parse_quiet<T: DeserializeOwned>(text: &str, verb: &str, url: &str) -> Result<T, String> {
-    serde_json::from_str(text).map_err(|e| {
-        format!(
-            "failed to parse JSON from {verb} {url} ({} bytes): {e}",
-            text.len()
-        )
-    })
-}
-
-async fn read_text(mut response: Response, verb: &str, url: &str) -> Result<String, String> {
-    response
-        .text()
-        .await
-        .map_err(|e| format!("failed to read body from {verb} {url}: {e:?}"))
-}
 
 /// GET with a Bearer token and extra headers, and parse the JSON response.
 /// No error quotes the response body.
@@ -188,8 +187,7 @@ pub async fn get_json_quiet<T: DeserializeOwned>(
         ErrorBody::Omit,
     )
     .await?;
-    let text = read_text(response, "GET", url).await?;
-    parse_quiet(&text, "GET", url)
+    read_json(response, "GET", url).await
 }
 
 /// POST a JSON body with extra headers, and parse the JSON response.
@@ -211,8 +209,7 @@ pub async fn post_json_quiet<T: DeserializeOwned>(
         ErrorBody::Omit,
     )
     .await?;
-    let text = read_text(response, "POST", url).await?;
-    parse_quiet(&text, "POST", url)
+    read_json(response, "POST", url).await
 }
 
 // ---------------------------------------------------------------------------
@@ -233,10 +230,12 @@ pub async fn exchange_oauth_code(token_request: &TokenRequest) -> Result<TokenRe
 }
 
 /// Fetch the authenticated user's profile from Google's userinfo endpoint.
+/// Quiet: the body carries the user's email, and the login path logs errors.
 pub async fn fetch_user_info(access_token: &str) -> Result<GoogleUserInfo, String> {
-    get_json(
+    get_json_quiet(
         "https://www.googleapis.com/oauth2/v2/userinfo",
         access_token,
+        &[],
     )
     .await
 }
