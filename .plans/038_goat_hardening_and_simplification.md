@@ -100,9 +100,21 @@ Wave 1 (`.plans/037`).
     Deposit") and an unnamed scanner `<select>` (surfaced by the second
     fixture event).
   - The short display code still needs its own issue (not filed yet).
-- [ ] **P2-b:** event page meta rows.
-- [ ] **P2-c:** TH/EN toggle. Wave 1 already ships `LanguageSwitch` on
-  attendee routes. Verify placement and the 390 px overflow only.
+- [x] **P2-b:** labelled When / Where / Format / Capacity rows in the event
+  details card.
+  - When names the viewer's zone ("(GMT+7)"; a London viewer sees "5:00 AM
+    (GMT+0)").
+  - Where links to the organizer's map URL, else a Maps search of the
+    venue.
+  - Capacity replaces the big card, with "เต็มแล้ว" when full, and is hidden
+    once the event ended.
+  - The inline-styled format pill is gone; `capacity_indicator.rs` and 8
+    dead CSS classes are deleted.
+  - +2,009 B br4. Checked in EN, TH, full and London in headless Chrome.
+- [x] **P2-c:** TH/EN toggle. Wave 1's `LanguageSwitch` bar is at the top
+  right of every attendee page in this session's 390 px captures. The pick
+  persists under `bethere.lang`, and every probe reported
+  `scrollWidth <= innerWidth`. No change needed.
 - [ ] **P2-d:** cookie/privacy notice.
 - [ ] **P2-e:** `consent_marketing` self-serve.
 - [ ] **P2-f:** sample-event button, and the version + commit in the footer.

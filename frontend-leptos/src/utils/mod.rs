@@ -394,6 +394,29 @@ pub fn format_event_datetime(ms: i64) -> String {
         .unwrap_or_default()
 }
 
+/// The viewer's timezone at `ms`, short form (`GMT+7`), for labelling event
+/// times: they render in the viewer's local zone, which a visitor abroad
+/// cannot otherwise tell (.plans/038 P2-b). Empty when `Intl` has no name.
+pub fn local_tz_label(ms: i64) -> String {
+    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+    d.set_time(ms as f64);
+    let opts = js_sys::Object::new();
+    let _ = js_sys::Reflect::set(&opts, &"timeZoneName".into(), &"short".into());
+    let formatter = js_sys::Intl::DateTimeFormat::new(&js_sys::Array::of1(&"en-GB".into()), &opts);
+    formatter
+        .format_to_parts(&d)
+        .iter()
+        .find(|part| {
+            js_sys::Reflect::get(part, &"type".into())
+                .ok()
+                .and_then(|t| t.as_string())
+                .is_some_and(|t| t == "timeZoneName")
+        })
+        .and_then(|part| js_sys::Reflect::get(&part, &"value".into()).ok())
+        .and_then(|value| value.as_string())
+        .unwrap_or_default()
+}
+
 /// Split an instant into the day number and a short uppercase month —
 /// `("27", "SEPT")` — for the date chip on `/discover`.
 ///

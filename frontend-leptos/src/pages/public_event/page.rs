@@ -1,4 +1,3 @@
-use super::capacity_indicator::capacity_indicator;
 use super::deposit_section::deposit_section;
 use super::details_card::details_card;
 use super::event_hero::event_hero;
@@ -524,7 +523,6 @@ fn render_loaded_event(
     let online_available = data.online_available;
     let in_person_remaining = data.in_person_remaining;
     let online_remaining = data.online_remaining;
-    let in_person_capacity = data.in_person_capacity;
 
     // Registration form signals
     let (reg_name, set_reg_name) = signal(String::new());
@@ -645,9 +643,6 @@ fn render_loaded_event(
 
         // Deposit Info Section
         {deposit_section(&data)}
-
-        // Capacity indicator
-        {capacity_indicator(in_person_capacity, online_remaining, in_person_remaining)}
 
         // Signed-in indicator + logout
         {move || {
