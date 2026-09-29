@@ -246,8 +246,9 @@ Owner decisions raised by phase 3:
     palette in `claim/widgets.rs`; the status greens/reds in `nfc_checkin.rs`
     (`#4ade80`, `#f87171`) that have `--success`/`--danger` equivalents of a
     different shade. Moving them changes the look, so it needs an owner nod.
-  - Noticed, not changed: the "Tap NDEF / Web Wallet" badge on
-    `/checkin/nfc` renders a tofu box before its label (a missing glyph).
+  - Checked, not a bug: the box before "Tap NDEF / Web Wallet" on
+    `/checkin/nfc` is `IconName::Phone` (the Feather smartphone outline) at
+    `icon-xs`, not a missing glyph.
 
 ## 6. Accessibility
 
