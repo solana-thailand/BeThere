@@ -94,7 +94,10 @@ owner decision.
     deletes the issue file.
   - Needs an owner OK before purging the existing closed files, since it
     changes where the team looks for history.
-- [~] **Pinned golden vectors.** Part done 2026-09-24:
+  - **Skipped 2026-09-29 (session `event-checkin-4e`):** owner decision
+    pending. It also moves files in `.issues/`, which peer
+    `event-checkin-16` is working in.
+- [x] **Pinned golden vectors.** Done 2026-09-29 (consumers below). Part done 2026-09-24:
   `domain/tests/fixtures/golden_vectors.json` pins USDC string/float → atomic
   (issue 146), the on-chain event id (now `domain::onchain`) and escrow /
   deposit PDAs + vault ATAs for three event ids (two need bump 254). The PDA
@@ -127,7 +130,26 @@ owner decision.
   both; each signature is 32 bytes. The HMAC itself is WebCrypto's and cannot
   run natively, so it is not pinned here. Mutant: a reordered JWT header
   (`typ` before `alg`) → 1 red.
-  **Left:** the escrow-crate / flow-harness consumers. Original scope: one `domain` fixture of
+  **Escrow-crate and flow-harness consumers, done 2026-09-29** (session
+  `event-checkin-4e`). Both `include_str!` the same domain fixture:
+  - `bethere-escrow/src/tests/golden_vectors.rs` (3 tests, runs in the CI
+    `quasar test` job): `crate::ID` equals the fixture program id; escrow and
+    deposit PDAs + bumps derived from the program's own
+    `EventEscrow::seeds(..).as_slices()` / `AttendeeDeposit::seeds(..)`, not a
+    test-side transcription; the generated client's instruction data equals
+    all 11 `escrow_ix_data` hex cases. Adds `serde_json` as a dev-dep (already
+    in the lockfile). Mutants: a `b"depositx"` seed in `state.rs` → PDA test
+    red; swapped `create_event` `event_end`/`refund_deadline` → ix test red.
+  - `flow-harness/tests/golden_vectors.rs` (3 tests, floored):
+    `ESCROW_PROGRAM_ID`, `derive_on_chain_event_id` (now `pub`) on all three
+    `on_chain_event_id` cases, and `StagingContext`'s escrow/deposit PDAs,
+    bumps and vault ATA. Mutants: a changed FNV prime and a `b"escrox"` seed
+    → 2 of 3 red.
+  - Not pinned: the escrow crate has no ATA derivation (no
+    `spl-associated-token-account` dep), so the vault is asserted by the
+    worker and flow-harness only. The flow-harness does no THB/USDC rounding
+    or JWT work, so those vectors have no consumer there.
+  Original scope: one `domain` fixture of
   (input → expected bytes) for:
   - escrow PDA derivation and instruction-data encoding;
   - JWT signing;
@@ -215,6 +237,9 @@ owner decision.
     `CACHE_VERSION` change on every rebuild, and the worker wasm hash
     changes; that is a few bytes of noise.
   - [ ] Commit on the branch (owner, pending); merge after RTM #6.
+    Still owner-gated as of 2026-09-29 (session `event-checkin-4e`): it
+    changes every build, and the 6–8 Oct demo freeze argues for merging
+    after the take.
 
   **Version check, 2026-09-24.**
   - Latest stable is 1.98.1 (`rustup check`). CI's `toolchain: stable` resolves to it.
@@ -234,6 +259,8 @@ owner decision.
   - 1.96 stopped passing `--allow-undefined` on wasm. The local wasm32 clippy builds on 1.98.1 pass; a full `worker-build` on 1.98.1 has not been run.
 
 ## 4. Owner decisions (product)
+
+All four still await the owner (checked 2026-09-29, session `event-checkin-4e`).
 
 - [ ] **Verifiable lucky draw**, from `katgpt-device-verify` fair_roll: commit,
   then reveal with a Solana blockhash, re-runnable in the browser. About 1.5 d.
