@@ -93,5 +93,9 @@
     "policy_prefix": "For full details on how we handle your data, see our ",
     "policy_link": "Privacy Policy",
     "policy_suffix": "."
-  }
+  },
+  "notice_label": "Privacy notice",
+  "notice_body": "BeThere uses one sign-in cookie and cookie-free page analytics. No tracking cookies.",
+  "notice_link": "Privacy policy →",
+  "notice_ok": "OK"
 }

@@ -360,3 +360,37 @@
     min-height: 65px;
     margin: 12px 0;
 }
+
+/* First-visit privacy notice (.plans/038 P2-d). Fixed, so it never shifts
+   the page; above the event page's sticky CTA until dismissed. */
+.privacy-notice {
+    position: fixed;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    /* Above the event page's sticky CTA (z-index 60, later in the DOM). */
+    z-index: 70;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    max-width: 40rem;
+    margin: 0 auto;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.privacy-notice-text {
+    flex: 1;
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.privacy-notice-ok {
+    flex-shrink: 0;
+    min-height: 44px;
+}

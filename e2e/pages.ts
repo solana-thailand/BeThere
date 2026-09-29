@@ -49,6 +49,9 @@ const FIXED_NOW = new Date("2030-01-01T03:00:00Z");
 export async function openPage(page: Page, context: BrowserContext, target: AppPage, baseURL: string) {
   await page.route(/static\.cloudflareinsights\.com/, route => route.abort());
   await page.clock.setFixedTime(FIXED_NOW);
+  // The first-visit privacy notice has its own test (privacy-notice.spec.ts);
+  // everywhere else it would sit over every snapshot.
+  await page.addInitScript(() => localStorage.setItem("bethere.privacy_notice", "1"));
   if (target.authed) {
     await context.addCookies([{ name: "event_checkin_token", value: "dev-token", url: baseURL }]);
     await page.addInitScript(() => localStorage.setItem("event_checkin_token", "dev-token"));

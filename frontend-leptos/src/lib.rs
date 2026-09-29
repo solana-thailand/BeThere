@@ -7,6 +7,7 @@ pub mod components;
 pub mod icons;
 pub mod locale;
 pub mod pages;
+pub mod privacy_notice;
 pub mod utils;
 pub mod wallet;
 pub mod wallet_error;
@@ -144,6 +145,9 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/events/:id/pr-pack") view=ProtectedPrPack />
                 </Routes>
             </main>
+            // After <main>, so it is painted last and never sits between the
+            // language bar and the page (.plans/038 P2-d).
+            <privacy_notice::AttendeePrivacyNotice />
         </Router>
         </i18n::I18nContextProvider>
     }

@@ -115,7 +115,18 @@ Wave 1 (`.plans/037`).
   right of every attendee page in this session's 390 px captures. The pick
   persists under `bethere.lang`, and every probe reported
   `scrollWidth <= innerWidth`. No change needed.
-- [ ] **P2-d:** cookie/privacy notice.
+- [x] **P2-d:** first-visit privacy notice on attendee pages.
+  - Copy follows `docs/pdpa_ropa.md`: one sign-in cookie, cookie-free
+    analytics, no tracking cookies. It is a notice, not a consent prompt,
+    because nothing is optional.
+  - Links to /privacy. The dismissal persists under
+    `bethere.privacy_notice`.
+  - Fixed position and after `<main>`; z-index 70, above the sticky CTA.
+  - 20 samples show it adds no layout shift. They also exposed a
+    pre-existing ~0.95 CLS on the event page (`.issues/175`).
+  - `e2e/privacy-notice.spec.ts` covers visibility, the link, axe, a
+    snapshot and dismissal across reloads.
+  - Every other spec pre-dismisses it. +2,742 B br4.
 - [ ] **P2-e:** `consent_marketing` self-serve.
 - [ ] **P2-f:** sample-event button, and the version + commit in the footer.
 
