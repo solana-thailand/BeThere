@@ -200,6 +200,10 @@ Wave 1 (`.plans/037`).
 - [ ] **P3-e:** LINE in-app browser auth. Needs staging and a phone, so it is
   owner-run.
   **Blocked:** owner; it needs a real phone with LINE.
+  **Owner question (2026-09-30, `event-checkin-aa`):** "can you open a
+  staging event link inside LINE on your phone, sign in with Google, and
+  report whether you land on the ticket (or the error text)?" The same run
+  closes `.plans/039` F5.
 
 ## Separate design issues (filed; not in this package)
 
@@ -222,6 +226,13 @@ Wave 1 (`.plans/037`).
   three empty `<div>` `Show` fallbacks each added a 1.5rem flex gap. Tiles
   now start at 167 px (was 476) at 390 px and 124 px (was 172) at 1280 px;
   checked at 390/720/721/1280 with no horizontal overflow; Playwright 51/51.
+- The staff shell is past its warn line on `develop` (2026-09-30, session
+  `event-checkin-aa`, `develop` `04ab57b5`): 1,997,238 B br4, 95.23% of the
+  2 MiB budget, +9,004 B over its 2026-09-29 baseline (warn line 1,887,436
+  B). The attendee shell is 57.94%. The gate still passes. The budget
+  script's own advice applies: only the scanner is opened at the door, so
+  the scanner is the split candidate. Not started: it touches demo-facing
+  scanner code before the freeze.
 - The ticket page with a pending deposit shows "Ready for Check-In", then
   "Deposit Required", then "Verifying", all at once. This is input for P1-2
   (LM-2).

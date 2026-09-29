@@ -74,6 +74,10 @@ can't come are moved to online and refunded later.
 - [ ] 2. Attendees answer on their own ticket page ("can't come" switches
   them to online and lists them for a refund).
   **Blocked:** owner; option 2 was not chosen, so it is a product decision.
+  **Owner question (2026-09-30, `event-checkin-aa`):** "should attendees of a
+  postponed event be able to answer "can't come" on their own ticket page,
+  which switches them to online and puts them on the refund list, or does
+  option 2 stay unchosen?"
 - [x] A failed D1 dual-write on event save (`sync_event_to_d1`) should reach
   the admin who saved, not only a log line (`.issues/152`, "Not done").
   Done on develop 2026-09-26 as a response `warnings` entry and warning toast,

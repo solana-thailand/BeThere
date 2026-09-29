@@ -261,6 +261,8 @@ owner decision.
 
 Each item below is a product decision: **blocked on the owner** (checked 2026-09-29, sessions `event-checkin-4e`, `event-checkin-8c`).
 
+**Rechecked 2026-09-30 (session `event-checkin-aa`):** no gate moved. Every open item in §3 and §4 waits on the owner question written under it, and `/tmp/ec-pin` is still uncommitted at `83241bd9`. The pin commit's question is "may `feature/030-toolchain-pin` be committed now (it edits `worker/deploy.sh`, `frontend-leptos/build.sh`, CI and `CLAUDE.md`) and merged after the remap and build-stamp branches, after the 8 Oct take?"
+
 - [ ] **Verifiable lucky draw**, from `katgpt-device-verify` fair_roll: commit,
   then reveal with a Solana blockhash, re-runnable in the browser. About 1.5 d.
   **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "does any event run a lucky draw that attendees need to audit?"

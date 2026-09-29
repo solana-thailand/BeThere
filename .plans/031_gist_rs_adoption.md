@@ -92,7 +92,7 @@ reflex-site has no license, so its code is a pattern only.
 - [ ] `--remap-path-prefix` for `$HOME` and the rustup/cargo roots in both wasm
   builds, then make the leak scan blocking. Measure the brotli delta and open
   the staging page.
-  **Built on branch `feature/031-remap-path-prefix` (`132d82be`, 2026-09-28,
+  **Built on branch `feature/031-remap-path-prefix` (`132d82be`, rebased to `9c13c05e` on 2026-09-30; 2026-09-28,
   session `event-checkin-82`), not merged** (same RTM #6 hold as plan 028 §5,
   since it changes shipped bytes).
   **Blocked (2026-09-29, `event-checkin-8c`):** open only on its merge sub-step below (owner go, demo freeze).
@@ -111,8 +111,27 @@ reflex-site has no license, so its code is a pattern only.
     whenever RUSTFLAGS was set, which includes CI's `-D warnings`. So CI built
     and size-measured the serial backend while local deploys shipped fiat. The
     cfg now lives in the build command, and the config file is gone.
+  - [x] Rebased onto `develop` `04ab57b5` (2026-09-30, session
+    `event-checkin-aa`): now `9c13c05e` (was `132d82be`, 139 commits behind,
+    and `git merge-tree` showed 3 conflicts). Resolutions:
+    - `build.sh`: both trunk builds (staff shell, then attendee) take the
+      remap, computed once;
+    - CI: `develop`'s `bash build.sh` step stays, so CI gets the remap
+      through `build.sh`; the frontend leak scan stays blocking;
+    - `wrangler.toml`: remap plus fiat cfg, without `CARGO_BUILD_JOBS=1`,
+      which `develop` dropped on purpose (`0e1c6fae`).
+    Checked on the rebased tree: `wasm_rustflags.sh` and `wasm_leak_scan.sh`
+    self-tests, ShellCheck gate, and CI YAML parse all pass; a real
+    `build.sh` build gives a clean leak scan over both shells' wasm (9 files;
+    `develop`'s build has path hits). Size A/B, same session and target dir,
+    br4 first load: attendee 1,215,099 → 1,215,306 B (+207), staff
+    1,997,238 → 1,999,364 B (+2,126). The raw wasm shrinks (−2,313 / −2,797
+    B) and so does br11 (−14 / −272 B); only brotli q4 packs the remapped
+    strings worse. Both gates pass. The staff shell is past the warn line on
+    `develop` too (95.23%), not because of this branch (`.plans/038`).
   - [ ] Merge after RTM #6, then open the staging page (owner-gated deploy).
     **Blocked (2026-09-29, `event-checkin-8c`):** owner go for the merge + staging deploy; after the 6–8 Oct freeze.
+    **Owner question:** "may `feature/031-remap-path-prefix` (`9c13c05e`) merge into `develop` after the 8 Oct take and go to staging, at +2.1 KB br4 on the staff shell?"
 - [ ] Toolchain pin (`.plans/030` §3): declare `components` and `targets`.
   **Built on branch `feature/030-toolchain-pin` (2026-09-28, session
   `event-checkin-00`), not committed or merged** (RTM #6 hold). Details and
@@ -143,6 +162,7 @@ reflex-site has no license, so its code is a pattern only.
     until the first deploy that carries this change.
   - [ ] Merge after RTM #6; the first deploy then shows the stamp on prod.
     **Blocked:** owner go + prod deploy; edits `worker/` (peer `event-checkin-16`); after the 6–8 Oct freeze.
+    **Rechecked 2026-09-30 (`event-checkin-aa`):** `git merge-tree` against `develop` `04ab57b5` is clean, so no rebase is needed yet. The peer clause is stale (`event-checkin-16` is gone). **Owner question:** "may `feature/031-health-build-stamp` merge after the remap branch, after the 8 Oct take?"
 
 ### reflex, after 12 Oct (research only)
 
@@ -176,6 +196,8 @@ items are dated after 12 Oct.
 - [ ] Parity-before-use in the lucky-draw spec (`.plans/030` §4): the browser
   replays pinned server outputs bit-exactly before showing its own re-run.
   **Blocked:** owner; depends on the lucky-draw product decision in `.plans/030` §4.
+  **Owner question:** the same as `.plans/030` §4, "does any event run a lucky draw that attendees need to audit?" A yes opens this item with the draw.
 - [ ] Whether to keep `dev_mode` and the Solana readiness block public on
   `/api/health` (`.issues/147`, "Not in scope").
   **Blocked:** owner: security/product decision.
+  **Owner question:** "should unauthenticated `/api/health` keep returning `dev_mode` and the Solana readiness block, or should they move behind staff auth and leave the public body as status only?"

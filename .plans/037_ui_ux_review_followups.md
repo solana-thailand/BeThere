@@ -24,9 +24,27 @@ groups and a backlog.
 - [ ] Staging repro. The fix is not on staging and this session may not
   deploy, so this waits for the next staging deploy (owner).
   **Blocked (2026-09-29, `event-checkin-8c`):** the fix is now on staging (`bb8ac906`) and prod, but the repro needs a sheet with the Luma header shared with staging, which staging lacks (owner), and it would append rows to that sheet.
+  **Owner question (2026-09-30, `event-checkin-aa`):** "may we share a sheet
+  with the Luma header row with the staging service account, knowing the
+  repro appends a registration row to it?"
 - [ ] Part B of `.issues/167`: the dedup falls back to a shared sheet across
   events. Needs a product decision.
   **Blocked:** the owner decided on 2026-09-29 (`.issues/167`), but the implementation is in `worker/`, peer `event-checkin-16`'s area.
+  - [x] Built 2026-09-30 (session `event-checkin-aa`), on branch
+    `feature/167-empty-roster` (`16de5c3c`, off `develop` `04ab57b5`; the
+    peer gate was stale, since `event-checkin-16` is gone). An event created
+    on or after `fa0dca12` (2026-08-11T18:59:34Z, D1 attendee writes made
+    authoritative) reads an empty D1 roster as empty; older events keep the
+    sheet fallback. Every per-event roster read passes
+    `EmptyRoster::for_event`; the organizer's sheet sync forces `ReadSheet`.
+    Guard `worker/tests/empty_roster_policy.rs` (4, floored); two mutants
+    turn it red. Workspace clippy, 79 worker binaries and 104 Python tests
+    are green. Details are in `.issues/167`.
+  - [ ] Merge and a staging run with two events sharing one sheet.
+    **Owner questions:** "may `feature/167-empty-roster` merge into
+    `develop` before RTM #6 (4 Oct), or after the 8 Oct take?" and "did prod
+    first get `fa0dca12` later than 12 Aug? If so, on what date? The cutoff
+    constant moves to it."
 
 ## 2. EN + TH for attendee pages
 
@@ -115,6 +133,9 @@ Owner decisions raised by phase 3:
   wrong against the Act (erasure is usually s.33, contract basis s.24(3)).
   EN and TH both carry them as written. Needs legal review.
   **Blocked:** owner; waiting on legal review.
+  **Owner question (2026-09-30, `event-checkin-aa`):** "has the legal review
+  of the PDPA section numbers (s.37, s.29, s.38 vs. s.33 and s.24(3)) come
+  back, and with which numbers?"
 - [x] **Kept (2026-09-29):** it renders only in `usdc_payment.rs`, the escrow
   path where an unclaimed deposit is really lost.
   Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
@@ -232,7 +253,7 @@ Owner decisions raised by phase 3:
   stylesheet and needs a per-file visual diff. Held 2026-09-29 (session
   `event-checkin-4e`): it moves layout on every demo-facing page one week
   before the 6–8 Oct freeze; start it after the take.
-  **Blocked:** the 6–8 Oct demo freeze; start after the take.
+  **Blocked:** the 6–8 Oct demo freeze; start after the take. No owner question; it is dated.
 - [x] Remaining hardcoded colours in other Rust files (2026-09-29, session
   `event-checkin-4e`). 20 inline text colours in 6 files now use tokens:
   `#94a3b8`/`#64748b` → `--text-muted`, `#cbd5e1` → `--text-secondary`,

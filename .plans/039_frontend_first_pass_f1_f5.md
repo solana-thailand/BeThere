@@ -63,6 +63,10 @@ the Linux baselines were re-taken.
 - [ ] `Nº 00123` ticket number: waits for the short-code column
   (`.issues/178`); the brief forbids deriving it from IDs.
   **Blocked (2026-09-29, `event-checkin-1a`):** `.issues/178` is design-only (owner decision), and the column is a `worker/` migration (peer `event-checkin-16`).
+  **Owner question (2026-09-30, `event-checkin-aa`; the peer clause is
+  stale):** "do you approve `.issues/178` as written: a random 6-character
+  per-event `display_code` column, a staff-only lookup, and a backfill
+  migration, landing after the 8 Oct take?"
 - Verified at 390×844 EN + TH; a11y allowlist still empty. CI after push:
   only the 2 re-taken ticket baselines failed, as designed.
 
@@ -78,8 +82,12 @@ the Linux baselines were re-taken.
   does not fit the free-plan CPU cap (`free-plan-cpu-cap-is-binding`).
   Options: a build-time/offline render per event, or a paid plan.
   **Blocked (2026-09-29, `event-checkin-1a`):** owner picks the option (paid plan is a cost call; per-event render needs a pipeline decision).
+  **Owner question (2026-09-30, `event-checkin-aa`):** "for OG images, a paid
+  Workers plan (render SVG→PNG in the Worker), or a PNG rendered per event
+  offline and uploaded to R2 on save?"
 
 ## Remaining
 
 - [ ] **F5** LINE in-app browser login on staging — owner phone test.
   **Blocked (2026-09-29, `event-checkin-1a`):** owner, on a real phone with LINE (same gate as plan 038 P3-e).
+  **Owner question:** the one in `.plans/038` P3-e; one phone run closes both.

@@ -1,6 +1,6 @@
 # 167: A sheet column with no header borrows the standard-layout slot, and on a Luma sheet that slot is claim_token
 
-**Status:** deployed to prod `f02143d4` (2026-09-29, `deploy/production/20260929T050434Z`, session `event-checkin-1b`; staging runs the same tree as `bb8ac906`). Was: fixed on develop (part A, 2026-09-29, session `event-checkin-5f`). Part B is still open. The staging repro is not done; see "Staging" below. Reported in the 2026-09-29 UI/UX review handoff (Task 1).
+**Status:** deployed to prod `f02143d4` (2026-09-29, `deploy/production/20260929T050434Z`, session `event-checkin-1b`; staging runs the same tree as `bb8ac906`). Was: fixed on develop (part A, 2026-09-29, session `event-checkin-5f`). Part B is built on the unmerged branch `feature/167-empty-roster` (`16de5c3c`, 2026-09-30, session `event-checkin-aa`); see "Part B built". The staging repro is not done; see "Staging" below. Reported in the 2026-09-29 UI/UX review handoff (Task 1).
 
 ## What happens
 
@@ -127,3 +127,35 @@ truth, and the sheet fallback can only return another event's rows. Gate the
 fallback in `sheets::get_attendees_inner` on that, as an explicit option, so
 `handlers/events/sync.rs` (which exists to read the sheet) keeps reading it.
 Test with two events sharing one sheet (compare `.issues/153`).
+
+## Part B built (branch `feature/167-empty-roster`, not merged)
+
+2026-09-30, session `event-checkin-aa`, commit `16de5c3c` off `develop`
+`04ab57b5`.
+
+- `worker/src/empty_roster.rs`: `EmptyRoster::{ReadSheet, Trust}`.
+  `for_event` gives `Trust` when the event's `created_at` (RFC 3339) is on or
+  after `D1_AUTHORITATIVE_SINCE` = `2026-08-11T18:59:34Z`, the commit time of
+  `fa0dca12`. An empty or unparseable timestamp is a legacy event and keeps
+  the sheet.
+- `get_attendees_for_event` takes the policy. On `Trust`, an empty D1 roster
+  returns empty before any sheet request. A D1 **error** still falls back
+  to the sheet, as before (the decision covered the empty case).
+- Callers: registration dedup, my-registration (both paths), the admin
+  attendee list, QR generation and adventure pass `for_event`. The
+  organizer's sheet sync (`handlers/events/sync.rs`) passes `ReadSheet`.
+- Guard `worker/tests/empty_roster_policy.rs` (4 tests): the cutoff both
+  ways (including `+07:00`), legacy and garbage timestamps, every handler
+  call site uses the event policy (only the sync forces `ReadSheet`), and the
+  trusted return comes before the sheet read. Mutants: `qr.rs` forced to
+  `ReadSheet`, and the `Trust` return removed; each turns it red.
+- Not run: the two-events-one-sheet scenario at runtime. Offline the worker
+  has no sheet credentials, so both old and new code read D1 only there. It
+  needs a staging run with a real shared sheet.
+
+Open for the owner:
+- Merge timing: before RTM #6 (4 Oct) or after the 8 Oct take.
+- The cutoff is the commit time, not the prod deploy time (deploy tags start
+  on 24 Sep). If prod got `fa0dca12` later, an event created between the two
+  whose registrations reached only the sheet would now read as empty. The
+  question: "on what date did prod first run `fa0dca12`?"
