@@ -33,3 +33,24 @@ fn claim_tokens_are_fingerprinted_before_logging() {
         );
     }
 }
+
+/// The GitHub token exchange must not echo the response body into its error:
+/// the callback logs that error, and a form-encoded answer carries
+/// `access_token=…`.
+#[test]
+fn github_token_response_body_is_not_echoed() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/handlers/social_link.rs");
+    let source = fs::read_to_string(&path).expect("social_link.rs is readable");
+    let start = source
+        .find("async fn exchange_github_code")
+        .expect("exchange_github_code moved; update this guard");
+    let end = source[start..]
+        .find("\n}\n")
+        .map(|offset| start + offset)
+        .expect("end of exchange_github_code");
+    let body = &source[start..end];
+    assert!(
+        !body.contains("{text}") && !body.contains("{text:"),
+        "exchange_github_code interpolates the raw token response into an error"
+    );
+}

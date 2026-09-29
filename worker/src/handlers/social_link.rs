@@ -214,8 +214,14 @@ async fn exchange_github_code(
         error_description: Option<String>,
     }
 
-    let parsed: GithubTokenRes = serde_json::from_str(&text)
-        .map_err(|e| format!("failed to parse GitHub JSON response '{text}': {e}"))?;
+    // Never echo `text`: a non-JSON answer (form-encoded) carries the access
+    // token, and these errors are logged by the callback.
+    let parsed: GithubTokenRes = serde_json::from_str(&text).map_err(|e| {
+        format!(
+            "failed to parse GitHub token response ({} bytes): {e}",
+            text.len()
+        )
+    })?;
 
     if let Some(err) = parsed.error {
         let desc = parsed.error_description.unwrap_or_default();
@@ -225,7 +231,7 @@ async fn exchange_github_code(
     parsed
         .access_token
         .filter(|t| !t.is_empty())
-        .ok_or_else(|| format!("no access token in GitHub response '{text}'"))
+        .ok_or_else(|| "no access token in GitHub token response".to_string())
 }
 
 /// GET /api/auth/github/callback?code=...&state=<encoded_email>
