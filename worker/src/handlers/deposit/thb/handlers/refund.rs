@@ -189,7 +189,7 @@ pub async fn mark_refund_handler(
             &event.sheet_id,
             &event.sheet_name,
             Some(kv),
-            &attendee_id,
+            SheetRow::of(attendee_id.clone()),
             "refunded",
         )
         .await
@@ -206,7 +206,7 @@ pub async fn mark_refund_handler(
             &event.sheet_id,
             &event.sheet_name,
             Some(kv),
-            &attendee_id,
+            SheetRow::of(attendee_id.clone()),
             &refund_proof_url,
         )
         .await
@@ -542,7 +542,7 @@ pub async fn mark_manual_refund_handler(
             &event.sheet_id,
             &event.sheet_name,
             Some(kv),
-            &attendee_id,
+            SheetRow::of(attendee_id.clone()),
             &body.refund_status,
         )
         .await
@@ -567,7 +567,7 @@ pub async fn mark_manual_refund_handler(
                 &event.sheet_id,
                 &event.sheet_name,
                 Some(kv),
-                &attendee_id,
+                SheetRow::of(attendee_id.clone()),
                 link,
             )
             .await

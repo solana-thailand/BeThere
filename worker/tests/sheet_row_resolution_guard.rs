@@ -49,7 +49,13 @@ const ROW_WRITERS: [(&str, &[&str]); 4] = [
     ),
     (
         "sheets/write/deposit.rs",
-        &["write_bank_info", "write_deposit_verification"],
+        &[
+            "write_bank_info",
+            "write_deposit_verification",
+            "update_deposit_method",
+            "write_refund_status",
+            "write_refund_link",
+        ],
     ),
     ("sheets/write/append.rs", &["update_participation_type"]),
 ];

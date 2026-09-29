@@ -10,9 +10,7 @@ use crate::state::AppState;
 use super::SheetContext;
 use crate::sheets::locate::resolve_row;
 use crate::sheets::values::{send, write_cells};
-use crate::sheets::{
-    get_attendees, get_cached_access_token, get_column_mapping, invalidate_column_map_cache,
-};
+use crate::sheets::{get_cached_access_token, get_column_mapping, invalidate_column_map_cache};
 use event_checkin_domain::models::attendee::SheetRow;
 
 /// Write bank account info (bank_account, bank_name, account_name) to the sheet.
@@ -114,30 +112,24 @@ pub async fn write_deposit_verification(
     Ok(())
 }
 
-/// Update the deposit_method column (N) for an attendee, found by api_id.
+/// Update the deposit_method column (N) for an attendee.
 /// Used when a rolling deposit credit covers the deposit — writes "credit_thb" or "credit_usdc".
 pub async fn update_deposit_method(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
-    attendee_api_id: &str,
+    row: SheetRow,
     method: &str,
 ) -> Result<(), String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
-    // Find the attendee row by api_id
     let mapping = get_column_mapping(state, sheet_id, sheet_name, kv)
         .await
         .unwrap_or_else(|_| ColumnMapping::hardcoded());
 
-    let attendees = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    let row_index = attendees
-        .iter()
-        .find(|a| a.api_id == attendee_api_id)
-        .map(|a| a.row_index)
-        .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
     let cells = vec![(CK::DepositMethod, method.to_string())];
     write_cells(
@@ -151,7 +143,7 @@ pub async fn update_deposit_method(
     .await?;
 
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         %method,
         "wrote credit deposit_method to google sheet"
@@ -167,7 +159,7 @@ pub async fn write_refund_status(
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
-    attendee_api_id: &str,
+    row: SheetRow,
     status: &str,
 ) -> Result<(), String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
@@ -180,15 +172,10 @@ pub async fn write_refund_status(
         .await
         .unwrap_or_else(|_| ColumnMapping::hardcoded());
 
-    let attendees = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    let row_index = attendees
-        .iter()
-        .find(|a| a.api_id == attendee_api_id)
-        .map(|a| a.row_index)
-        .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         column = ?mapping.column_letter(CK::RefundStatus),
         total_columns = mapping.total_columns,
@@ -207,7 +194,7 @@ pub async fn write_refund_status(
     .await?;
 
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         %status,
         "wrote refund_status to google sheet"
@@ -278,7 +265,7 @@ pub async fn write_refund_link(
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
-    attendee_api_id: &str,
+    row: SheetRow,
     link: &str,
 ) -> Result<(), String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
@@ -291,15 +278,10 @@ pub async fn write_refund_link(
         .await
         .unwrap_or_else(|_| ColumnMapping::hardcoded());
 
-    let attendees = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    let row_index = attendees
-        .iter()
-        .find(|a| a.api_id == attendee_api_id)
-        .map(|a| a.row_index)
-        .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         column = ?mapping.column_letter(CK::RefundLink),
         total_columns = mapping.total_columns,
@@ -318,7 +300,7 @@ pub async fn write_refund_link(
     .await?;
 
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         "wrote refund_link to google sheet"
     );
