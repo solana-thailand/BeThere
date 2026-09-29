@@ -97,9 +97,22 @@ pub async fn update_event(
                     "escrow PDA confirmed closed on-chain — reset to None allowed"
                 );
             }
-            // The RPC could not answer: we don't know whether the escrow is
-            // closed, so refuse the reset without claiming it still exists.
-            Err(e @ crate::solana_escrow::EscrowError::RpcFailed(_)) => {
+            // `AccountNotFound` is the only answer that means "an account sits
+            // at the escrow PDA".
+            Err(e @ crate::solana_escrow::EscrowError::AccountNotFound(_)) => {
+                tracing::warn!(
+                    event_id = %id,
+                    error = %e,
+                    "escrow PDA still exists on-chain — rejecting reset to None"
+                );
+                return Err(AppError::Validation(
+                    "cannot reset escrow: on-chain escrow account still exists. Close it on-chain first.".to_string()
+                ).into());
+            }
+            // The RPC could not answer, or the stored wallet did not derive a
+            // PDA: we don't know whether the escrow is closed, so refuse the
+            // reset without claiming it still exists.
+            Err(e) => {
                 tracing::warn!(
                     event_id = %id,
                     error = %e,
@@ -109,16 +122,6 @@ pub async fn update_event(
                     "cannot confirm the on-chain escrow is closed: {e}"
                 ))
                 .into());
-            }
-            Err(e) => {
-                tracing::warn!(
-                    event_id = %id,
-                    error = %e,
-                    "escrow PDA still exists on-chain — rejecting reset to None"
-                );
-                return Err(AppError::Validation(
-                    "cannot reset escrow: on-chain escrow account still exists. Close it on-chain first.".to_string()
-                ).into());
             }
         }
     }

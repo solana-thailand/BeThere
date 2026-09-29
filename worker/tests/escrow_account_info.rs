@@ -70,3 +70,27 @@ fn get_account_info_is_only_built_in_the_shared_module() {
         "wire.rs builds its own getAccountInfo request; use account_info::get_account_info"
     );
 }
+
+/// The escrow reset may tell the organizer "the escrow still exists" only
+/// when the check found an account there (`AccountNotFound`). An RPC failure
+/// or a wallet that does not derive a PDA once fell into a catch-all arm that
+/// said so too.
+#[test]
+fn reset_says_still_exists_only_for_an_existing_account() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/handlers/events/update.rs"
+    ))
+    .expect("read update.rs");
+    let message = src
+        .find("on-chain escrow account still exists")
+        .expect("reset message moved; update this guard");
+    let arm = src[..message]
+        .rfind("Err(e")
+        .expect("no match arm before the message");
+    assert!(
+        src[arm..message]
+            .starts_with("Err(e @ crate::solana_escrow::EscrowError::AccountNotFound(_))"),
+        "the \"still exists\" reset message must sit in the AccountNotFound arm, not a catch-all"
+    );
+}
