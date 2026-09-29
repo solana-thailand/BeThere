@@ -1,11 +1,9 @@
 //! The landing page component itself.
 
-use crate::utils::deposit_copy::{never_forfeited, thb_refund_window};
 use leptos::prelude::*;
 use leptos_router::components::A;
 
 use crate::components::is_admin_role;
-use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 
 use super::auth::AuthState;
@@ -17,7 +15,6 @@ use super::waitlist::WaitlistForm;
 /// Landing page component.
 #[component]
 pub fn Landing() -> impl IntoView {
-    let i18n = use_i18n();
     // Auth state for nav bar
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (user_role, set_user_role) = signal(String::new());
@@ -134,68 +131,13 @@ pub fn Landing() -> impl IntoView {
                 </ol>
             </section>
 
-            // ===== FAQ =====
-            <section id="faq" class="landing-section-narrow">
-                <div class="landing-section-header">
-                    <h2 class="landing-h2">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.title))}
-                    </h2>
-                    <p class="landing-subtitle">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.subtitle))}
-                    </p>
-                </div>
-
-                <div class="landing-faq-grid">
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.what_q))}
-                        </h3>
-                        <p class="landing-faq-a">
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.what_a))}
-                        </p>
-                    </div>
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.wallet_q))}
-                        </h3>
-                        <p class="landing-faq-a">
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.wallet_a))}
-                        </p>
-                    </div>
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.deposit_q))}
-                        </h3>
-                        <p class="landing-faq-a">
-                            {t!(
-                                i18n,
-                                landing.faq.deposit_a,
-                                refund_window = move || thb_refund_window(i18n.get_locale()),
-                                never_forfeited = move || never_forfeited(i18n.get_locale())
-                            )}
-                        </p>
-                    </div>
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.crypto_q))}
-                        </h3>
-                        <p class="landing-faq-a">
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.crypto_a))}
-                        </p>
-                    </div>
-
-                </div>
-
-                <div class="landing-faq-cta">
-                    <a href="#waitlist" class="btn btn-outline landing-faq-cta-link">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.host_cta))}
-                    </a>
-                </div>
-            </section>
+            // The FAQ moved to /faq, linked from the footer (.plans/038 P3-a).
+            // Organizers keep their one entry point here, above the waitlist.
+            <div class="landing-faq-cta">
+                <a href="#waitlist" class="btn btn-outline landing-faq-cta-link">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.host_cta))}
+                </a>
+            </div>
 
             // ===== Waitlist (organizer-focused) =====
             <section id="waitlist" class="landing-section">
@@ -277,7 +219,7 @@ pub fn Landing() -> impl IntoView {
                     <div class="landing-footer-col">
                         <h4>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.product))}</h4>
                         <a href="#how-it-works">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.how))}</a>
-                        <a href="#faq">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.faq))}</a>
+                        <a href="/faq">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.faq))}</a>
                         <A href="/login">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.staff_portal))}</A>
                     </div>
 

@@ -58,7 +58,7 @@ use crate::pages::{
     Discover, EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister, admin::Admin,
     adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
-    dev_profile::DevProfile, event_summary::EventSummary, landing::Landing, login::Login,
+    dev_profile::DevProfile, event_summary::EventSummary, faq::Faq, landing::Landing, login::Login,
     pr_pack::PrPack, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
     ticket::page::Ticket,
 };
@@ -133,6 +133,7 @@ pub fn App() -> impl IntoView {
                     // What is on, and what I am part of (.issues/096).
                     <Route path=path!("/discover") view=Discover />
                     <Route path=path!("/privacy") view=Privacy />
+                    <Route path=path!("/faq") view=Faq />
                     <Route path=path!("/data-privacy") view=DataPrivacy />
                     <Route path=path!("/adventure") view=Adventure />
                     <Route path=path!("/dashboard") view=DevDashboard />

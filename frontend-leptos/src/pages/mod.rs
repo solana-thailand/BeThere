@@ -30,6 +30,7 @@ pub mod escrow_init;
 pub mod event_form;
 pub mod event_summary;
 pub mod events_page;
+pub mod faq;
 pub mod form_builder;
 pub mod landing;
 pub mod login;

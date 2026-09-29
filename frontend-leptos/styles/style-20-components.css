@@ -421,3 +421,66 @@
 .marketing-pref-more {
     font-size: 0.85rem;
 }
+
+/* /faq (.plans/038 P3-a): two tabs of native <details> accordions. */
+.faq-page {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 1.5rem 1.25rem 4rem;
+}
+
+.faq-back {
+    font-size: 0.9rem;
+}
+
+.faq-title {
+    margin: 1rem 0;
+}
+
+.faq-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.faq-tab {
+    flex: 1;
+    min-height: 44px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font: inherit;
+    cursor: pointer;
+}
+
+.faq-tab--active {
+    color: var(--text-primary);
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.faq-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.faq-item {
+    border-bottom: 1px solid var(--border);
+    padding: 0.25rem 0;
+}
+
+.faq-q {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.faq-a {
+    margin: 0 0 1rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}

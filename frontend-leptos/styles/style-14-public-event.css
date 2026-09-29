@@ -16,26 +16,6 @@
 
 /* ── Landing FAQ ─────────────────────────────────────────────────── */
 
-.landing-faq-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-}
-
-.landing-faq-card {
-    background: rgba(10, 10, 14, 0.9);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.5rem 1.75rem;
-}
-
-.landing-faq-q {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #fff;
-    margin-bottom: 0.4rem;
-}
-
 .landing-faq-a {
     font-size: 0.9375rem;
     color: var(--text-secondary);

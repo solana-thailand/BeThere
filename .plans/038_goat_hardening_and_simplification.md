@@ -152,9 +152,25 @@ Wave 1 (`.plans/037`).
 
 ## P3
 
-- [ ] **P3-a:** FAQ.
+- [x] **P3-a:** `/faq` with Attendees / Organizers tabs over native
+  `<details>` accordions.
+  - Content: 9 attendee questions (the moved landing FAQ plus account,
+    ticket, claim, cancellation and data) and 4 organizer questions (host,
+    capacity, check-in, settlement).
+  - The promises interpolate from `deposit_copy`. No claim-TTL number is
+    stated, because prod's value is configurable and unknown here.
+  - The landing's FAQ section and the header nav FAQ links are gone. The
+    footer links `/faq`. 5 dead CSS classes deleted.
+  - Checked EN and TH at 390 px (no overflow). `/faq` joins the visual +
+    a11y list (51 e2e). +6,246 B br4.
 - [ ] **P3-b:** discover cards.
-- [ ] **P3-c:** jsQR lazy-load + Early Hints.
+- [x] **P3-c:** no change needed. The premise was stale: `js/lazy_assets.js`
+  already loads jsQR only when `BarcodeDetector` is missing.
+  - Probe: 0 jsQR requests on /, /discover, /e/…, /ticket, /admin and
+    /staff.
+  - `/jsqr-1.4.0.js` serves br (33,223 B) and identity when asked.
+  - **Early Hints is owner-gated:** it is a Cloudflare zone setting, and the
+    site is on workers.dev. Unverified whether it is available there.
 - [ ] **P3-d:** fluid type scale.
 - [ ] **P3-e:** LINE in-app browser auth. Needs staging and a phone, so it is
   owner-run.

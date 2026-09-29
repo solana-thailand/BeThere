@@ -46,7 +46,6 @@ pub fn SiteHeader(
                 </a>
                 <div class="landing-nav-links">
                     <a href="/#how-it-works">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.how_it_works))}</a>
-                    <a href="/#faq">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.faq))}</a>
                     <a href="/#waitlist">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.for_organizers))}</a>
                 </div>
                 <div class="landing-nav-right" style="display:flex;align-items:center;gap:8px;">
@@ -151,7 +150,6 @@ pub fn SiteHeader(
                     view! {
                         <div class="landing-nav-mobile-menu">
                             <a href="/#how-it-works" on:click=move |_| set_mobile_menu_open.set(false)>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.how_it_works))}</a>
-                            <a href="/#faq" on:click=move |_| set_mobile_menu_open.set(false)>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.faq))}</a>
                             <a href="/#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.for_organizers))}</a>
                             <A href="/profile" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
                                 <Icon icon=IconName::User class="icon-sm" />

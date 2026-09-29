@@ -173,6 +173,7 @@ fn switch_shows_on_attendee_pages_only() {
         "/privacy",
         "/data-privacy",
         "/past-events",
+        "/faq",
         "/events/rtm-6/recap",
         "/events/rtm-6/post-event-register",
     ] {

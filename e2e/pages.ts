@@ -27,6 +27,7 @@ export const PAGES: AppPage[] = [
   { name: "discover", path: "/discover", authed: false, ready: EVENT_LOADED },
   { name: "event", path: `/e/${EVENT_SLUG}`, authed: false, ready: EVENT_LOADED },
   { name: "privacy", path: "/privacy", authed: false, ready: ".pe-section-title" },
+  { name: "faq", path: "/faq", authed: false, ready: ".faq-item" },
   { name: "admin", path: "/admin", authed: true, ready: EVENT_LOADED },
   // The scanner defaults to whichever active event it picks, so wait for its
   // event picker rather than a name.

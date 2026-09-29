@@ -600,12 +600,6 @@
     padding: 1rem 1.5rem 3rem;
 }
 
-.landing-section-narrow {
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 3rem 1.5rem 4rem;
-}
-
 /* ── Landing Section Headers ─────────────────────────────────────── */
 
 .landing-section-header {
@@ -625,11 +619,6 @@
     font-weight: 700;
     color: #fff;
     margin-bottom: 0.5rem;
-}
-
-.landing-subtitle {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
 }
 
 .landing-email-text {
