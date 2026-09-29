@@ -12,7 +12,8 @@
   "flow-harness": {
     "doc-tests flow_harness": 0,
     "flow_harness src/lib.rs": 132,
-    "flow_harness src/main.rs": 0
+    "flow_harness src/main.rs": 0,
+    "golden_vectors tests/golden_vectors.rs": 3
   },
   "frontend": {
     "admin_duplicate_hint tests/admin_duplicate_hint.rs": 3,

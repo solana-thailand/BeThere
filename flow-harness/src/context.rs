@@ -523,7 +523,7 @@ fn join_path(base: &Url, path: &str) -> HarnessResult<Url> {
 /// This mapping is part of the public on-chain PDA identity, so it must remain
 /// stable. A fixture can explicitly supply a non-zero `on_chain_event_id`, but
 /// new standard events use this deterministic fallback in both components.
-fn derive_on_chain_event_id(event_id: &str) -> u64 {
+pub fn derive_on_chain_event_id(event_id: &str) -> u64 {
     let mut hash: u64 = 0xcbf29ce484222325;
     for byte in event_id.bytes() {
         hash ^= u64::from(byte);

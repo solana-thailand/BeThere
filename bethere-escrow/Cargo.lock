@@ -384,6 +384,7 @@ dependencies = [
  "quasar-lang",
  "quasar-spl",
  "quasar-svm",
+ "serde_json",
  "solana-instruction",
  "solana-program-pack",
  "spl-token-interface",

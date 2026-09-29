@@ -32,3 +32,5 @@ quasar-svm = { git = "https://github.com/blueshift-gg/quasar-svm", rev = "cf3c06
 spl-token-interface = { version = "2.0.0" }
 solana-program-pack = { version = "3.1.0" }
 wincode = { version = "0.4", features = ["derive"] }
+# Reads domain/tests/fixtures/golden_vectors.json (src/tests/golden_vectors.rs).
+serde_json = "1"
