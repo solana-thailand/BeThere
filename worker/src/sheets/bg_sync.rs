@@ -13,10 +13,11 @@ use event_checkin_domain::models::attendee::{
 };
 use worker::KvStore;
 
-use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
+use crate::http::ValueRange;
 use crate::state::AppState;
 
 use super::locate::{resolve_row, resolve_rows};
+use super::values::{row_cells, send};
 use super::{get_cached_access_token, invalidate_column_map_cache};
 
 // ---------------------------------------------------------------------------
@@ -43,17 +44,6 @@ async fn access_token(state: &AppState, kv: Option<&KvStore>, op: &str) -> Optio
     }
 }
 
-/// Send `data` as one `values:batchUpdate`. An empty `data` sends nothing.
-async fn send(sheet_id: &str, data: Vec<ValueRange>, access_token: &str) -> Result<(), String> {
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-    batch_update_sheet(&url, &body, access_token).await
-}
-
 /// Find `row` by `api_id` at write time, then write `cells` into it in one
 /// batch. Cells whose column the sheet lacks are skipped. Returns the 1-based
 /// row written, or `None` once the reason it was skipped is logged.
@@ -73,11 +63,7 @@ async fn write_row(
         }
     };
 
-    let data = cells
-        .into_iter()
-        .filter_map(|(key, value)| a1::cell(&sheet_ref, target.mapping, key, row_index, value))
-        .collect();
-
+    let data = row_cells(&sheet_ref, target.mapping, row_index, cells);
     if let Err(e) = send(target.sheet_id, data, &access_token).await {
         tracing::error!(row_index, error = %e, "bg_sync {op}: sheet write failed");
         return None;

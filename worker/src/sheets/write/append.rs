@@ -6,10 +6,10 @@ use event_checkin_domain::models::attendee::{
 };
 use worker::KvStore;
 
-use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
 use crate::state::AppState;
 
 use crate::sheets::locate::resolve_row;
+use crate::sheets::values::write_cells;
 use crate::sheets::{get_cached_access_token, invalidate_column_map_cache};
 use event_checkin_domain::models::attendee::SheetRow;
 
@@ -295,26 +295,16 @@ pub async fn update_participation_type(
 
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
-    let data: Vec<ValueRange> = [a1::cell(
+    let cells = vec![(CK::ParticipationType, new_value.to_string())];
+    write_cells(
+        sheet_id,
         &sheet_ref,
         mapping,
-        CK::ParticipationType,
         row_index,
-        new_value.to_string(),
-    )]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
         row_index = row_index,

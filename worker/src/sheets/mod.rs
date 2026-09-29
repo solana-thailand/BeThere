@@ -14,6 +14,7 @@ mod gid;
 pub mod locate;
 mod staff;
 mod token;
+mod values;
 pub mod write;
 
 // Re-export all public write functions for backward compatibility.

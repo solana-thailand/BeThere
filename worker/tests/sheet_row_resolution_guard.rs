@@ -110,7 +110,7 @@ fn bg_sync_row_writers_go_through_the_resolving_helper() {
         .find("resolve_row(")
         .unwrap_or_else(|| panic!("{rel}: `write_row` never resolves its row"));
     let first_cell = helper
-        .find("a1::cell(")
+        .find("row_cells(")
         .unwrap_or_else(|| panic!("{rel}: `write_row` no longer builds its cells"));
     assert!(
         resolved < first_cell,
@@ -132,6 +132,52 @@ fn bg_sync_row_writers_go_through_the_resolving_helper() {
             "{rel}: `{name}` builds its own range instead of going through `write_row`"
         );
     }
+}
+
+/// The blocking one-row writers resolve their row, then hand it to
+/// `values::write_cells`, which builds the cells and sends one batch. None of
+/// them builds a range or a request body of its own.
+#[test]
+fn blocking_row_writers_write_through_the_shared_cells_helper() {
+    for (rel, names) in ROW_WRITERS {
+        if rel == "sheets/bg_sync.rs" {
+            continue;
+        }
+        let code = source(rel);
+        for name in names.iter().filter(|name| **name != "update_qr_urls") {
+            let body = function_body(rel, &code, name);
+            let resolved = body
+                .find("resolve_row(")
+                .unwrap_or_else(|| panic!("{rel}: `{name}` never resolves its row"));
+            let written = body
+                .find("write_cells(")
+                .unwrap_or_else(|| panic!("{rel}: `{name}` must write through `write_cells`"));
+            assert!(
+                resolved < written,
+                "{rel}: `{name}` must resolve the row before writing it"
+            );
+            assert!(
+                !body.contains("a1::cell(") && !body.contains("BatchUpdateRequest"),
+                "{rel}: `{name}` builds its own range instead of going through `write_cells`"
+            );
+        }
+    }
+
+    let rel = "sheets/values.rs";
+    let code = source(rel);
+    let start = code
+        .find("pub(crate) async fn write_cells(")
+        .unwrap_or_else(|| panic!("{rel}: `write_cells` is gone — was it renamed?"));
+    let helper = &code[start..];
+    let helper = &helper[..helper.find("\n}\n").unwrap_or(helper.len())];
+    assert!(
+        helper.contains("row_cells(") && helper.contains("send("),
+        "{rel}: `write_cells` must build through `row_cells` and send one batch"
+    );
+    assert!(
+        code.contains("a1::cell("),
+        "{rel}: `row_cells` must skip missing columns through `a1::cell`"
+    );
 }
 
 #[test]
