@@ -346,8 +346,9 @@ fn Section(
 ///
 /// The colour is the whole point: it says which list a row belongs to without
 /// the reader parsing a date, which is what makes a mixed page scannable.
+/// Shared with the landing's "Your Events" rows.
 #[component]
-fn DateChip(ms: i64, past: bool) -> impl IntoView {
+pub(crate) fn DateChip(ms: i64, past: bool) -> impl IntoView {
     // Reactive, so the month follows a language switch.
     let parts = Memo::new(move |_| crate::utils::format_event_day_parts(ms));
     let day = move || parts.get().0;

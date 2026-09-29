@@ -384,7 +384,14 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Email / wallet identity (read-only)
                         <div class="dev-profile-field">
-                            <label class="dev-profile-label">{email_label}</label>
+                            <label class="dev-profile-label">
+                                {email_label}
+                                // Moved here from the landing account card
+                                // (F1-a): a Google sign-in is a verified email.
+                                {(!is_wallet_identity).then(|| view! {
+                                    " "<span class="dev-profile-verified-badge">{tr(|l| td_string!(l, profile.verified))}</span>
+                                })}
+                            </label>
                             <div class="dev-profile-readonly">{email}</div>
                             {if is_wallet_identity {
                                 view! { <span class="dev-profile-hint">{tr(|l| td_string!(l, profile.wallet_identity_hint))}</span> }.into_any()

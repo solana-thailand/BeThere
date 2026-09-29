@@ -22,14 +22,32 @@
     line-height: 1.7;
 }
 
-.landing-faq-cta {
+/* Organizers: one line above the footer (F1-d), a disclosure over the
+   waitlist for everyone who is not an organizer yet. */
+.landing-host-line {
     text-align: center;
-    margin-top: 2rem;
+    margin: 2rem auto 0;
+    padding: 0 1.5rem;
+    max-width: 480px;
 }
 
-.landing-faq-cta-link {
-    padding: 0.75rem 1.5rem;
+.landing-host-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--accent);
+    font-weight: 600;
     text-decoration: none;
+    cursor: pointer;
+    list-style: none;
+}
+
+.landing-host-link::-webkit-details-marker {
+    display: none;
+}
+
+.landing-host-details[open] .landing-waitlist-inner {
+    margin-top: 0.75rem;
 }
 
 /* ── Landing Waitlist ────────────────────────────────────────────── */
@@ -286,41 +304,6 @@
     margin-top: 24px;
 }
 
-.landing-reg-card {
-    background: var(--bg-card);
-    border-radius: var(--radius);
-    padding: 1.25rem 1.5rem;
-    box-shadow: var(--shadow);
-    display: grid;
-    grid-template-columns: 1fr auto auto auto;
-    align-items: center;
-    gap: 1rem;
-}
-
-@media (max-width: 640px) {
-    .landing-reg-card {
-        grid-template-columns: 1fr auto;
-    }
-}
-
-.landing-reg-info {
-    min-width: 0;
-}
-
-.landing-reg-identity {
-    display: flex;
-    align-items: center;
-}
-
-.landing-reg-identity-label {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .landing-reg-empty {
     background: var(--bg-card);
     border-radius: var(--radius);
@@ -329,43 +312,47 @@
     text-align: center;
 }
 
-.landing-reg-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 1rem;
-}
-
 .landing-reg-title {
     font-size: 1.25rem;
     font-weight: 700;
     color: #fff;
 }
 
-.landing-reg-grid {
-    display: grid;
-    gap: 0.75rem;
+/* "Your Events" (F1-b): /discover's rows (.dv-row + DateChip), grouped
+   upcoming then past. The row is the ticket link; a full-width button
+   follows only when the attendee has something to do. */
+.landing-reg-group-title {
+    font-size: 1rem;
+    margin: 1.5rem 0 0.75rem;
 }
 
-.landing-reg-event-name {
-    color: #fff;
-    font-weight: 600;
-    text-decoration: none;
-    font-size: 0.95rem;
+.landing-reg-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
 }
 
-.landing-reg-event-date {
+.landing-reg-item .dv-row {
+    margin-bottom: 0;
+}
+
+.landing-reg-chevron {
+    display: inline-flex;
+    flex-shrink: 0;
     color: var(--text-secondary);
-    font-size: 0.8rem;
-    margin-top: 0.15rem;
+}
+
+.landing-reg-action {
+    margin-top: 0.375rem;
+    text-decoration: none;
+}
+
+.landing-reg-more {
+    margin-top: 0.75rem;
 }
 
 .landing-reg-empty-text {
     color: var(--text-secondary);
-    font-size: 0.85rem;
-}
-.landing-reg-action {
-    text-decoration: none;
     font-size: 0.85rem;
 }
 
