@@ -1,0 +1,10 @@
+# Staff shell (.issues/169). The attendee shell (index.html) does not carry the
+# scanner, admin and organizer pages; `build.sh` builds them into a second
+# shell, staff-app.html, and these 200 rewrites serve it for the staff paths.
+# Keep in step with STAFF_PATHS in src/staff_routes.rs
+# (tests/staff_shell_split.rs checks both ways).
+/staff /staff-app 200
+/admin /staff-app 200
+/dashboard/live /staff-app 200
+/events/:id/summary /staff-app 200
+/events/:id/pr-pack /staff-app 200

@@ -27,6 +27,10 @@ console_log = ["dep:console_log"]
 # Forces all log macros to compile to no-ops, stripping string data from WASM.
 # Automatically enabled when console_log is disabled.
 release_no_log = ["log/max_level_off"]
+# The staff shell (`dist/staff-app.html`): scanner, admin and organizer pages.
+# Off by default, so the attendee shell never carries them (.issues/169,
+# `src/staff_routes.rs`). `build.sh` builds both.
+staff = []
 
 [dependencies]
 leptos = { version = "0.8", features = ["csr"] }

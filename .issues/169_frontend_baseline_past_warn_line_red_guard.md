@@ -1,6 +1,10 @@
 # 169: The frontend size baseline is past the warn line, and `size_budget_guards` is red on develop
 
-**Status:** open (found 2026-09-29, session `event-checkin-ba`). `develop` fails `cargo test --workspace` until this is resolved. It is not pushed yet.
+**Status:** fixed on develop (2026-09-29, session `event-checkin-b2`), not
+pushed, not deployed. The owner chose the recommendation below, on the free
+route (no paid plan, no toolchain change). The attendee first load is
+1,226,416 B br4 (58.5% of the 2 MiB budget, was 1,994,214), and
+`size_budget_guards` is green again. Found 2026-09-29 by `event-checkin-ba`.
 
 ## What fails
 
@@ -99,3 +103,76 @@ which is the moment the budget exists for. It is an architectural decision
 
 Until then the choices are to raise `CEILING_BYTES` (an owner call; see
 Options) or to leave develop red.
+
+## Resolution (2026-09-29, `event-checkin-b2`)
+
+Owner call: take the recommendation, do not take a paid route. Picked (a),
+built as one crate with two Trunk builds rather than a second crate:
+
+- **`staff` cargo feature** (`frontend-leptos/Cargo.toml`, off by default).
+  `src/staff_routes.rs` holds the five staff route views. With `staff` they
+  wrap the real pages in `ProtectedRoute`; without it they all resolve to
+  `StaffShellHandoff`, so the linker drops the scanner, admin and organizer
+  pages from the attendee wasm. The route list in `lib.rs` is unchanged.
+- **`build.sh`** builds `--features staff` into `dist-staff/`, then the
+  attendee shell into `dist/`, and merges the staff build in as
+  `dist/staff-app.html`. Asset names are content-hashed, so both wasm files
+  sit side by side; both get the q11 `.br` sibling. The SW cache version
+  hashes both shells.
+- **`_redirects`** (free, Workers static assets proxying) rewrites `/staff`,
+  `/admin`, `/dashboard/live`, `/events/:id/summary` and
+  `/events/:id/pr-pack` to `/staff-app` with status 200. The query string
+  survives (checked `/admin?token=abc` locally). `tests/staff_shell_split.rs`
+  pins `_redirects` to `STAFF_PATHS` and to the `lib.rs` routes.
+- **Client-side navigation** from an attendee page to a staff path (a
+  `<A href="/admin">`) makes a full page load of the router's target URL, so
+  the edge hands over the staff shell. If the attendee shell *booted* on a
+  staff path (no `_redirects`, or the SW offline fallback), it shows "The
+  staff app could not be loaded" instead of looping.
+- **Deploy/CI:** CI's e2e job builds with `build.sh` (a bare `trunk build`
+  has no staff shell); CI also runs clippy with `--features staff`.
+  `deploy.sh` fails the content-type check if `/admin` does not reference the
+  staff shell's bundle. The PUT-API fallback cannot carry `_redirects` (same
+  as `_headers`, #057); it now says so in its warnings, and staff pages then
+  show the "could not be loaded" text.
+
+### Measured (local build, br4 unless noted)
+
+| | Before | After |
+|---|---|---|
+| Attendee first load (gate) | 1,994,214 | 1,226,416 |
+| Attendee wasm, q11 as served | ≈ 1,459 K | 874,268 |
+| Staff wasm, q11 as served | — | 1,459,276 |
+
+The staff shell costs what the whole app cost before; only staff and
+organizers download it.
+
+### Checked
+
+- Frontend: `cargo test` (incl. 3 new tests), wasm32 clippy `-D warnings`
+  for both feature sets, `fmt --check`.
+- Worker guards: `size_budget_guards`, `security_headers_parity`,
+  `vendored_jsqr_integrity`, `precompressed_asset`. Fallback unit tests 40/40.
+  ShellCheck gate clean.
+- Local worker (`wrangler dev`): each staff path returns the staff shell,
+  `/`, `/ticket/*` and `/events/:slug/recap` the attendee shell; both wasm
+  files come back `application/wasm` + `br`.
+- Playwright 51/51, including the admin and staff visual snapshots.
+- Headless probe: `/privacy` → click `<a href="/admin?event_id=e2e#tab">`
+  → the staff wasm loads, and the staff app's guard sends the signed-out
+  probe to `/login?next=/admin`.
+
+### Not checked
+
+- `_redirects` on the real edge (staging). The deploy content-type check
+  now covers `/admin`; run a staging deploy before prod.
+- The "could not be loaded" path in a browser (needs a misrouted edge).
+
+### Follow-ups (not done here)
+
+- The attendee `index.html` still links the staff stylesheets (scanner,
+  admin, quiz, event form, dashboard). Splitting them is the next win, but
+  the stylesheet order is the cascade (`frontend-stylesheet-split` memory),
+  so it needs its own visual check.
+- `worker/src/lib.rs` `INDEX_HTML` fallback still embeds the attendee shell;
+  it only answers when assets do not, so it was left alone.

@@ -87,6 +87,8 @@
              stale shell can't reference purged, content-hashed JS/WASM (the
              blank-page-after-deploy bug). Hashed assets cache forever. -->
         <link data-trunk rel="copy-file" href="_headers" />
+        <!-- Serves staff-app.html (the staff shell) for the staff paths. -->
+        <link data-trunk rel="copy-file" href="_redirects" />
         <!-- Written inline for readability, but it does not ship inline: the
              CSP has no script-src 'unsafe-inline', so Trunk's post_build hook
              (externalize_inline_scripts.py) moves it and Trunk's loader into

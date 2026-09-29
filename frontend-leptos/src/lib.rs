@@ -8,6 +8,7 @@ pub mod icons;
 pub mod locale;
 pub mod pages;
 pub mod privacy_notice;
+pub mod staff_routes;
 pub mod utils;
 pub mod wallet;
 pub mod wallet_error;
@@ -30,7 +31,6 @@ mod i18n_catalog {
 }
 pub use i18n_catalog::i18n;
 
-use crate::components::ProtectedRoute;
 use crate::icons::{Icon, IconName};
 
 /// Build marker exposed to JS and logged to the console once at app boot.
@@ -55,12 +55,14 @@ extern "C" {
     fn __bethere_build_tag() -> String;
 }
 use crate::pages::{
-    Discover, EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister, admin::Admin,
-    adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
-    data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
-    dev_profile::DevProfile, event_summary::EventSummary, faq::Faq, landing::Landing, login::Login,
-    pr_pack::PrPack, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
-    ticket::page::Ticket,
+    Discover, EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister,
+    adventure::page::Adventure, claim::Claim, data_privacy::DataPrivacy, deposit::Deposit,
+    dev_dashboard::DevDashboard, dev_profile::DevProfile, faq::Faq, landing::Landing, login::Login,
+    privacy::Privacy, public_event::PublicEvent, ticket::page::Ticket,
+};
+use crate::staff_routes::{
+    ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack,
+    ProtectedScanner,
 };
 
 /// Main application component.
@@ -72,10 +74,13 @@ use crate::pages::{
 /// - `/staff` — Staff scanner page (QR code scanning + manual check-in)
 /// - `/admin` — Admin dashboard (stats, attendee list, QR generation)
 ///
-/// Protected routes (`/staff`, `/admin`) are wrapped in `ProtectedRoute`,
-/// which handles auth checking, token capture from URL, and user email loading.
+/// Staff routes (`/staff`, `/admin`, …) come from `staff_routes`: the real
+/// pages behind `ProtectedRoute` in the staff build, a hand-off to the staff
+/// shell in the attendee build (.issues/169).
 #[component]
 pub fn App() -> impl IntoView {
+    staff_routes::record_boot_path();
+
     // Register Mobile Wallet Adapter once at app boot.
     // No-op on non-Android platforms. After registration, MWA wallets
     // (Phantom, Solflare, Seed Vault) appear in the Wallet Standard registry
@@ -151,76 +156,5 @@ pub fn App() -> impl IntoView {
             <privacy_notice::AttendeePrivacyNotice />
         </Router>
         </i18n::I18nContextProvider>
-    }
-}
-
-/// Protected wrapper for the Scanner page.
-///
-/// Nests the Scanner component inside `ProtectedRoute`, which handles:
-/// - Capturing OAuth tokens from URL params
-/// - Redirecting to `/login` if not authenticated
-/// - Loading user email via `GET /api/auth/me`
-/// - Providing `ReadSignal<String>` via context
-#[component]
-fn ProtectedScanner() -> impl IntoView {
-    view! {
-        <ProtectedRoute>
-            <Scanner />
-        </ProtectedRoute>
-    }
-}
-
-/// Protected wrapper for the Admin page.
-///
-/// Same auth guard as `ProtectedScanner`, but for the Admin dashboard.
-#[component]
-fn ProtectedAdmin() -> impl IntoView {
-    view! {
-        <ProtectedRoute>
-            <Admin />
-        </ProtectedRoute>
-    }
-}
-
-/// Protected wrapper for the live aggregate dashboard.
-///
-/// Same auth guard as `ProtectedAdmin`. The live dashboard is the big-screen
-/// view for the in-room demo — staff JWT is enforced before mount so a
-/// projector mishap can't leak attendee data to the room.
-#[component]
-fn ProtectedLiveDashboard() -> impl IntoView {
-    view! {
-        <ProtectedRoute>
-            <DashboardLive />
-        </ProtectedRoute>
-    }
-}
-
-/// Protected wrapper for the post-event summary page.
-///
-/// Same auth guard as `ProtectedAdmin`. Organizer-only view of the frozen
-/// funnel + financials snapshot; the freeze mutation is also organizer+
-/// (enforced server-side), so wrapping in `ProtectedRoute` prevents a Staff
-/// user from even loading the page and seeing the summary data.
-#[component]
-fn ProtectedEventSummary() -> impl IntoView {
-    view! {
-        <ProtectedRoute>
-            <EventSummary />
-        </ProtectedRoute>
-    }
-}
-
-/// Protected wrapper for the PR Pack page (Plan 008 Phase 4).
-///
-/// Organizer-only view of generated marketing copy. The backend enforces the
-/// role gate too, so this wrapper just prevents a Staff user from loading the
-/// page UI before the API rejects them.
-#[component]
-fn ProtectedPrPack() -> impl IntoView {
-    view! {
-        <ProtectedRoute>
-            <PrPack />
-        </ProtectedRoute>
     }
 }

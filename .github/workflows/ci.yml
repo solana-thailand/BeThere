@@ -238,6 +238,11 @@ jobs:
       - name: cargo clippy (frontend, wasm32, -D warnings)
         run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
 
+      - name: cargo clippy (frontend staff shell, wasm32, -D warnings)
+        # The default build is the attendee shell; `staff` compiles the staff
+        # route wrappers it leaves out (src/staff_routes.rs, .issues/169).
+        run: cargo clippy --locked --target wasm32-unknown-unknown --features staff -- -D warnings
+
       - name: cargo test (frontend, host target)
         # Host target on purpose: these are plain #[test] cases, and the wasm32
         # target has no test runner on the runner box.
@@ -292,10 +297,13 @@ jobs:
         with:
           tool: trunk@0.21.7,wasm-bindgen-cli@0.2.118
 
-      - name: Build frontend (trunk)
+      - name: Build frontend (build.sh)
         # Trunk.toml sets release = true, so this is the shipped artifact.
+        # build.sh, not a bare `trunk build`: it also builds the staff shell
+        # (staff-app.html, .issues/169) that /staff, /admin and
+        # /dashboard/live load, which the e2e specs below exercise.
         working-directory: frontend-leptos
-        run: trunk build
+        run: bash build.sh
 
       - name: Self-test the inline-script externalizer
         # Trunk's post_build hook (Trunk.toml) runs it on every build and fails

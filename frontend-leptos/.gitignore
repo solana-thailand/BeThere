@@ -2,3 +2,4 @@
 /dist/
 /.cargo/
 *.wasm
+/dist-staff/
