@@ -5,7 +5,11 @@
 //! dialogs with a name. The game keeps its own key handling, so this only
 //! pins the ARIA attributes, not focus management.
 
-const PAGE: &str = include_str!("../src/pages/adventure/page.rs");
+// The page plus the view modules split out of it (.issues/052).
+const PAGE: &str = concat!(
+    include_str!("../src/pages/adventure/page.rs"),
+    include_str!("../src/pages/adventure/puzzle_view.rs")
+);
 
 const CARDS: [&str; 5] = [
     "adventure-level-select-card",

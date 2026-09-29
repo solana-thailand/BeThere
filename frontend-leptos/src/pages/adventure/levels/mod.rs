@@ -11,4 +11,4 @@ mod registry;
 pub use advanced::*;
 pub use basics::*;
 pub use config::{AdventureConfig, AdventureProgress};
-pub use registry::default_levels;
+pub use registry::{default_levels, fallback_level};

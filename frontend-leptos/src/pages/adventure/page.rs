@@ -12,7 +12,9 @@ use std::collections::HashSet;
 
 use serde_json;
 
-use super::{default_levels, engine, types::*};
+use super::grid_view::tile_views;
+use super::puzzle_view::{PuzzleCtx, dismiss_notification_later, puzzle_overlay};
+use super::{default_levels, engine, levels::fallback_level, types::*};
 use crate::api::{self, AdventureLevelScore};
 use crate::icons::{Icon, IconName};
 
@@ -26,7 +28,7 @@ const LS_COMPLETED_KEY: &str = "adventure_completed_levels";
 #[component]
 pub fn Adventure() -> impl IntoView {
     let levels = default_levels();
-    let first_level = levels.first().cloned().unwrap_or_else(test_level_fallback);
+    let first_level = levels.first().cloned().unwrap_or_else(fallback_level);
 
     // Game state signal
     let initial_state = engine::init_game_state(&first_level);
@@ -393,16 +395,7 @@ pub fn Adventure() -> impl IntoView {
     };
 
     // Auto-dismiss notification after 3s
-    let auto_dismiss_notification = {
-        let set_notif = set_notification;
-        move || {
-            let set_notif = set_notif;
-            set_timeout(
-                move || set_notif.set(None),
-                std::time::Duration::from_secs(3),
-            );
-        }
-    };
+    let auto_dismiss_notification = move || dismiss_notification_later(set_notification);
 
     // One move, shared by keyboard, d-pad and swipe. Every input path must
     // stop at a finished level: the auto-save Effect tracks `game`, so a move
@@ -556,26 +549,18 @@ pub fn Adventure() -> impl IntoView {
         set_touch_start.set(None);
     };
 
-    // Compute tile grid for rendering
-    // Check if all conditions are met for exit to be "unlocked"
-    fn check_exit_unlocked(game: &GameState, levels: &[LevelData]) -> bool {
-        if let Some(level) = levels.get(game.current_level) {
-            let keys_ok = level
-                .required_keys
-                .iter()
-                .all(|k| game.collected_keys.contains(k));
-            let gates_ok = level
-                .gates
-                .iter()
-                .all(|g| game.solved_puzzles.contains(&g.puzzle_id));
-            keys_ok && gates_ok
-        } else {
-            false
-        }
-    }
-
     let first_level_width =
         levels_signal.with_untracked(|l| l.first().map(|l| l.width).unwrap_or(12));
+
+    let puzzle_ctx = PuzzleCtx {
+        game,
+        set_game,
+        levels_signal,
+        puzzle_feedback,
+        set_puzzle_feedback,
+        set_notification,
+        set_gate_animating,
+    };
 
     // Format elapsed time as MM:SS
     let format_time = move || {
@@ -961,315 +946,7 @@ pub fn Adventure() -> impl IntoView {
             }}
 
             // === Puzzle Overlay ===
-            {move || {
-                game.read().active_puzzle.as_ref().map(|puzzle_state| {
-                    let puzzle = &puzzle_state.puzzle;
-                    let pid = puzzle.id().to_string();
-                    let hint_text = puzzle.hint().to_string();
-
-                    let instruction = match puzzle {
-                        PuzzleDef::Arrange { instruction, pieces, .. } => {
-                            let inst = instruction.clone();
-                            let pcs: Vec<String> = pieces.clone();
-                            let order = puzzle_state.arrange_order.clone();
-                            view! {
-                                <div>
-                                    <p class="puzzle-instruction">{inst}</p>
-                                    <p class="puzzle-hint-small">"Use ↑↓ buttons or drag to reorder"</p>
-                                    <div class="puzzle-pieces puzzle-pieces-interactive">
-                                        {order.iter().enumerate().map(|(display_idx, &piece_idx)| {
-                                            let piece_text = pcs.get(piece_idx)
-                                                .cloned()
-                                                .unwrap_or_default();
-                                            let up_idx = display_idx;
-                                            let down_idx = display_idx;
-                                            view! {
-                                                <div class="puzzle-piece-row">
-                                                    <button
-                                                        class="puzzle-move-btn"
-                                                        on:click=move |_| {
-                                                            set_game.update(|g| {
-                                                                engine::arrange_piece_up(g, up_idx);
-                                                            });
-                                                        }
-                                                        disabled={display_idx == 0}
-                                                    >
-                                                        "↑"
-                                                    </button>
-                                                    <button
-                                                        class="puzzle-move-btn"
-                                                        on:click=move |_| {
-                                                            set_game.update(|g| {
-                                                                engine::arrange_piece_down(g, down_idx);
-                                                            });
-                                                        }
-                                                        disabled={display_idx >= order.len() - 1}
-                                                    >
-                                                        "↓"
-                                                    </button>
-                                                    <div class="puzzle-piece">
-                                                        <span class="puzzle-piece-num">{format!("{}.", display_idx + 1)}</span>
-                                                        {piece_text}
-                                                    </div>
-                                                </div>
-                                            }
-                                        }).collect_view()}
-                                    </div>
-                                </div>
-                            }.into_any()
-                        }
-                        PuzzleDef::FillBlank { instruction, code_template, options, .. } => {
-                            let inst = instruction.clone();
-                            let tmpl = code_template.clone();
-                            let opts: Vec<String> = options.clone();
-                            let current_input = puzzle_state.input.clone();
-                            view! {
-                                <div>
-                                    <p class="puzzle-instruction">{inst}</p>
-                                    <pre class="puzzle-code">{tmpl}</pre>
-                                    <div class="puzzle-options">
-                                        {opts.into_iter().map(|opt| {
-                                            let opt_val = opt.clone();
-                                            let is_selected = current_input == opt_val;
-                                            let sel_class = if is_selected { "puzzle-opt puzzle-opt-selected" } else { "puzzle-opt" };
-                                            view! {
-                                                <button
-                                                    class={sel_class}
-                                                    on:click=move |_| {
-                                                        set_game.update(|g| {
-                                                            *g = engine::update_puzzle_input(g.clone(), opt_val.clone());
-                                                        });
-                                                    }
-                                                >
-                                                    {opt}
-                                                </button>
-                                            }
-                                        }).collect_view()}
-                                    </div>
-                                </div>
-                            }.into_any()
-                        }
-                        PuzzleDef::FixError { instruction, broken_code, options, .. } => {
-                            let inst = instruction.clone();
-                            let code = broken_code.clone();
-                            let opts: Vec<String> = options.clone();
-                            let current_input = puzzle_state.input.clone();
-                            view! {
-                                <div>
-                                    <p class="puzzle-instruction">{inst}</p>
-                                    <pre class="puzzle-code puzzle-code-broken">{code}</pre>
-                                    <div class="puzzle-options">
-                                        {opts.into_iter().map(|opt| {
-                                            let opt_val = opt.clone();
-                                            let is_selected = current_input == opt_val;
-                                            let sel_class = if is_selected { "puzzle-opt puzzle-opt-selected" } else { "puzzle-opt" };
-                                            view! {
-                                                <button
-                                                    class={sel_class}
-                                                    on:click=move |_| {
-                                                        set_game.update(|g| {
-                                                            *g = engine::update_puzzle_input(g.clone(), opt_val.clone());
-                                                        });
-                                                    }
-                                                >
-                                                    {opt}
-                                                </button>
-                                            }
-                                        }).collect_view()}
-                                    </div>
-                                </div>
-                            }.into_any()
-                        }
-                        PuzzleDef::ShortAnswer { instruction, code_template, .. } => {
-                            let inst = instruction.clone();
-                            let tmpl = code_template.clone();
-                            view! {
-                                <div>
-                                    <p class="puzzle-instruction">{inst}</p>
-                                    <pre class="puzzle-code">{tmpl}</pre>
-                                    <input
-                                        class="puzzle-input"
-                                        type="text"
-                                        placeholder="Type your answer..."
-                                        on:input=move |ev| {
-                                            let val = event_target_value(&ev);
-                                            set_game.update(|g| {
-                                                *g = engine::update_puzzle_input(g.clone(), val);
-                                            });
-                                        }
-                                    />
-                                </div>
-                            }.into_any()
-                        }
-                        PuzzleDef::MatchPairs { instruction, pairs, .. } => {
-                            let inst = instruction.clone();
-                            let pairs_data: Vec<(String, String)> = pairs.clone();
-                            let matched = puzzle_state.matched_pairs.clone();
-                            let selected = puzzle_state.selected_left;
-                            let right_shuffle = puzzle_state.right_shuffle.clone();
-                            // Left items in canonical order, right items shuffled
-                            let left_items: Vec<String> = pairs_data.iter().map(|(l, _)| l.clone()).collect();
-                            let right_items_shuffled: Vec<(usize, String)> = right_shuffle.iter()
-                                .map(|&canonical_idx| {
-                                    let text = pairs_data.get(canonical_idx)
-                                        .map(|(_, r)| r.clone())
-                                        .unwrap_or_default();
-                                    (canonical_idx, text)
-                                })
-                                .collect();
-                            view! {
-                                <div>
-                                    <p class="puzzle-instruction">{inst}</p>
-                                    <div class="puzzle-match-area">
-                                        <div class="match-row match-row-left">
-                                            <span class="match-label">"Code"</span>
-                                            {left_items.iter().enumerate().map(|(idx, item)| {
-                                                let is_matched = matched.iter().any(|(l, _)| *l == idx);
-                                                let is_selected = selected == Some(idx);
-                                                let cls = if is_matched {
-                                                    "match-item match-item-matched"
-                                                } else if is_selected {
-                                                    "match-item match-item-selected"
-                                                } else {
-                                                    "match-item"
-                                                };
-                                                let left_idx = idx;
-                                                view! {
-                                                    <button
-                                                        class={cls}
-                                                        on:click=move |_| {
-                                                            set_game.update(|g| {
-                                                                engine::select_match_left(g, left_idx);
-                                                            });
-                                                        }
-                                                        disabled={is_matched}
-                                                    >
-                                                        {item.clone()}
-                                                    </button>
-                                                }
-                                            }).collect_view()}
-                                        </div>
-                                        <div class="match-arrows">
-                                            {(0..pairs_data.len()).map(|_| {
-                                                view! { <span class="match-arrow">"↕"</span> }
-                                            }).collect_view()}
-                                        </div>
-                                        <div class="match-row match-row-right">
-                                            <span class="match-label">"Type"</span>
-                                            {right_items_shuffled.iter().enumerate().map(|(display_idx, (canonical_idx, item))| {
-                                                let is_matched = matched.iter().any(|(_, r)| *r == *canonical_idx);
-                                                let cls = if is_matched {
-                                                    "match-item match-item-matched"
-                                                } else {
-                                                    "match-item"
-                                                };
-                                                let right_display_idx = display_idx;
-                                                let pairs_count = pairs_data.len();
-                                                view! {
-                                                    <button
-                                                        class={cls}
-                                                        on:click=move |_| {
-                                                            let result = {
-                                                                let g = game.get();
-                                                                let mut g_clone = g;
-                                                                engine::try_match_pair(&mut g_clone, right_display_idx)
-                                                            };
-                                                            if let Some(correct) = result {
-                                                                set_game.update(|g| {
-                                                                    engine::try_match_pair(g, right_display_idx);
-                                                                });
-                                                                if correct {
-                                                                    if game.with(|g| g.active_puzzle.as_ref().is_some_and(|ps| ps.matched_pairs.len() == pairs_count)) {
-                                                                            set_notification.set(Some("All pairs matched!".to_string()));
-                                                                        }
-                                                                } else {
-                                                                    set_puzzle_feedback.set(Some(false));
-                                                                }
-                                                            }
-                                                        }
-                                                        disabled={is_matched}
-                                                    >
-                                                        {item.clone()}
-                                                    </button>
-                                                }
-                                            }).collect_view()}
-                                        </div>
-                                    </div>
-                                </div>
-                            }.into_any()
-                        }
-                    };
-
-                    view! {
-                        <div class="adventure-overlay adventure-overlay-puzzle">
-                            <div class="adventure-puzzle-card" role="dialog" aria-modal="true" aria-label="Code Puzzle">
-                                <h3>"🧩 Code Puzzle"</h3>
-                                {instruction}
-
-                                // Feedback
-                                {move || {
-                                    puzzle_feedback.get().map(|correct| {
-                                        if correct {
-                                            view! {
-                                                <div class="puzzle-feedback puzzle-correct">
-                                                    <Icon icon=IconName::Check class="icon-sm icon-success" />" Correct!"
-                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! {
-                                                <div class="puzzle-feedback puzzle-wrong">
-                                                    <Icon icon=IconName::Cross class="icon-sm icon-danger" />" Not quite. Try again!"
-                                                </div>
-                                            }.into_any()
-                                        }
-                                    })
-                                }}
-
-                                <div class="puzzle-actions">
-                                    <button class="btn btn-primary" on:click=move |_| {
-                                        let (new_state, correct) = engine::submit_puzzle(game.get());
-                                        if correct {
-                                            // Gate animation
-                                            if new_state.active_puzzle.is_some() {
-                                                // shouldn't have active puzzle after correct
-                                            } else {
-                                                // The puzzle was just solved — find the gate
-                                                let levels = levels_signal.read();
-                                                if let Some(level) = levels.get(new_state.current_level) {
-                                                    for gate in &level.gates {
-                                                        if gate.puzzle_id == pid {
-                                                            set_gate_animating.set(Some(pid.clone()));
-                                                            // Clear animation after delay
-                                                            let _anim_id = pid.clone();
-                                                            set_timeout(move || {
-                                                                set_gate_animating.set(None);
-                                                            }, std::time::Duration::from_millis(600));
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            set_game.set(new_state);
-                                            set_puzzle_feedback.set(None);
-                                            set_notification.set(Some("Puzzle solved! Gate opened.".to_string()));
-                                            auto_dismiss_notification();
-                                        } else {
-                                            set_game.set(new_state);
-                                            set_puzzle_feedback.set(Some(false));
-                                        }
-                                    }>"Submit"</button>
-                                    <button class="btn btn-outline" on:click=move |_| {
-                                        set_game.update(|g| *g = engine::dismiss_puzzle(g.clone()));
-                                        set_puzzle_feedback.set(None);
-                                    }>"Cancel"</button>
-                                </div>
-                                <p class="puzzle-hint">
-                                    "💡 Hint: " {hint_text}
-                                </p>
-                            </div>
-                        </div>
-                    }.into_any()
-                })
-            }}
+            {move || game.read().active_puzzle.as_ref().map(|ps| puzzle_overlay(ps, puzzle_ctx))}
 
             // === Game Grid ===
             <div class="adventure-grid-container" node_ref=grid_container_ref on:touchstart=touch_start_handler on:touchend=touch_end_handler>
@@ -1279,72 +956,7 @@ pub fn Adventure() -> impl IntoView {
                     let width = levels.get(g.current_level).map(|l| l.width).unwrap_or(first_level_width);
                     format!("grid-template-columns: repeat({}, var(--tile-size))", width)
                 }}>
-                    {move || {
-                        let g = game.read();
-                        let levels = levels_signal.read();
-                        let grid = &g.tile_grid;
-                        let player_pos = g.player_pos;
-                        let collected = &g.collected_keys;
-                        let solved = &g.solved_puzzles;
-                        let animating = gate_animating.get();
-
-                        let mut tiles_out = Vec::new();
-                        for (row_idx, row) in grid.iter().enumerate() {
-                            for (col_idx, tile) in row.iter().enumerate() {
-                                let is_player = (col_idx, row_idx) == player_pos;
-                                let tile_class = match tile {
-                                    Tile::Floor | Tile::PlayerStart => "tile-floor",
-                                    Tile::Wall => "tile-wall",
-                                    Tile::Exit => {
-                                        if check_exit_unlocked(&g, &levels) {
-                                            "tile-exit tile-exit-unlocked"
-                                        } else {
-                                            "tile-exit"
-                                        }
-                                    }
-                                    Tile::Key { name, .. } => {
-                                        if collected.contains(name) { "tile-floor" } else { "tile-key" }
-                                    }
-                                    Tile::Npc { .. } => "tile-npc",
-                                    Tile::Gate { puzzle_id } => {
-                                        if solved.contains(puzzle_id) {
-                                            "tile-gate-open"
-                                        } else if animating.as_deref() == Some(puzzle_id.as_str()) {
-                                            "tile-gate tile-gate-animating"
-                                        } else {
-                                            "tile-gate"
-                                        }
-                                    }
-                                    Tile::CodeBlock { .. } => "tile-code",
-                                    Tile::Water => "tile-water",
-                                    Tile::Sign { .. } => "tile-sign",
-                                };
-
-                                let display = if is_player {
-                                    "🦀".to_string()
-                                } else {
-                                    match tile {
-                                        Tile::Floor | Tile::PlayerStart => String::new(),
-                                        Tile::Wall => String::new(),
-                                        Tile::Exit => "🚪".to_string(),
-                                        Tile::Key { name, .. } if !collected.contains(name) => name.clone(),
-                                        Tile::Gate { puzzle_id } if !solved.contains(puzzle_id) => "🔒".to_string(),
-                                        _ => tile.display_char().to_string(),
-                                    }
-                                };
-
-                                let class = if is_player {
-                                    format!("tile {tile_class} tile-player")
-                                } else {
-                                    format!("tile {tile_class}")
-                                };
-                                tiles_out.push(view! {
-                                    <div class={class}>{display}</div>
-                                });
-                            }
-                        }
-                        tiles_out.collect_view()
-                    }}
+                    {move || tile_views(&game.read(), &levels_signal.read(), gate_animating.get())}
                 </div>
             </div>
 
@@ -1381,31 +993,5 @@ pub fn Adventure() -> impl IntoView {
                 <a href="/" class="adventure-back">"← Back to BeThere"</a>
             </div>
         </div>
-    }
-}
-
-fn test_level_fallback() -> LevelData {
-    LevelData {
-        id: "fallback".to_string(),
-        name: "Fallback".to_string(),
-        concept: "Fallback".to_string(),
-        width: 8,
-        height: 6,
-        grid: vec![
-            "########".to_string(),
-            "#@.....#".to_string(),
-            "#......#".to_string(),
-            "#......#".to_string(),
-            "#.....>#".to_string(),
-            "########".to_string(),
-        ],
-        keys: vec![],
-        npcs: vec![],
-        gates: vec![],
-        signs: vec![],
-        puzzles: vec![],
-        required_keys: vec![],
-        intro_text: "Empty level.".to_string(),
-        completion_text: "Done!".to_string(),
     }
 }

@@ -5,7 +5,12 @@
 //! every move, about 20 clones per step. They now borrow with `read()` or
 //! `with()`. `get()` stays only where the engine takes the state by value.
 
-const PAGE: &str = include_str!("../src/pages/adventure/page.rs");
+// The page plus the view modules split out of it (.issues/052).
+const PAGE: &str = concat!(
+    include_str!("../src/pages/adventure/page.rs"),
+    include_str!("../src/pages/adventure/puzzle_view.rs"),
+    include_str!("../src/pages/adventure/grid_view.rs")
+);
 
 #[test]
 fn levels_are_never_cloned() {

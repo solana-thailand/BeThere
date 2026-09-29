@@ -20,3 +20,30 @@ pub fn default_levels() -> Vec<LevelData> {
         level_10_traits(),
     ]
 }
+
+/// The empty level the page falls back to when the registry is empty.
+pub fn fallback_level() -> LevelData {
+    LevelData {
+        id: "fallback".to_string(),
+        name: "Fallback".to_string(),
+        concept: "Fallback".to_string(),
+        width: 8,
+        height: 6,
+        grid: vec![
+            "########".to_string(),
+            "#@.....#".to_string(),
+            "#......#".to_string(),
+            "#......#".to_string(),
+            "#.....>#".to_string(),
+            "########".to_string(),
+        ],
+        keys: vec![],
+        npcs: vec![],
+        gates: vec![],
+        signs: vec![],
+        puzzles: vec![],
+        required_keys: vec![],
+        intro_text: "Empty level.".to_string(),
+        completion_text: "Done!".to_string(),
+    }
+}
