@@ -1002,6 +1002,6 @@ pub async fn delete_sheet_row(
 }
 
 // resolve_sheet_gid removed — sheet GIDs are resolved dynamically via
-// super::resolve_sheet_gid() in sheets/mod.rs, which fetches the real GID
+// super::resolve_sheet_gid() in sheets/gid.rs, which fetches the real GID
 // from the spreadsheet metadata. The hardcoded map here was wrong (the
 // "Attendees" tab is NOT GID 0), causing row deletes to silently no-op.
