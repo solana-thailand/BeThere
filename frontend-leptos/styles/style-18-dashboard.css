@@ -430,6 +430,11 @@
         align-items: stretch;
     }
 
+    /* In a column the 320px basis becomes a height: ~260px of empty space. */
+    .dashboard-header-info {
+        flex: 0 0 auto;
+    }
+
     .dashboard-controls {
         justify-content: space-between;
     }

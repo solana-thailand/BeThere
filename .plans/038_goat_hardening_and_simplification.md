@@ -205,7 +205,12 @@ Wave 1 (`.plans/037`).
 - `.issues/169`: `size_budget_guards` is red on develop, because the
   baseline is past the warn line (from Wave 1 `e1161fdd`).
 - At 390 px, the `/dashboard/live` header has a large empty gap above the
-  controls. This predates this plan.
+  controls. This predates this plan. **Fixed on develop (2026-09-29):**
+  `.dashboard-header-info`'s `flex: 1 1 320px` became a 320 px height once
+  the ≤720 px query turned the header into a column (content: 59 px), and
+  three empty `<div>` `Show` fallbacks each added a 1.5rem flex gap. Tiles
+  now start at 167 px (was 476) at 390 px and 124 px (was 172) at 1280 px;
+  checked at 390/720/721/1280 with no horizontal overflow; Playwright 51/51.
 - The ticket page with a pending deposit shows "Ready for Check-In", then
   "Deposit Required", then "Verifying", all at once. This is input for P1-2
   (LM-2).

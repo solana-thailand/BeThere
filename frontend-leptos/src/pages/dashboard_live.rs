@@ -319,7 +319,7 @@ pub fn DashboardLive() -> impl IntoView {
             </header>
 
             // ---------- Initial loading state ----------
-            <Show when=move || is_initial_loading() fallback=|| view! { <div></div> }>
+            <Show when=move || is_initial_loading() fallback=|| ()>
                 <div class="dashboard-state dashboard-state-loading">
                     <div class="dashboard-spinner"></div>
                     <p>"Loading live data…"</p>
@@ -327,7 +327,7 @@ pub fn DashboardLive() -> impl IntoView {
             </Show>
 
             // ---------- Hard failure state (no cached data yet) ----------
-            <Show when=move || is_hard_failure() fallback=|| view! { <div></div> }>
+            <Show when=move || is_hard_failure() fallback=|| ()>
                 <div class="dashboard-state dashboard-state-error">
                     <p>"Failed to load dashboard data."</p>
                     <p class="dashboard-state-error-detail">
@@ -343,7 +343,7 @@ pub fn DashboardLive() -> impl IntoView {
             </Show>
 
             // ---------- Main content (cached data on screen) ----------
-            <Show when=move || has_data() fallback=|| view! { <div></div> }>
+            <Show when=move || has_data() fallback=|| ()>
                 {move || {
                     let resp = data.get().unwrap_or_default();
                     let totals = resp.totals.clone();
