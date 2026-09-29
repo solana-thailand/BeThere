@@ -690,8 +690,10 @@ Checked 2026-09-30 and left alone, because each one already fails closed:
   response") but dropped the provider's message. Since `acdfeddf` it reads
   through `rpc_result`, and the guard covers it.
 
-These posts could share one JSON-RPC post helper. That would be a refactor,
-not a fix, because their error types differ.
+Since `1b167b35` all seven posts build their request with
+`json_rpc::post_request`. Each keeps its own send, timeout, retry and error
+type. The guard fails if a `"jsonrpc"` envelope appears anywhere else under
+`src/`.
 
 ## Transitions not yet swept
 
