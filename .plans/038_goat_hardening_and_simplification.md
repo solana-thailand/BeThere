@@ -27,6 +27,7 @@ Wave 1 (`.plans/037`).
 - [ ] **D4:** cargo-heal in the fix loop. Use it as needed; it is not a
   deliverable. The memory `cargo-heal-not-adopted` records a 2026-09-13
   evaluation.
+  **Not closable:** a standing practice, not a deliverable (`cargo-heal-not-adopted`); nothing blocks it.
 - [x] **D5:** loop discipline, followed throughout.
 
 ## P0
@@ -198,6 +199,7 @@ Wave 1 (`.plans/037`).
   - css_class_audit passes. +517 B br4.
 - [ ] **P3-e:** LINE in-app browser auth. Needs staging and a phone, so it is
   owner-run.
+  **Blocked:** owner; it needs a real phone with LINE.
 
 ## Separate design issues (filed; not in this package)
 

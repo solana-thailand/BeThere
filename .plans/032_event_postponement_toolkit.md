@@ -65,13 +65,15 @@ can't come are moved to online and refunded later.
   - `<b>` renders as literal text (no element);
   - registration stays open;
   - exactly one "Postponed" badge on the landing list.
-- [ ] Deploy order: migration 0053 **before** the code, because the D1-first
+- [x] Deploy order: migration 0053 **before** the code, because the D1-first
   public list selects `postponed_note` and fails without the column.
+  Done (2026-09-29, `event-checkin-8c`): `wrangler d1 migrations list bethere-db --remote` has nothing to apply, the prod `events` schema has `postponed_note`, 0053 is in the prod tree `f02143d4`, and prod `/api/public/events` answers 200 `application/json`.
 
 ## Later / not chosen
 
 - [ ] 2. Attendees answer on their own ticket page ("can't come" switches
   them to online and lists them for a refund).
+  **Blocked:** owner; option 2 was not chosen, so it is a product decision.
 - [x] A failed D1 dual-write on event save (`sync_event_to_d1`) should reach
   the admin who saved, not only a log line (`.issues/152`, "Not done").
   Done on develop 2026-09-26 as a response `warnings` entry and warning toast,

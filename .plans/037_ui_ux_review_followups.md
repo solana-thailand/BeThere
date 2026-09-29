@@ -23,8 +23,10 @@ groups and a backlog.
   real header row. Commit `31c5d469`, `.issues/167`.
 - [ ] Staging repro. The fix is not on staging and this session may not
   deploy, so this waits for the next staging deploy (owner).
+  **Blocked (2026-09-29, `event-checkin-8c`):** the fix is now on staging (`bb8ac906`) and prod, but the repro needs a sheet with the Luma header shared with staging, which staging lacks (owner), and it would append rows to that sheet.
 - [ ] Part B of `.issues/167`: the dedup falls back to a shared sheet across
   events. Needs a product decision.
+  **Blocked:** the owner decided on 2026-09-29 (`.issues/167`), but the implementation is in `worker/`, peer `event-checkin-16`'s area.
 
 ## 2. EN + TH for attendee pages
 
@@ -112,6 +114,7 @@ Owner decisions raised by phase 3:
   exemption", /data-privacy "s.29 erasure", "s.38 contract exemption") look
   wrong against the Act (erasure is usually s.33, contract basis s.24(3)).
   EN and TH both carry them as written. Needs legal review.
+  **Blocked:** owner; waiting on legal review.
 - [x] **Kept (2026-09-29):** it renders only in `usdc_payment.rs`, the escrow
   path where an unclaimed deposit is really lost.
   Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
@@ -229,6 +232,7 @@ Owner decisions raised by phase 3:
   stylesheet and needs a per-file visual diff. Held 2026-09-29 (session
   `event-checkin-4e`): it moves layout on every demo-facing page one week
   before the 6–8 Oct freeze; start it after the take.
+  **Blocked:** the 6–8 Oct demo freeze; start after the take.
 - [x] Remaining hardcoded colours in other Rust files (2026-09-29, session
   `event-checkin-4e`). 20 inline text colours in 6 files now use tokens:
   `#94a3b8`/`#64748b` → `--text-muted`, `#cbd5e1` → `--text-secondary`,
@@ -274,8 +278,9 @@ Owner decisions raised by phase 3:
   button, Tab → stays, Escape → back to "Full Screen"); SIWS
   role/label/Escape; event-form header `aria-expanded` toggles on Enter and
   on Space.
-- [ ] Adventure overlays have no dialog role. The game has its own key
+- [x] Adventure overlays have no dialog role. The game has its own key
   handling; left alone.
+  Done (2026-09-29, `event-checkin-8c`): the level-select, intro, level-complete, NPC/sign and puzzle cards have `role="dialog"`, `aria-modal` and an `aria-label` (the SIWS pattern). The key handling is unchanged, and there is no focus trap because any key dismisses. Guard: `tests/adventure_overlay_dialogs.rs` (2 tests, floored); removing the puzzle card's role turned it red. At 390×844 on the local e2e worker, Chrome's accessibility tree reads "dialog: Hello, Rust!" and "dialog: Select Level", any key and Escape still dismiss, the page has no errors, and the screenshots look unchanged.
 
 ## Backlog
 
