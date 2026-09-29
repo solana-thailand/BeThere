@@ -168,6 +168,12 @@ Re-measured 2026-09-29 (`fd -e rs`): over 1024 in `frontend-leptos/src` are only
 (1304), `pages/quiz_editor/editor.rs` (1075) and the test file `adventure/tests/playtest.rs` (1052). The
 scanner is demo-critical, so it waits until after the 6–8 Oct freeze.
 
+2026-09-30 (`event-checkin-b5`, `4e16286e`): `adventure/tests/playtest.rs` is split. The level-data checks
+moved to `tests/level_data.rs` (397 lines); the engine, reachability, completion and walkthrough tests stay
+in `playtest.rs` (658 lines). The move is verbatim and all 42 tests still pass. Native clippy
+`--lib --tests -D warnings` and `fmt --check` are clean. That leaves `scanner/page.rs` and `quiz_editor/editor.rs`
+in the frontend. Both are single-component `view!` splits, so both wait until after the freeze.
+
 Backend re-measure, same day: `worker/src/db/events.rs` is **1114 at HEAD** (1125 with the uncommitted F7
 sponsor edits). The "backend queue is empty" note below is stale. Split it after F7 lands; F7 owns the file
 until then. Also done: `worker/src/sheets/mod.rs` (953 lines of logic behind an index, not over the line
