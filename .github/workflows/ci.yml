@@ -395,10 +395,12 @@ jobs:
           exit 1
 
       - name: Copy the fixture event into KV
-        # The event read path is KV-first; the fixture only wrote D1.
+        # The event read path is KV-first; the fixture only wrote D1. Every
+        # event the seed inserts must reach KV (it has two since b796df7d).
         run: |
+          want=$(grep -c 'INTO events' e2e/fixtures/seed.sql)
           curl -sf -X POST -H "Cookie: event_checkin_token=dev-token" \
-            http://localhost:8788/api/events/reseed-kv | tee /dev/stderr | grep -q '"synced":1'
+            http://localhost:8788/api/events/reseed-kv | tee /dev/stderr | grep -q "\"synced\":${want}}"
 
       - name: Run Playwright specs
         working-directory: worker
