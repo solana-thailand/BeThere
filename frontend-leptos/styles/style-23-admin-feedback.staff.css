@@ -1,3 +1,7 @@
+/* Staff-shell only (.issues/169): rules from style-23-admin-feedback.css that match
+   no class the attendee app renders. staff-app.html links this file
+   right after style-23-admin-feedback.css, so the cascade order is unchanged. */
+
 /* ===== Admin feedback (admin_feedback.rs) =====
    Moved out of inline styles, same declarations (.plans/037 §5). Every rule
    is scoped under the page root: inline styles beat everything, so a bare

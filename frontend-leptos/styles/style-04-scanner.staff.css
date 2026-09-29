@@ -1,0 +1,522 @@
+/* Staff-shell only (.issues/169): rules from style-04-scanner.css that match
+   no class the attendee app renders. staff-app.html links this file
+   right after style-04-scanner.css, so the cascade order is unchanged. */
+
+/* ===== Scanner: Fullscreen Camera ===== */
+.scanner-fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    background: var(--bg-void);
+}
+
+.scanner-fullscreen video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.scanner-frame-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.scanner-scan-hint {
+    position: absolute;
+    bottom: 35%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    background: rgba(31, 31, 39, 0.8);
+    padding: 0.4rem 1rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* ===== Scanner: Bottom Sheet ===== */
+.scanner-bottom-sheet {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    background: rgba(26, 26, 26, 0.95);
+    border-top: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0;
+    padding: 0.75rem 1rem 1.5rem;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.scanner-bottom-handle {
+    width: 40px;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 0 auto 0.75rem;
+    opacity: 0.5;
+}
+
+.scanner-bottom-session {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 0.75rem;
+}
+
+.scanner-bottom-session-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.scanner-bottom-session-title {
+    color: var(--text-primary);
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.scanner-bottom-session-sub {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Scanner session stats */
+.scanner-session-stats {
+    display: flex;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--border);
+    margin-top: 0.5rem;
+}
+
+.scanner-session-stat {
+    flex: 1;
+    text-align: center;
+}
+
+.scanner-session-stat-value {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.scanner-session-stat-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.scanner-manual-toggle {
+    font-size: 0.75rem;
+    color: var(--accent);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+}
+
+.scanner-manual-toggle:hover {
+    color: var(--text-primary);
+}
+
+.scanner-settings-btn {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0 0.25rem;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    text-decoration: none;
+}
+
+.scanner-settings-btn:hover {
+    color: var(--text-primary);
+}
+
+.scanner-settings-popover {
+    position: absolute;
+    bottom: 100%;
+    right: 0;
+    margin-bottom: 0.5rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 0.5rem 0.75rem;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-width: 160px;
+}
+
+.scanner-settings-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0.25rem 0;
+    font-family: inherit;
+}
+
+.scanner-settings-toggle:hover {
+    color: var(--text-primary);
+}
+
+.scanner-settings-toggle.is-on {
+    color: var(--accent);
+}
+
+.scanner-manual-form {
+    padding-top: 0.5rem;
+}
+
+.scanner-manual-form .manual-input-group {
+    margin-top: 0;
+}
+
+/* ===== Scanner: Glass Panel Result Overlay ===== */
+.scanner-result-overlay {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    padding: 1rem;
+    pointer-events: auto;
+}
+
+.scanner-glass-card {
+    background: rgba(30, 30, 30, 0.85);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.scanner-glass-card .result-success,
+.scanner-glass-card .result-error,
+.scanner-glass-card .result-warning {
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+.scanner-glass-card .card {
+    background: transparent;
+    border: none;
+    padding: 0;
+    box-shadow: none;
+}
+
+.scanner-glass-card .btn-block {
+    margin-top: 1rem;
+}
+
+/* ===== Scanner: Success Flash ===== */
+.scanner-success-flash {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: radial-gradient(
+        circle,
+        rgba(34, 197, 94, 0.12) 0%,
+        rgba(34, 197, 94, 0) 70%
+    );
+    pointer-events: none;
+    animation: flash-fade 1.5s ease-out forwards;
+}
+
+/* ===== Scanner: State View Components ===== */
+.scanner-state-header {
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.scanner-state-loading {
+    text-align: center;
+}
+
+.scanner-state-loading .page-loading {
+    min-height: auto;
+    padding: 1rem;
+}
+
+.scanner-attendee-info {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+}
+
+.scanner-attendee-name {
+    font-weight: 600;
+    color: var(--text-heading);
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.scanner-attendee-email {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+}
+
+.scanner-attendee-badges {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.scanner-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.scanner-qr-wrapper {
+    margin-top: 1.25rem;
+    display: flex;
+    justify-content: center;
+}
+
+.scanner-qr-card {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    background: var(--text-heading);
+    border-radius: var(--radius);
+    /* Uniform padding for geometric centering. */
+    padding: 1rem;
+}
+
+.scanner-qr-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+
+.scanner-qr-img {
+    display: block;
+    width: 240px;
+    height: 240px;
+}
+
+.scanner-qr-copy-btn {
+    margin-top: 0.75rem;
+    width: 100%;
+}
+
+.scanner-result-detail-line {
+    margin-top: 0.5rem;
+}
+
+/* ===== Scanner: Responsive Overrides ===== */
+@media (max-width: 480px) {
+    .scanner-bottom-sheet {
+        max-height: 45vh;
+        padding: 0.75rem;
+    }
+    .scanner-glass-card {
+        max-width: calc(100vw - 2rem);
+        padding: 1rem;
+    }
+    .scanner-qr-img {
+        width: 160px;
+        height: 160px;
+    }
+    .scanner-bottom-session {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+}
+
+@media (max-width: 359px) {
+    .scanner-bottom-session-title {
+        font-size: 0.9rem;
+    }
+    .scanner-bottom-session-sub {
+        font-size: 0.65rem;
+    }
+    .scanner-bottom-session {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .scanner-manual-toggle {
+        font-size: 0.7rem;
+        padding: 0.3rem 0.5rem;
+    }
+    .scanner-session-stats {
+        gap: 0.5rem;
+    }
+    .scanner-qr-img {
+        width: 140px;
+        height: 140px;
+    }
+}
+
+/* ===== Admin Page — Phase B ===== */
+
+.filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.filter-pill {
+    padding: 0.35rem 0.85rem;
+    border-radius: 9999px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.filter-pill:hover {
+    color: var(--text-primary);
+    border-color: var(--border-hover);
+}
+
+.filter-pill.active {
+    color: var(--text-heading);
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.stat-progress {
+    width: 100%;
+    height: 4px;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 0.6rem;
+}
+
+.stat-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.stat-card.success .stat-progress-fill {
+    background: var(--success);
+}
+
+.stat-card.warning .stat-progress-fill {
+    background: var(--warning);
+}
+
+.stat-card.info .stat-progress-fill {
+    background: var(--info);
+}
+
+.attendee-item.vip {
+    border-color: rgba(234, 179, 8, 0.3);
+    background: linear-gradient(
+        135deg,
+        rgba(234, 179, 8, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+}
+
+.attendee-item.vip:hover {
+    border-color: rgba(234, 179, 8, 0.5);
+}
+
+.vip-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius);
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--warning-bright);
+    background: rgba(234, 179, 8, 0.12);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-left: 0.35rem;
+}
+
+.walkin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius);
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--info, #3b82f6);
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-left: 0.35rem;
+}
+
+.badge-refunded {
+    color: var(--text-muted);
+    background: rgba(148, 163, 184, 0.12);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+.badge-nft {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius);
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #a855f7;
+    background: rgba(168, 85, 247, 0.12);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-left: 0.35rem;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.badge-nft:hover {
+    background: rgba(168, 85, 247, 0.2);
+    border-color: rgba(168, 85, 247, 0.5);
+}

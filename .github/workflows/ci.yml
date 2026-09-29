@@ -326,6 +326,16 @@ jobs:
         # build.sh does not spuriously red this step.
         run: bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
 
+      - name: Staff-only stylesheet fence
+        # The attendee shell does not link styles/*.staff.css. An attendee page
+        # that starts using one of their classes would render unstyled there
+        # while the staff shell still looks right (.issues/169). build.sh runs
+        # the fence too; the self-test proves it can fail.
+        run: |
+          set -euo pipefail
+          python3 scripts/verify/staff_css_fence.py --self-test
+          python3 scripts/verify/staff_css_fence.py
+
       - name: Frontend wasm leak scan (report-only)
         # .plans/031: build-host paths (/home/runner/... here, /Users/... on a
         # laptop build) are reported, not failed, until --remap-path-prefix

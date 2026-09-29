@@ -170,9 +170,50 @@ organizers download it.
 
 ### Follow-ups (not done here)
 
-- The attendee `index.html` still links the staff stylesheets (scanner,
-  admin, quiz, event form, dashboard). Splitting them is the next win, but
-  the stylesheet order is the cascade (`frontend-stylesheet-split` memory),
-  so it needs its own visual check.
+- ~~The attendee `index.html` still links the staff stylesheets.~~ Done in
+  the follow-up below.
+
+### Follow-up: staff-only stylesheets (2026-09-29, session `event-checkin-1b`)
+
+The attendee shell linked all 23 sheets, render-blocking. 839 rules in the
+eight staff-flavoured sheets were sorted by one test: a rule moves when every
+selector in its list names a class that the attendee wasm (plus `index.html`
+and `js/`) never contains, because such a selector cannot match there. No
+class in `src/` is assembled from fragments (`css_class_audit.rs` records that
+invariant), so the byte search is sound.
+
+- Moved rules sit in `styles/style-NN-*.staff.css` beside the sheet they came
+  from; `style-06-admin` (quiz editor) and `style-23-admin-feedback` moved
+  whole. `index.html` links only the attendee sheets.
+- `staff_shell_html.py` writes `staff-shell.html` (index.html with every
+  sheet, sorted) as the staff build's Trunk target. A `.staff.css` file sorts
+  right after its parent, so the staff shell keeps the cascade position of
+  every rule, except that staff rules now come after the attendee rules of
+  the same file. A scan for such a pair that could hit one element (shared
+  properties, subject classes that occur together in a `class` literal)
+  found none.
+- Rule multiset per file checked equal before/after (839 rules, 0 lost).
+- Guards: `tests/staff_shell_split.rs` pins index.html's list to the sorted
+  non-staff files; `scripts/verify/staff_css_fence.py` (build.sh + CI, with a
+  self-test) fails when the attendee wasm uses a class only a `.staff.css`
+  sheet styles.
+- `bash serve.sh --staff` serves the staff shell in the fast edit loop.
+- `externalize_inline_scripts.py` now processes every `*.html` in the
+  staging dir, because Trunk names the staff build's page after its target.
+
+| | Before | After |
+|---|---|---|
+| Attendee first load (gate, br4) | 1,226,416 | 1,211,646 (57.8%) |
+| Stylesheets linked by the attendee shell | 23 | 21 |
+| Stylesheets linked by the staff shell | 23 | 29 (same rules) |
+
+Checked: `build.sh` exit 0 with the fence green (534 staff selectors); fence
+A/B with `.claim-step.active` appended to a staff sheet → exit 1, reverted →
+0; frontend `cargo test` 34 binaries green, `fmt --check`; ShellCheck gate;
+local worker: `/` links no `.staff.css`, `/admin` `/staff` `/dashboard/live`
+link them, served `text/css` + immutable; Playwright 51/51 including the
+admin and staff pixel snapshots. Not pixel-checked: `/dashboard/live` and
+the admin feedback tab (no snapshot exists); their rules kept their cascade
+position (see above).
 - `worker/src/lib.rs` `INDEX_HTML` fallback still embeds the attendee shell;
   it only answers when assets do not, so it was left alone.

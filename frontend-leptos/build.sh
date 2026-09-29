@@ -66,9 +66,10 @@ PY
 
 merge_staff_shell() {
     # Every asset name is content-hashed (or byte-identical in both builds:
-    # styles, snippets, sw.js, _headers), so the staff files sit beside the
-    # attendee ones. Only the shell is renamed.
-    mv "$STAFF_DIST/index.html" "$STAFF_DIST/staff-app.html"
+    # snippets, sw.js, _headers), so the staff files sit beside the attendee
+    # ones; the staff build only adds the *.staff.css sheets. Only the shell is
+    # renamed.
+    mv "$STAFF_DIST/staff-shell.html" "$STAFF_DIST/staff-app.html"
     cp -R "$STAFF_DIST"/. dist/
     rm -rf "$STAFF_DIST"
     echo "🧩 Merged the staff shell → dist/staff-app.html"
@@ -131,8 +132,10 @@ build() {
     # footer hides the line when this is empty (a plain `trunk build`).
     BETHERE_GIT_SHA="$(git rev-parse --short=7 HEAD 2>/dev/null || true)"
     export BETHERE_GIT_SHA
-    # Staff first: every `trunk build` replaces its whole dist directory.
-    ~/.cargo/bin/trunk build --release --features staff --dist "$STAFF_DIST"
+    # Staff first: every `trunk build` replaces its whole dist directory. Its
+    # target is staff-shell.html, index.html plus the staff-only stylesheets.
+    python3 staff_shell_html.py
+    ~/.cargo/bin/trunk build --release --features staff --dist "$STAFF_DIST" staff-shell.html
     ~/.cargo/bin/trunk build --release
 
     # Trunk only copies JS files directly referenced by #[wasm_bindgen(module = "...")].
@@ -150,12 +153,14 @@ build() {
     [[ "$copied" == 1 ]] || echo "⚠️  No snippet dir or lazy_assets.js not found — QR scanner may fail at runtime"
 
     cleanup_html dist/index.html
-    cleanup_html "$STAFF_DIST/index.html"
+    cleanup_html "$STAFF_DIST/staff-shell.html"
     merge_staff_shell
     echo "📦 Output:"
     ls -lh dist/
     bump_sw_version
     precompress_assets
+    # Fails when an attendee page uses a class only a *.staff.css sheet styles.
+    python3 ../scripts/verify/staff_css_fence.py --dist dist
 }
 
 # --watch mode: auto-rebuild on file changes

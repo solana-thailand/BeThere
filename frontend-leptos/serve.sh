@@ -4,6 +4,7 @@
 # Usage:
 #   bash serve.sh                # serves on :3001, proxies /api to :8787
 #   bash serve.sh --port 3002    # extra args go to trunk serve
+#   bash serve.sh --staff        # the staff shell (/admin, /staff, …)
 #
 # A one-line view edit rebuilds in ~10 s here, against ~120 s on the release
 # profile. Three settings are needed together, none of them alone gets there:
@@ -24,5 +25,13 @@ fi
 
 export CARGO_INCREMENTAL=1
 export RUSTC_WRAPPER=
+
+# `bash serve.sh --staff` serves the staff shell (scanner, admin, …) instead:
+# the staff feature plus the staff-only stylesheets (.issues/169).
+if [[ "${1:-}" == "--staff" ]]; then
+    shift
+    python3 staff_shell_html.py
+    exec ~/.cargo/bin/trunk serve --release false --features staff staff-shell.html "$@"
+fi
 
 exec ~/.cargo/bin/trunk serve --release false "$@"

@@ -150,14 +150,16 @@
             rel="stylesheet"
         />
         <!-- Stylesheet split by section (see styles/). ORDER IS LOAD-BEARING:
-             these files concatenate to the former single style.css byte-for-byte,
-             so the cascade only holds if they stay in this order. -->
+             the numeric prefix is the cascade order. This is the attendee list:
+             the style-NN-*.staff.css files hold rules for staff-only classes,
+             and staff_shell_html.py links every file, sorted, into the staff
+             shell. Keep this list sorted and free of .staff.css files
+             (tests/staff_shell_split.rs). -->
         <link data-trunk rel="css" href="styles/style-01-core.css" />
         <link data-trunk rel="css" href="styles/style-02-claim.css" />
         <link data-trunk rel="css" href="styles/style-03-responsive.css" />
         <link data-trunk rel="css" href="styles/style-04-scanner.css" />
         <link data-trunk rel="css" href="styles/style-05-admin.css" />
-        <link data-trunk rel="css" href="styles/style-06-admin.css" />
         <link data-trunk rel="css" href="styles/style-07-quiz.css" />
         <link data-trunk rel="css" href="styles/style-08-core.css" />
         <link data-trunk rel="css" href="styles/style-09-core.css" />
@@ -174,7 +176,6 @@
         <link data-trunk rel="css" href="styles/style-20-components.css" />
         <link data-trunk rel="css" href="styles/style-21-feedback.css" />
         <link data-trunk rel="css" href="styles/style-22-discover.css" />
-        <link data-trunk rel="css" href="styles/style-23-admin-feedback.css" />
         <!-- jsQR is self-hosted (npm jsqr@1.4.0, byte-identical, Apache-2.0) and
              loaded lazily by js/lazy_assets.js, only on browsers without a native
              BarcodeDetector (iOS Safari). copy-file emits no tag, so it stays out

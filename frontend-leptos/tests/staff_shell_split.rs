@@ -58,3 +58,35 @@ fn redirects_ship_and_build_produces_the_staff_shell() {
     assert!(BUILD_SH.contains("--features staff"));
     assert!(BUILD_SH.contains("staff-app.html"));
 }
+
+/// index.html links the attendee stylesheets: every `styles/style-*.css`
+/// except the `.staff.css` ones, sorted, because the prefix is the cascade
+/// order. `staff_shell_html.py` builds the staff list from the same directory,
+/// so an unlinked or misordered sheet here would differ between the shells.
+#[test]
+fn index_html_links_every_attendee_stylesheet_in_sorted_order() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("styles");
+    let mut on_disk: Vec<String> = std::fs::read_dir(&dir)
+        .expect("read styles/")
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|n| n.starts_with("style-") && n.ends_with(".css") && !n.ends_with(".staff.css"))
+        .collect();
+    on_disk.sort();
+    let linked: Vec<&str> = INDEX_HTML
+        .lines()
+        .filter_map(|l| {
+            l.trim()
+                .strip_prefix(r#"<link data-trunk rel="css" href="styles/"#)?
+                .strip_suffix(r#"" />"#)
+        })
+        .collect();
+    assert_eq!(
+        linked, on_disk,
+        "index.html stylesheet links drifted from styles/"
+    );
+    assert!(
+        on_disk.len() < std::fs::read_dir(&dir).expect("read styles/").count(),
+        "styles/ must still hold the staff-only sheets"
+    );
+    assert!(BUILD_SH.contains("staff_shell_html.py") && BUILD_SH.contains("staff-shell.html"));
+}

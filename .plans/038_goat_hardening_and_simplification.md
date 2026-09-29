@@ -206,6 +206,8 @@ Wave 1 (`.plans/037`).
   baseline is past the warn line (from Wave 1 `e1161fdd`). **Fixed on develop
   (2026-09-29):** staff pages moved to a second shell (`staff-app.html`);
   the attendee first load is 1,226,416 B br4, 58.5% of the budget.
+  Follow-up the same day: staff-only CSS rules moved to `*.staff.css`
+  sheets that only the staff shell links; 1,211,646 B br4 (57.8%).
 - At 390 px, the `/dashboard/live` header has a large empty gap above the
   controls. This predates this plan. **Fixed on develop (2026-09-29):**
   `.dashboard-header-info`'s `flex: 1 1 320px` became a 320 px height once

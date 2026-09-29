@@ -3,3 +3,4 @@
 /.cargo/
 *.wasm
 /dist-staff/
+/staff-shell.html

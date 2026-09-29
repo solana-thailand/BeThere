@@ -16,7 +16,7 @@ This is a navigable map — file/dir pointers over exhaustive detail.
 |---|---|---|
 | `worker` | `worker/` | The Cloudflare Worker: Axum router, handlers, storage layers, Solana/Sheets/Crossmint integrations, the Durable Object. Compiles to a WASM cdylib. Entry: `worker/src/lib.rs`. |
 | `event-checkin-domain` (`domain`) | `domain/` | Shared, JS-free domain types: models (`models/`), config (`config/`), wire protocol (`wire.rs`), QR generation. Depended on by both worker and frontend, so it stays `Send + Sync` pure-Rust. |
-| `frontend-leptos` | `frontend-leptos/` | Leptos client-side-rendered SPA (`build.sh`: two Trunk builds, the attendee shell `index.html` and the staff shell `staff-app.html` behind `_redirects`, .issues/169). Pages in `pages/`, API client in `api/`, wallet interop in `wallet*.rs` + `js/`. |
+| `frontend-leptos` | `frontend-leptos/` | Leptos client-side-rendered SPA (`build.sh`: two Trunk builds, the attendee shell `index.html` and the staff shell `staff-app.html` behind `_redirects`, which also links the `styles/*.staff.css` sheets, .issues/169). Pages in `pages/`, API client in `api/`, wallet interop in `wallet*.rs` + `js/`. |
 | `bethere-escrow` | `bethere-escrow/` | The on-chain Solana escrow program (Quasar/Pinocchio-style). Instructions in `src/instructions/`. |
 | `flow-harness` | `flow-harness/` | Test/automation harness. |
 
