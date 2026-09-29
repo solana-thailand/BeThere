@@ -267,14 +267,11 @@ pub fn refund_window_open_at(
     refund_deadline_ms > 0 && now < refund_deadline_ms
 }
 
-/// Format epoch ms to a short readable date for the refund deadline.
+/// Format epoch ms for the refund deadline: `29 Sep 2026, 13:00` in the
+/// attendee's language. It was `09/29 13:00`, which reads as a nonsense date
+/// to the day-first audience (.plans/037).
 pub fn format_refund_deadline(ms: i64) -> String {
-    let date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(ms as f64));
-    let month = date.get_month() + 1;
-    let day = date.get_date();
-    let hours = date.get_hours();
-    let minutes = date.get_minutes();
-    format!("{:02}/{:02} {:02}:{:02}", month, day, hours, minutes)
+    crate::utils::format_event_datetime(ms)
 }
 
 /// Format hours into a human-friendly duration label (e.g. "7 days", "3d 12h";

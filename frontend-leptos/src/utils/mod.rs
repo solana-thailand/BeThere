@@ -212,48 +212,22 @@ pub fn is_activation_key(ev: &web_sys::KeyboardEvent) -> bool {
     matches!(ev.key().as_str(), "Enter" | " ")
 }
 
-/// Build a JS object from key-value string pairs.
-///
-/// Helper to avoid repeated `Reflect::set` calls when constructing
-/// JS options objects for `toLocaleString` etc.
-fn js_object(pairs: &[(&str, &str)]) -> js_sys::Object {
-    let obj = js_sys::Object::new();
-    for (key, val) in pairs {
-        let _ = js_sys::Reflect::set(
-            &obj,
-            &wasm_bindgen::JsValue::from_str(key),
-            &wasm_bindgen::JsValue::from_str(val),
-        );
-    }
-    obj
-}
-
-/// Format an ISO 8601 timestamp to a human-readable locale string.
+/// Format an ISO 8601 timestamp like [`format_event_datetime`]:
+/// `29 Sep 2026, 13:00`, in the attendee's language.
 ///
 /// Returns "N/A" for empty strings and the raw input if parsing fails.
 pub fn format_timestamp(iso: &str) -> String {
     if iso.is_empty() {
         return "N/A".to_string();
     }
-
-    let js_date = js_sys::Date::new_with_year_month_day_hr_min_sec(0, 0, 0, 0, 0, 0);
-    js_date.set_time(js_sys::Date::parse(iso));
-    if js_date.get_time().is_nan() {
+    let ms = js_sys::Date::parse(iso);
+    if ms.is_nan() {
         return iso.to_string();
     }
-
-    let opts = js_object(&[
-        ("year", "numeric"),
-        ("month", "short"),
-        ("day", "numeric"),
-        ("hour", "2-digit"),
-        ("minute", "2-digit"),
-    ]);
-
-    js_date
-        .to_locale_string("en-US", &opts)
-        .as_string()
-        .unwrap_or_else(|| iso.to_string())
+    match format_event_datetime(ms as i64) {
+        formatted if formatted.is_empty() => iso.to_string(),
+        formatted => formatted,
+    }
 }
 
 /// Format a relative time string (e.g. "5m ago", "2h ago").

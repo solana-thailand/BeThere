@@ -116,8 +116,15 @@ Owner decisions raised by phase 3:
   the wording anyway.
 - [ ] Thai term consistency: the landing page says เหรียญตรา and the ticket
   page says "badge".
-- [ ] `utils::format_timestamp` (receipt "Date") and
+- [x] `utils::format_timestamp` (receipt "Date") and
   `deposit::types::format_refund_deadline` (`MM/DD`) are still US-style.
+  - Done 2026-09-29 (`event-checkin-1b`): both delegate to
+    `utils::format_event_datetime`, so they read `20 Sept 2026, 10:04` /
+    `20 ก.ย. 2569 10:04` in the attendee's language (was `Sep 20, 2026,
+    10:04 AM` and `10/01 13:00`). Staff pages that use `format_timestamp`
+    (scanner, admin, slip queue) get the `en-GB` form too. Checked by
+    rendering `/deposit/:id` with a mocked verified USDC deposit in EN and
+    TH (Asia/Bangkok); Playwright 51/51.
 - [x] Still English on attendee pages, from shared code: `wallet_error.rs`
   messages, `components::postponed_banner`, the escrow cluster-mismatch
   toast, and `dev_profile.rs` "Connect Wallet →".
