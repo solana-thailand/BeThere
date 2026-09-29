@@ -686,9 +686,9 @@ Checked 2026-09-30 and left alone, because each one already fails closed:
 - `deposit/usdc/rpc.rs` (`getTransaction`, `getSignaturesForAddress`) and
   `deposit/escrow/workflows.rs` check `error` explicitly.
 - `solana.rs` `getAssetsByOwner` deserializes `error` into a typed field.
-- `solana_escrow/blockhash.rs` never reads `error`. A missing
-  `result.value.blockhash` is still an `Err` ("no blockhash in response"), but
-  the provider's message is lost.
+- `solana_escrow/blockhash.rs` already failed closed ("no blockhash in
+  response") but dropped the provider's message. Since `acdfeddf` it reads
+  through `rpc_result`, and the guard covers it.
 
 These posts could share one JSON-RPC post helper. That would be a refactor,
 not a fix, because their error types differ.
