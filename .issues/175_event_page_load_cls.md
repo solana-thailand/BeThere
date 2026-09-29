@@ -83,5 +83,12 @@ Two measurement traps met on the way. Both produce a false clean:
 Not yet measured on prod. Re-run the probe against staging after the next
 deploy.
 
-Seen, not fixed (pre-existing): at 390 px the sticky "Reserve Your Spot" bar
-covers the "Powered by BeThere" footer at the very bottom of the scroll.
+Pre-existing, fixed on develop 2026-09-29 as a follow-up: at 390 px the sticky
+"Reserve Your Spot" bar covered the "Powered by BeThere" footer at the very
+bottom of the scroll. The `.pe-sticky-spacer` sat inside the loaded-event
+block, but the footer is in the page shell after it. The spacer is gone; the
+footer gets `padding-bottom: 4.5rem + safe-area` via
+`.pe-bg-anim:has(.pe-sticky-cta)` (≤640 px), so the room exists only while
+the bar renders. Probe `/tmp/ec-ba/sticky_probe.mjs`: footer text ends at
+728 px, bar top 789 px (390×844); desktop and no-bar padding 0; Playwright
+51/51.

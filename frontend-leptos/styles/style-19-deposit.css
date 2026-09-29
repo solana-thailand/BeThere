@@ -377,9 +377,6 @@
 .pe-sticky-cta {
     display: none;
 }
-.pe-sticky-spacer {
-    display: none;
-}
 @media (max-width: 640px) {
     .pe-sticky-cta {
         position: fixed;
@@ -402,9 +399,9 @@
     .pe-sticky-cta:active {
         background: linear-gradient(135deg, #ff7b5c 0%, #ffa184 100%);
     }
-    .pe-sticky-spacer {
-        display: block;
-        height: 4.5rem;
+    /* Clear the fixed bar below the page footer, only while the bar renders. */
+    .pe-bg-anim:has(.pe-sticky-cta) .pe-footer {
+        padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
     }
 }
 

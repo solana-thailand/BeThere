@@ -905,9 +905,6 @@ fn render_loaded_event(
         } else {
             ().into_any()
         }}
-
-        // Bottom spacer so the sticky mobile CTA never hides the last section.
-        <div class="pe-sticky-spacer"></div>
     }.into_any()
 }
 
