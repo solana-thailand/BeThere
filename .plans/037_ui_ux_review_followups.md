@@ -32,7 +32,8 @@ Phase 1: infrastructure.
 - [x] Add `leptos_i18n` 0.6 with `csr` only: no ICU formatting data and no
   cookie. The catalog is `locales/{en,th}.json` through
   `[package.metadata.leptos-i18n]` and `load_locales!()`.
-  - [ ] Owner decision: `load_locales!` is deprecated upstream. The
+  - [x] Owner decision (2026-09-29): stay on `load_locales!` until upstream
+    splits the ICU datagen dependency. `load_locales!` is deprecated upstream. The
     recommended `build.rs` + `leptos_i18n_build` path always pulls ICU
     datagen networking (ureq/rustls/webpki-roots, ISC and
     CDLA-Permissive-2.0), which `deny.toml` rejects. Moving needs per-crate
@@ -106,16 +107,23 @@ Phase 3: every string on the attendee routes comes from the catalog.
   wallet modal.
 
 Owner decisions raised by phase 3:
-- [ ] Privacy notice PDPA section numbers (§5 "s.37 technical-impossibility
+- [ ] **Owner, 2026-09-29: legal review first; text unchanged until then.**
+  Privacy notice PDPA section numbers (§5 "s.37 technical-impossibility
   exemption", /data-privacy "s.29 erasure", "s.38 contract exemption") look
   wrong against the Act (erasure is usually s.33, contract basis s.24(3)).
   EN and TH both carry them as written. Needs legal review.
-- [ ] Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
+- [x] **Kept (2026-09-29):** it renders only in `usdc_payment.rs`, the escrow
+  path where an unclaimed deposit is really lost.
+  Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
   refund window) contradicts "never forfeited" for THB readers only if
   shown on THB; it is the USDC escrow path, where forfeiture is real. Check
   the wording anyway.
-- [ ] Thai term consistency: the landing page says เหรียญตรา and the ticket
+- [x] Thai term consistency: the landing page says เหรียญตรา and the ticket
   page says "badge".
+  - Done 2026-09-29 (owner: one word): "badge" everywhere, the most-used
+    form (28 of 43). เหรียญตรา (9) and แบดจ์ (6) replaced in the landing,
+    event, recap and privacy catalogs; "NFT badge" word order and spaces
+    around the loanword follow the existing ticket strings.
 - [x] `utils::format_timestamp` (receipt "Date") and
   `deposit::types::format_refund_deadline` (`MM/DD`) are still US-style.
   - Done 2026-09-29 (`event-checkin-1b`): both delegate to
@@ -166,6 +174,9 @@ Owner decisions raised by phase 3:
     `::after`, with no visual change.
   - Why not a menu: all row actions stay one tap away. A menu for Delete may
     still be worth it (owner call).
+  - Done 2026-09-29 (owner: yes): Delete moved into a per-row "⋯"
+    `<details>` menu (44 px summary), keeping its tap-again-to-confirm step
+    inside. The menu opens under its own button at 390 and 1280 px.
 - [x] The filter pills are ≥44 px.
 - Verified (headless Chrome, local `wrangler dev`, hybrid event, 69
   attendees):
