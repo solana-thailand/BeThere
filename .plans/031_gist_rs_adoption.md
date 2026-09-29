@@ -95,6 +95,7 @@ reflex-site has no license, so its code is a pattern only.
   **Built on branch `feature/031-remap-path-prefix` (`132d82be`, 2026-09-28,
   session `event-checkin-82`), not merged** (same RTM #6 hold as plan 028 §5,
   since it changes shipped bytes).
+  **Blocked (2026-09-29, `event-checkin-8c`):** open only on its merge sub-step below (owner go, demo freeze).
   - [x] `scripts/wasm_rustflags.sh` (self-test 3/3) appends the remaps to the
     caller's RUSTFLAGS. `frontend-leptos/build.sh`, the wrangler `[build]`
     command and the CI trunk step use it. Cargo's `trim-paths` would be
@@ -111,17 +112,21 @@ reflex-site has no license, so its code is a pattern only.
     and size-measured the serial backend while local deploys shipped fiat. The
     cfg now lives in the build command, and the config file is gone.
   - [ ] Merge after RTM #6, then open the staging page (owner-gated deploy).
+    **Blocked (2026-09-29, `event-checkin-8c`):** owner go for the merge + staging deploy; after the 6–8 Oct freeze.
 - [ ] Toolchain pin (`.plans/030` §3): declare `components` and `targets`.
   **Built on branch `feature/030-toolchain-pin` (2026-09-28, session
   `event-checkin-00`), not committed or merged** (RTM #6 hold). Details and
   the open size A/B are in `.plans/030` §3.
+  **Blocked (2026-09-29, `event-checkin-8c`):** see `.plans/030` §3; the commit is owner-pending and edits peer `event-checkin-16`'s files.
   - [x] `components = ["clippy", "rustfmt"]` and
     `targets = ["wasm32-unknown-unknown"]` declared in `rust-toolchain.toml`.
   - [ ] Merge after RTM #6, after the remap and build-stamp branches.
+    **Blocked:** owner go; after the 6–8 Oct freeze and the two merges before it.
 - [ ] Build stamp on `/api/health`: git sha, `BUILD_TAG`, and "stale" when
   built outside `deploy.sh`.
   **Built on branch `feature/031-health-build-stamp` (`2bc919f0`, 2026-09-28,
   session `event-checkin-82`), not merged** (RTM #6 hold).
+  **Blocked (2026-09-29, `event-checkin-8c`):** open only on its merge sub-step below (owner go, demo freeze).
   - [x] `deploy.sh` exports `BETHERE_BUILD` as its existing provenance string
     (`git:<sha>[+dirty]`, the same one the Version message carries), and
     `/api/health` returns it as `build`. Any other build returns `"unstamped"`,
@@ -137,6 +142,7 @@ reflex-site has no license, so its code is a pattern only.
     `post_deploy_smoke.sh` assertion on the stamp, because prod is unstamped
     until the first deploy that carries this change.
   - [ ] Merge after RTM #6; the first deploy then shows the stamp on prod.
+    **Blocked:** owner go + prod deploy; edits `worker/` (peer `event-checkin-16`); after the 6–8 Oct freeze.
 
 ### reflex, after 12 Oct (research only)
 
@@ -146,9 +152,11 @@ corpus. It serves on localhost only, has no public API for loading our data,
 and publishes 0.22–0.51 accuracy. So nothing ships in the product.
 - [ ] Offline A/B: replay RTM #6 W1 shadow-mode decisions through reflex and
   compare agreement with the deterministic checks. Record under `.benchmarks/`.
+  **Blocked:** data; the RTM #6 (4 Oct) W1 decisions don't exist yet, and they live in prod D1 (owner access). Dated after 12 Oct.
 - [ ] No-show prediction: can past check-in history predict a no-show well
   enough to matter for D1a's T-48h confirm (`docs/deposit-commitment-model.md`)?
   Needs labeled data from at least two deposit events first.
+  **Blocked:** data; two labeled deposit events don't exist yet.
 
 **Checked 2026-09-29 (session `event-checkin-4e`), nothing taken:** the
 three held merges (remap, toolchain pin, build stamp) change every shipped
@@ -161,5 +169,7 @@ items are dated after 12 Oct.
 
 - [ ] Parity-before-use in the lucky-draw spec (`.plans/030` §4): the browser
   replays pinned server outputs bit-exactly before showing its own re-run.
+  **Blocked:** owner; depends on the lucky-draw product decision in `.plans/030` §4.
 - [ ] Whether to keep `dev_mode` and the Solana readiness block public on
   `/api/health` (`.issues/147`, "Not in scope").
+  **Blocked:** owner: security/product decision.

@@ -94,9 +94,7 @@ owner decision.
     deletes the issue file.
   - Needs an owner OK before purging the existing closed files, since it
     changes where the team looks for history.
-  - **Skipped 2026-09-29 (session `event-checkin-4e`):** owner decision
-    pending. It also moves files in `.issues/`, which peer
-    `event-checkin-16` is working in.
+  - **Blocked (2026-09-29, `event-checkin-8c`):** owner OK pending; it also moves files in `.issues/`, peer `event-checkin-16`'s area.
 - [x] **Pinned golden vectors.** Done 2026-09-29 (consumers below). Part done 2026-09-24:
   `domain/tests/fixtures/golden_vectors.json` pins USDC string/float → atomic
   (issue 146), the on-chain event id (now `domain::onchain`) and escrow /
@@ -208,6 +206,7 @@ owner decision.
 - [ ] **Toolchain pin.** Add `rust-toolchain.toml`, listing `targets`
   explicitly (the katgpt wasm32 trap), plus a weekly `RUSTUP_TOOLCHAIN=stable`
   rot lane. **After RTM#6**, because it can change builds.
+  **Blocked (2026-09-29, `event-checkin-8c`):** open only on the commit + merge sub-step below (owner, demo freeze).
   **Built on branch `feature/030-toolchain-pin` (worktree `/tmp/ec-pin`, cut
   from `develop` `83241bd9`, 2026-09-28, session `event-checkin-00`), not
   committed yet and not merged** (RTM #6 hold; merge after the remap and
@@ -237,9 +236,7 @@ owner decision.
     `CACHE_VERSION` change on every rebuild, and the worker wasm hash
     changes; that is a few bytes of noise.
   - [ ] Commit on the branch (owner, pending); merge after RTM #6.
-    Still owner-gated as of 2026-09-29 (session `event-checkin-4e`): it
-    changes every build, and the 6–8 Oct demo freeze argues for merging
-    after the take.
+    **Blocked (2026-09-29, `event-checkin-8c`):** owner go; the uncommitted `/tmp/ec-pin` diff edits `worker/deploy.sh` + `CLAUDE.md` (peer `event-checkin-16`'s area), and the merge waits for the 6–8 Oct freeze.
 
   **Version check, 2026-09-24.**
   - Latest stable is 1.98.1 (`rustup check`). CI's `toolchain: stable` resolves to it.
@@ -260,13 +257,17 @@ owner decision.
 
 ## 4. Owner decisions (product)
 
-All four still await the owner (checked 2026-09-29, session `event-checkin-4e`).
+Each item below is a product decision: **blocked on the owner** (checked 2026-09-29, sessions `event-checkin-4e`, `event-checkin-8c`).
 
 - [ ] **Verifiable lucky draw**, from `katgpt-device-verify` fair_roll: commit,
   then reveal with a Solana blockhash, re-runnable in the browser. About 1.5 d.
+  **Blocked:** owner: product decision.
 - [ ] **Tamper-evident check-in log:** Merkle root at event close plus an
   inclusion proof on the ticket. About 2 d.
+  **Blocked:** owner: product decision.
 - [ ] **LtHash checksum** on the deposits/credits ledger with a nightly drift
   alert. About 1 d.
+  **Blocked:** owner: product decision.
 - [ ] Whether to adopt the BOUNDARY.md drift-ledger discipline and the
   second-model AGREE/REVISE review for escrow and money-path plans.
+  **Blocked:** owner: process decision.
