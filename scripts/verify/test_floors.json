@@ -36,6 +36,7 @@
     "i18n_catalog tests/i18n_catalog.rs": 6,
     "listener_cleanup tests/listener_cleanup.rs": 4,
     "mirror_field_types tests/mirror_field_types.rs": 8,
+    "profile_link_result tests/profile_link_result.rs": 4,
     "public_ticket_page_never_redirects tests/public_ticket_page_never_redirects.rs": 3,
     "qr_svg_path tests/qr_svg_path.rs": 2,
     "scanner_scan_wakeup tests/scanner_scan_wakeup.rs": 3,

@@ -13,7 +13,7 @@ publish = false
 [package.metadata.leptos-i18n]
 default = "en"
 locales = ["en", "th"]
-namespaces = ["lang", "common", "discover", "login", "status", "series", "feedback", "event", "deposit", "ticket", "claim", "landing", "privacy", "recap", "wallet"]
+namespaces = ["lang", "common", "discover", "login", "status", "series", "feedback", "event", "deposit", "ticket", "claim", "landing", "privacy", "recap", "wallet", "profile"]
 
 [package.metadata.wasm-pack.profile.release]
 wasm-opt = false

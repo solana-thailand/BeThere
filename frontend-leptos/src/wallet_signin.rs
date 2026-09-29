@@ -254,7 +254,7 @@ pub fn WalletSignInButton(
     /// Trigger button label (default: the catalog's "Sign in with Solana
     /// Wallet", in the reader's language).
     #[prop(optional, into)]
-    label: Option<String>,
+    label: Option<Signal<&'static str>>,
 ) -> impl IntoView {
     let btn_class = class.unwrap_or_else(|| "btn-google btn-solana-wallet".to_string());
     let btn_style = style.unwrap_or_default();
@@ -428,7 +428,7 @@ pub fn WalletSignInButton(
                 }
             >
                 {show_icon.then(|| view! { <span inner_html=solana_icon()></span> })}
-                {match label.clone() {
+                {match label {
                     Some(custom) => custom.into_any(),
                     None => crate::locale::tr(|l| crate::i18n::td_string!(l, wallet.sign_in)).into_any(),
                 }}

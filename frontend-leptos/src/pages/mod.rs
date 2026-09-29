@@ -41,6 +41,7 @@ pub mod onchain_events_panel;
 pub mod post_event_panel;
 pub mod pr_pack;
 pub mod privacy;
+pub mod profile_link_result;
 pub mod public;
 pub mod public_event;
 pub mod quiz_editor;

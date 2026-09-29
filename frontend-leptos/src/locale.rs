@@ -58,7 +58,7 @@ pub fn RestoreSavedLocale() -> impl IntoView {
 
 /// Routes that are attendee-facing and therefore bilingual. Everything else
 /// (admin, staff, dashboards) is English-only for now and shows no switch.
-const ATTENDEE_PREFIXES: [&str; 10] = [
+const ATTENDEE_PREFIXES: [&str; 11] = [
     "/e/",
     "/deposit/",
     "/ticket/",
@@ -69,6 +69,7 @@ const ATTENDEE_PREFIXES: [&str; 10] = [
     "/data-privacy",
     "/past-events",
     "/faq",
+    "/profile",
 ];
 
 /// `/events/{slug}/…` pages that attendees see. The rest of `/events/` (the
