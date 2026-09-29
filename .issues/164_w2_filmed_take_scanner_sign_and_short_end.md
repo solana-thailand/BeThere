@@ -1,6 +1,6 @@
 # 164: The W2 filmed take has two unrehearsed steps: the scanner's wallet sign and a short event end
 
-**Status:** open (2026-09-29): gap 2 fixed on develop (uncommitted, 2026-09-29) and rehearsed on staging; gap 1 (the owner's Phantom walk-through) is still open. Found by session `event-checkin-cf` during the W2 devnet rehearsal (`.plans/033` §6). Both gaps must be closed before the final demo take on Thu 8 Oct.
+**Status:** open (2026-09-29): gap 2 fixed on develop (`0da1be79`, 2026-09-29) and rehearsed on staging; gap 1 (the owner's Phantom walk-through) is still open. Found by session `event-checkin-cf` during the W2 devnet rehearsal (`.plans/033` §6). Both gaps must be closed before the final demo take on Thu 8 Oct.
 
 ## What the rehearsal covered
 
