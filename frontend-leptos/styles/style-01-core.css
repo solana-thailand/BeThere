@@ -87,9 +87,16 @@
     --size-7: clamp(3rem, 2.893rem + 0.5357vw, 3.375rem); /* 48 -> 54px */
 }
 
+/* Document-level scroll only (F1-e). Sideways overflow is clipped on html
+   alone: with html not `visible`, an overflow rule on body is no longer
+   propagated to the viewport, and body's overflow-y computes to `auto`,
+   which WebKit can turn into an inner scroller (no momentum, no URL-bar
+   hide, no pull-to-refresh). `clip` never creates a scroll container;
+   `hidden` is the fallback for engines without it. */
 html {
     scroll-behavior: smooth;
     overflow-x: hidden;
+    overflow-x: clip;
 }
 
 /* Scroll-margin for anchored sections so sticky nav doesn't cover them */
@@ -119,7 +126,6 @@ body {
     min-height: 100vh;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden;
 }
 
 /* ===== Layout ===== */
@@ -138,6 +144,7 @@ body {
     min-height: 100vh;
     max-width: 100vw;
     overflow-x: hidden;
+    overflow-x: clip;
     padding: 1.5rem;
     position: relative;
 }
