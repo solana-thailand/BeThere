@@ -165,6 +165,12 @@ working in; the toolchain branch is still uncommitted pending the owner. With
 the 6–8 Oct demo freeze, merge them after the take, on an owner go. The reflex
 items are dated after 12 Oct.
 
+**Rechecked 2026-09-30 (session `event-checkin-c7`), nothing taken:**
+- `feature/031-remap-path-prefix` (`132d82be`) and `feature/031-health-build-stamp` (`2bc919f0`) are still not ancestors of `develop`.
+- `feature/030-toolchain-pin` still points at its base, `83241bd9`, and its work is still uncommitted in `/tmp/ec-pin`. `git merge-base --is-ancestor` reports it as "merged" only because the branch has no commits of its own.
+- Peer `event-checkin-16` is no longer running, so the peer-area clauses above no longer apply.
+- The gates that still hold are: an owner go for each merge (and a deploy for the stamp), the 6–8 Oct freeze, reflex data dated after 12 Oct, and the two owner decisions in §4.
+
 ## 4. Owner decisions
 
 - [ ] Parity-before-use in the lucky-draw spec (`.plans/030` §4): the browser
