@@ -150,6 +150,13 @@ and publishes 0.22–0.51 accuracy. So nothing ships in the product.
   enough to matter for D1a's T-48h confirm (`docs/deposit-commitment-model.md`)?
   Needs labeled data from at least two deposit events first.
 
+**Checked 2026-09-29 (session `event-checkin-4e`), nothing taken:** the
+three held merges (remap, toolchain pin, build stamp) change every shipped
+build, and two edit `worker/`/`deploy.sh`, which peer `event-checkin-16` is
+working in; the toolchain branch is still uncommitted pending the owner. With
+the 6–8 Oct demo freeze, merge them after the take, on an owner go. The reflex
+items are dated after 12 Oct.
+
 ## 4. Owner decisions
 
 - [ ] Parity-before-use in the lucky-draw spec (`.plans/030` §4): the browser

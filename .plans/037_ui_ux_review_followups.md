@@ -226,8 +226,28 @@ Owner decisions raised by phase 3:
   region (content changes inside it, so it is announced). Verified in the
   browser: same colours and position.
 - [ ] Breakpoints: 8 sets → 360/480/768. Not started; it touches every
-  stylesheet and needs a per-file visual diff.
-- [ ] Remaining hardcoded colours in other Rust files.
+  stylesheet and needs a per-file visual diff. Held 2026-09-29 (session
+  `event-checkin-4e`): it moves layout on every demo-facing page one week
+  before the 6–8 Oct freeze; start it after the take.
+- [x] Remaining hardcoded colours in other Rust files (2026-09-29, session
+  `event-checkin-4e`). 20 inline text colours in 6 files now use tokens:
+  `#94a3b8`/`#64748b` → `--text-muted`, `#cbd5e1` → `--text-secondary`,
+  `#fff` → `--text-primary` (wallet sign-in modal, NFC check-in, profile,
+  landing nav badge, registration heads-up, admin track progress).
+  - Guard: `tests/inline_text_colour_tokens.rs` (floored, 3). Restoring the
+    old `landing/nav.rs` turned it red with 2 hits.
+  - Verified at 390×844 on the local e2e worker: computed colours are the
+    tokens (`rgb(233,228,211)`, `rgb(142,147,170)`), no page errors; all 19
+    visual snapshots unchanged.
+  - **Left on purpose (design call, not a token swap):** Solana brand
+    green/purple (`#14F195`, `#9945FF` and their rgba tints) on the NFC,
+    claim, event and profile pages; wallet and Google logo fills; the
+    transaction-kind colours in `api/admin.rs`; the claim quiz's pixel-art
+    palette in `claim/widgets.rs`; the status greens/reds in `nfc_checkin.rs`
+    (`#4ade80`, `#f87171`) that have `--success`/`--danger` equivalents of a
+    different shade. Moving them changes the look, so it needs an owner nod.
+  - Noticed, not changed: the "Tap NDEF / Web Wallet" badge on
+    `/checkin/nfc` renders a tofu box before its label (a missing glyph).
 
 ## 6. Accessibility
 
