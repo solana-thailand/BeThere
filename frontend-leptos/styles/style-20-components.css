@@ -394,3 +394,30 @@
     flex-shrink: 0;
     min-height: 44px;
 }
+
+/* Marketing emails on the profile (.plans/038 P2-e). */
+.marketing-pref {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: 1.25rem 0;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.marketing-pref-title {
+    font-size: 1rem;
+    margin: 0;
+}
+
+.marketing-pref-state {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.marketing-pref-more {
+    font-size: 0.85rem;
+}

@@ -899,6 +899,8 @@ pub fn DevProfile() -> impl IntoView {
                             }.into_any()
                         }}
 
+                        <crate::pages::marketing_preference::MarketingPreference />
+
                         // Consent
                         <div class="dev-profile-field">
                             <label class="dev-profile-checkbox-label">

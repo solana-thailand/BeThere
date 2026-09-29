@@ -206,6 +206,11 @@ pub fn routes(state: AppState) -> Router<()> {
         // notification because the message is per person and the form is
         // per (person, event) — see `.issues/102`.
         .route("/my-feedback-events", get(feedback::my_feedback_events))
+        // Current marketing-consent state for the profile (.plans/038 P2-e).
+        .route(
+            "/privacy/marketing-consent",
+            get(privacy::marketing_consent),
+        )
         .route(
             "/my-notifications/read-all",
             post(notifications::my_read_all),

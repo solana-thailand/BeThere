@@ -257,6 +257,16 @@ pub async fn update_my_profile(
         .await
         .map_err(|e| AppError::Internal(format!("Failed to update profile: {e:?}")))?;
 
+    // An unticked "contact me" box is a withdrawal, and a withdrawal must be
+    // complete: registration wrote the same consent to the attendee rows
+    // (#117, .plans/038 P2-e). Ticking it again re-enables only the profile;
+    // per-event consent is given at registration, in its own context.
+    if !body.consent_outreach {
+        crate::db::attendees::set_marketing_consent(d1, &claims.email.to_lowercase(), false)
+            .await
+            .map_err(|e| AppError::Internal(format!("set_marketing_consent failed: {e}")))?;
+    }
+
     // Return the updated profile
     Ok(ApiOk::new(MyProfileResponse {
         email: claims.email,

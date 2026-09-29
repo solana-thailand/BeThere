@@ -97,5 +97,12 @@
   "notice_label": "Privacy notice",
   "notice_body": "BeThere uses one sign-in cookie and cookie-free page analytics. No tracking cookies.",
   "notice_link": "Privacy policy →",
-  "notice_ok": "OK"
+  "notice_ok": "OK",
+  "pref_title": "Marketing emails",
+  "pref_on": "You receive news about future events.",
+  "pref_anytime": "You can withdraw at any time.",
+  "pref_withdraw": "Stop marketing emails",
+  "pref_off": "You don't receive marketing emails. To get them, tick the box when you register for an event.",
+  "pref_failed": "Couldn't load your preference. Try again later.",
+  "pref_more": "Manage your data →"
 }

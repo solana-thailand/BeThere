@@ -308,6 +308,26 @@ pub async fn delete_request(
 // Handlers — Marketing Unsubscribe
 // ---------------------------------------------------------------------------
 
+/// `GET /api/privacy/marketing-consent`
+///
+/// Whether the signed-in person currently has marketing consent on, so the
+/// profile can show the state beside the withdraw button (.plans/038 P2-e).
+/// Email from the JWT; no-store (per-person).
+#[worker::send]
+pub async fn marketing_consent(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let email = claims.email.to_lowercase();
+    let consented = match state.d1.as_deref() {
+        Some(db) => crate::db::attendees::marketing_consent_on(db, &email)
+            .await
+            .map_err(|e| AppError::Internal(format!("marketing_consent_on failed: {e}")))?,
+        None => false,
+    };
+    Ok(ApiOk::new(json!({ "consented": consented })))
+}
+
 /// `POST /api/privacy/unsubscribe-marketing`
 ///
 /// Self-service marketing opt-out (PDPA right to withdraw consent).

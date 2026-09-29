@@ -127,7 +127,19 @@ Wave 1 (`.plans/037`).
   - `e2e/privacy-notice.spec.ts` covers visibility, the link, axe, a
     snapshot and dismissal across reloads.
   - Every other spec pre-dismisses it. +2,742 B br4.
-- [ ] **P2-e:** `consent_marketing` self-serve.
+- [x] **P2-e:** a "Marketing emails" section on /profile.
+  - It shows the combined state from the new no-store `GET
+    /api/privacy/marketing-consent` and says "ยกเลิกได้ทุกเมื่อ".
+  - Withdrawal uses the existing audited unsubscribe (attendee rows plus the
+    developer profile).
+  - The premise was partly stale: an opt-out already existed at
+    /data-privacy, linked only from /privacy.
+  - Found: unticking the profile's own "contact me" box cleared only the
+    developer profile. It now withdraws everywhere (guard test).
+    `set_marketing_consent` rewrites only rows that change.
+  - Opt-in stays at registration (the per-event context).
+  - Checked in the browser (EN and TH), and D1 rows were read back.
+    +3,328 B br4.
 - [ ] **P2-f:** sample-event button, and the version + commit in the footer.
 
 ## P3
