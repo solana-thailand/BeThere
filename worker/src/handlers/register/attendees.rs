@@ -1,8 +1,9 @@
 //! The attendee list registration checks read (duplicate email, capacity).
 //!
-//! `get_attendees_for_event` is D1-first but falls back to the event's sheet
-//! when D1 has no rows, which is every brand-new event. An unreachable sheet
-//! then failed the very first registration with a 500. D1 is the source of
+//! `get_attendees_for_event` is D1-first. For a legacy event it falls back to
+//! the event's sheet when D1 has no rows, and an unreachable sheet then failed
+//! the very first registration with a 500. (Events created after D1 became
+//! authoritative read an empty roster as empty, `.issues/167` part B.) D1 is the source of
 //! truth, so when the sheet read fails this re-reads D1 and trusts its answer,
 //! including an empty one. Only a D1 failure on top fails the request.
 
@@ -23,6 +24,7 @@ pub(super) async fn registration_attendees(
         &config.sheet_name,
         kv,
         &config.id,
+        crate::sheets::EmptyRoster::for_event(config),
     )
     .await
     {

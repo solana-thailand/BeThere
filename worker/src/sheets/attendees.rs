@@ -10,6 +10,7 @@ use worker::KvStore;
 use crate::http::{ValueRange, fetch_sheet_range};
 use crate::state::AppState;
 
+use super::EmptyRoster;
 use super::a1;
 use super::columns::get_column_mapping;
 use super::token::get_cached_access_token;
@@ -92,21 +93,26 @@ pub async fn get_attendees(
 /// Fetch all attendees for an event, trying D1 first when available.
 ///
 /// Phase 2b: Queries D1 directly by `event_id`, avoiding the Google Sheets API
-/// entirely on D1 hit. Falls back to Sheets on D1 miss/error.
+/// entirely on D1 hit. Falls back to Sheets on a D1 error, and on an empty D1
+/// roster only when `empty_roster` is [`EmptyRoster::ReadSheet`]
+/// (`.issues/167` part B).
 pub async fn get_attendees_for_event(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
     event_id: &str,
+    empty_roster: EmptyRoster,
 ) -> Result<Vec<Attendee>, String> {
-    get_attendees_inner(state, sheet_id, sheet_name, kv, Some(event_id)).await
+    let d1_first = Some((event_id, empty_roster));
+    get_attendees_inner(state, sheet_id, sheet_name, kv, d1_first).await
 }
 
 /// Inner implementation shared between `get_attendees` and `get_attendees_for_event`.
 ///
-/// When `event_id` is provided and D1 is configured, tries D1 first.
-/// Otherwise (or on D1 miss/error), falls through to Google Sheets.
+/// When `d1_first` is provided and D1 is configured, tries D1 first.
+/// Otherwise (or on a D1 error, or an empty roster the policy does not
+/// trust), falls through to Google Sheets.
 ///
 /// Phase 2d: KV attendee cache removed — D1 is the primary store.
 async fn get_attendees_inner(
@@ -114,10 +120,10 @@ async fn get_attendees_inner(
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
-    event_id: Option<&str>,
+    d1_first: Option<(&str, EmptyRoster)>,
 ) -> Result<Vec<Attendee>, String> {
     // Phase 2b: D1-first when event_id is available
-    if let (Some(d1), Some(eid)) = (&state.d1, event_id) {
+    if let (Some(d1), Some((eid, empty_roster))) = (&state.d1, d1_first) {
         tracing::info!(event_id = %eid, "D1 path: querying attendees");
         match crate::db::attendees::get_attendees_by_event(d1, eid).await {
             Ok(attendees) if !attendees.is_empty() => {
@@ -127,6 +133,10 @@ async fn get_attendees_inner(
                     "D1 hit: attendees for event"
                 );
                 return Ok(attendees);
+            }
+            Ok(_) if empty_roster == EmptyRoster::Trust => {
+                tracing::debug!(event_id = %eid, "D1 empty: event created after D1 became authoritative, not reading the sheet");
+                return Ok(Vec::new());
             }
             Ok(_) => {
                 tracing::debug!(event_id = %eid, "D1 empty: no attendees for event, falling back to Sheets");

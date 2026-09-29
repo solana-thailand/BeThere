@@ -20,6 +20,7 @@ pub mod write;
 // Re-export all public write functions for backward compatibility.
 pub use write::*;
 
+pub use crate::empty_roster::EmptyRoster;
 pub use attendees::*;
 pub(crate) use columns::invalidate_column_map_cache;
 pub use columns::{column_mapping_or_hardcoded, get_column_mapping};
