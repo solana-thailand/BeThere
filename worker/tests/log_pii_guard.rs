@@ -776,3 +776,24 @@ fn the_guard_detects_a_reintroduced_identifier() {
         assert!(!flagged, "guard false-positived on: {source}");
     }
 }
+
+/// Class 4 with a twist: the identifier is not ours to format, the provider
+/// echoes it. Crossmint bodies carry the recipient wallet (a 4xx echoes the
+/// request, the NFT resource names its owner), and callers log mint errors as
+/// `error = %e`. Every Crossmint body must pass `scrub_recipient` before it is
+/// logged or returned.
+#[test]
+fn crossmint_bodies_are_scrubbed_of_the_recipient_wallet() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/solana.rs");
+    let source = fs::read_to_string(&path).expect("solana.rs is readable");
+    assert!(
+        source.contains(".map_err(|e| scrub_recipient(&e, req.wallet_address))"),
+        "mint_compressed_nft must scrub the recipient wallet from every error it returns"
+    );
+    for raw in ["%poll_json", "%post_json", "error = %e, \"crossmint"] {
+        assert!(
+            !source.contains(raw),
+            "solana.rs logs an unscrubbed Crossmint body ({raw}); pass it through scrub_recipient"
+        );
+    }
+}
