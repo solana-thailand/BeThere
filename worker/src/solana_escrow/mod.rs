@@ -7,6 +7,7 @@
 //! PDA derivation uses SHA-256 via Web Crypto (SubtleCrypto).
 //! Transaction serialization follows the Solana wire format (bincode-like).
 
+pub mod account_info;
 pub(crate) mod blockhash;
 pub(crate) mod crypto;
 pub mod rpc_retry;

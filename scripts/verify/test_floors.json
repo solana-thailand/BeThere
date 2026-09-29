@@ -92,6 +92,7 @@
     "email_validation tests/email_validation.rs": 4,
     "error_body_guard tests/error_body_guard.rs": 4,
     "error_public_message tests/error_public_message.rs": 11,
+    "escrow_account_info tests/escrow_account_info.rs": 5,
     "escrow_ix_program_sync tests/escrow_ix_program_sync.rs": 3,
     "escrow_transition_contract tests/escrow_transition_contract.rs": 14,
     "event_checkin_domain src/lib.rs": 157,

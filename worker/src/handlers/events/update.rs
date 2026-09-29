@@ -97,6 +97,19 @@ pub async fn update_event(
                     "escrow PDA confirmed closed on-chain — reset to None allowed"
                 );
             }
+            // The RPC could not answer: we don't know whether the escrow is
+            // closed, so refuse the reset without claiming it still exists.
+            Err(e @ crate::solana_escrow::EscrowError::RpcFailed(_)) => {
+                tracing::warn!(
+                    event_id = %id,
+                    error = %e,
+                    "escrow PDA check failed — rejecting reset to None"
+                );
+                return Err(AppError::Internal(format!(
+                    "cannot confirm the on-chain escrow is closed: {e}"
+                ))
+                .into());
+            }
             Err(e) => {
                 tracing::warn!(
                     event_id = %id,

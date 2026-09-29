@@ -1,5 +1,6 @@
 //! Wire format serialization and on-chain verification.
 
+use super::account_info::get_account_info;
 use super::crypto::{find_program_address, pubkey_from_base58, pubkey_to_base58};
 use super::{EscrowError, PubkeyBytes, escrow_program_id};
 
@@ -56,62 +57,10 @@ pub async fn verify_escrow_account_exists(
 
     let escrow_b58 = pubkey_to_base58(&event_escrow);
 
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-verify-escrow",
-        "method": "getAccountInfo",
-        "params": [
-            escrow_b58,
-            { "encoding": "base64", "commitment": "confirmed" }
-        ]
-    });
-
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(rpc_url, &init)
-        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
-
-    let mut response = worker::Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("fetch: {e:?}")))?;
-
-    let status = response.status_code();
-    if !(200..300).contains(&status) {
-        let text = response.text().await.unwrap_or_default();
-        return Err(EscrowError::RpcFailed(format!("HTTP {status}: {text}")));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("read body: {e:?}")))?;
-
-    let json: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
-
-    // JSON-RPC failures still use HTTP 200. Treating a missing `result` as an
-    // absent account hides configuration errors such as a missing RPC API key
-    // and can send an organizer down an unsafe retry path.
-    if let Some(error) = json.get("error") {
-        return Err(EscrowError::RpcFailed(format!("RPC error: {error}")));
-    }
-
-    let account_info = json.get("result").and_then(|v| v.get("value"));
+    let account_info = get_account_info(rpc_url, "bethere-verify-escrow", &escrow_b58).await?;
 
     match account_info {
-        None | Some(serde_json::Value::Null) => Err(EscrowError::AccountNotFound(
+        None => Err(EscrowError::AccountNotFound(
             "escrow account does not exist on-chain — it may have already been closed".to_string(),
         )),
         Some(info) => {
@@ -142,53 +91,11 @@ async fn account_exists_owned_by_program(
     account_b58: &str,
     expected_owner_b58: &str,
 ) -> Result<bool, EscrowError> {
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-account-owner-check",
-        "method": "getAccountInfo",
-        "params": [
-            account_b58,
-            { "encoding": "base64", "commitment": "confirmed" }
-        ]
-    });
+    let account_info =
+        get_account_info(rpc_url, "bethere-account-owner-check", account_b58).await?;
 
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(rpc_url, &init)
-        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
-
-    let mut response = worker::Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("fetch: {e:?}")))?;
-
-    let status = response.status_code();
-    if !(200..300).contains(&status) {
-        let text = response.text().await.unwrap_or_default();
-        return Err(EscrowError::RpcFailed(format!("HTTP {status}: {text}")));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("read body: {e:?}")))?;
-
-    let json: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
-
-    Ok(match json.get("result").and_then(|v| v.get("value")) {
-        None | Some(serde_json::Value::Null) => false,
+    Ok(match account_info {
+        None => false,
         Some(v) => v
             .get("owner")
             .and_then(|o| o.as_str())
@@ -247,42 +154,8 @@ async fn fetch_account_data(
 ) -> Result<Option<(String, Vec<u8>)>, EscrowError> {
     use base64::Engine as _;
 
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-account-read",
-        "method": "getAccountInfo",
-        "params": [account_b58, { "encoding": "base64", "commitment": "confirmed" }]
-    });
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-    let request = worker::Request::new_with_init(rpc_url, &init)
-        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
-    let mut response = worker::Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("fetch: {e:?}")))?;
-    let status = response.status_code();
-    if !(200..300).contains(&status) {
-        let text = response.text().await.unwrap_or_default();
-        return Err(EscrowError::RpcFailed(format!("HTTP {status}: {text}")));
-    }
-    let text = response
-        .text()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("read body: {e:?}")))?;
-    let json: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
-    let value = match json.get("result").and_then(|v| v.get("value")) {
-        None | Some(serde_json::Value::Null) => return Ok(None),
-        Some(v) => v,
+    let Some(value) = get_account_info(rpc_url, "bethere-account-read", account_b58).await? else {
+        return Ok(None);
     };
     let owner = value
         .get("owner")
@@ -497,55 +370,11 @@ pub async fn check_escrow_pda_available(
 
     let escrow_b58 = pubkey_to_base58(&event_escrow);
 
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-check-pda-available",
-        "method": "getAccountInfo",
-        "params": [
-            escrow_b58,
-            { "encoding": "base64", "commitment": "confirmed" }
-        ]
-    });
-
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(rpc_url, &init)
-        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
-
-    let mut response = worker::Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("fetch: {e:?}")))?;
-
-    let status = response.status_code();
-    if !(200..300).contains(&status) {
-        let text = response.text().await.unwrap_or_default();
-        return Err(EscrowError::RpcFailed(format!("HTTP {status}: {text}")));
-    }
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| EscrowError::RpcFailed(format!("read body: {e:?}")))?;
-
-    let json: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
-
-    let account_info = json.get("result").and_then(|v| v.get("value"));
+    let account_info =
+        get_account_info(rpc_url, "bethere-check-pda-available", &escrow_b58).await?;
 
     match account_info {
-        None | Some(serde_json::Value::Null) => {
+        None => {
             // Account does not exist — PDA is available for initialization
             Ok(escrow_b58)
         }
