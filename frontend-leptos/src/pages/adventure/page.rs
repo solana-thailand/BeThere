@@ -728,7 +728,7 @@ pub fn Adventure() -> impl IntoView {
                         .collect();
                     view! {
                         <div class="adventure-overlay" on:click=move |_| set_show_level_select.set(false)>
-                            <div class="adventure-overlay-card adventure-level-select-card" on:click=move |ev| ev.stop_propagation()>
+                            <div class="adventure-overlay-card adventure-level-select-card" role="dialog" aria-modal="true" aria-label="Select Level" on:click=move |ev| ev.stop_propagation()>
                                 <h2><Icon icon=IconName::Map class="icon-sm" />" Select Level"</h2>
                                 <div class="level-select-list">
                                     {levels_vec.into_iter().map(|(idx, name, concept, is_current, is_completed)| {
@@ -778,9 +778,10 @@ pub fn Adventure() -> impl IntoView {
                     let level_info = levels.get(g.current_level)
                         .map(|l| (l.intro_text.clone(), l.name.clone()));
                     let (intro, level_name) = level_info.unwrap_or_default();
+                    let dialog_label = level_name.clone();
                     view! {
                         <div class="adventure-overlay" on:click=move |_| dismiss_intro()>
-                            <div class="adventure-overlay-card adventure-intro-card">
+                            <div class="adventure-overlay-card adventure-intro-card" role="dialog" aria-modal="true" aria-label=dialog_label>
                                 <div class="adventure-intro-level">"Level " {g.current_level + 1}</div>
                                 <h2>{level_name}</h2>
                                 <p>{intro}</p>
@@ -836,7 +837,7 @@ pub fn Adventure() -> impl IntoView {
                     };
                     view! {
                         <div class="adventure-overlay adventure-overlay-success">
-                            <div class="adventure-overlay-card adventure-overlay-card-success">
+                            <div class="adventure-overlay-card adventure-overlay-card-success" role="dialog" aria-modal="true" aria-label="Level Complete">
                                 <div class="adventure-success-icon">"🎉"</div>
                                 <h2>"Level Complete!"</h2>
                                 <div class="adventure-stars">{star_display}</div>
@@ -950,7 +951,7 @@ pub fn Adventure() -> impl IntoView {
                     <div class="adventure-overlay" on:click=move |_| {
                         set_game.update(|g| *g = engine::dismiss_dialog(g.clone()));
                     }>
-                        <div class="adventure-dialog-card">
+                        <div class="adventure-dialog-card" role="dialog" aria-modal="true" aria-label=dialog.npc_name.clone()>
                             <div class="dialog-speaker">{dialog.npc_name.clone()}</div>
                             <div class="dialog-text">{dialog.text.clone()}</div>
                             <p class="adventure-overlay-hint">"Press any key or tap to dismiss"</p>
@@ -1201,7 +1202,7 @@ pub fn Adventure() -> impl IntoView {
 
                     view! {
                         <div class="adventure-overlay adventure-overlay-puzzle">
-                            <div class="adventure-puzzle-card">
+                            <div class="adventure-puzzle-card" role="dialog" aria-modal="true" aria-label="Code Puzzle">
                                 <h3>"🧩 Code Puzzle"</h3>
                                 {instruction}
 
