@@ -85,6 +85,12 @@ the Linux baselines were re-taken.
   **Owner question (2026-09-30, `event-checkin-aa`):** "for OG images, a paid
   Workers plan (render SVG→PNG in the Worker), or a PNG rendered per event
   offline and uploaded to R2 on save?"
+  **Tradeoff written (2026-10-01, `event-checkin-53`):** `.issues/183`.
+  Crawlers never see the per-event tags (the SPA sets them after boot, and
+  `/e/*` is asset-first), and the static card's `badge.svg` renders nowhere.
+  Recommendation: Worker splices per-event tags into `/e/{slug}`, and the
+  organizer's browser makes the PNG on save (no Worker CPU). A one-file quick
+  win (`badge.png`) is the owner's call. Build after the take.
 
 ## Remaining
 
