@@ -134,7 +134,8 @@ reflex-site has no license, so its code is a pattern only.
     **Owner question:** "may `feature/031-remap-path-prefix` (`9c13c05e`) merge into `develop` after the 8 Oct take and go to staging, at +2.1 KB br4 on the staff shell?"
 - [ ] Toolchain pin (`.plans/030` §3): declare `components` and `targets`.
   **Built on branch `feature/030-toolchain-pin` (2026-09-28, session
-  `event-checkin-00`), not committed or merged** (RTM #6 hold). Details and
+  `event-checkin-00`); committed and rebased onto `develop` as `020fdc0b`
+  (2026-10-01, `event-checkin-53`), not merged** (RTM #6 hold). Details and
   the open size A/B are in `.plans/030` §3.
   **Blocked (2026-09-29, `event-checkin-8c`):** see `.plans/030` §3; the commit is owner-pending and edits peer `event-checkin-16`'s files.
   - [x] `components = ["clippy", "rustfmt"]` and
@@ -190,6 +191,24 @@ items are dated after 12 Oct.
 - `feature/030-toolchain-pin` still points at its base, `83241bd9`, and its work is still uncommitted in `/tmp/ec-pin`. `git merge-base --is-ancestor` reports it as "merged" only because the branch has no commits of its own.
 - Peer `event-checkin-16` is no longer running, so the peer-area clauses above no longer apply.
 - The gates that still hold are: an owner go for each merge (and a deploy for the stamp), the 6–8 Oct freeze, reflex data dated after 12 Oct, and the two owner decisions in §4.
+
+**Rechecked 2026-10-01 (session `event-checkin-53`): every open item is gated.**
+- The three merges wait for the 6–8 Oct freeze and an owner go (plus a
+  deploy for the stamp).
+- The reflex items wait for data dated after 12 Oct.
+- §4 waits on the owner.
+
+Done this pass:
+- The toolchain pin is committed and rebased (`020fdc0b`).
+- A simulated merge of remap (`9c13c05e`), then stamp (`2bc919f0`), then
+  pin (`020fdc0b`) onto `develop` `1d67e75d` is conflict-free
+  (`git merge-tree` + `commit-tree`; no branch moved).
+- On that combined tree:
+  - `toolchain_pin_gate.py` passes, ShellCheck is clean and every workflow's
+    YAML parses;
+  - `build.sh` carries both the pin source and the remap RUSTFLAGS.
+- Not run: the cargo and wasm builds on the combined tree (CI's job, after
+  the owner pushes).
 
 ## 4. Owner decisions
 

@@ -236,7 +236,15 @@ owner decision.
     Trunk reorders `modulepreload` links, so `index.html` and the SW
     `CACHE_VERSION` change on every rebuild, and the worker wasm hash
     changes; that is a few bytes of noise.
-  - [ ] Commit on the branch (owner, pending); merge after RTM #6.
+  - [x] Commit on the branch: `f063100c` (2026-10-01, `event-checkin-53`),
+    then rebased onto `develop` `1d67e75d` as `020fdc0b`. The one conflict
+    was the `CLAUDE.md` gates table; both rows kept.
+    Committed because the only copy was uncommitted in `/tmp/ec-pin`, which
+    macOS can clean. A local feature-branch commit is not a push, a migration
+    or a deploy. Gates re-run first: `toolchain_pin_gate.py --self-test` 7/7
+    and clean, ShellCheck 0.11.0 clean over 39 scripts.
+  - [ ] Merge into `develop` after the 8 Oct take, after the remap and
+    build-stamp branches. Push is the owner's.
     **Blocked (2026-09-29, `event-checkin-8c`):** owner go; the uncommitted `/tmp/ec-pin` diff edits `worker/deploy.sh` + `CLAUDE.md` (peer `event-checkin-16`'s area), and the merge waits for the 6–8 Oct freeze.
     **Rechecked 2026-09-30 (`event-checkin-c7`):** `/tmp/ec-pin` is still at `83241bd9` with 4 modified and 4 new files, none committed. Two gates are left: an owner go for the commit, and the merge after the 6–8 Oct freeze. The peer-area clause no longer applies, because `event-checkin-16` is not running.
 
@@ -256,6 +264,13 @@ owner decision.
   **Compat notes to re-check on the bump:**
   - 1.97 switched to v0 symbol mangling by default. Re-measure `worker_size_budget.sh` and `frontend_size_budget.sh`.
   - 1.96 stopped passing `--allow-undefined` on wasm. The local wasm32 clippy builds on 1.98.1 pass; a full `worker-build` on 1.98.1 has not been run.
+
+**All remaining 030 work is owner-gated (2026-10-01, `event-checkin-53`).**
+- HISTORY.md close protocol: needs the owner's yes to move closed issues
+  out of `.issues/`.
+- Toolchain pin: committed. Only the merge is left, and it waits for the
+  demo freeze (6–8 Oct) plus the owner's push.
+- §4: four product and process decisions, each with its question below.
 
 ## 4. Owner decisions (product)
 
