@@ -10,6 +10,7 @@
 
 mod helpers;
 mod interop;
+pub mod mint_retry;
 mod page;
 mod quiz_helpers;
 mod quiz_views;

@@ -787,7 +787,11 @@ fn crossmint_bodies_are_scrubbed_of_the_recipient_wallet() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/solana.rs");
     let source = fs::read_to_string(&path).expect("solana.rs is readable");
     assert!(
-        source.contains(".map_err(|e| scrub_recipient(&e, req.wallet_address))"),
+        // Issue 180 typed the error (`MintError`); `map_detail` scrubs the
+        // detail of both variants (pinned in domain/tests/mint_error.rs).
+        source.contains(
+            ".map_err(|e| e.map_detail(|detail| scrub_recipient(detail, req.wallet_address)))"
+        ),
         "mint_compressed_nft must scrub the recipient wallet from every error it returns"
     );
     for raw in ["%poll_json", "%post_json", "error = %e, \"crossmint"] {

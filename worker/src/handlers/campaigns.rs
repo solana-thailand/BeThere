@@ -839,7 +839,7 @@ pub async fn claim_campaign_reward(
             return Err(AppError::External {
                 service: "crossmint".into(),
                 status: 502,
-                body: e,
+                body: e.to_string(),
             }
             .into());
         }
