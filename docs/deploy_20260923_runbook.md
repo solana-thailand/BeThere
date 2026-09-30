@@ -274,8 +274,12 @@ and deletes the fixture. Every step is an INSERT or UPDATE.
 
 ```bash
 # staging, BEFORE promoting to production:
-bash scripts/verify/post_deploy_smoke.sh
+bash scripts/verify/post_deploy_smoke.sh --expect-build "git:$(git rev-parse HEAD)"
 ```
+
+`--expect-build` pins the stamp `deploy.sh` bakes into `/api/health`'s
+`build` (`git:<sha>`, `+dirty` if the tree was dirty). A build from outside
+`deploy.sh` reports "unstamped" and fails it.
 
 It fails closed on a non-staging URL, because it writes real rows. It is proven
 in both directions: against a build with `.issues/138` reintroduced it reports
