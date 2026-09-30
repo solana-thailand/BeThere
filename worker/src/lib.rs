@@ -13,6 +13,8 @@ mod crypto;
 // `pub`; only the module declaration was private.
 pub mod db;
 mod durable_objects;
+// Public so `worker/tests/empty_roster_policy.rs` can drive the policy.
+pub mod empty_roster;
 mod error;
 mod escrow_indexer;
 // Public so that `worker/tests/escrow_transition_contract.rs` (Plan 014

@@ -88,6 +88,7 @@ pub async fn sync_sheet_to_d1(
         &config.sheet_name,
         kv,
         &event_id,
+        crate::sheets::EmptyRoster::ReadSheet,
     )
     .await
     .map_err(|e| {

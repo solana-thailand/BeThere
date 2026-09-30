@@ -312,6 +312,7 @@ pub async fn quest_complete_checkin(
         &event.sheet_name,
         kv,
         &event.id,
+        crate::sheets::EmptyRoster::for_event(&event),
     )
     .await
     .map_err(|e| AppError::Internal(format!("failed to fetch attendees: {e}")))?;

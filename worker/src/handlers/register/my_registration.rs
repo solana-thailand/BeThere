@@ -48,6 +48,7 @@ pub async fn my_registration(
         &config.sheet_name,
         kv,
         &config.id,
+        crate::sheets::EmptyRoster::for_event(&config),
     )
     .await
     .map_err(|e| {
@@ -196,6 +197,7 @@ pub async fn my_registrations(
                         &config.sheet_name,
                         kv.as_ref(),
                         &config.id,
+                        crate::sheets::EmptyRoster::for_event(&config),
                     )
                     .await
                     {
