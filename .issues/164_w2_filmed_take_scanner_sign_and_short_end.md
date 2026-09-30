@@ -67,3 +67,22 @@ The staff-scan CPU from this run is `.benchmarks/007`.
 
 - `solana transfer` and `spl-token transfer` now work against devnet (both finalized, 28 Sep). The 27 Sep "error sending request" did not reproduce.
 - Badge minting can't be filmed on staging (no Crossmint secret). W2 already plans to film the badge on prod, where it is live, so it is a separate clip.
+
+## Gap 1 rehearsal fixture (2026-09-30, session `event-checkin-b5`)
+
+Staging, devnet. Built with `demo_fixture` plus `bethere-mcp` `register` and
+`pay_deposit` (the first half of `/tmp/gap2/run.py`; driver
+`/tmp/ec-b5-rehearsal/setup.py`, outside the repo). Check-in was left undone
+for the owner's Phantom run:
+
+- Event `agent-demo-meetup-1790757649`, active. It ends Tue 6 Oct 23:58 ICT;
+  `mark_checked_in` needs `clock <= event_end`.
+- Escrow `97cGnfZCWQC43AwycSWV3yPQUq9GvbAuvNxL87od7bau`, initialized. The
+  scanner's on-chain prompt shows because `deposit_enabled` is true and
+  `escrow_address` is set.
+- Attendee `01a0f179-9b4a-7a13-82a0-cf4d2d629dfe` ("Phantom Rehearsal"). It
+  paid 1 USDC from agent wallet `54GK…` (verified), and D1 `checked_in_at` is
+  NULL.
+- Ticket (QR):
+  `https://bethere-staging.solana-thailand.workers.dev/ticket/01a0f179-9b4a-7a13-82a0-cf4d2d629dfe?event_id=agent-demo-meetup-1790757649`
+- The organizer to sign in Phantom (devnet) is `9Bz7p4RWdX7eaR4hFUeCc7aSZjDHsie8q1u8imwavkBN`.
