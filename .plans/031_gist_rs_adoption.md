@@ -138,6 +138,7 @@ reflex-site has no license, so its code is a pattern only.
   (2026-10-01, `event-checkin-53`), not merged** (RTM #6 hold). Details and
   the open size A/B are in `.plans/030` §3.
   **Blocked (2026-09-29, `event-checkin-8c`):** see `.plans/030` §3; the commit is owner-pending and edits peer `event-checkin-16`'s files.
+  **Gate (2026-10-01, `event-checkin-13`):** only the merge sub-step below is open. The commit is done (`020fdc0b`) and the peer is gone.
   - [x] `components = ["clippy", "rustfmt"]` and
     `targets = ["wasm32-unknown-unknown"]` declared in `rust-toolchain.toml`.
   - [ ] Merge after RTM #6, after the remap and build-stamp branches.
@@ -209,6 +210,18 @@ Done this pass:
   - `build.sh` carries both the pin source and the remap RUSTFLAGS.
 - Not run: the cargo and wasm builds on the combined tree (CI's job, after
   the owner pushes).
+
+**Rechecked 2026-10-01, later (session `event-checkin-13`): every open item is still gated.**
+- Remap, stamp and pin merges: the owner's go after the 8 Oct take (plus a
+  deploy for the stamp). None of the three is an ancestor of `develop`.
+- The reflex A/B needs RTM #6 W1 data from prod D1, dated after 12 Oct.
+  No-show prediction needs two labeled deposit events.
+- §4: two owner questions, written under each item.
+- `develop` moved to `d0d62a2f`, which edits `ci.yml` and `CLAUDE.md`, as
+  all three branches do. The simulated merge (remap, then stamp, then pin)
+  is still conflict-free. On the combined tree, `toolchain_pin_gate.py`
+  passes, every workflow's YAML parses, and both the `toolchain_pin_gate`
+  row and the new report index are in `CLAUDE.md`. No branch moved.
 
 ## 4. Owner decisions
 

@@ -247,6 +247,7 @@ owner decision.
     build-stamp branches. Push is the owner's.
     **Blocked (2026-09-29, `event-checkin-8c`):** owner go; the uncommitted `/tmp/ec-pin` diff edits `worker/deploy.sh` + `CLAUDE.md` (peer `event-checkin-16`'s area), and the merge waits for the 6–8 Oct freeze.
     **Rechecked 2026-09-30 (`event-checkin-c7`):** `/tmp/ec-pin` is still at `83241bd9` with 4 modified and 4 new files, none committed. Two gates are left: an owner go for the commit, and the merge after the 6–8 Oct freeze. The peer-area clause no longer applies, because `event-checkin-16` is not running.
+    **Gate (rechecked 2026-10-01, `event-checkin-13`):** the commit gate is gone (`020fdc0b`). What is left is the owner's go for the merge after the 8 Oct take, and the owner's push. A simulated merge of remap, then stamp, then pin onto `develop` `d0d62a2f` is conflict-free. On the combined tree, `toolchain_pin_gate.py` passes, every workflow's YAML parses, and the new deposit-report CI step is still there.
 
   **Version check, 2026-09-24.**
   - Latest stable is 1.98.1 (`rustup check`). CI's `toolchain: stable` resolves to it.
@@ -276,7 +277,7 @@ owner decision.
 
 Each item below is a product decision: **blocked on the owner** (checked 2026-09-29, sessions `event-checkin-4e`, `event-checkin-8c`).
 
-**Rechecked 2026-09-30 (session `event-checkin-aa`):** no gate moved. Every open item in §3 and §4 waits on the owner question written under it, and `/tmp/ec-pin` is still uncommitted at `83241bd9`. The pin commit's question is "may `feature/030-toolchain-pin` be committed now (it edits `worker/deploy.sh`, `frontend-leptos/build.sh`, CI and `CLAUDE.md`) and merged after the remap and build-stamp branches, after the 8 Oct take?"
+**Rechecked 2026-09-30 (session `event-checkin-aa`):** no gate moved. Every open item in §3 and §4 waits on the owner question written under it, and `/tmp/ec-pin` is still uncommitted at `83241bd9` (committed since, as `020fdc0b` on 2026-10-01). The pin commit's question is "may `feature/030-toolchain-pin` be committed now (it edits `worker/deploy.sh`, `frontend-leptos/build.sh`, CI and `CLAUDE.md`) and merged after the remap and build-stamp branches, after the 8 Oct take?"
 
 - [ ] **Verifiable lucky draw**, from `katgpt-device-verify` fair_roll: commit,
   then reveal with a Solana blockhash, re-runnable in the browser. About 1.5 d.
