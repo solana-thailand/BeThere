@@ -1,7 +1,7 @@
 //! Save handler: validate, then create or update (plus escrow init).
 
 use event_checkin_domain::models::event::{
-    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, normalize_sheet_name,
+    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, normalize_sheet_name, normalize_sponsors,
 };
 use event_checkin_domain::money::{check_usdc_deposit, parse_usdc_atomic};
 use leptos::prelude::*;
@@ -20,6 +20,7 @@ pub(super) fn save_event(ctx: FormCtx, on_done: OnDone) {
         set_saving,
         slug_taken,
         cl_links,
+        sponsors,
         create_wallet_name,
         create_wallet_pk,
         ..
@@ -84,6 +85,19 @@ pub(super) fn save_event(ctx: FormCtx, on_done: OnDone) {
             return;
         }
     }
+    // Same check the backend runs; the normalised list (trimmed, blank rows
+    // dropped) is what gets sent.
+    let sponsor_list = match normalize_sponsors(&sponsors.get()) {
+        Ok(list) => list,
+        Err(e) => {
+            components::show_toast(
+                &set_toast,
+                &format!("Sponsors: {e}"),
+                components::ToastType::Error,
+            );
+            return;
+        }
+    };
 
     // Validate schedule — backend requires positive start_ms and end > start
     let time_tba = current_form.time_tba;
@@ -256,6 +270,7 @@ pub(super) fn save_event(ctx: FormCtx, on_done: OnDone) {
                 .ok(),
             visibility: current_form.visibility.clone(),
             community_links: cl_links.get(),
+            sponsors: sponsor_list.clone(),
             ticket_note_in_person: current_form.ticket_note_in_person.clone(),
             ticket_note_online: current_form.ticket_note_online.clone(),
             postponed_note: current_form.postponed_note.clone(),
@@ -517,6 +532,8 @@ pub(super) fn save_event(ctx: FormCtx, on_done: OnDone) {
             ),
             visibility: Some(current_form.visibility.clone()),
             community_links: Some(cl_links.get()),
+            // Always sent, so removing every row removes the logo row.
+            sponsors: Some(sponsor_list.clone()),
             ticket_note_in_person: Some(current_form.ticket_note_in_person.clone()),
             ticket_note_online: Some(current_form.ticket_note_online.clone()),
             // Always sent, so emptying the box un-postpones the event.

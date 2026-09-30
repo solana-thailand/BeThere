@@ -1,3 +1,4 @@
+use super::attribution::{organizer_line, sponsor_row};
 use super::deposit_section::deposit_section;
 use super::details_card::details_card;
 use super::event_hero::event_hero;
@@ -576,6 +577,7 @@ fn render_loaded_event(
         // Event Name + Tagline
         <div class="pe-name-block">
             <h1 class="pe-name">{name}</h1>
+            {organizer_line(&data.organizer_name)}
             {if !tagline.is_empty() {
                 let t = tagline.clone();
                 view! {
@@ -879,6 +881,9 @@ fn render_loaded_event(
         } else {
             ().into_any()
         }}
+
+        // Sponsors — last, directly above the footer.
+        {sponsor_row(&data.sponsors)}
     }.into_any()
 }
 
@@ -905,6 +910,7 @@ fn completed_event_gateway(
 
         <div class="pe-name-block">
             <h1 class="pe-name">{name}</h1>
+            {organizer_line(&data.organizer_name)}
             {if !tagline.is_empty() {
                 view! { <p class="pe-tagline">{tagline}</p> }.into_any()
             } else {
@@ -960,6 +966,8 @@ fn completed_event_gateway(
             community_links,
             crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent,
         )}
+
+        {sponsor_row(&data.sponsors)}
     }
     .into_any()
 }

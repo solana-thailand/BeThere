@@ -89,6 +89,13 @@
     margin: 0;
 }
 
+/* Organizer attribution (F7-a): a quiet line under the title. */
+.pe-organizer {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0 0 0.5rem;
+}
+
 /* Share row */
 .pe-share-row {
     width: 100%;
@@ -725,4 +732,75 @@
     font-family: var(--font-mono);
     font-size: 0.75rem;
     color: var(--text-muted);
+}
+
+/* Sponsor logo row (F7-b), last on the page, above the footer. Logos sit on
+   the paper tone in greyscale and regain colour on hover or focus. */
+.pe-sponsors {
+    width: 100%;
+    background: var(--paper);
+    color: var(--paper-ink);
+    border-radius: var(--radius);
+    padding: var(--size-4) var(--size-5);
+    margin-bottom: 1.25rem;
+    text-align: center;
+}
+
+.pe-sponsors-title {
+    /* The global h2 colour is light text for the dark cards. */
+    color: var(--paper-ink);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 0.75rem;
+    opacity: 0.7;
+}
+
+.pe-sponsors-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem 1.5rem;
+}
+
+.pe-sponsor {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: inherit;
+    text-decoration: none;
+    filter: grayscale(1);
+    opacity: 0.75;
+    transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+a.pe-sponsor:hover,
+a.pe-sponsor:focus-visible {
+    filter: none;
+    opacity: 1;
+}
+
+.pe-sponsor-logo {
+    display: block;
+    max-height: 40px;
+    max-width: 140px;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.pe-sponsor-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pe-sponsor {
+        transition: none;
+    }
 }

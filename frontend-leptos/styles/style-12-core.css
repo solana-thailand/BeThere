@@ -410,6 +410,11 @@
     flex-shrink: 0;
 }
 
+.sponsor-row .quiz-number-input {
+    flex: 1;
+    min-width: 140px;
+}
+
 .community-link-remove {
     flex-shrink: 0;
     padding: 0.25rem 0.5rem !important;
@@ -447,7 +452,8 @@
     }
     .community-link-platform,
     .community-link-url,
-    .community-link-label {
+    .community-link-label,
+    .sponsor-row .quiz-number-input {
         width: 100% !important;
         min-width: unset;
     }

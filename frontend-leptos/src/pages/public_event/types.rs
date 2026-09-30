@@ -265,6 +265,12 @@ pub struct PublicEventData {
     /// Plain text; rendered by `components::postponed_banner`, never as HTML.
     #[serde(default)]
     pub postponed_note: String,
+    /// Display name of the organizing organization. Empty = no line.
+    #[serde(default)]
+    pub organizer_name: String,
+    /// Sponsors for the logo row (migration 0057). Empty = no row.
+    #[serde(default)]
+    pub sponsors: Vec<event_checkin_domain::models::event::Sponsor>,
 }
 
 // ---------------------------------------------------------------------------

@@ -148,5 +148,7 @@
   "err_parse": "Parse error",
   "err_read": "Read error",
   "err_network": "Network error",
-  "err_bot_check": "The human check failed or expired. Please try again."
+  "err_bot_check": "The human check failed or expired. Please try again.",
+  "organized_by": "Organized by",
+  "sponsors_title": "Supported by"
 }
