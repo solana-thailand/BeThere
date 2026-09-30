@@ -225,3 +225,19 @@ cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
 cargo clippy --locked --all-targets -- -D warnings   # native, catches test-only lints
 cargo test --locked                                   # 181 tests, 6 ignored
 ```
+
+---
+
+## Post-take merge queue (owner, 2026-10-01)
+
+The owner decided: both 052 branches stay unmerged until after the 8 Oct take. They merge into `develop`
+then, with the other held branches. There are no pushes, merges or deploys before the take.
+
+| Order | Branch | Tip | What |
+|---|---|---|---|
+| 1 | `feature/052-db-events-split` | `15a188da` | `worker/src/db/events.rs` → `db/events/` |
+| 2 | `feature/052-quiz-editor-split` | `a6aa8340` | `quiz_editor/editor.rs` → `editor.rs` + `questions.rs` (DOM A/B 18/18) |
+
+- **Merge check:** a simulated merge (`git merge-tree`) of 1 and then 2 onto `develop` `6604beee` is conflict-free. Both branches add a dated paragraph to this issue, in different places.
+- **No overlap with the other branches:** no other held branch touches `quiz_editor/`. The other held branches are qa-take-fixes, 162, 163, remap, stamp and pin; their order is in `.plans/031`.
+- **`pages/scanner/page.rs` (1304) stays frozen** until after the take, because it is demo-critical. Reopen trigger: the 8 Oct take is filmed.
