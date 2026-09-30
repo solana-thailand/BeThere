@@ -25,12 +25,13 @@ const CORPUS: &[&str] = &[
     "something else",
 ];
 
-/// The loop every counting site ran before W3.
+/// The loop every counting site ran before W3, on today's `is_in_person`
+/// (which since .issues/162 includes the walk-in sentinel).
 fn per_attendee(types: &[&str]) -> TrackCounts {
     let mut counts = TrackCounts::default();
     for t in types {
         let parsed = ParticipationType::parse(t);
-        if parsed == ParticipationType::InPerson {
+        if parsed.is_in_person() {
             counts.in_person += 1;
         } else if parsed.counts_toward_online_track() {
             counts.online += 1;
@@ -40,8 +41,8 @@ fn per_attendee(types: &[&str]) -> TrackCounts {
 }
 
 #[test]
-fn matches_the_per_attendee_loop_for_every_non_walk_in_value() {
-    for t in CORPUS {
+fn matches_the_per_attendee_loop_for_every_value() {
+    for t in CORPUS.iter().chain(&[PARTICIPATION_WALK_IN]) {
         assert_eq!(
             TrackCounts::from_participation_types([*t]),
             per_attendee(&[t]),
@@ -60,13 +61,11 @@ fn a_walk_in_takes_an_in_person_spot_not_an_online_one() {
             online: 0
         }
     );
-    // The old loop put it in the online bucket; that is the bug being fixed.
+    // `TrackCounts::add` used to special-case the sentinel; the parser
+    // classifies it now, so the plain loop agrees (.issues/162).
     assert_eq!(
-        per_attendee(&[PARTICIPATION_WALK_IN]),
-        TrackCounts {
-            in_person: 0,
-            online: 1
-        }
+        ParticipationType::parse(PARTICIPATION_WALK_IN),
+        ParticipationType::WalkIn
     );
 }
 
@@ -75,8 +74,16 @@ fn only_the_exact_stored_sentinel_is_a_walk_in() {
     // `count_walkin_attendees` matches `participation_type = 'walkin'` exactly.
     for t in ["Walkin", "WALKIN", " walkin"] {
         assert_eq!(
+            ParticipationType::parse(t),
+            ParticipationType::Other,
+            "{t:?}"
+        );
+        assert_eq!(
             TrackCounts::from_participation_types([t]),
-            per_attendee(&[t]),
+            TrackCounts {
+                in_person: 0,
+                online: 1
+            },
             "{t:?}"
         );
     }

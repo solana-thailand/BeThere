@@ -915,9 +915,11 @@ pub(super) fn resolve_participation_type(
         ParticipationType::InPerson | ParticipationType::Online => {
             Ok(resolved.as_str().to_string())
         }
-        ParticipationType::Retrospective | ParticipationType::Other => Err(AppError::Validation(
-            "participation_type must be in-person or online".to_string(),
-        )),
+        ParticipationType::Retrospective | ParticipationType::WalkIn | ParticipationType::Other => {
+            Err(AppError::Validation(
+                "participation_type must be in-person or online".to_string(),
+            ))
+        }
     }
 }
 

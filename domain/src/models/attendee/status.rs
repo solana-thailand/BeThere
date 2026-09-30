@@ -45,6 +45,10 @@ impl std::fmt::Display for CheckInStatus {
     }
 }
 
+/// The `participation_type` a staff walk-in row is stored with
+/// (`db::attendees::try_insert_walkin`).
+pub const PARTICIPATION_WALK_IN: &str = "walkin";
+
 /// Canonical attendee participation type.
 ///
 /// Normalized from the raw Google Sheet `participation_type` column, which has
@@ -53,8 +57,8 @@ impl std::fmt::Display for CheckInStatus {
 /// canonicalize; [`Attendee::is_in_person`] delegates to this enum.
 ///
 /// Canonical wire form is snake_case (`in_person` / `online` / `retrospective`
-/// / `other`),
-/// matching `EventFormat`'s convention.
+/// / `other`), matching `EventFormat`'s convention. `WalkIn` keeps the stored
+/// sentinel `walkin` so a round trip through this enum never erases it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ParticipationType {
@@ -64,6 +68,14 @@ pub enum ParticipationType {
     /// Post-event learning lead. It is deliberately distinct from `Online` so
     /// retrospective enrollment cannot alter live-attendance reporting.
     Retrospective,
+    /// Staff walk-in, stored as `walkin` (`db::attendees::try_insert_walkin`).
+    /// Physically present, so [`Self::is_in_person`] is true, but kept apart
+    /// from `InPerson` because the walk-in claim path, the duplicate check and
+    /// the admin Walk-in pill key on the sentinel (.issues/162). Never a valid
+    /// user choice: signup and the manual override accept only
+    /// `InPerson`/`Online`.
+    #[serde(rename = "walkin")]
+    WalkIn,
     /// Unrecognized value (e.g. "test", "TBD"). Treated as NOT in-person.
     Other,
 }
@@ -75,6 +87,7 @@ impl ParticipationType {
             Self::InPerson => "in_person",
             Self::Online => "online",
             Self::Retrospective => "retrospective",
+            Self::WalkIn => "walkin",
             Self::Other => "other",
         }
     }
@@ -87,6 +100,7 @@ impl ParticipationType {
             Self::InPerson => "In-Person",
             Self::Online => "Online",
             Self::Retrospective => "Retrospective",
+            Self::WalkIn => "Walk-in",
             Self::Other => "Other",
         }
     }
@@ -101,6 +115,13 @@ impl ParticipationType {
     /// online-registration total.
     pub fn counts_toward_online_track(self) -> bool {
         matches!(self, Self::Online | Self::Other)
+    }
+
+    /// Whether the attendee takes part in the room: registered in-person or
+    /// walked in at the door. The one rule every in-person reader shares
+    /// (capacity, check-in, claim timing, ticket copy).
+    pub fn is_in_person(self) -> bool {
+        matches!(self, Self::InPerson | Self::WalkIn)
     }
 
     /// Canonicalize a raw participation_type string into a typed value.
@@ -120,6 +141,12 @@ impl ParticipationType {
     /// sign (to `k`). `domain/tests/participation_type_parse.rs` pins the
     /// equivalence.
     pub fn parse(s: &str) -> Self {
+        // Exact, like every SQL `participation_type = 'walkin'` and the claim
+        // and delete paths, so no reader counts a row as a walk-in that the
+        // others do not.
+        if s == PARTICIPATION_WALK_IN {
+            return Self::WalkIn;
+        }
         let value = s.trim();
         if value.is_empty() {
             return Self::InPerson;

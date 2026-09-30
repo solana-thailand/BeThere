@@ -292,7 +292,7 @@ pub fn InPersonView(
                     // Display label only; the stored value stays `participation`.
                     let kind = ParticipationType::parse(&participation);
                     let pt = move || match kind {
-                        ParticipationType::InPerson => t_string!(i18n, ticket.participation.in_person),
+                        ParticipationType::InPerson | ParticipationType::WalkIn => t_string!(i18n, ticket.participation.in_person),
                         ParticipationType::Online => t_string!(i18n, ticket.participation.online),
                         ParticipationType::Retrospective => t_string!(i18n, ticket.participation.retrospective),
                         ParticipationType::Other => t_string!(i18n, ticket.participation.other),

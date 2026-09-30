@@ -8,10 +8,6 @@
 
 use super::ParticipationType;
 
-/// The `participation_type` a staff walk-in row is stored with
-/// (`db::attendees::try_insert_walkin`).
-pub const PARTICIPATION_WALK_IN: &str = "walkin";
-
 /// Attendees counted against each live track's capacity.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct TrackCounts {
@@ -22,16 +18,12 @@ pub struct TrackCounts {
 impl TrackCounts {
     /// Add `n` attendees whose stored participation type is `participation_type`.
     ///
-    /// A walk-in is physically present, so it takes an in-person spot. `parse`
-    /// alone would call it `Other`, which the legacy rule puts in the online
-    /// bucket (.issues/157). Retrospective learners count toward neither track.
+    /// A walk-in is physically present, so it takes an in-person spot
+    /// (.issues/157, classified at the parser since .issues/162). Retrospective
+    /// learners count toward neither track.
     pub fn add(&mut self, participation_type: &str, n: u32) {
-        if participation_type == PARTICIPATION_WALK_IN {
-            self.in_person = self.in_person.saturating_add(n);
-            return;
-        }
         match ParticipationType::parse(participation_type) {
-            ParticipationType::InPerson => self.in_person = self.in_person.saturating_add(n),
+            p if p.is_in_person() => self.in_person = self.in_person.saturating_add(n),
             other if other.counts_toward_online_track() => {
                 self.online = self.online.saturating_add(n);
             }

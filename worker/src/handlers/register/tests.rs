@@ -14,7 +14,7 @@ fn is_online_participation_uses_canonical_enum() {
     assert!(!is_online_participation("physical"));
     // Empty defaults to in-person (legacy), not online
     assert!(!is_online_participation(""));
-    // walk-in sentinel is neither online nor in-person
+    // walk-in sentinel is in-person, never online
     assert!(!is_online_participation("walkin"));
 }
 
@@ -79,8 +79,12 @@ fn registering_in_person_detection_matches_canonical_enum() {
             "expected '{v}' to be online"
         );
     }
-    // walk-in sentinel stays out of both tracks
-    assert_eq!(ParticipationType::parse("walkin"), ParticipationType::Other);
+    // the walk-in sentinel is its own in-person kind (.issues/162)
+    assert_eq!(
+        ParticipationType::parse("walkin"),
+        ParticipationType::WalkIn
+    );
+    assert!(ParticipationType::parse("walkin").is_in_person());
 }
 
 /// Cross-cutting invariant: every write path in 3.2 (registration,

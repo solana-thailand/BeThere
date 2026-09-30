@@ -4,8 +4,12 @@
 
 use event_checkin_domain::models::attendee::ParticipationType;
 
-/// The implementation before 2026-09-24, verbatim apart from the name.
+/// The implementation before 2026-09-24, verbatim apart from the name and the
+/// `walkin` arm added with `ParticipationType::WalkIn` (.issues/162).
 fn reference(s: &str) -> ParticipationType {
+    if s == "walkin" {
+        return ParticipationType::WalkIn;
+    }
     let lower = s.trim().to_lowercase();
     if lower.is_empty() {
         return ParticipationType::InPerson;
@@ -60,6 +64,11 @@ const CORPUS: &[&str] = &[
     "physica",
     "virtua",
     "retrospectiv",
+    "walkin",
+    " Walkin ",
+    "WALKIN",
+    "walk-in",
+    "walkin guest",
 ];
 
 #[test]
