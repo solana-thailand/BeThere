@@ -252,7 +252,7 @@ pub fn Claim() -> impl IntoView {
             } else {
                 Some(wallet.as_str())
             };
-            let result = api::post_claim(&token, arg, use_linked).await;
+            let result = super::mint_retry::post_claim_until_settled(&token, arg, use_linked).await;
             // Ensure spinner displays for at least 1.5s for smooth UX
             let elapsed = js_sys::Date::now() - start;
             if elapsed < 1500.0 {
@@ -272,9 +272,8 @@ pub fn Claim() -> impl IntoView {
                     // Launch confetti celebration!
                     launch_confetti();
                 }
-                Err(e) => {
-                    log::error!("[claim] mint failed: {e}");
-                    set_state.set(ClaimState::MintError(current_data_clone, format!("{e}")));
+                Err(failure) => {
+                    set_state.set(ClaimState::MintError(current_data_clone, failure));
                 }
             }
         });
@@ -926,18 +925,36 @@ pub fn Claim() -> impl IntoView {
                         }
 
                         // ---- Mint error ----
-                        ClaimState::MintError(data, error) => {
+                        ClaimState::MintError(data, failure) => {
+                            let (pending, error) = match failure {
+                                super::mint_retry::MintFailure::Failed(message) => (false, escape_html(&message)),
+                                super::mint_retry::MintFailure::StillPending => (true, String::new()),
+                            };
+                            let pending_detail = crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_error.pending_detail));
+                            let (tone, title) = match pending {
+                                true => (crate::components::StatusTone::Pending, crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_error.pending_title))),
+                                false => (crate::components::StatusTone::Failed, crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_error.title))),
+                            };
                             view! {
-                                <div class="claim-error">
+                                <div class=match pending {
+                                    true => "claim-error claim-pending",
+                                    false => "claim-error",
+                                }>
                                     {move || view! {
                                         <crate::components::StatusBadge
-                                            tone=crate::components::StatusTone::Failed
-                                            label=t_string!(i18n, claim.mint_error.badge)
+                                            tone=tone
+                                            label=match pending {
+                                                true => t_string!(i18n, claim.mint_error.pending_title),
+                                                false => t_string!(i18n, claim.mint_error.badge),
+                                            }
                                         />
                                     }}
-                                    <h2>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_error.title))}</h2>
+                                    <h2>{title}</h2>
                                     <div class="result-details">
-                                        <p>{escape_html(&error)}</p>
+                                        <p>{move || match pending {
+                                            true => pending_detail.get().to_string(),
+                                            false => error.clone(),
+                                        }}</p>
                                         <p>
                                             {crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_error.retry_note))}
                                         </p>

@@ -40,7 +40,7 @@ groups and a backlog.
     Guard `worker/tests/empty_roster_policy.rs` (4, floored); two mutants
     turn it red. Workspace clippy, 79 worker binaries and 104 Python tests
     are green. Details are in `.issues/167`.
-  - [x] Merge: `58fc5186` on `develop`, on staging 2026-09-30 (`event-checkin-b5`).
+  - [x] Merge: `58fc5186` on `develop`; on prod in release `438c392d` (2026-09-30, `event-checkin-b5`).
     **Answered (2026-09-30):** the RTM #6 event shares no sheet. The prod
     date question is moot: a read-only prod D1 query shows the only events
     created after the cutoff are the RTM #6 event (57 D1 attendees, so its

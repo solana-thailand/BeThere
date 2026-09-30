@@ -1007,6 +1007,16 @@
     font-weight: 700;
 }
 
+/* A mint the provider has not confirmed yet is not a failure (issue 180). */
+.claim-error.claim-pending {
+    background: var(--warning-bg);
+    border-color: var(--warning-border);
+}
+
+.claim-error.claim-pending h2 {
+    color: var(--warning);
+}
+
 /* ===== Claim Page: Bookmark Footer ===== */
 .claim-bookmark-hint {
     font-size: 0.8rem;

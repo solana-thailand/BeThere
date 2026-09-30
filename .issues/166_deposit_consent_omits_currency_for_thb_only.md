@@ -1,6 +1,6 @@
 # 166: The deposit consent omits the currency for THB-only events
 
-**Status:** fixed on develop (2026-09-29, session `event-checkin-31`). Staging page check still to do. Found by session `event-checkin-f6` while checking `.issues/161` on staging `53de706d`.
+**Status:** deployed to prod `f02143d4` (2026-09-29): the fix `0b15255c` is in that release (checked with `git merge-base --is-ancestor` on 2026-09-30, `event-checkin-b5`). The staging page check below was not re-run. Was: fixed on develop (2026-09-29, session `event-checkin-31`). Staging page check still to do. Found by session `event-checkin-f6` while checking `.issues/161` on staging `53de706d`.
 
 ## What happens
 

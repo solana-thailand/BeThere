@@ -1,6 +1,6 @@
 # 173: Attendee flow audit: landing → event → register → deposit → ticket → claim
 
-**Status:** fixed on develop (2026-09-29, session `event-checkin-3e`): C3, C4, C5, C7 and C8 approved by the owner and applied; C1/C2 were fixed earlier (session `event-checkin-ba`), C6 went to P2-b.
+**Status:** deployed to prod `438c392d` (2026-09-30, `deploy/production/20260930T013304Z`, version `e2d7ce81`, session `event-checkin-b5`): the cuts ship in `c93080eb`. Was: fixed on develop (2026-09-29, session `event-checkin-3e`): C3, C4, C5, C7 and C8 approved by the owner and applied; C1/C2 were fixed earlier (session `event-checkin-ba`), C6 went to P2-b.
 
 ## Method
 

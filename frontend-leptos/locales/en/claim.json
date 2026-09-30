@@ -116,6 +116,8 @@
     "badge": "Action failed",
     "title": "Minting Failed",
     "retry_note": "Retrying uses the same protected claim request. If the provider already accepted it, BeThere resumes that result instead of minting another NFT.",
-    "retry": "Check Status or Retry"
+    "retry": "Check Status or Retry",
+    "pending_title": "Still minting",
+    "pending_detail": "Your NFT is still being confirmed on-chain. Tap below to check again in a minute. It will not mint twice."
   }
 }

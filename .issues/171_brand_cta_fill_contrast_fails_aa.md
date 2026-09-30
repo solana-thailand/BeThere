@@ -1,6 +1,6 @@
 # 171: Light text on the brand accent and warning fills fails WCAG AA
 
-**Status:** fixed on develop (2026-09-29, session `event-checkin-3e`). Owner picked option 1 (dark text on small fills). Found 2026-09-29 by the axe gate, session `event-checkin-ba`.
+**Status:** deployed to prod `438c392d` (2026-09-30, `deploy/production/20260930T013304Z`, version `e2d7ce81`, session `event-checkin-b5`): the fix ships in `c93080eb`. Was: fixed on develop (2026-09-29, session `event-checkin-3e`). Owner picked option 1 (dark text on small fills). Found 2026-09-29 by the axe gate, session `event-checkin-ba`.
 
 ## Found by the gate
 
