@@ -49,10 +49,15 @@ groups and a backlog.
     the exact prod date cannot be read back. The staging smoke's roster read
     ran through the new path and passed.
   - [ ] A staging run with two events sharing one sheet (optional now).
-    **Former owner questions:** "may `feature/167-empty-roster` merge into
-    `develop` before RTM #6 (4 Oct), or after the 8 Oct take?" and "did prod
-    first get `fa0dca12` later than 12 Aug? If so, on what date? The cutoff
-    constant moves to it."
+    Both former owner questions (merge timing, prod date of `fa0dca12`) are
+    answered above.
+    **Gate (2026-10-01, `event-checkin-a6`):** the same one as the staging
+    repro at the top of this section. Staging has no sheet shared with its
+    service account (no `CONTACTS_SHEET_ID`), and the run appends rows to
+    whatever sheet it uses. The code needs no deploy; it is on staging and
+    prod. Unit coverage is `worker/tests/empty_roster_policy.rs`.
+    **Reopen trigger:** the owner shares a sheet with the staging service
+    account (the same answer unblocks both items).
 
 ## 2. EN + TH for attendee pages
 

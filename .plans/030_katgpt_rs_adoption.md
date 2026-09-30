@@ -96,6 +96,8 @@ owner decision.
     changes where the team looks for history.
   - **Blocked (2026-09-29, `event-checkin-8c`):** owner OK pending; it also moves files in `.issues/`, peer `event-checkin-16`'s area.
   - **Rechecked 2026-09-30 (`event-checkin-c7`):** peer `event-checkin-16` is no longer running, so only one gate is left. The owner must answer: "may closed issues leave `.issues/` for a dated `HISTORY.md` entry?" `issue_ledger.py` and `numbering_gate.py` read `.issues/`, so a yes also means changing both gates.
+  - **Reopen trigger (2026-10-01, `event-checkin-a6`):** the owner answers
+    yes to that question. Not date-gated; nothing can be built before the answer.
 - [x] **Pinned golden vectors.** Done 2026-09-29 (consumers below). Part done 2026-09-24:
   `domain/tests/fixtures/golden_vectors.json` pins USDC string/float → atomic
   (issue 146), the on-chain event id (now `domain::onchain`) and escrow /
@@ -209,9 +211,11 @@ owner decision.
   rot lane. **After RTM#6**, because it can change builds.
   **Blocked (2026-09-29, `event-checkin-8c`):** open only on the commit + merge sub-step below (owner, demo freeze).
   **Built on branch `feature/030-toolchain-pin` (worktree `/tmp/ec-pin`, cut
-  from `develop` `83241bd9`, 2026-09-28, session `event-checkin-00`), not
-  committed yet and not merged** (RTM #6 hold; merge after the remap and
-  build-stamp branches, which also edit `build.sh`).
+  from `develop` `83241bd9`, 2026-09-28, session `event-checkin-00`),
+  committed as `020fdc0b` (2026-10-01) and not merged** (RTM #6 hold; merge
+  after the remap and build-stamp branches, which also edit `build.sh`).
+  **Reopen trigger (2026-10-01, `event-checkin-a6`):** the 8 Oct take is done
+  and the owner says go for the merge sub-step below; nothing else is open.
   - [x] `rust-toolchain.toml`: `channel = "1.98.1"`, clippy + rustfmt,
     `targets = ["wasm32-unknown-unknown"]`, `profile = "minimal"`.
   - [x] `scripts/pinned_toolchain.sh`, sourced by `worker/deploy.sh` and
@@ -281,13 +285,13 @@ Each item below is a product decision: **blocked on the owner** (checked 2026-09
 
 - [ ] **Verifiable lucky draw**, from `katgpt-device-verify` fair_roll: commit,
   then reveal with a Solana blockhash, re-runnable in the browser. About 1.5 d.
-  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "does any event run a lucky draw that attendees need to audit?"
+  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "does any event run a lucky draw that attendees need to audit?" Reopen trigger: the owner answers yes (a no closes it as declined).
 - [ ] **Tamper-evident check-in log:** Merkle root at event close plus an
   inclusion proof on the ticket. About 2 d.
-  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is an attendee-verifiable attendance proof worth a ticket-page change?"
+  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is an attendee-verifiable attendance proof worth a ticket-page change?" Reopen trigger: the owner answers yes (a no closes it as declined).
 - [ ] **LtHash checksum** on the deposits/credits ledger with a nightly drift
   alert. About 1 d.
-  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is ledger drift a risk worth a nightly cron and alert channel?" The cron runs under the free-plan CPU cap.
+  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is ledger drift a risk worth a nightly cron and alert channel?" The cron runs under the free-plan CPU cap. Reopen trigger: the owner answers yes (a no closes it as declined).
 - [ ] Whether to adopt the BOUNDARY.md drift-ledger discipline and the
   second-model AGREE/REVISE review for escrow and money-path plans.
-  **Blocked:** owner: process decision. Rechecked 2026-09-30: the question is "must escrow and money-path plans get a second-model review before merge?"
+  **Blocked:** owner: process decision. Rechecked 2026-09-30: the question is "must escrow and money-path plans get a second-model review before merge?" Reopen trigger: the owner answers yes (a no closes it as declined).
