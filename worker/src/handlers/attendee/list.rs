@@ -62,6 +62,7 @@ pub async fn list_attendees(
         &event.sheet_name,
         kv,
         &event.id,
+        sheets::EmptyRoster::for_event(&event),
     )
     .await
     {

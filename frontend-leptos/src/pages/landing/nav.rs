@@ -73,7 +73,7 @@ pub fn SiteHeader(
                                     };
                                     let avatar_char = clean_email.chars().next().unwrap_or('?').to_uppercase().to_string();
                                     view! {
-                                        <A href="/profile" attr:class="landing-user-badge" attr:style="display:flex;align-items:center;gap:6px;background:rgba(20,241,149,0.1);border:1px solid rgba(20,241,149,0.3);padding:4px 10px;border-radius:999px;text-decoration:none;color:#fff;font-weight:600;font-size:0.82rem;transition:all 0.2s ease;">
+                                        <A href="/profile" attr:class="landing-user-badge" attr:style="display:flex;align-items:center;gap:6px;background:rgba(20,241,149,0.1);border:1px solid rgba(20,241,149,0.3);padding:4px 10px;border-radius:999px;text-decoration:none;color:var(--text-primary);font-weight:600;font-size:0.82rem;transition:all 0.2s ease;">
                                             <span class="landing-user-avatar" style="width:22px;height:22px;border-radius:50%;background:#14F195;color:#000;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:0.72rem;">
                                                 {avatar_char}
                                             </span>
@@ -96,7 +96,7 @@ pub fn SiteHeader(
                                         }}
                                         <button
                                             class="btn btn-outline btn-xs landing-desktop-only-btn"
-                                            style="color:#94a3b8;border-color:rgba(255,255,255,0.15);"
+                                            style="color:var(--text-muted);border-color:rgba(255,255,255,0.15);"
                                             on:click=move |_| trigger_landing_signout()
                                             title=crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.sign_out))
                                         >

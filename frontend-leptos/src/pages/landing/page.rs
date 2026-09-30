@@ -131,57 +131,51 @@ pub fn Landing() -> impl IntoView {
                 </ol>
             </section>
 
-            // The FAQ moved to /faq, linked from the footer (.plans/038 P3-a).
-            // Organizers keep their one entry point here, above the waitlist.
-            <div class="landing-faq-cta">
-                <a href="#waitlist" class="btn btn-outline landing-faq-cta-link">
-                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.host_cta))}
-                </a>
-            </div>
-
-            // ===== Waitlist (organizer-focused) =====
-            <section id="waitlist" class="landing-section">
-                <div class="landing-waitlist-inner">
-                    <h2 class="landing-h2">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.title))}
-                    </h2>
-                    <p class="landing-faq-a">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.desc))}
-                    </p>
-                    {move || {
-                        let state = auth_state.get();
-                        let role = user_role.get();
-                        match &state {
-                            AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
-                                view! {
-                                    <A href="/admin" attr:class="btn btn-primary landing-waitlist-submit">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.dashboard))}
-                                    </A>
-                                }.into_any()
-                            }
-                            AuthState::SignedIn(_) => {
-                                view! {
-                                    <div class="landing-waitlist-signed-in">
-                                        <p class="landing-faq-a">
-                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.signed_in))}
-                                        </p>
-                                        <a
-                                            href="https://x.com/ozoneRatchapon"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="btn btn-outline btn-sm"
-                                        >
-                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.dm))}
-                                        </a>
+            // ===== Organizers: one line (F1-d) =====
+            // Organizers go straight to /admin. Everyone else gets the same
+            // line as a disclosure over the waitlist: /admin only checks sign-in,
+            // not role, so for a would-be organizer it would be a dead end.
+            <section id="waitlist" class="landing-host-line">
+                {move || {
+                    let role = user_role.get();
+                    match auth_state.get() {
+                        AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => view! {
+                            <A href="/admin" attr:class="landing-host-link">
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.host_cta))}
+                            </A>
+                        }.into_any(),
+                        signed_in => {
+                            let signed_in = matches!(signed_in, AuthState::SignedIn(_));
+                            view! {
+                                <details class="landing-host-details">
+                                    <summary class="landing-host-link">
+                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.host_cta))}
+                                    </summary>
+                                    <div class="landing-waitlist-inner">
+                                        {match signed_in {
+                                            true => view! {
+                                                <div class="landing-waitlist-signed-in">
+                                                    <p class="landing-faq-a">
+                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.signed_in))}
+                                                    </p>
+                                                    <a
+                                                        href="https://x.com/ozoneRatchapon"
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="btn btn-outline btn-sm"
+                                                    >
+                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.dm))}
+                                                    </a>
+                                                </div>
+                                            }.into_any(),
+                                            false => view! { <WaitlistForm /> }.into_any(),
+                                        }}
                                     </div>
-                                }.into_any()
-                            }
-                            _ => {
-                                view! { <WaitlistForm /> }.into_any()
-                            }
+                                </details>
+                            }.into_any()
                         }
-                    }}
-                </div>
+                    }
+                }}
             </section>
 
             // ===== Footer =====

@@ -94,13 +94,14 @@ struct Row {
 }
 
 /// Poster first, badge second — the fallback `event_hero` documents.
-fn pick_image(poster: &str, badge: &str) -> String {
+fn pick_image(poster: &str, badge: &str, slug: &str) -> String {
     match poster.is_empty() {
         false => poster.to_string(),
-        // The generic badge SVG is not a picture of anything. Better an empty
-        // slot than four identical thumbnails down the page.
-        true => match badge.contains("badge-hd.svg") {
-            true => String::new(),
+        // The generic badge SVG is not a picture of anything, and four
+        // identical thumbnails down the page say nothing: an event without
+        // its own image gets its generative poster instead (F4).
+        true => match badge.is_empty() || badge.contains("badge-hd.svg") {
+            true => crate::utils::poster::poster_data_url(slug),
             false => badge.to_string(),
         },
     }
@@ -134,7 +135,7 @@ pub fn Discover() -> impl IntoView {
                         start_ms: e.event_start_ms,
                         time_tba: e.time_tba,
                         location: e.location,
-                        image: pick_image(&e.poster_url, &e.nft_image_url),
+                        image: pick_image(&e.poster_url, &e.nft_image_url, &e.slug),
                         has_poster: !e.poster_url.is_empty(),
                         // Public rows have no registration status, so the
                         // pill is free to flag a postponed event.
@@ -189,7 +190,7 @@ pub fn Discover() -> impl IntoView {
                             start_ms: r.event_start_ms,
                             time_tba: r.time_tba,
                             location: r.location,
-                            image: pick_image(&r.poster_url, &r.nft_image_url),
+                            image: pick_image(&r.poster_url, &r.nft_image_url, &r.event_slug),
                             has_poster: !r.poster_url.is_empty(),
                             status: Some(r.status),
                             past: ends < now_ms,
@@ -346,8 +347,9 @@ fn Section(
 ///
 /// The colour is the whole point: it says which list a row belongs to without
 /// the reader parsing a date, which is what makes a mixed page scannable.
+/// Shared with the landing's "Your Events" rows.
 #[component]
-fn DateChip(ms: i64, past: bool) -> impl IntoView {
+pub(crate) fn DateChip(ms: i64, past: bool) -> impl IntoView {
     // Reactive, so the month follows a language switch.
     let parts = Memo::new(move |_| crate::utils::format_event_day_parts(ms));
     let day = move || parts.get().0;

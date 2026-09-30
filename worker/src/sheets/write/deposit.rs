@@ -1,17 +1,16 @@
 //! Deposit, refund, and bank info write operations.
 
 use crate::sheets::a1;
-use event_checkin_domain::models::attendee::ColumnMapping;
+use event_checkin_domain::models::attendee::{ColumnKey as CK, ColumnMapping};
 use worker::KvStore;
 
-use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
+use crate::http::ValueRange;
 use crate::state::AppState;
 
 use super::SheetContext;
 use crate::sheets::locate::resolve_row;
-use crate::sheets::{
-    get_attendees, get_cached_access_token, get_column_mapping, invalidate_column_map_cache,
-};
+use crate::sheets::values::{send, write_cells};
+use crate::sheets::{get_cached_access_token, get_column_mapping, invalidate_column_map_cache};
 use event_checkin_domain::models::attendee::SheetRow;
 
 /// Write bank account info (bank_account, bank_name, account_name) to the sheet.
@@ -37,56 +36,29 @@ pub async fn write_bank_info(
     let access_token = get_cached_access_token(state, kv).await?;
     let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let mut data = Vec::new();
-
-    if let Some(val) = bank_account {
-        data.extend(a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::BankAccount,
-            row_index,
-            val.to_string(),
-        ));
-    }
-    if let Some(val) = bank_name {
-        data.extend(a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::BankName,
-            row_index,
-            val.to_string(),
-        ));
-    }
-    if let Some(val) = account_name {
-        data.extend(a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::AccountName,
-            row_index,
-            val.to_string(),
-        ));
-    }
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+    let cells = [
+        (CK::BankAccount, bank_account),
+        (CK::BankName, bank_name),
+        (CK::AccountName, account_name),
+    ]
+    .into_iter()
+    .filter_map(|(key, value)| Some((key, value?.to_string())))
+    .collect();
+    write_cells(
+        sheet_id,
+        &sheet_ref,
+        mapping,
+        row_index,
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
         row_index = row_index,
         bank_account_col = ?mapping.column_letter(CK::BankAccount),
         bank_name_col = ?mapping.column_letter(CK::BankName),
         account_name_col = ?mapping.column_letter(CK::AccountName),
-        bank_account_val = ?bank_account,
-        bank_name_val = ?bank_name,
-        account_name_val = ?account_name,
         "wrote bank info to google sheet"
     );
 
@@ -110,50 +82,24 @@ pub async fn write_deposit_verification(
     let sheet_ref = a1::sheet_ref(ctx.sheet_name);
     let row_index = resolve_row(&row, ctx.sheet_id, &sheet_ref, &access_token).await?;
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            ctx.mapping,
-            CK::DepositMethod,
-            row_index,
-            deposit_method.to_string(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            ctx.mapping,
-            CK::DepositAmount,
-            row_index,
-            deposit_amount.to_string(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            ctx.mapping,
-            CK::DepositVerified,
-            row_index,
-            if verified {
-                "Yes".to_string()
-            } else {
-                "No".to_string()
-            },
-        ),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchUpdate",
-        ctx.sheet_id
-    );
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
+    let verified_cell = match verified {
+        true => "Yes",
+        false => "No",
     };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+    let cells = vec![
+        (CK::DepositMethod, deposit_method.to_string()),
+        (CK::DepositAmount, deposit_amount.to_string()),
+        (CK::DepositVerified, verified_cell.to_string()),
+    ];
+    write_cells(
+        ctx.sheet_id,
+        &sheet_ref,
+        ctx.mapping,
+        row_index,
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
         row_index = row_index,
@@ -166,56 +112,38 @@ pub async fn write_deposit_verification(
     Ok(())
 }
 
-/// Update the deposit_method column (N) for an attendee, found by api_id.
+/// Update the deposit_method column (N) for an attendee.
 /// Used when a rolling deposit credit covers the deposit — writes "credit_thb" or "credit_usdc".
 pub async fn update_deposit_method(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
-    attendee_api_id: &str,
+    row: SheetRow,
     method: &str,
 ) -> Result<(), String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
     let access_token = get_cached_access_token(state, kv).await?;
 
-    // Find the attendee row by api_id
     let mapping = get_column_mapping(state, sheet_id, sheet_name, kv)
         .await
         .unwrap_or_else(|_| ColumnMapping::hardcoded());
 
-    let attendees = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    let row_index = attendees
-        .iter()
-        .find(|a| a.api_id == attendee_api_id)
-        .map(|a| a.row_index)
-        .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [a1::cell(
+    let cells = vec![(CK::DepositMethod, method.to_string())];
+    write_cells(
+        sheet_id,
         &sheet_ref,
         &mapping,
-        CK::DepositMethod,
         row_index,
-        method.to_string(),
-    )]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         %method,
         "wrote credit deposit_method to google sheet"
@@ -231,7 +159,7 @@ pub async fn write_refund_status(
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
-    attendee_api_id: &str,
+    row: SheetRow,
     status: &str,
 ) -> Result<(), String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
@@ -244,45 +172,29 @@ pub async fn write_refund_status(
         .await
         .unwrap_or_else(|_| ColumnMapping::hardcoded());
 
-    let attendees = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    let row_index = attendees
-        .iter()
-        .find(|a| a.api_id == attendee_api_id)
-        .map(|a| a.row_index)
-        .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         column = ?mapping.column_letter(CK::RefundStatus),
         total_columns = mapping.total_columns,
         "resolved refund_status column"
     );
 
-    let data: Vec<ValueRange> = [a1::cell(
+    let cells = vec![(CK::RefundStatus, status.to_string())];
+    write_cells(
+        sheet_id,
         &sheet_ref,
         &mapping,
-        CK::RefundStatus,
         row_index,
-        status.to_string(),
-    )]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         %status,
         "wrote refund_status to google sheet"
@@ -301,7 +213,6 @@ pub fn refund_batch_ranges(
     status: &str,
     link: &str,
 ) -> Vec<ValueRange> {
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
     let sheet_ref = a1::sheet_ref(sheet_name);
     rows.iter()
         .flat_map(|row| {
@@ -339,16 +250,8 @@ pub async fn write_refund_batch(
     }
 
     let access_token = get_cached_access_token(state, kv).await?;
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data: refund_batch_ranges(sheet_name, mapping, rows, status, link),
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+    let data = refund_batch_ranges(sheet_name, mapping, rows, status, link);
+    send(sheet_id, data, &access_token).await?;
 
     tracing::info!(count = rows.len(), "wrote batch refund to google sheet");
 
@@ -362,7 +265,7 @@ pub async fn write_refund_link(
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
-    attendee_api_id: &str,
+    row: SheetRow,
     link: &str,
 ) -> Result<(), String> {
     let sheet_ref = a1::sheet_ref(sheet_name);
@@ -375,45 +278,29 @@ pub async fn write_refund_link(
         .await
         .unwrap_or_else(|_| ColumnMapping::hardcoded());
 
-    let attendees = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    let row_index = attendees
-        .iter()
-        .find(|a| a.api_id == attendee_api_id)
-        .map(|a| a.row_index)
-        .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
+    let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         column = ?mapping.column_letter(CK::RefundLink),
         total_columns = mapping.total_columns,
         "resolved refund_link column"
     );
 
-    let data: Vec<ValueRange> = [a1::cell(
+    let cells = vec![(CK::RefundLink, link.to_string())];
+    write_cells(
+        sheet_id,
         &sheet_ref,
         &mapping,
-        CK::RefundLink,
         row_index,
-        link.to_string(),
-    )]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
-        %attendee_api_id,
+        attendee_api_id = %row.api_id(),
         row_index,
         "wrote refund_link to google sheet"
     );

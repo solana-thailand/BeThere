@@ -39,7 +39,7 @@
     "deposit_a": "Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back {{ refund_window }}, or you keep it as credit for your next event. {{ never_forfeited }} If you can't make it, tell the organizer. USDC deposits sit in a Solana escrow and you claim them back after the event ends.",
     "crypto_q": "Is it only for crypto events?",
     "crypto_a": "It works for any event — meetups, workshops, conferences, hackathons. The blockchain part runs behind the scenes; attendees don't need to know anything about crypto.",
-    "host_cta": "Want to host events? Learn more ↓",
+    "host_cta": "Host your event →",
     "page_title": "FAQ — BeThere",
     "back_home": "← Back to BeThere",
     "tab_attendees": "Attendees",
@@ -66,8 +66,6 @@
     "org_settle_a": "PromptPay deposits reach you off-chain; you return them {{ refund_window }}, or the attendee keeps them as credit for a next event. USDC deposits stay in the Solana escrow until the attendee claims them back."
   },
   "waitlist": {
-    "title": "Bring deposit-backed events to your community",
-    "desc": "Stop losing seats to no-shows. Set a deposit, track check-ins live, and give attendees their deposit back when they show up.",
     "signed_in": "Signed in! Contact us to get organizer access.",
     "dm": "DM us on X/Twitter",
     "invalid_email": "Please enter a valid email",
@@ -111,19 +109,15 @@
     "sample_event": "View a sample event →"
   },
   "reg": {
-    "verified": "✓ Verified Passport",
-    "member": "Solana Thailand Developer Community Member",
-    "edit_profile": "Edit Profile",
-    "sign_out": "Sign out",
-    "your_events": "Your Events",
+    "upcoming": "Upcoming ({{ count }})",
+    "past": "Past ({{ count }})",
+    "show_all_past": "Show {{ count }} more",
     "tba": "TBA",
     "empty": "You haven't registered for any events yet. Check out upcoming events below!",
     "step": {
       "claim": "Claim Badge",
       "deposit": "Complete Deposit",
-      "quest": "Start Quest",
-      "ticket": "View Ticket",
-      "view": "View"
+      "quest": "Start Quest"
     },
     "show_ticket": "Show ticket",
     "hide_ticket": "Hide",

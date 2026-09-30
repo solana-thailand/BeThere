@@ -21,6 +21,7 @@ One line per item; the detail and evidence stay in §2 below.
 | W3 counting | done, staging `53de706d` (rehearsed 2026-09-29) | fixes `.issues/157` for capacity only (walk-ins elsewhere: `.issues/162`); prod with the next owner deploy |
 | W4 public GET | both halves merged to `develop` (SQL `604cd993`, Cache API `58761686` via `25709f49`, pushed 2026-09-29) | rehearsed on staging `53de706d` 2026-09-29 (2 misses/key in BKK, cookie bypass, private never HIT); prod with the next owner deploy |
 | W5 credit release | merged to `develop` (`604cd993`, pushed 2026-09-29); 0056 applied on staging D1 | on staging `53de706d`; rehearsal partial (credit-spending registration needs a non-staff sign-in); 0056 must be applied on prod before the prod deploy; per-reader scoping is `.issues/163` |
+| W5 follow-up (`.issues/163`) | built on unmerged `feature/163-scoped-credit-release` (`a843c063`, 2026-09-30): per-person reads release only that person's ended credit, 18,747 → 107 SQLite VM steps at 2,900 ledger rows; no migration | merge after RTM #6 together with the W5 staging credit-registration rehearsal |
 | W6, W7, W9–W12 | done, prod | — |
 | F1 | closed negative; rebuild churn fixed (`401ff282`) | premise false; Trunk's `modulepreload` order churned the SW version and the worker wasm hash, now sorted in `build.sh` |
 | F2–F8, F10 | done, prod | — |

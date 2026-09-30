@@ -176,7 +176,7 @@ fn ScoreBreakdown(total_nfts: i64, tier: Tier, score: i64) -> impl IntoView {
         <div class="dev-score-card">
             <div class="dev-score-header">
                 <span class=tier_badge_class(&tier)>
-                    {tier.emoji()} " " {tier.label()}
+                    <Icon icon=tier.icon() class="icon-xs" />" " {tier.label()}
                 </span>
                 <span class="dev-score-value">{score} " pts"</span>
             </div>
@@ -200,7 +200,7 @@ fn ScoreBreakdown(total_nfts: i64, tier: Tier, score: i64) -> impl IntoView {
                 view! {
                     <div class="dev-score-progress">
                         <div class="dev-score-progress-label">
-                            {format!("{} {} pts to {}", next.emoji(), needed, next.label())}
+                            <Icon icon=next.icon() class="icon-xs" />{format!(" {needed} pts to {}", next.label())}
                         </div>
                         <div class="dev-score-progress-bar">
                             <div

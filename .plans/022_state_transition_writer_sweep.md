@@ -659,6 +659,42 @@ Also cleared by inspection: `state.rs`'s 17 hits are all `get_secret`/`get_var`
 deployment-config fallbacks, and `db/attendees/reads.rs`'s 17 are
 `Option<String>` → `String` on nullable text columns — no enum parse in either.
 
+## §10 — the *RPC read* side: a JSON-RPC error read as "nothing there"
+
+Solana JSON-RPC errors arrive with HTTP 200 and an `error` object instead of
+`result`. A reader that checks only `result` treats a rate limit or a bad API
+key as "account absent" or "transaction missing". The same read had several
+hand-rolled copies, and each one had to learn that rule on its own.
+
+| Reader | What an RPC error became | Fix |
+|---|---|---|
+| `check_escrow_pda_available` (escrow reset in `handlers/events/update.rs`) | "PDA closed": the reset to None went through | `8cfcbd71` |
+| `fetch_account_data` (`recover.rs`) | "no deposit": a false F1 refusal in the log | `8cfcbd71` |
+| `account_exists_owned_by_program` (forfeit sweep) | every candidate dropped | `8cfcbd71` |
+| `escrow_indexer/poller.rs` `fetch_transaction` | `Ok(None)`, counted as "no escrow event"; the index summary showed 0 errors | `69d09de3` |
+| escrow reset catch-all arm (`update.rs`) | `InvalidPubkey`/`PdaDerivationFailed` told the organizer "escrow still exists" | `c79d0434` |
+
+All of them now go through `solana_escrow::json_rpc::rpc_result`, either
+directly or through `account_info::account_value`. The guards are
+`worker/tests/json_rpc_result.rs` (parser tests, plus a check that no reader
+calls `.get("result")` by hand) and `worker/tests/escrow_account_info.rs`
+(no hand-built `getAccountInfo` in `wire.rs`, and the "still exists" message
+only in the `AccountNotFound` arm). Each guard fails on the tree before its
+fix.
+
+Checked 2026-09-30 and left alone, because each one already fails closed:
+- `deposit/usdc/rpc.rs` (`getTransaction`, `getSignaturesForAddress`) and
+  `deposit/escrow/workflows.rs` check `error` explicitly.
+- `solana.rs` `getAssetsByOwner` deserializes `error` into a typed field.
+- `solana_escrow/blockhash.rs` already failed closed ("no blockhash in
+  response") but dropped the provider's message. Since `acdfeddf` it reads
+  through `rpc_result`, and the guard covers it.
+
+Since `1b167b35` all seven posts build their request with
+`json_rpc::post_request`. Each keeps its own send, timeout, retry and error
+type. The guard fails if a `"jsonrpc"` envelope appears anywhere else under
+`src/`.
+
 ## Transitions not yet swept
 
 None. Every transition identified at the start of this plan has been swept.

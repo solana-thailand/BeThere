@@ -385,6 +385,25 @@
     width: 100%;
 }
 
+/* Per-row variant (attendee row Delete): one short item, so the menu is as
+   wide as its button and opens rightward from the summary, which sits in a
+   left-aligned wrapping action row. */
+/* Doubled class: beats the phone rule that makes the toolbar menu static. */
+.admin-actions-more.admin-row-more {
+    position: relative;
+}
+
+.admin-row-more > summary {
+    min-width: 44px;
+    justify-content: center;
+}
+
+.admin-row-more .admin-actions-menu {
+    left: 0;
+    right: auto;
+    min-width: max-content;
+}
+
 .admin-force-regen-row {
     margin-top: 0.5rem;
     display: flex;

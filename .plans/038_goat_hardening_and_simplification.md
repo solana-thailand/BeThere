@@ -27,6 +27,7 @@ Wave 1 (`.plans/037`).
 - [ ] **D4:** cargo-heal in the fix loop. Use it as needed; it is not a
   deliverable. The memory `cargo-heal-not-adopted` records a 2026-09-13
   evaluation.
+  **Not closable:** a standing practice, not a deliverable (`cargo-heal-not-adopted`); nothing blocks it.
 - [x] **D5:** loop discipline, followed throughout.
 
 ## P0
@@ -47,12 +48,16 @@ Wave 1 (`.plans/037`).
   artifact).
   - Locally: 42/42 green, three runs.
   - The axe self-test proves the gate fails on injected violations.
-  - **Open:** commit the Linux baselines from the first CI run's artifact.
-    This machine has no container runtime, so it cannot render Linux
-    baselines.
+  - Done: the Linux baselines from CI run 36525317862 are committed
+    (`141cd7c5`); run 36526674731 on it is fully green.
+  - The `staff-*` snapshots were all magenta (the masked full-viewport
+    video covered the page), so they checked nothing. Fixed: the video is
+    hidden by `e2e/screenshot.css` instead of masked; staff Linux baselines
+    are re-taken from CI.
   - Found and fixed along the way: `.issues/172` (the `/api/auth/me` per-IP
     limit) and the muted-text contrast.
-  - Owner decision: `.issues/171` (brand CTA fills).
+  - `.issues/171` (brand CTA fills): owner picked dark text on small fills;
+    applied, and the a11y allowlist is empty.
 
 ## P1: cut
 
@@ -82,8 +87,8 @@ Wave 1 (`.plans/037`).
     page's day-aware formatter) and C2 ("Recommended" on the only payment
     option).
   - `/claim` was added to the visual + a11y page list (45 e2e tests).
-  - **Awaiting owner approval:** C3–C5, C7 (LM-2 ticket banners), C8 (LM-3
-    claim trim). C6 folds into P2-b.
+  - C3–C5, C7 (LM-2 ticket banners) and C8 (LM-3 claim trim): owner
+    approved 2026-09-29, applied (see `.issues/173`). C6 folds into P2-b.
 
 ## P2: add
 
@@ -182,6 +187,7 @@ Wave 1 (`.plans/037`).
   - `/jsqr-1.4.0.js` serves br (33,223 B) and identity when asked.
   - **Early Hints is owner-gated:** it is a Cloudflare zone setting, and the
     site is on workers.dev. Unverified whether it is available there.
+    Owner, 2026-09-29: skip until a custom domain.
 - [x] **P3-d:** `--font-size-0..5` and `--size-1..7` clamp() tokens in
   `style-01-core.css` (Utopia-style, 320→1440).
   - Migrated: the event title, section titles, card padding (`pe-card`, 8
@@ -191,8 +197,13 @@ Wave 1 (`.plans/037`).
   - Probe at 320/390/768/1024/1440 in EN and TH: no page overflow and no
     element spill on event, ticket or claim. The h1 scales 24–28 → 35 px.
   - css_class_audit passes. +517 B br4.
-- [ ] **P3-e:** LINE in-app browser auth. Needs staging and a phone, so it is
+- [x] **P3-e:** LINE in-app browser auth. **Done (2026-09-30):** the owner's phone login works (see `.plans/039` F5). Needs staging and a phone, so it is
   owner-run.
+  **Blocked:** owner; it needs a real phone with LINE.
+  **Owner question (2026-09-30, `event-checkin-aa`):** "can you open a
+  staging event link inside LINE on your phone, sign in with Google, and
+  report whether you land on the ticket (or the error text)?" The same run
+  closes `.plans/039` F5.
 
 ## Separate design issues (filed; not in this package)
 
@@ -215,6 +226,13 @@ Wave 1 (`.plans/037`).
   three empty `<div>` `Show` fallbacks each added a 1.5rem flex gap. Tiles
   now start at 167 px (was 476) at 390 px and 124 px (was 172) at 1280 px;
   checked at 390/720/721/1280 with no horizontal overflow; Playwright 51/51.
+- The staff shell is past its warn line on `develop` (2026-09-30, session
+  `event-checkin-aa`, `develop` `04ab57b5`): 1,997,238 B br4, 95.23% of the
+  2 MiB budget, +9,004 B over its 2026-09-29 baseline (warn line 1,887,436
+  B). The attendee shell is 57.94%. The gate still passes. The budget
+  script's own advice applies: only the scanner is opened at the door, so
+  the scanner is the split candidate. Not started: it touches demo-facing
+  scanner code before the freeze.
 - The ticket page with a pending deposit shows "Ready for Check-In", then
   "Deposit Required", then "Verifying", all at once. This is input for P1-2
   (LM-2).

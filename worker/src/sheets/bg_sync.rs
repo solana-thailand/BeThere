@@ -8,15 +8,68 @@
 //! HTTP response. D1 is the source of truth; Sheets is a legacy mirror.
 
 use super::a1;
-use event_checkin_domain::models::attendee::{ColumnMapping, TICKET_NAME_SELF_REGISTERED};
+use event_checkin_domain::models::attendee::{
+    ColumnKey as CK, ColumnMapping, SheetRow, TICKET_NAME_SELF_REGISTERED,
+};
 use worker::KvStore;
 
-use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
+use crate::http::ValueRange;
 use crate::state::AppState;
 
 use super::locate::{resolve_row, resolve_rows};
+use super::values::{row_cells, send};
 use super::{get_cached_access_token, invalidate_column_map_cache};
-use event_checkin_domain::models::attendee::SheetRow;
+
+// ---------------------------------------------------------------------------
+// Shared write path
+// ---------------------------------------------------------------------------
+
+/// The tab a background write lands on, with its column layout.
+struct Target<'a> {
+    state: &'a AppState,
+    kv: Option<&'a KvStore>,
+    sheet_id: &'a str,
+    sheet_name: &'a str,
+    mapping: &'a ColumnMapping,
+}
+
+/// A Google access token, or `None` once the failure is logged under `op`.
+async fn access_token(state: &AppState, kv: Option<&KvStore>, op: &str) -> Option<String> {
+    match get_cached_access_token(state, kv).await {
+        Ok(t) => Some(t),
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync {op}: failed to get access token");
+            None
+        }
+    }
+}
+
+/// Find `row` by `api_id` at write time, then write `cells` into it in one
+/// batch. Cells whose column the sheet lacks are skipped. Returns the 1-based
+/// row written, or `None` once the reason it was skipped is logged.
+async fn write_row(
+    target: &Target<'_>,
+    row: &SheetRow,
+    cells: Vec<(CK, String)>,
+    op: &str,
+) -> Option<usize> {
+    let access_token = access_token(target.state, target.kv, op).await?;
+    let sheet_ref = a1::sheet_ref(target.sheet_name);
+    let row_index = match resolve_row(row, target.sheet_id, &sheet_ref, &access_token).await {
+        Ok(n) => n,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync {op}: row lookup failed, write skipped");
+            return None;
+        }
+    };
+
+    let data = row_cells(&sheet_ref, target.mapping, row_index, cells);
+    if let Err(e) = send(target.sheet_id, data, &access_token).await {
+        tracing::error!(row_index, error = %e, "bg_sync {op}: sheet write failed");
+        return None;
+    }
+    Some(row_index)
+}
 
 // ---------------------------------------------------------------------------
 // Check-in
@@ -36,70 +89,24 @@ pub async fn mark_checked_in(
     kv: Option<KvStore>,
     timestamp: String,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync mark_checked_in: failed to get access token");
-            return;
-        }
+    let target = Target {
+        state: &state,
+        kv: kv.as_ref(),
+        sheet_id: &sheet_id,
+        sheet_name: &sheet_name,
+        mapping: &mapping,
     };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync mark_checked_in: row lookup failed, write skipped");
-            return;
-        }
-    };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::CheckedInAt,
-            row_index,
-            timestamp.clone(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::CheckedInBy,
-            row_index,
-            staff_email.clone(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::ClaimToken,
-            row_index,
-            claim_token.clone(),
-        ),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(
-            row_index = row_index,
-            error = %e,
-            "bg_sync mark_checked_in: sheet write failed"
-        );
+    let cells = vec![
+        (CK::CheckedInAt, timestamp),
+        (CK::CheckedInBy, staff_email.clone()),
+        (CK::ClaimToken, claim_token.clone()),
+    ];
+    let Some(row_index) = write_row(&target, &row, cells, "mark_checked_in").await else {
         return;
-    }
+    };
 
     tracing::info!(
-        row_index = row_index,
+        row_index,
         staff_fingerprint = %state.log_fingerprint(&staff_email),
         claim_token_fingerprint = %crate::crypto::claim_token_fingerprint(&claim_token),
         "bg_sync: marked row as checked in"
@@ -122,65 +129,22 @@ pub async fn mark_virtual_checked_in(
     kv: Option<KvStore>,
     timestamp: String,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync mark_virtual_checked_in: failed to get access token");
-            return;
-        }
+    let target = Target {
+        state: &state,
+        kv: kv.as_ref(),
+        sheet_id: &sheet_id,
+        sheet_name: &sheet_name,
+        mapping: &mapping,
     };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync mark_virtual_checked_in: row lookup failed, write skipped");
-            return;
-        }
-    };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::CheckedInAt,
-            row_index,
-            timestamp.clone(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::CheckedInBy,
-            row_index,
-            "virtual".to_string(),
-        ),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(
-            row_index = row_index,
-            error = %e,
-            "bg_sync mark_virtual_checked_in: sheet write failed"
-        );
+    let cells = vec![
+        (CK::CheckedInAt, timestamp),
+        (CK::CheckedInBy, "virtual".to_string()),
+    ];
+    let Some(row_index) = write_row(&target, &row, cells, "mark_virtual_checked_in").await else {
         return;
-    }
+    };
 
-    tracing::info!(
-        row_index = row_index,
-        "bg_sync: marked row as virtually checked in"
-    );
+    tracing::info!(row_index, "bg_sync: marked row as virtually checked in");
 
     invalidate_column_map_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
@@ -199,77 +163,28 @@ pub async fn clear_checked_in(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync clear_checked_in: failed to get access token");
-            return;
-        }
+    let target = Target {
+        state: &state,
+        kv: kv.as_ref(),
+        sheet_id: &sheet_id,
+        sheet_name: &sheet_name,
+        mapping: &mapping,
     };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync clear_checked_in: row lookup failed, write skipped");
-            return;
-        }
-    };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::CheckedInAt,
-            row_index,
-            String::new(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::CheckedInBy,
-            row_index,
-            String::new(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::ClaimToken,
-            row_index,
-            String::new(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::ClaimedAt,
-            row_index,
-            String::new(),
-        ),
+    let cells = [
+        CK::CheckedInAt,
+        CK::CheckedInBy,
+        CK::ClaimToken,
+        CK::ClaimedAt,
     ]
     .into_iter()
-    .flatten()
+    .map(|key| (key, String::new()))
     .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
+    let Some(row_index) = write_row(&target, &row, cells, "clear_checked_in").await else {
+        return;
     };
 
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(
-            row_index = row_index,
-            error = %e,
-            "bg_sync clear_checked_in: sheet write failed"
-        );
-        return;
-    }
-
     tracing::info!(
-        row_index = row_index,
+        row_index,
         staff_fingerprint = %state.log_fingerprint(&staff_email),
         "bg_sync: cleared check-in fields (undo)"
     );
@@ -294,70 +209,24 @@ pub async fn mark_claimed(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync mark_claimed: failed to get access token");
-            return;
-        }
+    let target = Target {
+        state: &state,
+        kv: kv.as_ref(),
+        sheet_id: &sheet_id,
+        sheet_name: &sheet_name,
+        mapping: &mapping,
     };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync mark_claimed: row lookup failed, write skipped");
-            return;
-        }
-    };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::SolanaAddress,
-            row_index,
-            wallet_address.clone(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::ClaimedAt,
-            row_index,
-            claimed_at.clone(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::NftProofUrl,
-            row_index,
-            nft_proof_url.clone(),
-        ),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(
-            row_index = row_index,
-            error = %e,
-            "bg_sync mark_claimed: sheet write failed"
-        );
+    let cells = vec![
+        (CK::SolanaAddress, wallet_address.clone()),
+        (CK::ClaimedAt, claimed_at),
+        (CK::NftProofUrl, nft_proof_url.clone()),
+    ];
+    let Some(row_index) = write_row(&target, &row, cells, "mark_claimed").await else {
         return;
-    }
+    };
 
     tracing::info!(
-        row_index = row_index,
+        row_index,
         wallet_fingerprint = %state.log_fingerprint(&wallet_address),
         nft_proof_url = %nft_proof_url,
         "bg_sync: marked row as claimed"
@@ -392,15 +261,9 @@ pub async fn append_attendee_row(
     kv: Option<KvStore>,
 ) {
     let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync append_attendee_row: failed to get access token");
-            return;
-        }
+    let Some(access_token) = access_token(&state, kv.as_ref(), "append_attendee_row").await else {
+        return;
     };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
 
     let row_len = mapping.total_columns.max(31);
     let mut row = vec![String::new(); row_len];
@@ -466,62 +329,6 @@ pub async fn append_attendee_row(
 // Update operations
 // ---------------------------------------------------------------------------
 
-/// Update deposit_method column for an attendee row.
-#[allow(dead_code)]
-pub async fn update_deposit_method(
-    state: AppState,
-    sheet_id: String,
-    sheet_name: String,
-    kv: Option<KvStore>,
-    row: SheetRow,
-    method: String,
-    mapping: ColumnMapping,
-) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync update_deposit_method: failed to get access token");
-            return;
-        }
-    };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync update_deposit_method: row lookup failed, write skipped");
-            return;
-        }
-    };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [a1::cell(
-        &sheet_ref,
-        &mapping,
-        CK::DepositMethod,
-        row_index,
-        method.clone(),
-    )]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(row_index = row_index, error = %e, "bg_sync update_deposit_method: sheet write failed");
-        return;
-    }
-
-    tracing::info!(row_index = row_index, method = %method, "bg_sync: updated deposit_method");
-}
-
 /// Update participation_type column.
 pub async fn update_participation_type(
     state: AppState,
@@ -532,49 +339,19 @@ pub async fn update_participation_type(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync update_participation_type: failed to get access token");
-            return;
-        }
+    let target = Target {
+        state: &state,
+        kv: kv.as_ref(),
+        sheet_id: &sheet_id,
+        sheet_name: &sheet_name,
+        mapping: &mapping,
     };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync update_participation_type: row lookup failed, write skipped");
-            return;
-        }
-    };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [a1::cell(
-        &sheet_ref,
-        &mapping,
-        CK::ParticipationType,
-        row_index,
-        participation_type.clone(),
-    )]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(row_index = row_index, error = %e, "bg_sync update_participation_type: sheet write failed");
+    let cells = vec![(CK::ParticipationType, participation_type.clone())];
+    let Some(row_index) = write_row(&target, &row, cells, "update_participation_type").await else {
         return;
-    }
+    };
 
-    tracing::info!(row_index = row_index, %participation_type, "bg_sync: updated participation_type");
+    tracing::info!(row_index, %participation_type, "bg_sync: updated participation_type");
 }
 
 /// Write bank info columns.
@@ -589,62 +366,26 @@ pub async fn write_bank_info(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync write_bank_info: failed to get access token");
-            return;
-        }
-    };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync write_bank_info: row lookup failed, write skipped");
-            return;
-        }
-    };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let mut data = vec![];
-    if let Some(ref acct) = bank_account {
-        data.extend(a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::BankAccount,
-            row_index,
-            acct.clone(),
-        ));
-    }
-    if let Some(ref name) = bank_name {
-        data.extend(a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::BankName,
-            row_index,
-            name.clone(),
-        ));
-    }
-
-    if data.is_empty() {
+    let cells: Vec<(CK, String)> = [(CK::BankAccount, bank_account), (CK::BankName, bank_name)]
+        .into_iter()
+        .filter_map(|(key, value)| Some((key, value?)))
+        .collect();
+    if cells.is_empty() {
         return;
     }
 
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
+    let target = Target {
+        state: &state,
+        kv: kv.as_ref(),
+        sheet_id: &sheet_id,
+        sheet_name: &sheet_name,
+        mapping: &mapping,
+    };
+    let Some(row_index) = write_row(&target, &row, cells, "write_bank_info").await else {
+        return;
     };
 
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(row_index = row_index, error = %e, "bg_sync write_bank_info: sheet write failed");
-        return;
-    }
-
-    tracing::info!(row_index = row_index, "bg_sync: wrote bank info");
+    tracing::info!(row_index, "bg_sync: wrote bank info");
 }
 
 /// Write deposit verification columns (deposit_method, deposit_amount, deposit_verified).
@@ -660,69 +401,28 @@ pub async fn write_deposit_verification(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync write_deposit_verification: failed to get access token");
-            return;
-        }
+    let target = Target {
+        state: &state,
+        kv: kv.as_ref(),
+        sheet_id: &sheet_id,
+        sheet_name: &sheet_name,
+        mapping: &mapping,
     };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync write_deposit_verification: row lookup failed, write skipped");
-            return;
-        }
+    let verified = match verified {
+        true => "Yes",
+        false => "No",
     };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::DepositMethod,
-            row_index,
-            deposit_method,
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::DepositAmount,
-            row_index,
-            deposit_amount,
-        ),
-        a1::cell(
-            &sheet_ref,
-            &mapping,
-            CK::DepositVerified,
-            row_index,
-            if verified {
-                "Yes".to_string()
-            } else {
-                "No".to_string()
-            },
-        ),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(row_index = row_index, error = %e, "bg_sync write_deposit_verification: sheet write failed");
+    let cells = vec![
+        (CK::DepositMethod, deposit_method),
+        (CK::DepositAmount, deposit_amount),
+        (CK::DepositVerified, verified.to_string()),
+    ];
+    let Some(row_index) = write_row(&target, &row, cells, "write_deposit_verification").await
+    else {
         return;
-    }
+    };
 
-    tracing::info!(row_index = row_index, "bg_sync: wrote deposit verification");
+    tracing::info!(row_index, "bg_sync: wrote deposit verification");
 }
 
 /// Update QR code URLs for attendee rows.
@@ -734,17 +434,12 @@ pub async fn update_qr_urls(
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
     if updates.is_empty() {
         return;
     }
-
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync update_qr_urls: failed to get access token");
-            return;
-        }
+    let sheet_ref = a1::sheet_ref(&sheet_name);
+    let Some(access_token) = access_token(&state, kv.as_ref(), "update_qr_urls").await else {
+        return;
     };
     let updates = match resolve_rows(updates, &sheet_id, &sheet_ref, &access_token).await {
         Ok(found) => found,
@@ -754,29 +449,20 @@ pub async fn update_qr_urls(
         }
     };
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
     let data: Vec<ValueRange> = updates
         .into_iter()
         .filter_map(|(row_index, url)| {
             a1::cell(&sheet_ref, &mapping, CK::QrCodeUrl, row_index, url)
         })
         .collect();
+    let count = data.len();
 
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
+    if let Err(e) = send(&sheet_id, data, &access_token).await {
         tracing::error!(error = %e, "bg_sync update_qr_urls: sheet write failed");
         return;
     }
 
-    tracing::info!(count = body.data.len(), "bg_sync: updated QR URLs");
+    tracing::info!(count, "bg_sync: updated QR URLs");
 }
 
 /// Write refund status columns.
@@ -789,49 +475,19 @@ pub async fn write_refund_status(
     refund_status: String,
     mapping: ColumnMapping,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync write_refund_status: failed to get access token");
-            return;
-        }
+    let target = Target {
+        state: &state,
+        kv: kv.as_ref(),
+        sheet_id: &sheet_id,
+        sheet_name: &sheet_name,
+        mapping: &mapping,
     };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync write_refund_status: row lookup failed, write skipped");
-            return;
-        }
-    };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [a1::cell(
-        &sheet_ref,
-        &mapping,
-        CK::RefundStatus,
-        row_index,
-        refund_status,
-    )]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(row_index = row_index, error = %e, "bg_sync write_refund_status: sheet write failed");
+    let cells = vec![(CK::RefundStatus, refund_status)];
+    let Some(row_index) = write_row(&target, &row, cells, "write_refund_status").await else {
         return;
-    }
+    };
 
-    tracing::info!(row_index = row_index, "bg_sync: wrote refund_status");
+    tracing::info!(row_index, "bg_sync: wrote refund_status");
 }
 
 /// Write refund link column.
@@ -844,49 +500,19 @@ pub async fn write_refund_link(
     refund_link: String,
     mapping: ColumnMapping,
 ) {
-    let sheet_ref = a1::sheet_ref(&sheet_name);
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync write_refund_link: failed to get access token");
-            return;
-        }
+    let target = Target {
+        state: &state,
+        kv: kv.as_ref(),
+        sheet_id: &sheet_id,
+        sheet_name: &sheet_name,
+        mapping: &mapping,
     };
-    let row_index = match resolve_row(&row, &sheet_id, &sheet_ref, &access_token).await {
-        Ok(n) => n,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync write_refund_link: row lookup failed, write skipped");
-            return;
-        }
-    };
-
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [a1::cell(
-        &sheet_ref,
-        &mapping,
-        CK::RefundLink,
-        row_index,
-        refund_link,
-    )]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
-        tracing::error!(row_index = row_index, error = %e, "bg_sync write_refund_link: sheet write failed");
+    let cells = vec![(CK::RefundLink, refund_link)];
+    let Some(row_index) = write_row(&target, &row, cells, "write_refund_link").await else {
         return;
-    }
+    };
 
-    tracing::info!(row_index = row_index, "bg_sync: wrote refund_link");
+    tracing::info!(row_index, "bg_sync: wrote refund_link");
 }
 
 /// Write refund_status and refund_link for multiple attendees in a single
@@ -903,30 +529,13 @@ pub async fn write_refund_batch(
     if rows.is_empty() {
         return;
     }
-
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync write_refund_batch: failed to get access token");
-            return;
-        }
+    let Some(access_token) = access_token(&state, kv.as_ref(), "write_refund_batch").await else {
+        return;
     };
 
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data: super::write::refund_batch_ranges(
-            &sheet_name,
-            &mapping,
-            &rows,
-            "refunded",
-            &refund_link,
-        ),
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
+    let data =
+        super::write::refund_batch_ranges(&sheet_name, &mapping, &rows, "refunded", &refund_link);
+    if let Err(e) = send(&sheet_id, data, &access_token).await {
         tracing::error!(error = %e, "bg_sync write_refund_batch: sheet write failed");
         return;
     }
@@ -934,74 +543,29 @@ pub async fn write_refund_batch(
     tracing::info!(count = rows.len(), "bg_sync: wrote batch refund");
 }
 
-/// Delete a row from the Sheet.
+/// Delete a row from the Sheet. The work is `write::delete_sheet_row`'s; this
+/// is its detached form, which logs instead of returning the error.
 pub async fn delete_sheet_row(
     state: AppState,
     row_index: usize,
-    _mapping: ColumnMapping,
+    mapping: ColumnMapping,
     sheet_id: String,
     sheet_name: String,
     kv: Option<KvStore>,
 ) {
-    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
-        Ok(t) => t,
-        Err(e) => {
-            tracing::error!(error = %e, "bg_sync delete_sheet_row: failed to get access token");
-            return;
-        }
-    };
-
-    // Resolve the REAL numeric GID for this tab. The old hardcoded map
-    // ("attendees" => 0) was wrong — Google assigns arbitrary GIDs (e.g.
-    // 104609663), so deleting with sheetId=0 was a silent no-op and the row
-    // never disappeared from the sheet.
-    let gid =
-        match super::resolve_sheet_gid(&state, &sheet_id, &sheet_name, kv.as_ref(), &access_token)
-            .await
-        {
-            Ok(g) => g,
-            Err(e) => {
-                tracing::error!(
-                    sheet_id = %sheet_id,
-                    sheet_name = %sheet_name,
-                    error = %e,
-                    "bg_sync delete_sheet_row: failed to resolve gid"
-                );
-                return;
-            }
-        };
-
-    let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchUpdate");
-
-    // Row indices in the Sheets API are 0-based, but our row_index is 1-based (human-readable).
-    // Subtract 1 for the API call.
-    let api_row = row_index.saturating_sub(1);
-
-    let body = serde_json::json!({
-        "requests": [{
-            "deleteDimension": {
-                "range": {
-                    "sheetId": gid,
-                    "dimension": "ROWS",
-                    "startIndex": api_row,
-                    "endIndex": api_row + 1
-                }
-            }
-        }]
-    });
-
-    if let Err(e) =
-        crate::http::post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await
+    if let Err(e) = super::write::delete_sheet_row(
+        row_index,
+        &mapping,
+        &state,
+        &sheet_id,
+        &sheet_name,
+        kv.as_ref(),
+    )
+    .await
     {
-        tracing::error!(row_index = row_index, error = %e, "bg_sync delete_sheet_row: sheet write failed");
+        tracing::error!(row_index = row_index, error = %e, "bg_sync delete_sheet_row failed");
         return;
     }
 
     tracing::info!(row_index = row_index, "bg_sync: deleted sheet row");
-    invalidate_column_map_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
-
-// resolve_sheet_gid removed — sheet GIDs are resolved dynamically via
-// super::resolve_sheet_gid() in sheets/mod.rs, which fetches the real GID
-// from the spreadsheet metadata. The hardcoded map here was wrong (the
-// "Attendees" tab is NOT GID 0), causing row deletes to silently no-op.

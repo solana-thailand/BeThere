@@ -1,6 +1,6 @@
 # 171: Light text on the brand accent and warning fills fails WCAG AA
 
-**Status:** open (found 2026-09-29 by the new axe gate, session `event-checkin-ba`). The fix is an owner/design decision, because it changes the look of the primary CTAs. Until then the three cases below sit in `e2e/a11y-allowlist.json` as per-element entries.
+**Status:** fixed on develop (2026-09-29, session `event-checkin-3e`). Owner picked option 1 (dark text on small fills). Found 2026-09-29 by the axe gate, session `event-checkin-ba`.
 
 ## Found by the gate
 
@@ -38,3 +38,13 @@ it is a visible brand change.
   its tint).
 - The icon-only mobile hamburger and the header sign-out button now have
   accessible names.
+
+## Fix (2026-09-29, owner decision: option 1)
+
+- The active nav pill (`nav a[aria-current="page"], nav a.active`) and every
+  `.ticket-action-btn` now use `--bg-primary` text. The ticket button got it
+  on all its fills, not only the flagged warning one: white measured
+  2.15–3.68:1 on accent/warning/info/success, dark measures 4.90–8.38:1.
+- The landing persona tab no longer exists (P1-1 rebuilt the landing).
+- `e2e/a11y-allowlist.json` is empty; the a11y specs pass without it.
+- Large CTAs (hero, sticky bar) keep light text, as recommended.

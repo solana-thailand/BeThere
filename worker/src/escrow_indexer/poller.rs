@@ -5,6 +5,8 @@ use futures_util::StreamExt;
 use serde::Deserialize;
 use worker::D1Database;
 
+use crate::solana_escrow::json_rpc::{post_request, rpc_result};
+
 use super::{
     EscrowInstruction, IndexSummary, OnChainEvent, POLL_BATCH_SIZE, escrow_program_id, save_cursor,
 };
@@ -103,6 +105,9 @@ pub struct RpcInnerInstructions {
 pub(crate) enum FetchOutcome {
     SkippedFailed,
     SkippedNoEvent,
+    /// The RPC could not return the transaction; counted in `errors`, not as
+    /// "no escrow event".
+    RpcFailed,
     Event(OnChainEvent),
 }
 
@@ -164,7 +169,7 @@ pub async fn poll_escrow_events(
                         error = %e,
                         "failed to fetch transaction"
                     );
-                    (sig_info, FetchOutcome::SkippedNoEvent)
+                    (sig_info, FetchOutcome::RpcFailed)
                 }
             }
         }
@@ -184,6 +189,9 @@ pub async fn poll_escrow_events(
             }
             FetchOutcome::SkippedNoEvent => {
                 summary.skipped_no_event += 1;
+            }
+            FetchOutcome::RpcFailed => {
+                summary.errors += 1;
             }
             FetchOutcome::Event(event) => {
                 match super::store::save_onchain_event(db, event_id, event.clone()).await {
@@ -231,22 +239,14 @@ pub(crate) async fn fetch_signatures_for_address(
         params[1]["before"] = serde_json::Value::String(before_sig.to_string());
     }
 
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-poll",
-        "method": "getSignaturesForAddress",
-        "params": params
-    });
-
-    let response_text = rpc_post(rpc_url, &body).await?;
+    let response_text =
+        rpc_post(rpc_url, "bethere-poll", "getSignaturesForAddress", params).await?;
 
     // Parse response — handle both possible formats
     let parsed: serde_json::Value = serde_json::from_str(&response_text)
         .map_err(|e| format!("failed to parse signatures response: {e:?}"))?;
 
-    let result = parsed
-        .get("result")
-        .ok_or_else(|| format!("no result in signatures response: {response_text}"))?;
+    let result = rpc_result(&parsed)?;
 
     // The result can be either an array directly or have a signature_infos field
     let infos: Vec<RpcSignatureInfo> = if result.is_array() {
@@ -272,29 +272,24 @@ pub(crate) async fn fetch_transaction(
     rpc_url: &str,
     signature: &str,
 ) -> Result<Option<RpcTransactionResult>, String> {
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-tx",
-        "method": "getTransaction",
-        "params": [
-            signature,
-            {
-                "encoding": "json",
-                "maxSupportedTransactionVersion": 0
-            }
-        ]
-    });
+    let params = serde_json::json!([
+        signature,
+        {
+            "encoding": "json",
+            "maxSupportedTransactionVersion": 0
+        }
+    ]);
 
-    let response_text = rpc_post(rpc_url, &body).await?;
+    let response_text = rpc_post(rpc_url, "bethere-tx", "getTransaction", params).await?;
 
     let parsed: serde_json::Value = serde_json::from_str(&response_text)
         .map_err(|e| format!("failed to parse transaction response: {e:?}"))?;
 
-    let result = parsed.get("result");
-
-    match result {
-        None | Some(serde_json::Value::Null) => Ok(None),
-        Some(v) => {
+    // A null result is a transaction the node does not have (yet); an RPC
+    // error is a failed read and must not look like one.
+    match rpc_result(&parsed)? {
+        serde_json::Value::Null => Ok(None),
+        v => {
             let tx: RpcTransactionResult = serde_json::from_value(v.clone())
                 .map_err(|e| format!("failed to parse transaction result: {e:?}"))?;
             Ok(Some(tx))
@@ -378,23 +373,14 @@ pub(crate) fn parse_rpc_transaction(
     None
 }
 
-/// Execute an RPC POST request using worker::Fetch.
-async fn rpc_post(rpc_url: &str, body: &serde_json::Value) -> Result<String, String> {
-    let json_body =
-        serde_json::to_string(body).map_err(|e| format!("failed to serialize RPC request: {e}"))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(rpc_url, &init)
-        .map_err(|e| format!("failed to create RPC request: {e:?}"))?;
+/// Send one JSON-RPC call and return the raw body of a 2xx response.
+async fn rpc_post(
+    rpc_url: &str,
+    id: &str,
+    method: &str,
+    params: serde_json::Value,
+) -> Result<String, String> {
+    let request = post_request(rpc_url, id, method, params)?;
 
     let mut response = worker::Fetch::Request(request)
         .send()

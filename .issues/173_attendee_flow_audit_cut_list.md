@@ -1,6 +1,6 @@
 # 173: Attendee flow audit: landing → event → register → deposit → ticket → claim
 
-**Status:** in progress (2026-09-29, session `event-checkin-ba`). Two bug-level cuts are fixed on develop (C1, C2). The rest are proposals that need the owner's approval (the brief says "approved cuts implemented"). This is P1-2 of `.plans/038`, and it absorbs LM-2 (ticket banners) and LM-3 (claim trim).
+**Status:** fixed on develop (2026-09-29, session `event-checkin-3e`): C3, C4, C5, C7 and C8 approved by the owner and applied; C1/C2 were fixed earlier (session `event-checkin-ba`), C6 went to P2-b.
 
 ## Method
 
@@ -53,3 +53,29 @@ deposit page. That skip is right; keep it.
 The happy path (landing → paid) is **4 taps plus form fields**, and it has no
 dead-end screens. The cuts above remove repetition, not steps. The only step
 that could go is C3's chooser when there is one method (4 → 3 taps).
+
+## Applied (2026-09-29, owner approved C3–C5, C7, C8)
+
+- **C3** deposit: with one method the card drops its name and amount (the
+  hero says it once); the welcome/sign-out card and the `/api/auth/me` fetch
+  that only fed it are gone.
+- **C4** event: the 4-step grid and the "= FREE" card are cut; the refund
+  checklist stays. The sticky bar hides while `#reserve` is on screen (scroll
+  listener, removed on cleanup) and comes back above it.
+- **C5** event: the "👤 email / Sign out" card is cut. **Correction to the
+  premise:** attendee pages have no header account chip, so the card was the
+  only switch-account exit. It moved next to the locked email in the reserve
+  form ("Sign out", then reload the event page), the one place the email is
+  shown.
+- **C7** ticket: one derived state. An unpaid deposit is its own hero
+  (`DepositDue`, "Deposit Required") with the pay card as the only CTA, no QR
+  placeholder, no second "Ready" card and no "present this ticket" footer.
+  The pending/ready descriptions moved into the hero subtitle.
+- **C8** claim: before check-in (in-person, no check-in time) the stepper is
+  hidden and the card reads "Check in at the door to unlock your badge.",
+  followed by the badge preview. After check-in the status card no longer has
+  a separate preview card beside it.
+- Checked at 390×844 in headless Chrome against the local e2e worker: sticky
+  hides at the form and returns at the top, one amount on the deposit page,
+  no overflow. Playwright 45 passed; the 6 failures are the intended visual
+  changes (event, ticket, claim × 2 viewports). First load −2,969 B br4.

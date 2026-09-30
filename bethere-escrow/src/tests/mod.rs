@@ -244,11 +244,12 @@ mod close;
 mod create_event;
 mod deposit;
 mod differential;
+mod golden_vectors;
 mod introspection;
+mod reference_oracle;
 mod refund;
 mod rollover;
 mod rollover_flow;
-mod reference_oracle;
 
 // ===========================================================================
 // Full happy path lifecycle test

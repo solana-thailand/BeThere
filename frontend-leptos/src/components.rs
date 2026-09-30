@@ -108,7 +108,7 @@ pub fn show_toast(
     );
 }
 
-/// Success toast for a mutation. It becomes a warning toast, one `⚠` line per
+/// Success toast for a mutation. It becomes a warning toast, one `•` line per
 /// warning, when the server reported non-fatal `warnings` (for example a failed
 /// D1 dual-write, `.issues/152`).
 pub fn show_mutation_toast(
@@ -121,7 +121,7 @@ pub fn show_mutation_toast(
     }
     let mut msg = text.to_string();
     for warning in warnings {
-        msg.push_str("\n⚠ ");
+        msg.push_str("\n• ");
         msg.push_str(warning);
     }
     show_toast(set_toast, &msg, ToastType::Warning);

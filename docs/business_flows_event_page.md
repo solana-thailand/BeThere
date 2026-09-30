@@ -1014,7 +1014,7 @@ NFT Mint
 The platform supports a **Campaign system** for developer events and learning programs. Campaigns provide structured credential flows where attendees earn credits and certificates across multiple events.
 
 - **Handler**: `worker/src/handlers/campaigns.rs`
-- **Frontend**: `frontend-leptos/src/pages/campaigns_page.rs`
+- **Frontend**: `frontend-leptos/src/pages/campaigns_page/`
 - Campaigns can gate credential issuance on event attendance + quiz/adventure completion
 - Credits accumulate across events within a campaign
 

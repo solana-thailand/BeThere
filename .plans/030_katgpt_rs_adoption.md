@@ -94,7 +94,9 @@ owner decision.
     deletes the issue file.
   - Needs an owner OK before purging the existing closed files, since it
     changes where the team looks for history.
-- [~] **Pinned golden vectors.** Part done 2026-09-24:
+  - **Blocked (2026-09-29, `event-checkin-8c`):** owner OK pending; it also moves files in `.issues/`, peer `event-checkin-16`'s area.
+  - **Rechecked 2026-09-30 (`event-checkin-c7`):** peer `event-checkin-16` is no longer running, so only one gate is left. The owner must answer: "may closed issues leave `.issues/` for a dated `HISTORY.md` entry?" `issue_ledger.py` and `numbering_gate.py` read `.issues/`, so a yes also means changing both gates.
+- [x] **Pinned golden vectors.** Done 2026-09-29 (consumers below). Part done 2026-09-24:
   `domain/tests/fixtures/golden_vectors.json` pins USDC string/float → atomic
   (issue 146), the on-chain event id (now `domain::onchain`) and escrow /
   deposit PDAs + vault ATAs for three event ids (two need bump 254). The PDA
@@ -127,7 +129,26 @@ owner decision.
   both; each signature is 32 bytes. The HMAC itself is WebCrypto's and cannot
   run natively, so it is not pinned here. Mutant: a reordered JWT header
   (`typ` before `alg`) → 1 red.
-  **Left:** the escrow-crate / flow-harness consumers. Original scope: one `domain` fixture of
+  **Escrow-crate and flow-harness consumers, done 2026-09-29** (session
+  `event-checkin-4e`). Both `include_str!` the same domain fixture:
+  - `bethere-escrow/src/tests/golden_vectors.rs` (3 tests, runs in the CI
+    `quasar test` job): `crate::ID` equals the fixture program id; escrow and
+    deposit PDAs + bumps derived from the program's own
+    `EventEscrow::seeds(..).as_slices()` / `AttendeeDeposit::seeds(..)`, not a
+    test-side transcription; the generated client's instruction data equals
+    all 11 `escrow_ix_data` hex cases. Adds `serde_json` as a dev-dep (already
+    in the lockfile). Mutants: a `b"depositx"` seed in `state.rs` → PDA test
+    red; swapped `create_event` `event_end`/`refund_deadline` → ix test red.
+  - `flow-harness/tests/golden_vectors.rs` (3 tests, floored):
+    `ESCROW_PROGRAM_ID`, `derive_on_chain_event_id` (now `pub`) on all three
+    `on_chain_event_id` cases, and `StagingContext`'s escrow/deposit PDAs,
+    bumps and vault ATA. Mutants: a changed FNV prime and a `b"escrox"` seed
+    → 2 of 3 red.
+  - Not pinned: the escrow crate has no ATA derivation (no
+    `spl-associated-token-account` dep), so the vault is asserted by the
+    worker and flow-harness only. The flow-harness does no THB/USDC rounding
+    or JWT work, so those vectors have no consumer there.
+  Original scope: one `domain` fixture of
   (input → expected bytes) for:
   - escrow PDA derivation and instruction-data encoding;
   - JWT signing;
@@ -186,6 +207,7 @@ owner decision.
 - [ ] **Toolchain pin.** Add `rust-toolchain.toml`, listing `targets`
   explicitly (the katgpt wasm32 trap), plus a weekly `RUSTUP_TOOLCHAIN=stable`
   rot lane. **After RTM#6**, because it can change builds.
+  **Blocked (2026-09-29, `event-checkin-8c`):** open only on the commit + merge sub-step below (owner, demo freeze).
   **Built on branch `feature/030-toolchain-pin` (worktree `/tmp/ec-pin`, cut
   from `develop` `83241bd9`, 2026-09-28, session `event-checkin-00`), not
   committed yet and not merged** (RTM #6 hold; merge after the remap and
@@ -215,6 +237,8 @@ owner decision.
     `CACHE_VERSION` change on every rebuild, and the worker wasm hash
     changes; that is a few bytes of noise.
   - [ ] Commit on the branch (owner, pending); merge after RTM #6.
+    **Blocked (2026-09-29, `event-checkin-8c`):** owner go; the uncommitted `/tmp/ec-pin` diff edits `worker/deploy.sh` + `CLAUDE.md` (peer `event-checkin-16`'s area), and the merge waits for the 6–8 Oct freeze.
+    **Rechecked 2026-09-30 (`event-checkin-c7`):** `/tmp/ec-pin` is still at `83241bd9` with 4 modified and 4 new files, none committed. Two gates are left: an owner go for the commit, and the merge after the 6–8 Oct freeze. The peer-area clause no longer applies, because `event-checkin-16` is not running.
 
   **Version check, 2026-09-24.**
   - Latest stable is 1.98.1 (`rustup check`). CI's `toolchain: stable` resolves to it.
@@ -235,11 +259,19 @@ owner decision.
 
 ## 4. Owner decisions (product)
 
+Each item below is a product decision: **blocked on the owner** (checked 2026-09-29, sessions `event-checkin-4e`, `event-checkin-8c`).
+
+**Rechecked 2026-09-30 (session `event-checkin-aa`):** no gate moved. Every open item in §3 and §4 waits on the owner question written under it, and `/tmp/ec-pin` is still uncommitted at `83241bd9`. The pin commit's question is "may `feature/030-toolchain-pin` be committed now (it edits `worker/deploy.sh`, `frontend-leptos/build.sh`, CI and `CLAUDE.md`) and merged after the remap and build-stamp branches, after the 8 Oct take?"
+
 - [ ] **Verifiable lucky draw**, from `katgpt-device-verify` fair_roll: commit,
   then reveal with a Solana blockhash, re-runnable in the browser. About 1.5 d.
+  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "does any event run a lucky draw that attendees need to audit?"
 - [ ] **Tamper-evident check-in log:** Merkle root at event close plus an
   inclusion proof on the ticket. About 2 d.
+  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is an attendee-verifiable attendance proof worth a ticket-page change?"
 - [ ] **LtHash checksum** on the deposits/credits ledger with a nightly drift
   alert. About 1 d.
+  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is ledger drift a risk worth a nightly cron and alert channel?" The cron runs under the free-plan CPU cap.
 - [ ] Whether to adopt the BOUNDARY.md drift-ledger discipline and the
   second-model AGREE/REVISE review for escrow and money-path plans.
+  **Blocked:** owner: process decision. Rechecked 2026-09-30: the question is "must escrow and money-path plans get a second-model review before merge?"

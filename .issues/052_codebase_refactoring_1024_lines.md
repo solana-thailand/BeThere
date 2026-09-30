@@ -135,10 +135,10 @@ by the mechanical technique used above:
 
 | File | Lines | Component starts | `view!` starts | Residual after pulling out all non-component code |
 |---|---|---|---|---|
-| `pages/event_form.rs` | 2499 | 358 | 1002 | ~2142 |
+| ~~`pages/event_form.rs`~~ | 2499 | 358 | 1002 | ~2142 — **split 2026-09-29**, see below |
 | `pages/admin.rs` | 2317 | 195 | 929 | ~2123 |
-| `pages/campaigns_page.rs` | 1845 | 214 | 868 | ~1632 |
-| `pages/adventure/page.rs` | 1433 | 26 | 607 | ~1408 |
+| ~~`pages/campaigns_page.rs`~~ | 1845 | 214 | 868 | ~1632 — **split 2026-09-29**, see below |
+| ~~`pages/adventure/page.rs`~~ | 1433 | 26 | 607 | ~1408 — **split 2026-09-29** (`16380f12`, page 997) |
 | `pages/scanner/page.rs` | 1303 | 18 | 831 | ~1286 |
 | `pages/admin_deposit.rs` | 1170 | 40 | 432 | ~1131 |
 | `pages/claim/page.rs` | 1072 | 27 | 307 | ~1046 |
@@ -146,6 +146,39 @@ by the mechanical technique used above:
 Line counts re-measured 2026-09-04; every one has grown since the 2026-07 measurement (`event_form.rs`
 +208, `admin.rs` +37), so the residuals are floors, not targets. `adventure/tests/playtest.rs` (1052) is a
 test file and is left alone. `quiz_editor/editor.rs` was listed here at 1013 and is now under the line.
+
+**`event_form.rs` done (2026-09-29, 2,778 lines → `pages/event_form/`, largest file `save.rs` 550).**
+One component per section, a shared `FormSection` frame (header, badge, keyboard toggle; it owns its
+collapse signal), a `Copy` `FormCtx` of the shared signals, and `save_event` as a plain fn. Section
+bodies moved verbatim. Verified by a DOM A/B in headless Chrome against the local e2e worker, create
+and edit mode: identical markup except one latent bug the frame fixed (the Capacity header rendered a
+literal `&▼`); click and Enter toggles identical across all 11 sections. `tests/css_class_audit.rs`
+now reads `icon_class="…"` as a class position so the section icons stay audited. The same pattern
+(ctx struct + section components) applies to the rows below.
+
+**`campaigns_page.rs` done (2026-09-29, 1,845 lines → `pages/campaigns_page/`, largest file
+`detail_view.rs` 608).** A `Copy` `CampaignsState` owns every signal (`state.rs`, with `reload`/`back`/
+`change_status`); the list view stays in `page.rs`, the create/edit form and the detail tabs are plain
+fns in `form_view.rs` and `detail_view.rs`, and the pure helpers moved to `types.rs`/`reward.rs` with
+their tests. Bodies moved verbatim. Verified by a DOM A/B in headless Chrome at 390×844 against a local
+worker (list, create empty/titled/NFT, save without org, back, detail Events/Progress/Stats, edit):
+all 10 states byte-identical, no page errors, new bundle hash confirmed served.
+
+Re-measured 2026-09-29 (`fd -e rs`): over 1024 in `frontend-leptos/src` are only `pages/scanner/page.rs`
+(1304), `pages/quiz_editor/editor.rs` (1075) and the test file `adventure/tests/playtest.rs` (1052). The
+scanner is demo-critical, so it waits until after the 6–8 Oct freeze.
+
+2026-09-30 (`event-checkin-b5`, `4e16286e`): `adventure/tests/playtest.rs` is split. The level-data checks
+moved to `tests/level_data.rs` (397 lines); the engine, reachability, completion and walkthrough tests stay
+in `playtest.rs` (658 lines). The move is verbatim and all 42 tests still pass. Native clippy
+`--lib --tests -D warnings` and `fmt --check` are clean. That leaves `scanner/page.rs` and `quiz_editor/editor.rs`
+in the frontend. Both are single-component `view!` splits, so both wait until after the freeze.
+
+Backend re-measure, same day: `worker/src/db/events.rs` is **1114 at HEAD** (1125 with the uncommitted F7
+sponsor edits). The "backend queue is empty" note below is stale. Split it after F7 lands; F7 owns the file
+until then. Also done: `worker/src/sheets/mod.rs` (953 lines of logic behind an index, not over the line
+but against the `mod.rs`-is-an-index rule) became `token/gid/columns/attendees/staff.rs`, and `mod.rs` is now 27
+lines (`bae88287`). That is a pure move with re-exports; verified with clippy `-D warnings` and a full workspace test run.
 
 Closing these requires **extracting real sub-components with props** — a behaviour-affecting refactor that
 changes reactivity boundaries, not a move. The frontend has ~0 native tests (`#[wasm_bindgen_test]` only),

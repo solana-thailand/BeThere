@@ -161,51 +161,20 @@ struct GithubUserInfo {
     login: String,
 }
 
-/// Dedicated GitHub OAuth token exchange with explicit Accept: application/json and User-Agent headers.
+/// GitHub OAuth token exchange. GitHub answers form-encoded unless asked for
+/// JSON, and rejects requests without a `User-Agent`.
 async fn exchange_github_code(
     client_id: &str,
     client_secret: &str,
     code: &str,
     redirect_uri: &str,
 ) -> Result<String, String> {
-    let url = "https://github.com/login/oauth/access_token";
     let token_body = serde_json::json!({
         "client_id": client_id,
         "client_secret": client_secret,
         "code": code,
         "redirect_uri": redirect_uri,
     });
-    let json_body = serde_json::to_string(&token_body)
-        .map_err(|e| format!("failed to serialize GitHub token request: {e}"))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-    headers
-        .set("Accept", "application/json")
-        .map_err(|e| format!("failed to set accept: {e:?}"))?;
-    headers
-        .set("User-Agent", "BeThere-App/1.0")
-        .map_err(|e| format!("failed to set user-agent: {e:?}"))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create request to {url}: {e:?}"))?;
-
-    let mut response = worker::Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("POST {url} failed: {e:?}"))?;
-
-    let text = response
-        .text()
-        .await
-        .map_err(|e| format!("failed to read response text from {url}: {e:?}"))?;
 
     #[derive(Deserialize)]
     struct GithubTokenRes {
@@ -214,8 +183,17 @@ async fn exchange_github_code(
         error_description: Option<String>,
     }
 
-    let parsed: GithubTokenRes = serde_json::from_str(&text)
-        .map_err(|e| format!("failed to parse GitHub JSON response '{text}': {e}"))?;
+    // The quiet helper never quotes the body: a non-JSON answer
+    // (form-encoded) carries the access token, and the callback logs errors.
+    let parsed: GithubTokenRes = crate::http::post_json_quiet(
+        "https://github.com/login/oauth/access_token",
+        &token_body,
+        &[
+            ("Accept", "application/json"),
+            ("User-Agent", "BeThere-App/1.0"),
+        ],
+    )
+    .await?;
 
     if let Some(err) = parsed.error {
         let desc = parsed.error_description.unwrap_or_default();
@@ -225,7 +203,7 @@ async fn exchange_github_code(
     parsed
         .access_token
         .filter(|t| !t.is_empty())
-        .ok_or_else(|| format!("no access token in GitHub response '{text}'"))
+        .ok_or_else(|| "no access token in GitHub token response".to_string())
 }
 
 /// GET /api/auth/github/callback?code=...&state=<encoded_email>
@@ -345,45 +323,18 @@ pub async fn github_link_callback(
     Redirect::to("/profile?linked=github").into_response()
 }
 
-/// GET https://api.github.com/user with Bearer token.
-///
-/// GitHub API requires `User-Agent` header; use `worker::Fetch` directly.
+/// GET https://api.github.com/user with Bearer token. GitHub's API rejects
+/// requests without a `User-Agent`.
 async fn github_get_user(access_token: &str) -> Result<GithubUserInfo, String> {
-    use worker::{Fetch, Headers, Method, Request, RequestInit};
-
-    let headers = Headers::new();
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("header error: {e:?}"))?;
-    headers
-        .set("Accept", "application/vnd.github+json")
-        .map_err(|e| format!("header error: {e:?}"))?;
-    headers
-        .set("User-Agent", "BeThere-Protocol/1.0")
-        .map_err(|e| format!("header error: {e:?}"))?;
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Get).with_headers(headers);
-
-    let request = Request::new_with_init("https://api.github.com/user", &init)
-        .map_err(|e| format!("request error: {e:?}"))?;
-
-    let mut response = Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("fetch error: {e:?}"))?;
-
-    if response.status_code() != 200 {
-        return Err(format!(
-            "GitHub API returned status {}",
-            response.status_code()
-        ));
-    }
-
-    response
-        .json()
-        .await
-        .map_err(|e| format!("parse error: {e:?}"))
+    crate::http::get_json_quiet(
+        "https://api.github.com/user",
+        access_token,
+        &[
+            ("Accept", "application/vnd.github+json"),
+            ("User-Agent", "BeThere-Protocol/1.0"),
+        ],
+    )
+    .await
 }
 
 // ---------------------------------------------------------------------------

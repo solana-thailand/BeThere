@@ -91,7 +91,28 @@ pub(crate) fn crossmint_mint_id(idempotency_key: &str) -> Option<String> {
 /// See [`MintRequest`] for field documentation. KV caches the provider id for
 /// polling, while Crossmint's custom mint id prevents duplicate submission even
 /// if the Worker crashes before that cache write.
+///
+/// Every error comes back with the recipient wallet scrubbed: callers log it
+/// as `error = %e`, and Crossmint bodies (a 4xx echoing the request, an NFT
+/// resource carrying its owner) contain the address (issue 070).
 pub async fn mint_compressed_nft(
+    req: &MintRequest<'_>,
+    kv: Option<&worker::KvStore>,
+) -> Result<MintResult, String> {
+    mint_compressed_nft_unscrubbed(req, kv)
+        .await
+        .map_err(|e| scrub_recipient(&e, req.wallet_address))
+}
+
+/// Replace the recipient wallet in Crossmint-derived text with a placeholder.
+fn scrub_recipient(text: &str, wallet_address: &str) -> String {
+    match wallet_address.is_empty() {
+        true => text.to_string(),
+        false => text.replace(wallet_address, "[recipient]"),
+    }
+}
+
+async fn mint_compressed_nft_unscrubbed(
     req: &MintRequest<'_>,
     kv: Option<&worker::KvStore>,
 ) -> Result<MintResult, String> {
@@ -204,14 +225,16 @@ pub async fn mint_compressed_nft(
         let poll_json = match crossmint_request(&poll_url, Method::Get, req.api_key, None).await {
             Ok(v) => v,
             Err(e) => {
-                tracing::warn!(attempt, error = %e, "crossmint poll failed; retrying");
+                let error = scrub_recipient(&e, req.wallet_address);
+                tracing::warn!(attempt, error = %error, "crossmint poll failed; retrying");
                 continue;
             }
         };
-        // Log the raw shape on the first poll so field mapping can be verified
-        // against a real response (the exact asset-id field name is unconfirmed).
+        // The field mapping is verified (asset id ← `onChain.assetId`), so the
+        // first poll body is debug-only, and scrubbed: it carries the owner.
         if attempt == 1 {
-            tracing::info!(nft_id = %nft_id, raw = %poll_json, "crossmint poll #1 raw response");
+            let raw = scrub_recipient(&poll_json.to_string(), req.wallet_address);
+            tracing::debug!(nft_id = %nft_id, raw = %raw, "crossmint poll #1 raw response");
         }
 
         match crossmint_status(&poll_json).as_deref() {
@@ -411,37 +434,22 @@ pub async fn get_assets_by_owner(
 ) -> Result<DasAssetsResponse, String> {
     let url = format!("{}/?api-key={}", rpc_url, api_key);
 
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-das",
-        "method": "getAssetsByOwner",
-        "params": {
-            "ownerAddress": wallet_address,
-            "page": page,
-            "limit": limit,
-            "displayOptions": {
-                "showFungible": false,
-                "showNativeBalance": false,
-                "showInscription": false
-            }
+    let params = serde_json::json!({
+        "ownerAddress": wallet_address,
+        "page": page,
+        "limit": limit,
+        "displayOptions": {
+            "showFungible": false,
+            "showNativeBalance": false,
+            "showInscription": false
         }
     });
-
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| format!("failed to serialize DAS request: {e}"))?;
-
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = Request::new_with_init(&url, &init)
-        .map_err(|e| format!("failed to create DAS request: {e:?}"))?;
+    let request = crate::solana_escrow::json_rpc::post_request(
+        &url,
+        "bethere-das",
+        "getAssetsByOwner",
+        params,
+    )?;
 
     let mut response = Fetch::Request(request)
         .send()

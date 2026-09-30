@@ -1,9 +1,9 @@
 
 /* ===== Shared Form / Table / Card Primitives =====
    Added 2026-09-08. These class names were already used in the markup —
-   chiefly `pages/campaigns_page.rs` (mounted by the admin page's Campaigns
+   chiefly `pages/campaigns_page/` (mounted by the admin page's Campaigns
    section), plus `event_summary.rs`, `admin_deposit_record_slip.rs` and
-   `event_form.rs` — but had no rules at all, so the elements rendered at
+   `event_form/` — but had no rules at all, so the elements rendered at
    browser defaults. `tests/css_class_audit.rs` guards against that recurring.
 
    Deliberately generic: several of these are shared across pages, so they use

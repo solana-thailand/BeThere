@@ -51,10 +51,9 @@ pub fn PublicEvent() -> impl IntoView {
     // Auth state
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (reg_lookup, set_reg_lookup) = signal(RegistrationLookup::Pending);
-    // Wallet-only session info (Plan 017): drives the friendly address label and
-    // the "enter your email" input on the reservation form.
+    // Wallet-only session (Plan 017): drives the "enter your email" input on
+    // the reservation form.
     let (wallet_only, set_wallet_only) = signal(false);
-    let (wallet_addr, set_wallet_addr) = signal(None::<String>);
     // Rolling deposit credit (THB whole baht) for the signed-in attendee — shown
     // on the reserve card so returning attendees know their credit will apply.
     let (credit_thb, set_credit_thb) = signal(0u64);
@@ -201,13 +200,6 @@ pub fn PublicEvent() -> impl IntoView {
                                         .and_then(|d| d.get("wallet_only"))
                                         .and_then(|v| v.as_bool())
                                         .unwrap_or(false),
-                                );
-                                set_wallet_addr.set(
-                                    api_resp
-                                        .get("data")
-                                        .and_then(|d| d.get("wallet_address"))
-                                        .and_then(|v| v.as_str())
-                                        .map(|s| s.to_string()),
                                 );
                                 set_auth_state.set(AuthState::SignedIn(email));
                             } else {
@@ -442,7 +434,6 @@ pub fn PublicEvent() -> impl IntoView {
                                 share_copied,
                                 set_share_copied,
                                 wallet_only,
-                                wallet_addr,
                                 credit_thb,
                             )
                         }
@@ -476,13 +467,29 @@ fn render_loaded_event(
     share_copied: ReadSignal<bool>,
     set_share_copied: WriteSignal<bool>,
     wallet_only: ReadSignal<bool>,
-    wallet_addr: ReadSignal<Option<String>>,
     credit_thb: ReadSignal<u64>,
 ) -> AnyView {
     if data.status.eq_ignore_ascii_case("completed") {
         return completed_event_gateway(data, countdown, event_completed);
     }
     let i18n = use_i18n();
+
+    let (reserve_in_view, set_reserve_in_view) = signal(false);
+    let scroll = window_event_listener(leptos::ev::scroll, move |_| {
+        let viewport = window()
+            .inner_height()
+            .ok()
+            .and_then(|h| h.as_f64())
+            .unwrap_or(0.0);
+        let in_view = document()
+            .get_element_by_id("reserve")
+            .is_some_and(|el| el.get_bounding_client_rect().top() < viewport);
+        if in_view != reserve_in_view.get_untracked() {
+            set_reserve_in_view.set(in_view);
+        }
+    });
+    // Dropping a `WindowListenerHandle` does not remove the listener.
+    on_cleanup(move || scroll.remove());
 
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
@@ -564,7 +571,7 @@ fn render_loaded_event(
         }}
 
         // Event hero — prefer marketing poster, fall back to NFT badge image, then Ticket icon.
-        {event_hero(&poster_url, &nft_image_url)}
+        {event_hero(&poster_url, &nft_image_url, &data.slug)}
 
         // Event Name + Tagline
         <div class="pe-name-block">
@@ -600,9 +607,11 @@ fn render_loaded_event(
         }}
 
         // Sticky mobile CTA — a persistent bottom action bar on phones (CSS hides
-        // it on desktop). Keeps the primary action one tap away while scrolling.
+        // it on desktop). Keeps the primary action one tap away while scrolling,
+        // and goes away once the reserve zone is on screen: it would otherwise
+        // be a third "Reserve" button over the form (.issues/173 C4).
         {move || {
-            if !show_reg_form {
+            if !show_reg_form || reserve_in_view.get() {
                 return ().into_any();
             }
             let label = match reg_lookup.get() {
@@ -643,41 +652,6 @@ fn render_loaded_event(
 
         // Deposit Info Section
         {deposit_section(&data)}
-
-        // Signed-in indicator + logout
-        {move || {
-            match &auth_state.get() {
-                AuthState::SignedIn(email) => {
-                    // Wallet-only sessions show a friendly address, not `wallet:<addr>`.
-                    let email_disp = if wallet_only.get() {
-                        wallet_addr.get()
-                            .map(|a| crate::api::short_wallet(&a))
-                            .unwrap_or_else(|| t_string!(i18n, event.wallet_fallback).to_string())
-                    } else {
-                        email.clone()
-                    };
-                    view! {
-                        <div class="pe-auth-bar">
-                            <span class="pe-detail-secondary">
-                                {format!("👤 {email_disp}")}
-                            </span>
-                            <button
-                                class="btn btn-outline btn-xs"
-                                on:click=move |_| {
-                                    leptos::task::spawn_local(async move {
-                                        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
-                                        navigateTo("/");
-                                    });
-                                }
-                            >
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.sign_out))}
-                            </button>
-                        </div>
-                    }.into_any()
-                }
-                _ => ().into_any(),
-            }
-        }}
 
         // Anchor target for the hero / sticky CTAs (scrolls the action zone into view).
         <div id="reserve" class="pe-anchor"></div>
@@ -843,7 +817,7 @@ fn render_loaded_event(
                                             view! {
                                                 <div class="pe-card" style="background:rgba(20,241,149,0.08);border:1px solid rgba(20,241,149,0.3);">
                                                     <p class="pe-detail-secondary" style="margin:0;color:#14F195;font-weight:600;">
-                                                        {t!(i18n, event.credit_have, amount = credit_amt)}
+                                                        <Icon icon=IconName::CreditCard class="icon-sm" />" "{t!(i18n, event.credit_have, amount = credit_amt)}
                                                     </p>
                                                     <p class="pe-detail-secondary" style="margin:4px 0 0;">
                                                         {crate::locale::tr(|l| crate::i18n::td_string!(l, event.credit_applied))}
@@ -927,7 +901,7 @@ fn completed_event_gateway(
     let community_links = data.community_links.clone();
 
     view! {
-        {event_hero(&poster_url, &nft_image_url)}
+        {event_hero(&poster_url, &nft_image_url, &data.slug)}
 
         <div class="pe-name-block">
             <h1 class="pe-name">{name}</h1>

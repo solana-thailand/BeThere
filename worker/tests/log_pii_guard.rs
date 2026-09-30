@@ -43,6 +43,13 @@ const FORBIDDEN_FIELDS: &[&str] = &[
     // `renders_field` below accepts any `=`.
     "claim_token",
     "token",
+    // Refund bank details. The blocking `write_bank_info` logged all three
+    // raw under `*_val` names that no entry above matched.
+    "bank_account",
+    "bank_account_val",
+    "bank_account_number",
+    "account_name",
+    "account_name_val",
 ];
 
 fn rust_sources(path: &Path, output: &mut Vec<std::path::PathBuf>) {
@@ -223,6 +230,10 @@ const FORBIDDEN_EXPRESSIONS: &[&str] = &[
     ".phone",
     ".contact_handle",
     ".bank_account_number",
+    "?bank_account",
+    "%bank_account",
+    "?account_name",
+    "%account_name",
     ".first_name",
     ".last_name",
     "{email}",
@@ -763,5 +774,26 @@ fn the_guard_detects_a_reintroduced_identifier() {
             .iter()
             .any(|body| FORBIDDEN_FIELDS.iter().any(|f| renders_field(body, f)));
         assert!(!flagged, "guard false-positived on: {source}");
+    }
+}
+
+/// Class 4 with a twist: the identifier is not ours to format, the provider
+/// echoes it. Crossmint bodies carry the recipient wallet (a 4xx echoes the
+/// request, the NFT resource names its owner), and callers log mint errors as
+/// `error = %e`. Every Crossmint body must pass `scrub_recipient` before it is
+/// logged or returned.
+#[test]
+fn crossmint_bodies_are_scrubbed_of_the_recipient_wallet() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/solana.rs");
+    let source = fs::read_to_string(&path).expect("solana.rs is readable");
+    assert!(
+        source.contains(".map_err(|e| scrub_recipient(&e, req.wallet_address))"),
+        "mint_compressed_nft must scrub the recipient wallet from every error it returns"
+    );
+    for raw in ["%poll_json", "%post_json", "error = %e, \"crossmint"] {
+        assert!(
+            !source.contains(raw),
+            "solana.rs logs an unscrubbed Crossmint body ({raw}); pass it through scrub_recipient"
+        );
     }
 }

@@ -23,7 +23,7 @@
 use super::a1;
 use worker::KvStore;
 
-use crate::http::{ValueRange, post_json};
+use crate::http::{ValueRange, post_json_status, put_json};
 use crate::state::AppState;
 
 use super::get_cached_access_token;
@@ -211,7 +211,7 @@ async fn update_contact_row(
     };
 
     // Use PUT to update existing range
-    put_json_ignore(&url, &body, access_token).await?;
+    put_json(&url, &body, access_token).await?;
 
     Ok(())
 }
@@ -234,47 +234,7 @@ async fn append_contact_row(
         values: vec![row.to_vec()],
     };
 
-    let _: serde_json::Value = post_json(&url, &body, Some(access_token)).await?;
-    Ok(())
-}
-
-/// PUT JSON body, ignore response body (only check status).
-async fn put_json_ignore(
-    url: &str,
-    body: &impl serde::Serialize,
-    access_token: &str,
-) -> Result<(), String> {
-    let json_body =
-        serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
-
-    let headers = worker::Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
-
-    let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Put)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = worker::Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create PUT request to {url}: {e:?}"))?;
-
-    let mut response = worker::Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("PUT {url} failed: {e:?}"))?;
-
-    // Check status
-    let status = response.status_code();
-    if !(200..300).contains(&status) {
-        let text = response.text().await.unwrap_or_default();
-        return Err(format!("PUT {url} returned {status}: {text}"));
-    }
-
+    post_json_status(&url, &body, access_token).await?;
     Ok(())
 }
 

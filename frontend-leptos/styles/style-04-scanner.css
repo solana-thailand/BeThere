@@ -226,7 +226,7 @@
 .claim-asset-code {
     font-size: 0.8rem;
     color: var(--text-primary);
-    font-family: "SF Mono", "Fira Code", monospace;
+    font-family: var(--font-mono);
     letter-spacing: 0.02em;
     overflow: hidden;
     text-overflow: ellipsis;

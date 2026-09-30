@@ -18,6 +18,8 @@
 //! a second definition to keep in step.
 
 use leptos::prelude::*;
+
+use crate::icons::{Icon, IconName};
 use serde::{Deserialize, Serialize};
 
 use crate::api::{PostEventRegisterBody, register_post_event};
@@ -886,7 +888,7 @@ fn EventQuestionBlock(block: EventBlock) -> impl IntoView {
                                 // would be told their answer was saved.
                                 {move || match (!open.get(), answered.already, block_answered(&answered)) {
                                     (true, true, _) => view! { <span class="fb-badge">{crate::locale::tr(|l| crate::i18n::td_string!(l, feedback.answered))}</span> }.into_any(),
-                                    (true, false, true) => view! { <span class="fb-tick">"✓"</span> }.into_any(),
+                                    (true, false, true) => view! { <span class="fb-tick"><Icon icon=IconName::Check class="icon-xs" /></span> }.into_any(),
                                     (true, false, false) => view! { <span class="fb-chevron">"+"</span> }.into_any(),
                                     _ => view! { <div></div> }.into_any(),
                                 }}

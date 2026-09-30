@@ -6,6 +6,7 @@
 //   cd worker && pnpm exec playwright test visual --update-snapshots
 // CI runs with --update-snapshots=missing and uploads what it wrote as the
 // `visual-baselines` artifact; commit those PNGs to add a Linux baseline.
+import path from "node:path";
 import { test, expect } from "@playwright/test";
 import { PAGES, VIEWPORTS, openPage } from "./pages";
 
@@ -22,7 +23,10 @@ for (const target of PAGES) {
         caret: "hide",
         // Content that is correct but not fixed: the clock, camera state and
         // the build line (commit hash; absent from CI's plain trunk build).
-        mask: [page.locator(".dashboard-last-updated, video, canvas, .landing-footer-version")],
+        // The scanner <video> fills the viewport, so it is hidden by
+        // screenshot.css rather than masked (a mask covers the UI above it).
+        mask: [page.locator(".dashboard-last-updated, canvas, .landing-footer-version")],
+        stylePath: path.join(__dirname, "screenshot.css"),
         maxDiffPixelRatio: 0.01,
       });
     });

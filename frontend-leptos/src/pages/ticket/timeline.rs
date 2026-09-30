@@ -2,6 +2,8 @@
 
 use leptos::prelude::*;
 
+use crate::icons::{Icon, IconName};
+
 /// A single timeline step.
 ///
 /// Text fields are views so catalog text follows a language switch.
@@ -36,10 +38,9 @@ pub fn Timeline(
                     } else {
                         "ticket-timeline-dot ticket-timeline-dot--pending"
                     };
-                    let dot_content = if step.done {
-                        "✓".to_string()
-                    } else {
-                        step.number.to_string()
+                    let dot_content = match step.done {
+                        true => view! { <Icon icon=IconName::Check class="icon-xs" /> }.into_any(),
+                        false => step.number.to_string().into_any(),
                     };
                     view! {
                         <div class="ticket-timeline-step">

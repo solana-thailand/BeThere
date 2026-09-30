@@ -324,7 +324,13 @@ jobs:
         # Verified locally that a plain `trunk build` dist and a `build.sh` dist
         # measure within 4 bytes of each other, so the baseline recorded from
         # build.sh does not spuriously red this step.
-        run: bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
+        #
+        # Both shells: the attendee index.html and the staff-app.html that
+        # build.sh adds (.issues/169), each against its own baseline.
+        run: |
+          set -euo pipefail
+          bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist
+          bash scripts/verify/frontend_size_budget.sh --dir frontend-leptos/dist --shell staff
 
       - name: Staff-only stylesheet fence
         # The attendee shell does not link styles/*.staff.css. An attendee page
@@ -395,10 +401,12 @@ jobs:
           exit 1
 
       - name: Copy the fixture event into KV
-        # The event read path is KV-first; the fixture only wrote D1.
+        # The event read path is KV-first; the fixture only wrote D1. Every
+        # event the seed inserts must reach KV (it has two since b796df7d).
         run: |
+          want=$(grep -c 'INTO events' e2e/fixtures/seed.sql)
           curl -sf -X POST -H "Cookie: event_checkin_token=dev-token" \
-            http://localhost:8788/api/events/reseed-kv | tee /dev/stderr | grep -q '"synced":1'
+            http://localhost:8788/api/events/reseed-kv | tee /dev/stderr | grep -q "\"synced\":${want}}"
 
       - name: Run Playwright specs
         working-directory: worker

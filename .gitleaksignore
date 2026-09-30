@@ -11,3 +11,5 @@ a3cf555f17c6c42a73b9424bed09891acb41e477:worker/src/crypto.rs:private-key:399
 # "golden-vector-secret-not-a-real-key" over example.com claims — never a real session.
 0348be3a9dafb79272cbd4ce20d701a86b1756e6:domain/tests/fixtures/golden_vectors.json:jwt:96
 0348be3a9dafb79272cbd4ce20d701a86b1756e6:domain/tests/fixtures/golden_vectors.json:jwt:97
+# Synthetic UUIDv7 claim token in a column-mapping test — never a real token.
+31c5d469c184f62a8792129f63a0dfcb9898f4b5:domain/tests/unmapped_column_aliasing.rs:generic-api-key:74

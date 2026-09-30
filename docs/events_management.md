@@ -462,4 +462,4 @@ The platform includes a **Campaign system** for multi-event credential programs.
 - Campaign-event linking (associate events with a campaign)
 - Credential/credit tracking per campaign
 
-See `worker/src/handlers/campaigns.rs` and `frontend-leptos/src/pages/campaigns_page.rs`.
+See `worker/src/handlers/campaigns.rs` and `frontend-leptos/src/pages/campaigns_page/`.

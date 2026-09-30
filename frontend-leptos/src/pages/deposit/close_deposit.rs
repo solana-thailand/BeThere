@@ -4,7 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
 use crate::i18n::{t, use_i18n};
-use crate::icons::{Icon, wallet_icon_name};
+use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::get_cluster;
 
 use super::components;
@@ -172,7 +172,7 @@ pub fn close_deposit_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) 
 
     view! {
         <div class="dep2-card">
-            <div class="dep2-success-icon">"✓"</div>
+            <div class="dep2-success-icon"><Icon icon=IconName::Check class="icon-lg" /></div>
             <p class="dep2-amount-hero">
                 {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.close.done))}
             </p>

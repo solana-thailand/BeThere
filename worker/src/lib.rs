@@ -13,6 +13,8 @@ mod crypto;
 // `pub`; only the module declaration was private.
 pub mod db;
 mod durable_objects;
+// Public so `worker/tests/empty_roster_policy.rs` can drive the policy.
+pub mod empty_roster;
 mod error;
 mod escrow_indexer;
 // Public so that `worker/tests/escrow_transition_contract.rs` (Plan 014
@@ -64,10 +66,17 @@ use worker::*;
 /// Logger initialized once per Workers isolate.
 static LOG_INITIALIZED: OnceLock<()> = OnceLock::new();
 
-/// Embedded `index.html` for SPA fallback — serves the Leptos WASM frontend
-/// for any non-API route (e.g. `/staff`, `/admin`, `/claim/xxx`).
+/// Embedded attendee `index.html`, served by `spa_fallback` for a non-API
+/// path that reaches the Worker.
 ///
-/// Rebuild after frontend changes: `cd frontend-leptos && trunk build`
+/// Navigations normally never get here: `run_worker_first` in wrangler.toml
+/// is an array, so every path it does not list (`/`, `/claim/*`, `/staff`,
+/// `/admin`, …) is served asset-first — `not_found_handling = SPA` answers
+/// with `index.html`, and `_redirects` maps the staff paths to
+/// `staff-app.html` (.issues/169). This embed is the safety net.
+///
+/// Rebuild after frontend changes with `frontend-leptos/build.sh`, never a
+/// bare `trunk build` (it skips the staff shell and the gates).
 const INDEX_HTML: &str = include_str!("../../frontend-leptos/dist/index.html");
 
 /// `Cache-Control: no-store` for the SPA shell.
@@ -78,9 +87,8 @@ const INDEX_HTML: &str = include_str!("../../frontend-leptos/dist/index.html");
 /// refresh. `no-store` forces a fresh shell on every navigation.
 ///
 /// NOTE: Cloudflare's `_headers` file does NOT apply to Worker-generated
-/// responses (only to responses served by the Static Assets binding). The SPA
-/// fallback is Worker-generated for non-asset routes (`/claim/*`, `/staff`,
-/// `/admin`), so the header must be set here, not in `_headers`.
+/// responses (only to responses served by the Static Assets binding), so the
+/// header must be set here as well as in `_headers` for the asset-first path.
 static SPA_NO_STORE: std::sync::LazyLock<axum::http::HeaderValue> =
     std::sync::LazyLock::new(|| {
         axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0")
@@ -138,11 +146,10 @@ async fn fetch(
         tracing_wasm::set_as_global_default();
     });
 
-    // SPA fallback: serve index.html for non-API routes WITHOUT requiring
-    // state initialization. This guarantees the frontend (login, claim pages,
-    // admin UI) remains available even if a secret is missing or AppState
-    // build fails. Static assets (JS/CSS/WASM) are served by Cloudflare's
-    // [assets] binding before the worker is invoked.
+    // SPA fallback: serve index.html for a non-API path WITHOUT requiring
+    // state initialization, so the shell stays available even if a secret is
+    // missing or AppState fails to build. Navigations and static assets are
+    // normally served asset-first and never reach this (see `INDEX_HTML`).
     let path = req.uri().path();
     // The frontend wasm and jsQR are routed here by `run_worker_first` so they
     // can be served pre-compressed (brotli 11) instead of Cloudflare's q4.

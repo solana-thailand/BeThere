@@ -25,6 +25,12 @@ pub(super) fn claim_step(state: &ClaimState) -> (usize, usize) {
         ClaimState::Loading => (0, 3),
         // Step 1: Verified (attendee found + checked in)
         ClaimState::NotFound(_) => (0, 3),
+        // Not checked in yet: "Verified ✓" would contradict the card below.
+        ClaimState::NftComingSoon(d)
+            if super::helpers::awaiting_check_in(&d.checked_in_at, &d.participation_type) =>
+        {
+            (0, 3)
+        }
         ClaimState::NftComingSoon(_) => (1, 3),
         // Step 2: Quiz (if required)
         ClaimState::Quiz(_, _) | ClaimState::QuizSubmitted(_, _, _) => (2, 3),
@@ -48,20 +54,20 @@ pub(super) fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> imp
     // Build step labels based on whether quiz is shown
     let _ = total; // used for context, steps are hardcoded
     let i18n = use_i18n();
-    let steps: Vec<(&'static str, StepLabel, usize)> = if show_quiz {
+    let steps: Vec<(StepLabel, usize)> = if show_quiz {
         vec![
-            ("✓", StepLabel::Verified, 1),
-            ("?", StepLabel::Quiz, 2),
-            ("", StepLabel::Claim, 3),
+            (StepLabel::Verified, 1),
+            (StepLabel::Quiz, 2),
+            (StepLabel::Claim, 3),
         ]
     } else {
-        vec![("✓", StepLabel::Verified, 1), ("", StepLabel::Claim, 2)]
+        vec![(StepLabel::Verified, 1), (StepLabel::Claim, 2)]
     };
 
     view! {
         <div class="claim-stepper">
             <div class="claim-stepper-track">
-                {steps.into_iter().map(|(icon, label, step_num)| {
+                {steps.into_iter().map(|(label, step_num)| {
                     let is_completed = current > step_num;
                     let is_current = current == step_num;
 
@@ -81,7 +87,7 @@ pub(super) fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> imp
                                         </svg>
                                     }.into_any()
                                 } else {
-                                    view! { <span>{icon}</span> }.into_any()
+                                    view! { <span>{step_num}</span> }.into_any()
                                 }}
                             </div>
                             <span class=if is_current || is_completed { "claim-step-label active" } else { "claim-step-label" }>

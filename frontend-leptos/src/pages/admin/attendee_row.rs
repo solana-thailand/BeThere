@@ -399,48 +399,56 @@ pub(super) fn attendee_row(attendee: &AttendeeListItem, ctx: RowCtx) -> impl Int
                     >
                         "Ticket"
                     </button>
-                    <button
-                        class={
-                            let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
-                            let is_deleting = deleting_ids.get().contains(&delete_id);
-                            if is_deleting {
-                                "btn btn-xs btn-xs-override".to_string()
-                            } else if is_confirming {
-                                "btn btn-confirm-danger btn-xs btn-xs-override".to_string()
-                            } else {
-                                "btn btn-danger btn-xs btn-xs-override".to_string()
-                            }
-                        }
-                        disabled=deleting_ids.get().contains(&delete_id)
-                        title="Delete attendee"
-                        on:click={
-                            let delete_id = delete_id.clone();
-                            move |_| {
-                                let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
-                                if is_confirming {
-                                    set_confirm_delete_id.set(None);
-                                    spawn_delete_attendee(
-                                        delete_id.clone(),
-                                        event_id_for_delete.get(),
-                                        set_deleting_ids,
-                                        notify,
-                                    );
-                                } else {
-                                    set_confirm_delete_id.set(Some(delete_id.clone()));
-                                    let set_confirm = set_confirm_delete_id;
-                                    gloo_timers::callback::Timeout::new(3000, move || {
-                                        set_confirm.set(None);
-                                    }).forget();
+                    // Delete sits behind a "More" disclosure (owner, 2026-09-29):
+                    // one stray tap on a crowded row no longer arms it. It keeps
+                    // its own tap-again-to-confirm step inside the menu.
+                    <details class="admin-actions-more admin-row-more">
+                        <summary class="btn btn-outline btn-xs btn-xs-override" aria-label="More actions">"⋯"</summary>
+                        <div class="admin-actions-menu">
+                            <button
+                                class={
+                                    let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
+                                    let is_deleting = deleting_ids.get().contains(&delete_id);
+                                    if is_deleting {
+                                        "btn btn-xs btn-xs-override".to_string()
+                                    } else if is_confirming {
+                                        "btn btn-confirm-danger btn-xs btn-xs-override".to_string()
+                                    } else {
+                                        "btn btn-danger btn-xs btn-xs-override".to_string()
+                                    }
                                 }
-                            }
-                        }
-                    >
-                        {
-                            let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
-                            let is_deleting = deleting_ids.get().contains(&delete_id);
-                            if is_deleting { "Deleting..." } else if is_confirming { "⚠ Confirm?" } else { "Delete" }
-                        }
-                    </button>
+                                disabled=deleting_ids.get().contains(&delete_id)
+                                title="Delete attendee"
+                                on:click={
+                                    let delete_id = delete_id.clone();
+                                    move |_| {
+                                        let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
+                                        if is_confirming {
+                                            set_confirm_delete_id.set(None);
+                                            spawn_delete_attendee(
+                                                delete_id.clone(),
+                                                event_id_for_delete.get(),
+                                                set_deleting_ids,
+                                                notify,
+                                            );
+                                        } else {
+                                            set_confirm_delete_id.set(Some(delete_id.clone()));
+                                            let set_confirm = set_confirm_delete_id;
+                                            gloo_timers::callback::Timeout::new(3000, move || {
+                                                set_confirm.set(None);
+                                            }).forget();
+                                        }
+                                    }
+                                }
+                            >
+                                {
+                                    let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
+                                    let is_deleting = deleting_ids.get().contains(&delete_id);
+                                    if is_deleting { "Deleting..." } else if is_confirming { "⚠ Confirm?" } else { "Delete" }
+                                }
+                            </button>
+                        </div>
+                    </details>
                 </div>
             </div>
         </div>

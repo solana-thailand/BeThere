@@ -20,7 +20,7 @@
   "footer_pending": "Your registration is being reviewed. You'll receive a QR code once approved.",
   "footer_ready": "Present this ticket at the registration desk for check-in.",
   "announcement_title": "From the organizer",
-  "calendar": "📅 Our Event Calendar",
+  "calendar": "Our Event Calendar",
   "hero": {
     "checked_in": "Checked In",
     "checked_in_by": " by {{ name }}",
@@ -73,7 +73,7 @@
     "lightbox_hint": "Show this code to staff"
   },
   "nft": {
-    "claimed": "✓ NFT Badge Claimed!",
+    "claimed": "NFT Badge Claimed!",
     "copy_asset_id": "Copy Asset ID",
     "view_on_orb": "View NFT on Orb ↗"
   },
@@ -88,12 +88,12 @@
     "website": "Website"
   },
   "context": {
-    "sessions_link": "📅 Sessions & Slides ↗",
+    "sessions_link": "Sessions & Slides ↗",
     "badge_alt": "Event badge",
     "map": "Map ↗"
   },
   "video": {
-    "heading": "📺 Livestream / Recording",
+    "heading": "Livestream / Recording",
     "iframe_title": "Event video",
     "watch_youtube": "Watch on YouTube →",
     "watch": "Watch Video →"
@@ -153,7 +153,7 @@
     "pending_usdc_desc": "Your deposit is being confirmed on-chain.",
     "pending_credit_title": "Credit Deposit: Pending",
     "pending_credit_desc": "Your credit deposit is being processed.",
-    "refund_returned": "RSVP Deposit Returned ✓",
+    "refund_returned": "RSVP Deposit Returned",
     "refund_receipt": "View Refund Receipt →",
     "claim_title": "You're checked in!",
     "claim_cta": "Claim Your NFT Badge →",
@@ -182,7 +182,7 @@
     "rollover_sign": "Sign & Send Rollover",
     "rollover_processing": "Processing Rollover...",
     "approve_in_wallet": "Please approve the transaction in your wallet...",
-    "rollover_done": "Deposit Rolled Over ✓",
+    "rollover_done": "Deposit Rolled Over",
     "rollover_done_desc": "Your deposit has been moved to {{ target }}. TX: {{ tx }}",
     "view_solscan": "View on Solscan →",
     "rollover_failed": "Rollover Failed",
@@ -198,7 +198,7 @@
     "hold_confirm_desc": "We'll keep your {{ amount }} THB deposit on file. It will be applied automatically when you register for your next event. You can request its return at any time.",
     "hold_confirm_cta": "Confirm & Hold",
     "holding": "Holding Deposit...",
-    "held_title": "Deposit Held as Credit ✓",
+    "held_title": "Deposit Held as Credit",
     "held_desc": "Your {{ amount }} THB is now rolling credit. Total credit: {{ balance }}. We'll auto-apply it to your next registration.",
     "already_held_desc": "Your {{ amount }} THB deposit is held as rolling credit and will be auto-applied to your next event registration.",
     "hold_failed": "Hold Failed",
@@ -210,9 +210,9 @@
     "return_confirm_desc": "The organizer will be notified that you want your held credit refunded. They'll process it through their standard refund channel — this just signals your request, it does not trigger an automatic payout.",
     "return_confirm_cta": "Confirm Request",
     "return_submitting": "Submitting Request...",
-    "return_requested": "Refund Requested ✓",
+    "return_requested": "Refund Requested",
     "return_requested_desc": "You've already requested a return of your held credit. The organizer has been notified and will process it through their standard refund channel.",
-    "return_submitted": "Request Submitted ✓",
+    "return_submitted": "Request Submitted",
     "return_failed": "Request Failed"
   }
 }

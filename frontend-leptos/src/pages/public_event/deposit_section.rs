@@ -1,5 +1,5 @@
 use super::types::*;
-use crate::i18n::{t, t_string, use_i18n};
+use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
 use crate::utils::deposit_copy::{never_forfeited, thb_refund_window};
 use leptos::prelude::*;
@@ -29,33 +29,6 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
 
     let show_usdc = data.deposit_amount_usdc > 0 && !escrow_closed;
     let show_thb = data.deposit_amount_thb > 0;
-
-    // The journey reads as a sum: pay, show up, check in, get it back = FREE.
-    // "Free" is the net cost of attending, so every line must also say that the
-    // deposit is paid first, or people reach the payment step surprised.
-    let pay_label = match (show_thb, show_usdc) {
-        (true, _) => {
-            let amount = thb_display.clone().unwrap_or_default();
-            view! { {t!(i18n, event.pay_thb, amount)} }.into_any()
-        }
-        (false, true) => {
-            let amount = usdc_display.clone();
-            view! { {t!(i18n, event.pay_usdc, amount)} }.into_any()
-        }
-        (false, false) => {
-            view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, event.pay_deposit))} }
-                .into_any()
-        }
-    };
-    let back_label = move || match show_thb {
-        true => t_string!(i18n, event.back_refund_or_credit),
-        false => t_string!(i18n, event.back_claim_to_wallet),
-    };
-    let free_detail = move || match (show_thb, show_usdc) {
-        (true, true) => t_string!(i18n, event.free_detail_both),
-        (true, false) => t_string!(i18n, event.free_detail_thb),
-        (false, _) => t_string!(i18n, event.free_detail_usdc),
-    };
 
     view! {
         <div class="pe-card pe-deposit-card">
@@ -114,7 +87,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
             // Refund policy checklist
             <div class="pe-refund-list">
                 <div class="pe-refund-item">
-                    <span class="pe-check">"✓"</span>
+                    <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
                     <span class="pe-refund-text">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.refund_attend))}</span>
                 </div>
                 // Deposit model D1 (owner, 2026-09-28): nothing is forfeited.
@@ -125,7 +98,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     let promise = move || never_forfeited(i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
-                            <span class="pe-check">"✓"</span>
+                            <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
                             <span class="pe-refund-text">
                                 {t!(i18n, event.refund_cant_make_it, promise)}
                             </span>
@@ -138,7 +111,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     let deadline = move || format_refund_deadline(refund_hours, i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
-                            <span class="pe-check">"✓"</span>
+                            <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
                             <span class="pe-refund-text">
                                 {t!(i18n, event.refund_usdc, deadline)}
                             </span>
@@ -151,7 +124,7 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     let window = move || thb_refund_window(i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
-                            <span class="pe-check">"✓"</span>
+                            <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
                             <span class="pe-refund-text">
                                 {t!(i18n, event.refund_thb, window)}
                             </span>
@@ -162,41 +135,11 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                 }}
             </div>
 
-            // 4-step deposit journey infographic
-            <div class="pe-journey-timeline">
-                <div>
-                    <div class="pe-journey-step-num" style="background: rgba(153,69,255,0.2); border: 1px solid rgba(153,69,255,0.5); color: #fff;">"1"</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_reserve))}</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{pay_label}</div>
-                </div>
-                <div>
-                    <div class="pe-journey-step-num" style="background: rgba(20,241,149,0.2); border: 1px solid rgba(20,241,149,0.5); color: #14F195;">"2"</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_show_up))}</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_at_venue))}</div>
-                </div>
-                <div>
-                    <div class="pe-journey-step-num" style="background: rgba(153,69,255,0.2); border: 1px solid rgba(153,69,255,0.5); color: #fff;">"3"</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_scan_qr))}</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_check_in))}</div>
-                </div>
-                <div>
-                    <div class="pe-journey-step-num" style="background: rgba(20,241,149,0.25); border: 1px solid #14F195; color: #14F195;">"4"</div>
-                    <div style="font-size: 0.8rem; font-weight: 700; color: #14F195;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.step_back))}</div>
-                    <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 2px;">{back_label}</div>
-                </div>
-            </div>
-            <div class="pe-journey-total" role="note">
-                <span class="pe-journey-total-sum">
-                    <span aria-hidden="true">"= "</span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.free))}
-                </span>
-                <span class="pe-journey-total-detail">{free_detail}</span>
-            </div>
-
             // Hybrid note
             {if is_hybrid {
                 view! {
                     <div class="pe-hybrid-note" style="margin-top: 16px;">
-                        <span>"💡"</span>
+                        <Icon icon=IconName::Lightbulb class="icon-sm" />
                         <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.hybrid_deposit_note))}</span>
                     </div>
                 }.into_any()

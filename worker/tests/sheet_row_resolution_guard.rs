@@ -36,22 +36,7 @@ fn function_body<'a>(rel: &str, code: &'a str, name: &str) -> &'a str {
 /// Writers that address one attendee's row. Each must take a `SheetRow` and
 /// resolve it before building any range.
 const ROW_WRITERS: [(&str, &[&str]); 4] = [
-    (
-        "sheets/bg_sync.rs",
-        &[
-            "mark_checked_in",
-            "mark_virtual_checked_in",
-            "clear_checked_in",
-            "mark_claimed",
-            "update_deposit_method",
-            "update_participation_type",
-            "write_bank_info",
-            "write_deposit_verification",
-            "update_qr_urls",
-            "write_refund_status",
-            "write_refund_link",
-        ],
-    ),
+    ("sheets/bg_sync.rs", &["update_qr_urls"]),
     (
         "sheets/write/checkin.rs",
         &[
@@ -64,7 +49,13 @@ const ROW_WRITERS: [(&str, &[&str]); 4] = [
     ),
     (
         "sheets/write/deposit.rs",
-        &["write_bank_info", "write_deposit_verification"],
+        &[
+            "write_bank_info",
+            "write_deposit_verification",
+            "update_deposit_method",
+            "write_refund_status",
+            "write_refund_link",
+        ],
     ),
     ("sheets/write/append.rs", &["update_participation_type"]),
 ];
@@ -90,6 +81,109 @@ fn row_writers_resolve_the_row_before_writing() {
             );
         }
     }
+}
+
+/// `bg_sync`'s one-row writers share `write_row`, which resolves the row
+/// before it builds any cell. Each writer must go through it and must not
+/// build a range of its own.
+const BG_SYNC_ROW_WRITERS: [&str; 9] = [
+    "mark_checked_in",
+    "mark_virtual_checked_in",
+    "clear_checked_in",
+    "mark_claimed",
+    "update_participation_type",
+    "write_bank_info",
+    "write_deposit_verification",
+    "write_refund_status",
+    "write_refund_link",
+];
+
+#[test]
+fn bg_sync_row_writers_go_through_the_resolving_helper() {
+    let rel = "sheets/bg_sync.rs";
+    let code = source(rel);
+
+    let start = code
+        .find("async fn write_row(")
+        .unwrap_or_else(|| panic!("{rel}: `write_row` is gone — was it renamed?"));
+    let helper = &code[start..];
+    let helper = &helper[..helper.find("\n}\n").unwrap_or(helper.len())];
+    assert!(
+        helper.contains("row: &SheetRow"),
+        "{rel}: `write_row` must take a SheetRow, not a remembered row number"
+    );
+    let resolved = helper
+        .find("resolve_row(")
+        .unwrap_or_else(|| panic!("{rel}: `write_row` never resolves its row"));
+    let first_cell = helper
+        .find("row_cells(")
+        .unwrap_or_else(|| panic!("{rel}: `write_row` no longer builds its cells"));
+    assert!(
+        resolved < first_cell,
+        "{rel}: `write_row` must resolve the row before building a range"
+    );
+
+    for name in BG_SYNC_ROW_WRITERS {
+        let body = function_body(rel, &code, name);
+        assert!(
+            body.contains("SheetRow") && !body.contains("row_index: usize"),
+            "{rel}: `{name}` must take a SheetRow, not a remembered row number"
+        );
+        assert!(
+            body.contains("write_row("),
+            "{rel}: `{name}` must write through `write_row`"
+        );
+        assert!(
+            !body.contains("a1::cell(") && !body.contains("ValueRange {"),
+            "{rel}: `{name}` builds its own range instead of going through `write_row`"
+        );
+    }
+}
+
+/// The blocking one-row writers resolve their row, then hand it to
+/// `values::write_cells`, which builds the cells and sends one batch. None of
+/// them builds a range or a request body of its own.
+#[test]
+fn blocking_row_writers_write_through_the_shared_cells_helper() {
+    for (rel, names) in ROW_WRITERS {
+        if rel == "sheets/bg_sync.rs" {
+            continue;
+        }
+        let code = source(rel);
+        for name in names.iter().filter(|name| **name != "update_qr_urls") {
+            let body = function_body(rel, &code, name);
+            let resolved = body
+                .find("resolve_row(")
+                .unwrap_or_else(|| panic!("{rel}: `{name}` never resolves its row"));
+            let written = body
+                .find("write_cells(")
+                .unwrap_or_else(|| panic!("{rel}: `{name}` must write through `write_cells`"));
+            assert!(
+                resolved < written,
+                "{rel}: `{name}` must resolve the row before writing it"
+            );
+            assert!(
+                !body.contains("a1::cell(") && !body.contains("BatchUpdateRequest"),
+                "{rel}: `{name}` builds its own range instead of going through `write_cells`"
+            );
+        }
+    }
+
+    let rel = "sheets/values.rs";
+    let code = source(rel);
+    let start = code
+        .find("pub(crate) async fn write_cells(")
+        .unwrap_or_else(|| panic!("{rel}: `write_cells` is gone — was it renamed?"));
+    let helper = &code[start..];
+    let helper = &helper[..helper.find("\n}\n").unwrap_or(helper.len())];
+    assert!(
+        helper.contains("row_cells(") && helper.contains("send("),
+        "{rel}: `write_cells` must build through `row_cells` and send one batch"
+    );
+    assert!(
+        code.contains("a1::cell("),
+        "{rel}: `row_cells` must skip missing columns through `a1::cell`"
+    );
 }
 
 #[test]

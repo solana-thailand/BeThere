@@ -13,30 +13,103 @@ use event_checkin_domain::models::auth::{GoogleUserInfo, TokenRequest, TokenResp
 // Generic HTTP helpers
 // ---------------------------------------------------------------------------
 
-/// Perform a GET request with a Bearer token and parse the JSON response.
-pub async fn get_json<T: DeserializeOwned>(url: &str, access_token: &str) -> Result<T, String> {
-    let headers = Headers::new();
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
+/// What a non-2xx error carries besides the status and the URL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ErrorBody {
+    /// The response body, for Google APIs whose errors say what went wrong.
+    Echo,
+    /// Nothing: the caller logs the error and the provider body can carry
+    /// tokens or profile data.
+    Omit,
+}
 
+/// Send one request and fail on a non-2xx status. Every helper below goes
+/// through here, so the headers, the body and the status check live in one
+/// place.
+async fn send(
+    method: Method,
+    url: &str,
+    body: Option<(&str, String)>,
+    access_token: Option<&str>,
+    extra_headers: &[(&str, &str)],
+    error_body: ErrorBody,
+) -> Result<Response, String> {
+    let headers = Headers::new();
+    if let Some(token) = access_token {
+        headers
+            .set("Authorization", &format!("Bearer {token}"))
+            .map_err(|e| format!("failed to set auth header: {e:?}"))?;
+    }
+    for (name, value) in extra_headers {
+        headers
+            .set(name, value)
+            .map_err(|e| format!("failed to set {name} header: {e:?}"))?;
+    }
+
+    let verb: &str = method.as_ref();
     let mut init = RequestInit::new();
-    init.with_method(Method::Get).with_headers(headers);
+    init.with_method(method.clone());
+    if let Some((content_type, text)) = body {
+        headers
+            .set("Content-Type", content_type)
+            .map_err(|e| format!("failed to set content-type: {e:?}"))?;
+        init.with_body(Some(wasm_bindgen::JsValue::from_str(&text)));
+    }
+    init.with_headers(headers);
 
     let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create GET request to {url}: {e:?}"))?;
+        .map_err(|e| format!("failed to create {verb} request to {url}: {e:?}"))?;
 
     let mut response = Fetch::Request(request)
         .send()
         .await
-        .map_err(|e| format!("GET {url} failed: {e:?}"))?;
+        .map_err(|e| format!("{verb} {url} failed: {e:?}"))?;
 
-    check_status(&mut response, url).await?;
+    check_status(&mut response, url, error_body).await?;
+    Ok(response)
+}
 
+/// Parse `text` as JSON. The error names the size, not the content: V8's
+/// `JSON.parse` message quotes the text, and serde's does not.
+fn parse_quiet<T: DeserializeOwned>(text: &str, verb: &str, url: &str) -> Result<T, String> {
+    serde_json::from_str(text).map_err(|e| {
+        format!(
+            "failed to parse JSON from {verb} {url} ({} bytes): {e}",
+            text.len()
+        )
+    })
+}
+
+async fn read_text(mut response: Response, verb: &str, url: &str) -> Result<String, String> {
     response
-        .json()
+        .text()
         .await
-        .map_err(|e| format!("failed to parse JSON from GET {url}: {e:?}"))
+        .map_err(|e| format!("failed to read body from {verb} {url}: {e:?}"))
+}
+
+/// Parse a response body as JSON; `verb` and `url` only label the error,
+/// which never quotes the body.
+async fn read_json<T: DeserializeOwned>(
+    response: Response,
+    verb: &str,
+    url: &str,
+) -> Result<T, String> {
+    let text = read_text(response, verb, url).await?;
+    parse_quiet(&text, verb, url)
+}
+
+/// Perform a GET request with a Bearer token and parse the JSON response.
+pub async fn get_json<T: DeserializeOwned>(url: &str, access_token: &str) -> Result<T, String> {
+    let response = send(
+        Method::Get,
+        url,
+        None,
+        Some(access_token),
+        &[],
+        ErrorBody::Echo,
+    )
+    .await?;
+    read_json(response, "GET", url).await
 }
 
 /// Perform a POST request with form-encoded body and parse the JSON response.
@@ -47,107 +120,96 @@ pub async fn post_form<T: DeserializeOwned>(
     let body = form_urlencoded::Serializer::new(String::new())
         .extend_pairs(form_data.iter().copied())
         .finish();
+    let form = Some(("application/x-www-form-urlencoded", body));
+    let response = send(Method::Post, url, form, None, &[], ErrorBody::Echo).await?;
+    read_json(response, "POST", url).await
+}
 
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/x-www-form-urlencoded")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&body)));
-
-    let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create POST request to {url}: {e:?}"))?;
-
-    let mut response = Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("POST {url} failed: {e:?}"))?;
-
-    check_status(&mut response, url).await?;
-
-    response
-        .json()
-        .await
-        .map_err(|e| format!("failed to parse JSON from POST {url}: {e:?}"))
+/// Send `body` as JSON, with a Bearer token when given.
+async fn send_json(
+    method: Method,
+    url: &str,
+    body: &impl Serialize,
+    access_token: Option<&str>,
+) -> Result<Response, String> {
+    let json_body =
+        serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
+    let json = Some(("application/json", json_body));
+    send(method, url, json, access_token, &[], ErrorBody::Echo).await
 }
 
 /// Perform a POST request with a JSON body and parse the JSON response.
 /// Optionally includes a Bearer token for authenticated requests.
-#[allow(dead_code)]
 pub async fn post_json<T: DeserializeOwned>(
     url: &str,
     body: &impl Serialize,
     access_token: Option<&str>,
 ) -> Result<T, String> {
-    let json_body =
-        serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
-
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-
-    if let Some(token) = access_token {
-        headers
-            .set("Authorization", &format!("Bearer {token}"))
-            .map_err(|e| format!("failed to set auth header: {e:?}"))?;
-    }
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create POST JSON request to {url}: {e:?}"))?;
-
-    let mut response = Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("POST JSON {url} failed: {e:?}"))?;
-
-    check_status(&mut response, url).await?;
-
-    response
-        .json()
-        .await
-        .map_err(|e| format!("failed to parse JSON from POST {url}: {e:?}"))
+    let response = send_json(Method::Post, url, body, access_token).await?;
+    read_json(response, "POST", url).await
 }
 
-/// Perform a PUT request with a JSON body and a Bearer token.
-/// Returns the raw response text (Google Sheets PUT doesn't always return JSON).
-#[allow(dead_code)]
+/// POST a JSON body with a Bearer token; only the status matters.
+pub async fn post_json_status(
+    url: &str,
+    body: &impl Serialize,
+    access_token: &str,
+) -> Result<(), String> {
+    send_json(Method::Post, url, body, Some(access_token))
+        .await
+        .map(drop)
+}
+
+/// PUT a JSON body with a Bearer token; only the status matters.
 pub async fn put_json(url: &str, body: &impl Serialize, access_token: &str) -> Result<(), String> {
+    send_json(Method::Put, url, body, Some(access_token))
+        .await
+        .map(drop)
+}
+
+// ---------------------------------------------------------------------------
+// Quiet helpers: a bad status never quotes the provider's body
+// ---------------------------------------------------------------------------
+
+/// GET with a Bearer token and extra headers, and parse the JSON response.
+/// No error quotes the response body.
+pub async fn get_json_quiet<T: DeserializeOwned>(
+    url: &str,
+    access_token: &str,
+    extra_headers: &[(&str, &str)],
+) -> Result<T, String> {
+    let response = send(
+        Method::Get,
+        url,
+        None,
+        Some(access_token),
+        extra_headers,
+        ErrorBody::Omit,
+    )
+    .await?;
+    read_json(response, "GET", url).await
+}
+
+/// POST a JSON body with extra headers, and parse the JSON response.
+/// No error quotes the response body.
+pub async fn post_json_quiet<T: DeserializeOwned>(
+    url: &str,
+    body: &impl Serialize,
+    extra_headers: &[(&str, &str)],
+) -> Result<T, String> {
     let json_body =
         serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
-
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Put)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create PUT request to {url}: {e:?}"))?;
-
-    let mut response = Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("PUT {url} failed: {e:?}"))?;
-
-    check_status(&mut response, url).await?;
-
-    Ok(())
+    let json = Some(("application/json", json_body));
+    let response = send(
+        Method::Post,
+        url,
+        json,
+        None,
+        extra_headers,
+        ErrorBody::Omit,
+    )
+    .await?;
+    read_json(response, "POST", url).await
 }
 
 // ---------------------------------------------------------------------------
@@ -168,10 +230,12 @@ pub async fn exchange_oauth_code(token_request: &TokenRequest) -> Result<TokenRe
 }
 
 /// Fetch the authenticated user's profile from Google's userinfo endpoint.
+/// Quiet: the body carries the user's email, and the login path logs errors.
 pub async fn fetch_user_info(access_token: &str) -> Result<GoogleUserInfo, String> {
-    get_json(
+    get_json_quiet(
         "https://www.googleapis.com/oauth2/v2/userinfo",
         access_token,
+        &[],
     )
     .await
 }
@@ -242,43 +306,26 @@ pub async fn batch_update_sheet(
     if body.data.is_empty() {
         return Ok(());
     }
-    // Google Sheets batchUpdate returns JSON but we just need success/failure
-    let json_body = serde_json::to_string(body)
-        .map_err(|e| format!("failed to serialize batch update: {e}"))?;
-
-    let headers = Headers::new();
-    headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
-    headers
-        .set("Authorization", &format!("Bearer {access_token}"))
-        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
-
-    let mut init = RequestInit::new();
-    init.with_method(Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
-
-    let request = Request::new_with_init(url, &init)
-        .map_err(|e| format!("failed to create batch update request: {e:?}"))?;
-
-    let mut response = Fetch::Request(request)
-        .send()
-        .await
-        .map_err(|e| format!("batch update request failed: {e:?}"))?;
-
-    check_status(&mut response, url).await
+    post_json_status(url, body, access_token).await
 }
 
 // ---------------------------------------------------------------------------
 // Error checking
 // ---------------------------------------------------------------------------
 
-/// Check HTTP response status and return an error with the body if non-2xx.
-async fn check_status(response: &mut Response, url: &str) -> Result<(), String> {
+/// Check HTTP response status; a non-2xx error carries the body only when
+/// `error_body` is `Echo`.
+async fn check_status(
+    response: &mut Response,
+    url: &str,
+    error_body: ErrorBody,
+) -> Result<(), String> {
     let status = response.status_code();
     if (200..300).contains(&status) {
         return Ok(());
+    }
+    if error_body == ErrorBody::Omit {
+        return Err(format!("HTTP {status} from {url}"));
     }
 
     let body_text = response

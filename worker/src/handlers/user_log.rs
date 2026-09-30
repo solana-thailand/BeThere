@@ -6,7 +6,7 @@
 //!
 //! The "users" tab is auto-created with headers if it doesn't exist.
 
-use crate::http::{ValueRange, batch_update_sheet, fetch_sheet_range, post_json, put_json};
+use crate::http::{ValueRange, batch_update_sheet, fetch_sheet_range, post_json_status, put_json};
 use crate::sheets::get_access_token;
 use crate::state::AppState;
 
@@ -121,7 +121,7 @@ async fn create_users_tab(sheet_id: &str, access_token: &str) -> Result<(), Stri
         }]
     });
 
-    post_json::<serde_json::Value>(&url, &body, Some(access_token))
+    post_json_status(&url, &body, access_token)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, %sheet_id, "user_log: failed to create 'users' tab");
@@ -206,7 +206,7 @@ async fn append_new_user(
         ]],
     };
 
-    post_json::<serde_json::Value>(&url, &body, Some(access_token))
+    post_json_status(&url, &body, access_token)
         .await
         .map_err(|e| {
             tracing::error!(error = %e, %sheet_id, "user_log: failed to append new user");

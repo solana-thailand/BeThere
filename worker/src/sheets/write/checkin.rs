@@ -2,13 +2,14 @@
 
 use crate::sheets::a1;
 use chrono::Utc;
-use event_checkin_domain::models::attendee::ColumnMapping;
+use event_checkin_domain::models::attendee::{ColumnKey as CK, ColumnMapping};
 use worker::KvStore;
 
-use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
+use crate::http::ValueRange;
 use crate::state::AppState;
 
 use crate::sheets::locate::{resolve_row, resolve_rows};
+use crate::sheets::values::{send, write_cells};
 use crate::sheets::{get_cached_access_token, invalidate_column_map_cache};
 use event_checkin_domain::models::attendee::SheetRow;
 
@@ -34,44 +35,20 @@ pub async fn mark_checked_in(
     let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
     let timestamp = Utc::now().to_rfc3339();
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::CheckedInAt,
-            row_index,
-            timestamp.clone(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::CheckedInBy,
-            row_index,
-            staff_email.to_string(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::ClaimToken,
-            row_index,
-            claim_token.to_string(),
-        ),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+    let cells = vec![
+        (CK::CheckedInAt, timestamp.clone()),
+        (CK::CheckedInBy, staff_email.to_string()),
+        (CK::ClaimToken, claim_token.to_string()),
+    ];
+    write_cells(
+        sheet_id,
+        &sheet_ref,
+        mapping,
+        row_index,
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
         row_index = row_index,
@@ -100,37 +77,19 @@ pub async fn mark_virtual_checked_in(
     let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
     let timestamp = Utc::now().to_rfc3339();
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::CheckedInAt,
-            row_index,
-            timestamp.clone(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::CheckedInBy,
-            row_index,
-            "virtual".to_string(),
-        ),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+    let cells = vec![
+        (CK::CheckedInAt, timestamp.clone()),
+        (CK::CheckedInBy, "virtual".to_string()),
+    ];
+    write_cells(
+        sheet_id,
+        &sheet_ref,
+        mapping,
+        row_index,
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
         row_index = row_index,
@@ -161,45 +120,24 @@ pub async fn clear_checked_in(
     let access_token = get_cached_access_token(state, kv).await?;
     let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::CheckedInAt,
-            row_index,
-            String::new(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::CheckedInBy,
-            row_index,
-            String::new(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::ClaimToken,
-            row_index,
-            String::new(),
-        ),
-        a1::cell(&sheet_ref, mapping, CK::ClaimedAt, row_index, String::new()),
+    let cells = [
+        CK::CheckedInAt,
+        CK::CheckedInBy,
+        CK::ClaimToken,
+        CK::ClaimedAt,
     ]
     .into_iter()
-    .flatten()
+    .map(|key| (key, String::new()))
     .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+    write_cells(
+        sheet_id,
+        &sheet_ref,
+        mapping,
+        row_index,
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
         row_index = row_index,
@@ -229,44 +167,20 @@ pub async fn mark_claimed(
     let access_token = get_cached_access_token(state, kv).await?;
     let row_index = resolve_row(&row, sheet_id, &sheet_ref, &access_token).await?;
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
-    let data: Vec<ValueRange> = [
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::SolanaAddress,
-            row_index,
-            wallet_address.to_string(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::ClaimedAt,
-            row_index,
-            claimed_at.to_string(),
-        ),
-        a1::cell(
-            &sheet_ref,
-            mapping,
-            CK::NftProofUrl,
-            row_index,
-            nft_proof_url.to_string(),
-        ),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+    let cells = vec![
+        (CK::SolanaAddress, wallet_address.to_string()),
+        (CK::ClaimedAt, claimed_at.to_string()),
+        (CK::NftProofUrl, nft_proof_url.to_string()),
+    ];
+    write_cells(
+        sheet_id,
+        &sheet_ref,
+        mapping,
+        row_index,
+        cells,
+        &access_token,
+    )
+    .await?;
 
     tracing::info!(
         row_index = row_index,
@@ -296,8 +210,6 @@ pub async fn update_qr_urls(
     let access_token = get_cached_access_token(state, kv).await?;
     let updates = resolve_rows(updates.to_vec(), sheet_id, &sheet_ref, &access_token).await?;
 
-    use event_checkin_domain::models::attendee::ColumnKey as CK;
-
     // Build batch update with individual value ranges
     let data: Vec<ValueRange> = updates
         .iter()
@@ -305,16 +217,7 @@ pub async fn update_qr_urls(
             a1::cell(&sheet_ref, mapping, CK::QrCodeUrl, *row_index, url.clone())
         })
         .collect();
-
-    let url =
-        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
-
-    let body = BatchUpdateRequest {
-        data,
-        value_input_option: "USER_ENTERED".to_string(),
-    };
-
-    batch_update_sheet(&url, &body, &access_token).await?;
+    send(sheet_id, data, &access_token).await?;
 
     let updated = updates.len();
     tracing::info!(count = updated, "updated qr code urls in google sheets");

@@ -1,7 +1,6 @@
 # 169: The frontend size baseline is past the warn line, and `size_budget_guards` is red on develop
 
-**Status:** fixed on develop (2026-09-29, session `event-checkin-b2`), not
-pushed, not deployed. The owner chose the recommendation below, on the free
+**Status:** deployed to prod `f02143d4` (2026-09-29, `deploy/production/20260929T050434Z`, session `event-checkin-1b`; staging runs the same tree as `bb8ac906`). Was: fixed on develop (2026-09-29, session `event-checkin-b2`). The owner chose the recommendation below, on the free
 route (no paid plan, no toolchain change). The attendee first load is
 1,226,416 B br4 (58.5% of the 2 MiB budget, was 1,994,214), and
 `size_budget_guards` is green again. Found 2026-09-29 by `event-checkin-ba`.

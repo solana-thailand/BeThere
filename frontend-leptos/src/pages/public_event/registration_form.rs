@@ -176,8 +176,8 @@ pub fn registration_form(
                                 </p>
                                 {if wallet_not_linked {
                                     view! {
-                                        <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:0.82rem;line-height:1.45;color:#cbd5e1;text-align:left;">
-                                            <strong style="color:#fff;">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.heads_up))}" "</strong>
+                                        <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:0.82rem;line-height:1.45;color:var(--text-secondary);text-align:left;">
+                                            <strong style="color:var(--text-primary);">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.heads_up))}" "</strong>
                                             {crate::locale::tr(|l| crate::i18n::td_string!(l, event.wallet_not_linked))}
                                         </div>
                                         <button class="pe-submit-btn" on:click=move |_| navigateTo(&continue_url)>
@@ -274,6 +274,21 @@ pub fn registration_form(
                                                 readonly
                                                 class="pe-input pe-input--locked"
                                             />
+                                            // The switch-account exit, next to the one place
+                                            // the email is shown (was a separate card,
+                                            // .issues/173 C5).
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline btn-xs pe-field-signout"
+                                                on:click=move |_| {
+                                                    leptos::task::spawn_local(async move {
+                                                        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
+                                                        let _ = window().location().reload();
+                                                    });
+                                                }
+                                            >
+                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.sign_out))}
+                                            </button>
                                         }.into_any()
                                     }}
                                 </div>

@@ -15,10 +15,11 @@ var COLORS = ["#22c55e", "#8b5cf6", "#3b82f6", "#eab308", "#ec4899", "#f97316"];
 var PARTICLE_COUNT = 80;
 
 /** Minimum animation duration in seconds. */
-var DURATION_MIN = 1.5;
+var DURATION_MIN = 0.8;
 
-/** Maximum animation duration in seconds. */
-var DURATION_MAX = 3.0;
+/** Maximum animation duration in seconds. With the 0.2 s max delay a burst is
+ * over in about 1.2 s (F2: one short celebration, not a screensaver). */
+var DURATION_MAX = 1.0;
 
 /** Minimum particle size in pixels. */
 var SIZE_MIN = 6;
@@ -33,7 +34,7 @@ var OPACITY_MIN = 0.7;
 var OPACITY_MAX = 1.0;
 
 /** How long (ms) before auto-cleanup removes the container. */
-var CLEANUP_DELAY_MS = 3500;
+var CLEANUP_DELAY_MS = 1400;
 
 /** Unique keyframe name to avoid collisions. */
 var KEYFRAME_NAME = "confetti_fall_" + Date.now();
@@ -111,7 +112,7 @@ function spawn_particle(container) {
   var opacity = rand_range(OPACITY_MIN, OPACITY_MAX);
   var duration = rand_range(DURATION_MIN, DURATION_MAX);
   var left_pct = rand_range(0, 100);
-  var delay = rand_range(0, 0.4);
+  var delay = rand_range(0, 0.2);
 
   // Slight wind variation per particle
   var wind_x = rand_range(-40, 40);
@@ -139,6 +140,10 @@ function spawn_particle(container) {
  * Safe to call multiple times — each launch gets its own container.
  */
 export function launchConfetti() {
+  // Motion is decoration here; the success screen says the same thing.
+  if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return;
+  }
   // Inject keyframes once (idempotent — extra <style> tags are harmless
   // but we avoid duplicates on repeated calls)
   if (!document.querySelector('style[data-confetti="keyframes"]')) {

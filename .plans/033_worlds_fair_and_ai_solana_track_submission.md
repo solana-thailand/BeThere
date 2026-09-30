@@ -516,5 +516,8 @@ Session `event-checkin-cf`. Staging only, on version `814738a8` = git `a3d4e7a9`
 - [x] Rehearsal #2, event `e2e-test-event-1790606122`, all steps passed, with the same USDC round trip. Init tx `4scKxPTP…`, deposit tx `BGhrCQGK…`.
 - [x] Cost: the organizer went from 3.734 to 3.727 devnet SOL for both runs plus the transfer test. The two runs leave two `e2e-test-event-*` events on staging.
 - [ ] The **door-scan** step in a browser: scanner Flow 10, signed with the organizer wallet in Phantom. It has never been run. Owner step, `.issues/164` gap 1.
-- [ ] A scannable fixture that ends about 10 minutes after check-in. `demo_fixture` hardcodes 3 h, see `.issues/164` gap 2.
+  **Blocked:** owner; it needs the organizer wallet in Phantom.
+  **Owner question (2026-09-30, `event-checkin-aa`):** "when, before the 8 Oct take, can you run scanner Flow 10 on staging with the organizer wallet in Phantom (`.issues/164` gap 1)?"
+- [x] A scannable fixture that ends about 10 minutes after check-in. `demo_fixture` hardcodes 3 h, see `.issues/164` gap 2. **Done:** `BETHERE_DEMO_END_MIN` (`0da1be79`, on `develop`), rehearsed on staging per `.issues/164`; used by `.benchmarks/007`.
 - [ ] The final take (Thu 8 Oct), filmed with the explorer open. The badge clip is filmed on prod.
+  **Blocked:** owner and the date; filmed on prod on Thu 8 Oct, inside the demo freeze. No question is open; it is dated.

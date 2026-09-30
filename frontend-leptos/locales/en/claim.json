@@ -5,6 +5,7 @@
   "welcome": "Welcome, {{ name }}!",
   "registered": "Registered",
   "not_checked_in": "Not yet checked in",
+  "check_in_to_unlock": "Check in at the door to unlock your badge.",
   "checked_in_at": "Checked in {{ time }}",
   "not_found_title": "Claim Not Found",
   "invalid_link": "Invalid claim link — missing token.",
@@ -83,7 +84,7 @@
     "complete_it": "Complete the Rust Adventure to unlock your NFT!",
     "info": "<strong>{{ name }}</strong>, complete the Rust Adventures game to earn your NFT badge.",
     "hint": "Learn Rust basics by solving coding puzzles in a fun tile-based game!",
-    "start": "🎮 Start Adventure"
+    "start": "Start Adventure"
   },
   "minting": {
     "title": "Minting your NFT...",
@@ -96,15 +97,15 @@
     "on_chain": "On-Chain",
     "copy_asset_id": "Copy Asset ID",
     "view_on_orb": "View NFT on Orb ↗",
-    "view_solscan": "🔍 View Transaction on Solscan ↗",
+    "view_solscan": "View Transaction on Solscan ↗",
     "post_to_x": "Post to X",
     "copy_link": "Copy claim link",
     "link_copied": "Link copied!",
     "ticket_with_deposit": "View ticket & deposit / refund →",
     "back_to_ticket": "← Back to Ticket",
-    "tweet_generic": "I just claimed my attendance NFT on BeThere! 🎫✨\n\nProof I showed up. On-chain.\n\n#BeThere #Solana",
+    "tweet_generic": "I just claimed my attendance NFT on BeThere!\n\nProof I showed up. On-chain.\n\n#BeThere #Solana",
     "tweet_event_before": "I just earned my POAP at ",
-    "tweet_event_after": "! 🎫✨\n\nShowed up, proved I was there, got my NFT badge.\n\n#BeThere #Solana"
+    "tweet_event_after": "!\n\nShowed up, proved I was there, got my NFT badge.\n\n#BeThere #Solana"
   },
   "already": {
     "title": "Already Claimed",

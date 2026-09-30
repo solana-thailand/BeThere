@@ -391,6 +391,8 @@ EVENT_LINK = ""
 # 0 = defer to the per-event values stored in D1 by seed-staging.sh.
 EVENT_START_MS = "0"
 EVENT_END_MS = "0"
+# Empty hides the landing's "View a sample event" button (.plans/038 P2-f).
+SAMPLE_EVENT_SLUG = ""
 
 # Separate D1 — overrides the production [[d1_databases]] binding via the same `binding` name.
 [[env.staging.d1_databases]]

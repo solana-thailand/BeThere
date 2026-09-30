@@ -1,24 +1,30 @@
 //! My Registrations — signed-in attendees see their registered events.
 
 use leptos::prelude::*;
-use leptos_router::components::A;
 use serde::Deserialize;
 
 use super::notifications::NotificationInbox;
 use crate::api::ApiResponse;
-use crate::components::{StatusBadge, StatusTone};
-use crate::i18n::{t_string, use_i18n};
+use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
+use crate::pages::public::discover::DateChip;
 use crate::pages::ticket::credit_chip::CreditWallet;
+
+/// Past registrations shown before "show all": the most recent ones.
+const PAST_PREVIEW: usize = 3;
+/// An event with no recorded end counts as over this long after its start.
+const ASSUMED_DURATION_MS: i64 = 6 * 60 * 60 * 1000;
 
 /// Response item from GET /api/my-registrations.
 #[derive(Clone, Deserialize)]
 struct MyRegistrationItem {
+    event_id: String,
     event_name: String,
-    event_slug: String,
     #[serde(default)]
     event_start_ms: i64,
-    #[allow(dead_code)]
+    /// 0 when unknown (the KV fallback path does not carry it).
+    #[serde(default)]
+    event_end_ms: i64,
     attendee_id: String,
     /// Human-readable status: "registered", "deposit pending", "deposit confirmed",
     /// "checked in", "nft claimed".
@@ -105,51 +111,19 @@ pub(super) fn MyRegistrations() -> impl IntoView {
 
     move || {
         let regs = registrations.get();
-        let user_email = email.get();
+        let signed_in = email.get().is_some();
 
-        match (regs, user_email) {
-            (None, _) | (_, None) => ().into_any(),
-            (Some(refs), Some(user)) => {
-                let user_email = user.clone();
-                let has_regs = !refs.is_empty();
+        match (regs, signed_in) {
+            (None, _) | (_, false) => ().into_any(),
+            (Some(refs), true) => {
+                let now = js_sys::Date::now() as i64;
+                let (upcoming, mut past): (Vec<_>, Vec<_>) =
+                    refs.into_iter().partition(|r| !is_past(r, now));
+                // The API sorts by start ascending; past reads newest first.
+                past.reverse();
+                let has_regs = !upcoming.is_empty() || !past.is_empty();
                 view! {
                     <section class="landing-reg-section">
-                        // Developer Passport Card (Always shown for logged-in users)
-                        <div class="landing-dev-passport">
-                            <div class="landing-passport-left">
-                                <div class="landing-passport-avatar">
-                                    <Icon icon=IconName::Crab class="icon-lg" />
-                                </div>
-                                <div class="landing-passport-info">
-                                    <div class="landing-passport-title-row">
-                                        <span class="landing-passport-name">{user_email.clone()}</span>
-                                        <span class="landing-passport-verified-badge">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.verified))}</span>
-                                    </div>
-                                    <div class="landing-passport-sub">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.member))}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="landing-passport-actions">
-                                <A href="/profile" attr:class="btn btn-primary btn-sm landing-passport-btn">
-                                    <Icon icon=IconName::Settings class="icon-sm" />
-                                    " "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.edit_profile))}
-                                </A>
-                                <button
-                                    class="btn btn-outline btn-xs"
-                                    on:click=move |_| {
-                                        leptos::task::spawn_local(async move {
-                                            let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
-                                            let window = web_sys::window().expect("no window");
-                                            let _ = window.location().reload();
-                                        });
-                                    }
-                                >
-                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.sign_out))}
-                                </button>
-                            </div>
-                        </div>
-
                         {move || email_verified.get().then(|| view! { <NotificationInbox /> })}
 
                         // Deposit credit, and the way to ask for it back. The
@@ -160,73 +134,21 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                         <CreditWallet />
 
                         {if has_regs {
+                            let upcoming_count = upcoming.len();
+                            let past_count = past.len();
                             view! {
-                                <div class="landing-reg-header" style="margin-top: 24px;">
-                                    <h2 class="landing-reg-title">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.reg.your_events))}
+                                // One row per registration (F1-b): the row is the
+                                // link to the ticket; a button only when the
+                                // attendee has something to do.
+                                {(upcoming_count > 0).then(|| view! {
+                                    <h2 class="landing-reg-title landing-reg-group-title">
+                                        {t!(i18n, landing.reg.upcoming, count = upcoming_count)}
                                     </h2>
-                                </div>
-                                <div class="landing-reg-grid">
-                                    {refs.into_iter().map(|reg| {
-                                        let event_url = format!("/e/{}", reg.event_slug);
-                                        // `step_type` is a server code; only the
-                                        // label is translated.
-                                        let step_type = reg.next_step.step_type.clone();
-                                        let step_label = move || match step_type.as_str() {
-                                            "claim" => t_string!(i18n, landing.reg.step.claim),
-                                            "deposit" => t_string!(i18n, landing.reg.step.deposit),
-                                            "quest" => t_string!(i18n, landing.reg.step.quest),
-                                            "ticket" => t_string!(i18n, landing.reg.step.ticket),
-                                            _ => t_string!(i18n, landing.reg.step.view),
-                                        };
-                                        // Third copy of this, and the third to
-                                        // be wrong. `to_locale_string` with no
-                                        // options renders the browser default —
-                                        // `8/24/2026, 1:00:00 PM`: seconds on an
-                                        // event date, and a month/day order that
-                                        // is ambiguous to a Thai-majority
-                                        // audience. Shared helper (.issues/104).
-                                        // A closure so the date follows a language
-                                        // switch.
-                                        let start_ms = reg.event_start_ms;
-                                        let date_str = move || match start_ms > 0 {
-                                            true => crate::utils::format_event_datetime(start_ms),
-                                            false => t_string!(i18n, landing.reg.tba).to_string(),
-                                        };
-                                        let next_url = reg.next_step.url.clone();
-                                        let status_tone = match reg.status.as_str() {
-                                            "nft claimed" | "checked in" | "deposit confirmed" => StatusTone::Confirmed,
-                                            "deposit pending" => StatusTone::Pending,
-                                            _ => StatusTone::Neutral,
-                                        };
-                                        view! {
-                                            <div class="landing-reg-card">
-                                                <div class="landing-reg-info">
-                                                    <a href=event_url class="landing-reg-event-name">
-                                                        {reg.event_name}
-                                                    </a>
-                                                    <p class="landing-reg-event-date">{date_str}</p>
-                                                </div>
-                                                <div class="landing-reg-identity">
-                                                    <span class="landing-reg-identity-label">{user.clone()}</span>
-                                                </div>
-                                                // The status is a server code: compared
-                                                // above, labelled here in the reader's
-                                                // language.
-                                                {
-                                                    let status = reg.status.clone();
-                                                    move || view! {
-                                                        <StatusBadge tone=status_tone label=crate::locale::status_label(&status) />
-                                                    }
-                                                }
-                                                <a href=next_url class="btn btn-primary btn-sm landing-reg-action">
-                                                    {step_label}" →"
-                                                </a>
-                                                {reg.qr_url.as_deref().and_then(crate::utils::qr_gen::qr_svg_path).map(|qr| view! { <InlineTicketQr qr /> })}
-                                            </div>
-                                        }
-                                    }).collect::<Vec<_>>()}
-                                </div>
+                                    <div class="landing-reg-list">
+                                        {upcoming.into_iter().map(|reg| view! { <RegistrationRow reg past=false /> }).collect::<Vec<_>>()}
+                                    </div>
+                                })}
+                                {(past_count > 0).then(|| view! { <PastRegistrations past /> })}
                             }.into_any()
                         } else {
                             view! {
@@ -241,6 +163,91 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                 }.into_any()
             }
         }
+    }
+}
+
+/// Whether a registration belongs under "past": its end has gone by, or
+/// (end unknown) its start plus a typical duration has. TBA stays upcoming.
+fn is_past(reg: &MyRegistrationItem, now: i64) -> bool {
+    match (reg.event_end_ms, reg.event_start_ms) {
+        (end, _) if end > 0 => end < now,
+        (_, start) if start > 0 => start + ASSUMED_DURATION_MS < now,
+        _ => false,
+    }
+}
+
+/// "Past (n)": the most recent few, the rest behind one tap.
+#[component]
+fn PastRegistrations(past: Vec<MyRegistrationItem>) -> impl IntoView {
+    let i18n = use_i18n();
+    let (show_all, set_show_all) = signal(false);
+    let count = past.len();
+    let hidden = count.saturating_sub(PAST_PREVIEW);
+    let (preview, rest): (Vec<_>, Vec<_>) = past
+        .into_iter()
+        .enumerate()
+        .partition(|(i, _)| *i < PAST_PREVIEW);
+    let rest: Vec<_> = rest.into_iter().map(|(_, r)| r).collect();
+    view! {
+        <h2 class="landing-reg-title landing-reg-group-title">
+            {t!(i18n, landing.reg.past, count)}
+        </h2>
+        <div class="landing-reg-list">
+            {preview.into_iter().map(|(_, reg)| view! { <RegistrationRow reg past=true /> }).collect::<Vec<_>>()}
+            <Show when=move || show_all.get() fallback=|| ()>
+                {rest.clone().into_iter().map(|reg| view! { <RegistrationRow reg past=true /> }).collect::<Vec<_>>()}
+            </Show>
+        </div>
+        {(hidden > 0).then(|| view! {
+            <Show when=move || !show_all.get() fallback=|| ()>
+                <button class="btn btn-outline btn-sm landing-reg-more" on:click=move |_| set_show_all.set(true)>
+                    {t!(i18n, landing.reg.show_all_past, count = hidden)}
+                </button>
+            </Show>
+        })}
+    }
+}
+
+/// One registration: date tile, name, status text, chevron — the row links to
+/// the ticket. A full-width button follows only when there is an action.
+#[component]
+fn RegistrationRow(reg: MyRegistrationItem, past: bool) -> impl IntoView {
+    let i18n = use_i18n();
+    let ticket_url = format!("/ticket/{}?event_id={}", reg.attendee_id, reg.event_id);
+    // `step_type` is a server code; only the label is translated.
+    let step_type = reg.next_step.step_type.clone();
+    let action = match step_type.as_str() {
+        "deposit" | "claim" | "quest" => Some(reg.next_step.url.clone()),
+        _ => None,
+    };
+    let step_label = move || match step_type.as_str() {
+        "claim" => t_string!(i18n, landing.reg.step.claim),
+        "deposit" => t_string!(i18n, landing.reg.step.deposit),
+        _ => t_string!(i18n, landing.reg.step.quest),
+    };
+    let status = reg.status.clone();
+    let qr = reg
+        .qr_url
+        .as_deref()
+        .filter(|_| !past)
+        .and_then(crate::utils::qr_gen::qr_svg_path);
+    view! {
+        <div class="landing-reg-item">
+            <a class="dv-row" href=ticket_url>
+                <DateChip ms=reg.event_start_ms past />
+                <div class="dv-row-body">
+                    <span class="dv-row-title">{reg.event_name.clone()}</span>
+                    <span class="dv-row-meta">{move || crate::locale::status_label(&status)}</span>
+                </div>
+                <span class="landing-reg-chevron" aria-hidden="true">
+                    <Icon icon=IconName::ChevronRight class="icon-sm" />
+                </span>
+            </a>
+            {action.map(|url| view! {
+                <a href=url class="btn btn-primary btn-sm btn-block landing-reg-action">{step_label}</a>
+            })}
+            {qr.map(|qr| view! { <InlineTicketQr qr /> })}
+        </div>
     }
 }
 

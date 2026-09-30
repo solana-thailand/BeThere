@@ -85,7 +85,7 @@
   "thb": {
     "title": "Pay with THB",
     "scan_pay": "Scan & Pay",
-    "save_qr": "⬇ Save QR Code",
+    "save_qr": "Save QR Code",
     "qr_failed": "QR generation failed — please pay manually.",
     "scan_hint": "Scan with your banking app → Transfer ฿{{ amount }} THB",
     "no_promptpay": "PromptPay QR is not available for this event. Please transfer manually and upload your slip below.",
@@ -94,7 +94,7 @@
     "vision_privacy": "Privacy: if the QR code on your slip can't be read, the slip image is sent to {{ vendor }} to read the amount and reference. The organizer still reviews every slip.",
     "preview_alt": "Payment slip preview",
     "preview_close_hint": "Tap the image or backdrop to close",
-    "tap_enlarge": "🔍 Tap to enlarge",
+    "tap_enlarge": "Tap to enlarge",
     "advanced": "Advanced: paste slip image URL",
     "url_placeholder": "Paste slip image URL",
     "refund_title": "Refund Account",

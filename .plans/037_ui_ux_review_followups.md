@@ -23,8 +23,36 @@ groups and a backlog.
   real header row. Commit `31c5d469`, `.issues/167`.
 - [ ] Staging repro. The fix is not on staging and this session may not
   deploy, so this waits for the next staging deploy (owner).
+  **Blocked (2026-09-29, `event-checkin-8c`):** the fix is now on staging (`bb8ac906`) and prod, but the repro needs a sheet with the Luma header shared with staging, which staging lacks (owner), and it would append rows to that sheet.
+  **Owner question (2026-09-30, `event-checkin-aa`):** "may we share a sheet
+  with the Luma header row with the staging service account, knowing the
+  repro appends a registration row to it?"
 - [ ] Part B of `.issues/167`: the dedup falls back to a shared sheet across
   events. Needs a product decision.
+  **Blocked:** the owner decided on 2026-09-29 (`.issues/167`), but the implementation is in `worker/`, peer `event-checkin-16`'s area.
+  - [x] Built 2026-09-30 (session `event-checkin-aa`), on branch
+    `feature/167-empty-roster` (`16de5c3c`, off `develop` `04ab57b5`; the
+    peer gate was stale, since `event-checkin-16` is gone). An event created
+    on or after `fa0dca12` (2026-08-11T18:59:34Z, D1 attendee writes made
+    authoritative) reads an empty D1 roster as empty; older events keep the
+    sheet fallback. Every per-event roster read passes
+    `EmptyRoster::for_event`; the organizer's sheet sync forces `ReadSheet`.
+    Guard `worker/tests/empty_roster_policy.rs` (4, floored); two mutants
+    turn it red. Workspace clippy, 79 worker binaries and 104 Python tests
+    are green. Details are in `.issues/167`.
+  - [x] Merge: `58fc5186` on `develop`, on staging 2026-09-30 (`event-checkin-b5`).
+    **Answered (2026-09-30):** the RTM #6 event shares no sheet. The prod
+    date question is moot: a read-only prod D1 query shows the only events
+    created after the cutoff are the RTM #6 event (57 D1 attendees, so its
+    roster read is unchanged) and a ComfyUI draft (0). `fa0dca12` reached
+    `main` on 13 Aug (`f3c66652`); Cloudflare keeps only 10 deployments, so
+    the exact prod date cannot be read back. The staging smoke's roster read
+    ran through the new path and passed.
+  - [ ] A staging run with two events sharing one sheet (optional now).
+    **Former owner questions:** "may `feature/167-empty-roster` merge into
+    `develop` before RTM #6 (4 Oct), or after the 8 Oct take?" and "did prod
+    first get `fa0dca12` later than 12 Aug? If so, on what date? The cutoff
+    constant moves to it."
 
 ## 2. EN + TH for attendee pages
 
@@ -32,7 +60,8 @@ Phase 1: infrastructure.
 - [x] Add `leptos_i18n` 0.6 with `csr` only: no ICU formatting data and no
   cookie. The catalog is `locales/{en,th}.json` through
   `[package.metadata.leptos-i18n]` and `load_locales!()`.
-  - [ ] Owner decision: `load_locales!` is deprecated upstream. The
+  - [x] Owner decision (2026-09-29): stay on `load_locales!` until upstream
+    splits the ICU datagen dependency. `load_locales!` is deprecated upstream. The
     recommended `build.rs` + `leptos_i18n_build` path always pulls ICU
     datagen networking (ureq/rustls/webpki-roots, ISC and
     CDLA-Permissive-2.0), which `deny.toml` rejects. Moving needs per-crate
@@ -106,16 +135,27 @@ Phase 3: every string on the attendee routes comes from the catalog.
   wallet modal.
 
 Owner decisions raised by phase 3:
-- [ ] Privacy notice PDPA section numbers (§5 "s.37 technical-impossibility
+- [ ] **Owner, 2026-09-29: legal review first; text unchanged until then.**
+  Privacy notice PDPA section numbers (§5 "s.37 technical-impossibility
   exemption", /data-privacy "s.29 erasure", "s.38 contract exemption") look
   wrong against the Act (erasure is usually s.33, contract basis s.24(3)).
   EN and TH both carry them as written. Needs legal review.
-- [ ] Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
+  **Blocked:** owner; waiting on legal review.
+  **Owner question (2026-09-30, `event-checkin-aa`):** "has the legal review
+  of the PDPA section numbers (s.37, s.29, s.38 vs. s.33 and s.24(3)) come
+  back, and with which numbers?"
+- [x] **Kept (2026-09-29):** it renders only in `usdc_payment.rs`, the escrow
+  path where an unclaimed deposit is really lost.
+  Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
   refund window) contradicts "never forfeited" for THB readers only if
   shown on THB; it is the USDC escrow path, where forfeiture is real. Check
   the wording anyway.
-- [ ] Thai term consistency: the landing page says เหรียญตรา and the ticket
+- [x] Thai term consistency: the landing page says เหรียญตรา and the ticket
   page says "badge".
+  - Done 2026-09-29 (owner: one word): "badge" everywhere, the most-used
+    form (28 of 43). เหรียญตรา (9) and แบดจ์ (6) replaced in the landing,
+    event, recap and privacy catalogs; "NFT badge" word order and spaces
+    around the loanword follow the existing ticket strings.
 - [x] `utils::format_timestamp` (receipt "Date") and
   `deposit::types::format_refund_deadline` (`MM/DD`) are still US-style.
   - Done 2026-09-29 (`event-checkin-1b`): both delegate to
@@ -166,6 +206,9 @@ Owner decisions raised by phase 3:
     `::after`, with no visual change.
   - Why not a menu: all row actions stay one tap away. A menu for Delete may
     still be worth it (owner call).
+  - Done 2026-09-29 (owner: yes): Delete moved into a per-row "⋯"
+    `<details>` menu (44 px summary), keeping its tap-again-to-confirm step
+    inside. The menu opens under its own button at 390 and 1280 px.
 - [x] The filter pills are ≥44 px.
 - Verified (headless Chrome, local `wrangler dev`, hybrid event, 69
   attendees):
@@ -215,8 +258,30 @@ Owner decisions raised by phase 3:
   region (content changes inside it, so it is announced). Verified in the
   browser: same colours and position.
 - [ ] Breakpoints: 8 sets → 360/480/768. Not started; it touches every
-  stylesheet and needs a per-file visual diff.
-- [ ] Remaining hardcoded colours in other Rust files.
+  stylesheet and needs a per-file visual diff. Held 2026-09-29 (session
+  `event-checkin-4e`): it moves layout on every demo-facing page one week
+  before the 6–8 Oct freeze; start it after the take.
+  **Blocked:** the 6–8 Oct demo freeze; start after the take. No owner question; it is dated.
+- [x] Remaining hardcoded colours in other Rust files (2026-09-29, session
+  `event-checkin-4e`). 20 inline text colours in 6 files now use tokens:
+  `#94a3b8`/`#64748b` → `--text-muted`, `#cbd5e1` → `--text-secondary`,
+  `#fff` → `--text-primary` (wallet sign-in modal, NFC check-in, profile,
+  landing nav badge, registration heads-up, admin track progress).
+  - Guard: `tests/inline_text_colour_tokens.rs` (floored, 3). Restoring the
+    old `landing/nav.rs` turned it red with 2 hits.
+  - Verified at 390×844 on the local e2e worker: computed colours are the
+    tokens (`rgb(233,228,211)`, `rgb(142,147,170)`), no page errors; all 19
+    visual snapshots unchanged.
+  - **Left on purpose (design call, not a token swap):** Solana brand
+    green/purple (`#14F195`, `#9945FF` and their rgba tints) on the NFC,
+    claim, event and profile pages; wallet and Google logo fills; the
+    transaction-kind colours in `api/admin.rs`; the claim quiz's pixel-art
+    palette in `claim/widgets.rs`; the status greens/reds in `nfc_checkin.rs`
+    (`#4ade80`, `#f87171`) that have `--success`/`--danger` equivalents of a
+    different shade. Moving them changes the look, so it needs an owner nod.
+  - Checked, not a bug: the box before "Tap NDEF / Web Wallet" on
+    `/checkin/nfc` is `IconName::Phone` (the Feather smartphone outline) at
+    `icon-xs`, not a missing glyph.
 
 ## 6. Accessibility
 
@@ -242,8 +307,9 @@ Owner decisions raised by phase 3:
   button, Tab → stays, Escape → back to "Full Screen"); SIWS
   role/label/Escape; event-form header `aria-expanded` toggles on Enter and
   on Space.
-- [ ] Adventure overlays have no dialog role. The game has its own key
+- [x] Adventure overlays have no dialog role. The game has its own key
   handling; left alone.
+  Done (2026-09-29, `event-checkin-8c`): the level-select, intro, level-complete, NPC/sign and puzzle cards have `role="dialog"`, `aria-modal` and an `aria-label` (the SIWS pattern). The key handling is unchanged, and there is no focus trap because any key dismisses. Guard: `tests/adventure_overlay_dialogs.rs` (2 tests, floored); removing the puzzle card's role turned it red. At 390×844 on the local e2e worker, Chrome's accessibility tree reads "dialog: Hello, Rust!" and "dialog: Select Level", any key and Escape still dismiss, the page has no errors, and the screenshots look unchanged.
 
 ## Backlog
 

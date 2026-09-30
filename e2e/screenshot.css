@@ -1,0 +1,9 @@
+/* Applied only while visual.spec.ts takes a screenshot (stylePath).
+   The scanner's <video> is position:fixed over the whole viewport, so a
+   Playwright mask on it painted the entire staff page magenta and the
+   snapshot compared nothing. Hiding it instead keeps the layout and shows
+   the overlay UI on the section's plain background; headless has no camera,
+   so there is no frame to lose. */
+video {
+    visibility: hidden !important;
+}

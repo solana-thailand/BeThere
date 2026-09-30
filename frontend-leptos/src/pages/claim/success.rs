@@ -70,15 +70,20 @@ pub(super) fn ClaimSuccess(
 
     view! {
         <div class="claim-success">
-            // 1. Celebration
-            <div class="claim-success-rings">
-                <div class="claim-success-ring claim-success-ring-3"></div>
-                <div class="claim-success-ring claim-success-ring-2"></div>
-                <div class="claim-success-ring claim-success-ring-1"></div>
-                <div class="success-check">
-                    <svg viewBox="0 0 24 24">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
+            // 1. Celebration: the mark flips over from its paper back (F2).
+            <div class="claim-reveal">
+                <div class="claim-reveal-inner">
+                    <div class="claim-reveal-back" aria-hidden="true"></div>
+                    <div class="claim-success-rings claim-reveal-front">
+                        <div class="claim-success-ring claim-success-ring-3"></div>
+                        <div class="claim-success-ring claim-success-ring-2"></div>
+                        <div class="claim-success-ring claim-success-ring-1"></div>
+                        <div class="success-check">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                    </div>
                 </div>
             </div>
             <h2>{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.success.title))}</h2>

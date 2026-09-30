@@ -12,7 +12,7 @@ use crate::error::ApiOk;
 
 use event_checkin_domain::models::error::AppError;
 
-use crate::http::{ValueRange, fetch_sheet_range, post_json};
+use crate::http::{ValueRange, fetch_sheet_range, post_json_status};
 use crate::sheets::get_access_token;
 use crate::state::AppState;
 
@@ -138,7 +138,7 @@ async fn append_to_waitlist(email: &str, state: &AppState) -> Result<(), String>
     };
 
     // POST as JSON with auth
-    post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await?;
+    post_json_status(&url, &body, &access_token).await?;
 
     Ok(())
 }
@@ -163,7 +163,7 @@ async fn create_waitlist_tab(state: &AppState) -> Result<(), String> {
         }]
     });
 
-    post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await?;
+    post_json_status(&url, &body, &access_token).await?;
 
     // Write header row
     let header_body = ValueRange {

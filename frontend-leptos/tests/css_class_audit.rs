@@ -371,7 +371,8 @@ fn directive_classes(rs: &str) -> BTreeSet<String> {
 /// Drives the unstyled-markup direction.
 fn used_in_class_position(rs: &str) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    for pat in ["class=\"", "class=format!("] {
+    // `icon_class="` is `event_form::section::FormSection`'s modifier-class prop.
+    for pat in ["class=\"", "class=format!(", "icon_class=\""] {
         for (idx, _) in rs.match_indices(pat) {
             let rest = &rs[idx + pat.len()..];
             // for format!, advance to the template literal's opening quote

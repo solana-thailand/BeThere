@@ -37,8 +37,15 @@
 # document head, so they are all render-blocking and all first-load, whatever
 # page the visitor asked for.
 #
+# Two shells, each judged against its own baseline (.issues/169):
+#   --shell attendee (default)  dist/index.html      BASELINE_*
+#   --shell staff               dist/staff-app.html  STAFF_BASELINE_*
+# The staff shell (scanner, admin, dashboard) is also loaded on venue data, by
+# the people working the door, so it gets the same growth limits and budget.
+#
 # Usage:
 #   bash scripts/verify/frontend_size_budget.sh                 # measure dist/
+#   bash scripts/verify/frontend_size_budget.sh --shell staff   # staff shell
 #   bash scripts/verify/frontend_size_budget.sh --build         # build first
 #   bash scripts/verify/frontend_size_budget.sh --dir <dist>    # measure a dist
 #   bash scripts/verify/frontend_size_budget.sh --update-baseline
@@ -53,9 +60,10 @@ DIST_DIR="frontend-leptos/dist"
 DIST_GIVEN=false
 DO_BUILD=false
 UPDATE_BASELINE=false
+SHELL_NAME=attendee
 
 usage() {
-  sed -n '3,37p' "${BASH_SOURCE[0]}" >&2
+  sed -n '3,53p' "${BASH_SOURCE[0]}" >&2
   exit 1
 }
 
@@ -67,12 +75,23 @@ while [ $# -gt 0 ]; do
       DIST_GIVEN=true
       shift 2
       ;;
+    --shell)
+      [ $# -ge 2 ] || { echo "❌ --shell needs attendee|staff" >&2; usage; }
+      SHELL_NAME="$2"
+      shift 2
+      ;;
     --build) DO_BUILD=true; shift ;;
     --update-baseline) UPDATE_BASELINE=true; shift ;;
     -h|--help) usage ;;
     *) echo "❌ Unknown argument: $1" >&2; usage ;;
   esac
 done
+
+case "$SHELL_NAME" in
+  attendee) SHELL_HTML=index.html;     KEY_PREFIX= ;;
+  staff)    SHELL_HTML=staff-app.html; KEY_PREFIX=STAFF_ ;;
+  *) echo "❌ Unknown shell: $SHELL_NAME (attendee|staff)" >&2; usage ;;
+esac
 
 # ── Budget ──────────────────────────────────────────────────────────────────
 # Parsed, not sourced: the file is data, and `source` would execute anything a
@@ -89,8 +108,8 @@ read_budget() {
 CEILING_BYTES=$(read_budget CEILING_BYTES)
 FAIL_PCT=$(read_budget FAIL_PCT)
 WARN_PCT=$(read_budget WARN_PCT)
-BASELINE_BYTES=$(read_budget BASELINE_BYTES)
-BASELINE_DATE=$(read_budget BASELINE_DATE)
+BASELINE_BYTES=$(read_budget "${KEY_PREFIX}BASELINE_BYTES")
+BASELINE_DATE=$(read_budget "${KEY_PREFIX}BASELINE_DATE")
 MAX_GROWTH_BYTES=$(read_budget MAX_GROWTH_BYTES)
 WARN_GROWTH_BYTES=$(read_budget WARN_GROWTH_BYTES)
 
@@ -107,9 +126,9 @@ if [ "$DO_BUILD" = true ]; then
   }
 fi
 
-INDEX="$DIST_DIR/index.html"
+INDEX="$DIST_DIR/$SHELL_HTML"
 [ -d "$DIST_DIR" ] || { echo "❌ dist not found: $DIST_DIR (try --build)" >&2; exit 1; }
-[ -f "$INDEX" ] || { echo "❌ No index.html in $DIST_DIR — nothing to measure." >&2; exit 1; }
+[ -f "$INDEX" ] || { echo "❌ No $SHELL_HTML in $DIST_DIR — nothing to measure." >&2; exit 1; }
 
 # ── Staleness ───────────────────────────────────────────────────────────────
 # A gate that measures last week's build is a gate that reports last week's
@@ -150,7 +169,7 @@ while IFS= read -r ref; do
 done < <(grep -oE '(href|src)="/[^"]+"' "$INDEX" | sed 's/.*="//; s/"$//' | sort -u)
 
 if [ "${#missing[@]}" -gt 0 ]; then
-  echo "❌ index.html references files that are not in $DIST_DIR:" >&2
+  echo "❌ $SHELL_HTML references files that are not in $DIST_DIR:" >&2
   printf '     %s\n' "${missing[@]}" >&2
   echo "   Either the build is incomplete or a new non-dist route needs adding" >&2
   echo "   to the skip list in this script. Refusing to measure around it." >&2
@@ -210,6 +229,7 @@ echo ""
 pct_x100=$(( total_br * 10000 / CEILING_BYTES ))
 delta=$(( total_br - BASELINE_BYTES ))
 
+printf '  shell      : %s (%s)\n' "$SHELL_NAME" "$SHELL_HTML"
 printf '  first load : %s bytes br4 (%d.%02d%% of the %s-byte product budget)\n' \
   "$total_br" "$(( pct_x100 / 100 ))" "$(( pct_x100 % 100 ))" "$CEILING_BYTES"
 printf '  precompress: %s bytes at br11 — %s bytes an attendee pays for nothing,\n' \
@@ -226,8 +246,8 @@ echo ""
 if [ "$UPDATE_BASELINE" = true ]; then
   today=$(date +%Y-%m-%d)
   tmp_budget="${BUDGET_FILE}.tmp"
-  sed -e "s/^BASELINE_BYTES=.*/BASELINE_BYTES=${total_br}/" \
-      -e "s/^BASELINE_DATE=.*/BASELINE_DATE=${today}/" \
+  sed -e "s/^${KEY_PREFIX}BASELINE_BYTES=.*/${KEY_PREFIX}BASELINE_BYTES=${total_br}/" \
+      -e "s/^${KEY_PREFIX}BASELINE_DATE=.*/${KEY_PREFIX}BASELINE_DATE=${today}/" \
       "$BUDGET_FILE" > "$tmp_budget"
   mv "$tmp_budget" "$BUDGET_FILE"
   echo "📝 Baseline updated to ${total_br} bytes br4 (${today}) in ${BUDGET_FILE}."
@@ -248,9 +268,17 @@ if [ "$total_br" -gt "$FAIL_BYTES" ]; then
 elif [ "$total_br" -gt "$WARN_BYTES" ]; then
   echo "⚠️  First load is past the warn line: ${total_br} > ${WARN_BYTES} bytes br4."
   echo "   Still shippable. Stop adding to the frontend and start asking what can"
-  echo "   be split out of the first load — all 22 stylesheets are render-blocking"
-  echo "   today, including the admin, scanner and dashboard sheets that an"
-  echo "   attendee viewing a ticket never uses."
+  case "$SHELL_NAME" in
+    staff)
+      echo "   be split out of the first load — the staff shell is one wasm for the"
+      echo "   scanner, admin and dashboard, and only the scanner is opened at the door."
+      ;;
+    *)
+      echo "   be split out of the first load — every stylesheet index.html links is"
+      echo "   render-blocking, so a rule only staff pages use belongs in a"
+      echo "   styles/*.staff.css sheet (.issues/169)."
+      ;;
+  esac
 fi
 
 if [ "$delta" -gt "$MAX_GROWTH_BYTES" ]; then

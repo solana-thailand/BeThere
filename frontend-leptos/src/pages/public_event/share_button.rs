@@ -46,7 +46,7 @@ pub fn share_button(
                 rel="noopener noreferrer"
                 class="btn btn-outline btn-sm"
             >
-                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.add_to_calendar))}
+                <Icon icon=IconName::Calendar class="icon-sm" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.add_to_calendar))}
             </a>
             {move || {
                 if share_copied.get() {

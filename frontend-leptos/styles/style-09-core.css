@@ -586,20 +586,6 @@
     text-decoration: underline;
 }
 
-/* Logout button wrapper — top-right aligned on deposit page.
- * Replaces: style="position:absolute;top:1rem;right:1rem;" */
-.logout-btn-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    background: var(--bg-card);
-    border-radius: var(--radius);
-    padding: 0.6rem 1rem;
-    margin-bottom: 0.75rem;
-    box-shadow: var(--shadow);
-}
-
 /* ---------- Success / Celebration States ---------- */
 
 /* Large celebration icon

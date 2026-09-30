@@ -3,7 +3,7 @@
 use axum::{Extension, Json, extract::State, http::HeaderMap};
 use uuid::Uuid;
 
-use event_checkin_domain::models::attendee::{ParticipationType, TrackCounts};
+use event_checkin_domain::models::attendee::{ParticipationType, SheetRow, TrackCounts};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{EventFormat, EventStatus};
@@ -714,7 +714,7 @@ pub async fn register_attendee(
                     &bg_sheet_id,
                     &bg_sheet_name,
                     bg_kv.as_ref(),
-                    &bg_api_id,
+                    SheetRow::of(bg_api_id.clone()),
                     method,
                 )
                 .await
