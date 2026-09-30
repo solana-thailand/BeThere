@@ -1,6 +1,6 @@
 # 180: A slow Crossmint mainnet mint is shown as "Minting Failed" (502)
 
-**Status:** open (2026-09-30). Found by the owner on prod `438c392d` while claiming a badge; diagnosed from `wrangler tail` by session `event-checkin-b5`.
+**Status:** fixed on develop (`b99ee8f4` merge of `8a777b36`, plus `1598dd0f`; 2026-09-30, session `event-checkin-b5`). On staging `1598dd0f`; not on prod. Was: open (2026-09-30). Found by the owner on prod `438c392d` while claiming a badge; diagnosed from `wrangler tail` by session `event-checkin-b5`.
 
 ## What happened
 
@@ -43,3 +43,27 @@ slow, is the likely outcome if mainnet takes more than about 14 s again.
 
 Recommended: 1, with 2 as the one-line stopgap if 1 cannot land and be
 rehearsed before the 6 Oct freeze.
+
+## Fix (option 1), 2026-09-30
+
+- **Worker.** New `AppError::UpstreamPending` (504, fixed public body) and
+  a typed `MintError { Pending, Failed }` in `domain/src/models/error.rs`. A
+  poll timeout is `Pending` only when the mint can resume (provider id or KV
+  marker). Campaign reward mints have neither, so their timeout stays a
+  failure. `execute.rs` and `walkin.rs` map `Pending` to 504. The poll budget
+  is unchanged (option 2 not taken).
+- **Page.** `pages/claim/mint_retry.rs` retries a 504 up to 4 times, 3 s
+  apart, with the spinner still up. After that it shows "Still minting" (EN/TH)
+  on an amber card with a Pending badge. A 502 is never retried automatically.
+- **Tests.** `domain/tests/mint_error.rs` (4), `worker/tests/mint_pending_guard.rs`
+  (2), `frontend-leptos/tests/claim_mint_retry.rs` (3), all floored. Two
+  mutants go red. The `log_pii_guard` pin follows the typed scrub.
+- **Browser A/B on staging** (headless Chrome, 390 px). The claim POST was
+  faked in the browser, and `nft_available` was flipped client-side because
+  staging has no Crossmint key.
+  - A 504 gave 5 POSTs (1 + 4 retries), the spinner during the retries, then
+    "Still minting" (EN and TH, amber).
+  - A 502 gave 1 POST, then "Minting Failed" (red), as before.
+- **Not run:** a real slow mainnet mint. It cannot be triggered on demand.
+  With the real Worker each attempt waits up to about 14 s, so the pending
+  screen appears after about 75 s of retries.
