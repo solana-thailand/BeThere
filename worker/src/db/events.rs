@@ -95,6 +95,8 @@ pub struct D1EventRow {
     pub ticket_note_online: Option<String>,
     // Column added by migration 0053 (postponed notice)
     pub postponed_note: Option<String>,
+    // Column added by migration 0057 (sponsors, JSON array)
+    pub sponsors_json: Option<String>,
     // Columns added for Issue #053 Phase 3f
     pub form_config: Option<String>,
     // Columns added for organization calendar subscribe
@@ -326,6 +328,11 @@ impl D1EventRow {
             ticket_note_in_person: self.ticket_note_in_person.clone().unwrap_or_default(),
             ticket_note_online: self.ticket_note_online.clone().unwrap_or_default(),
             postponed_note: self.postponed_note.clone().unwrap_or_default(),
+            sponsors: self
+                .sponsors_json
+                .as_deref()
+                .and_then(|j| serde_json::from_str(j).ok())
+                .unwrap_or_default(),
             calendar_subscribe_url: self.calendar_subscribe_url.clone().unwrap_or_default(),
             location_map_url: self.location_map_url.clone().unwrap_or_default(),
             poster_url: self.poster_url.clone().unwrap_or_default(),
@@ -524,6 +531,8 @@ pub async fn upsert_event(
     let online_open_mode_str = config.online_open_mode.as_str();
     let community_links_json =
         serde_json::to_string(&config.community_links).unwrap_or_else(|_| "[]".to_string());
+    let sponsors_json =
+        serde_json::to_string(&config.sponsors).unwrap_or_else(|_| "[]".to_string());
 
     let sql = format!(
         "INSERT INTO events (\
@@ -545,7 +554,7 @@ pub async fn upsert_event(
          online_open_mode, online_registration_open, \
          deposit_deadline_hours, updated_by, dev_profile_enabled, community_links, \
          calendar_subscribe_url, poster_url, recap_published, location_map_url, \
-         ticket_note_in_person, ticket_note_online, postponed_note) \
+         ticket_note_in_person, ticket_note_online, postponed_note, sponsors_json) \
          VALUES (?, ?, ?, ?, ?, \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
@@ -565,7 +574,7 @@ pub async fn upsert_event(
          ?, {online_registration_open}, \
          {deposit_deadline_hours}, ?, {dev_profile_enabled}, ?, \
          ?, ?, {recap_published}, ?, \
-         ?, ?, ?) \
+         ?, ?, ?, ?) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -617,7 +626,8 @@ pub async fn upsert_event(
          location_map_url = excluded.location_map_url, \
          ticket_note_in_person = excluded.ticket_note_in_person, \
          ticket_note_online = excluded.ticket_note_online, \
-         postponed_note = excluded.postponed_note",
+         postponed_note = excluded.postponed_note, \
+         sponsors_json = excluded.sponsors_json",
         event_start_ms = config.event_start_ms,
         event_end_ms = config.event_end_ms,
         deposit_enabled = config.deposit_enabled as i32,
@@ -686,6 +696,7 @@ pub async fn upsert_event(
         D1Type::Text(&config.ticket_note_in_person),
         D1Type::Text(&config.ticket_note_online),
         D1Type::Text(&config.postponed_note),
+        D1Type::Text(&sponsors_json),
     ];
 
     db.prepare(&sql)

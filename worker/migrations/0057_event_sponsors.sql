@@ -1,0 +1,15 @@
+-- 0057_event_sponsors.sql
+-- Sponsors of an event, rendered as a logo row above the footer of the public
+-- event page (plan 039 F7-b).
+--
+-- A JSON array of {"name", "logo_url", "link"} objects, the same storage shape
+-- as `community_links`. Written only through `normalize_sponsors`, which holds
+-- both URLs to https and bounds the list, because every entry lands in a
+-- `src`/`href` on a public page.
+--
+-- '[]' = no sponsors, which is the state every existing event starts in.
+-- Nothing on any page changes until an organizer adds one.
+--
+-- NOTE: NOT idempotent — ALTER TABLE ADD COLUMN fails if the column already
+-- exists. Relies on the d1_migrations tracker to prevent re-execution.
+ALTER TABLE events ADD COLUMN sponsors_json TEXT NOT NULL DEFAULT '[]';

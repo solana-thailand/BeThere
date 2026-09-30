@@ -160,6 +160,7 @@
     "slip_ocr tests/slip_ocr.rs": 13,
     "slip_proposal tests/slip_proposal.rs": 9,
     "slug_cache_guard tests/slug_cache_guard.rs": 2,
+    "sponsors tests/sponsors.rs": 8,
     "sql_interpolation_guard tests/sql_interpolation_guard.rs": 2,
     "sync_deposit_status_guard tests/sync_deposit_status_guard.rs": 2,
     "thb_settlement_ownership_guard tests/thb_settlement_ownership_guard.rs": 6,

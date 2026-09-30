@@ -5,7 +5,7 @@ use worker::KvStore;
 use event_checkin_domain::models::event::{
     DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus, EventConfig,
     UpdateEventRequest, normalize_map_url, normalize_postponed_note, normalize_sheet_name,
-    normalize_ticket_note, slug_taken_by_other,
+    normalize_sponsors, normalize_ticket_note, slug_taken_by_other,
 };
 
 use crate::event_store::read::get_event_index;
@@ -371,6 +371,11 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     }
     if let Some(ref links) = req.community_links {
         config.community_links = links.clone();
+    }
+    // Both URLs reach a public `src`/`href`, so the list is validated here,
+    // not trusted at render. `Some(vec![])` removes the logo row.
+    if let Some(ref sponsors) = req.sponsors {
+        config.sponsors = normalize_sponsors(sponsors)?;
     }
     // Normalised, not just trimmed: bounds the size of the event JSON that KV
     // serves on every ticket page load, and folds CRLF so a browser textarea

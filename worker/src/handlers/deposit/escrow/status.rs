@@ -226,6 +226,7 @@ pub async fn confirm_escrow_init_handler(
             ticket_note_online: None,
             // None = leave the postponed notice alone, for the same reason.
             postponed_note: None,
+            sponsors: None,
             escrow_address: Some(escrow_address.clone()),
             on_chain_event_id: Some(on_chain_event_id),
             escrow_status: Some(EscrowStatus::Initialized),

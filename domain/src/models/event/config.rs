@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::defaults::default_true;
 use super::enums::{EscrowStatus, EventFormat, EventStatus, EventVisibility, OnlineOpenMode};
+use super::sponsor::Sponsor;
 
 /// Lightweight event metadata stored in the EventIndex list.
 /// Used for event listings / selectors without loading full config.
@@ -335,6 +336,13 @@ pub struct EventConfig {
     /// Organizer-configurable. Empty = no community section shown.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub community_links: Vec<CommunityLink>,
+
+    // ── Sponsors ─────────────────────────────────────────────────────
+    /// Sponsors shown as a logo row on the public event page (migration
+    /// 0057, column `sponsors_json`). Empty = no row. Written only through
+    /// [`super::normalize_sponsors`], which holds both URLs to `https://`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sponsors: Vec<Sponsor>,
     /// Event visibility — public (shown on landing) or private (auth required).
     #[serde(default)]
     pub visibility: EventVisibility,
@@ -621,6 +629,7 @@ impl EventConfig {
             ticket_note_online: String::new(),
             postponed_note: String::new(),
             community_links: vec![],
+            sponsors: vec![],
             calendar_subscribe_url: String::new(),
         }
     }

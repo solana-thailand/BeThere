@@ -196,6 +196,7 @@ pub async fn get_public_event(
         && is_online_registration_open(&config, in_person_available);
     let post_event_registration_accepting =
         config.post_event_registration_accepting(chrono::Utc::now().timestamp_millis());
+    let organizer_name = resolve_organizer_name(&state, &config.organization_id).await;
 
     // Return sanitized response — exclude all sensitive/internal fields
     let mut response = json!({
@@ -272,6 +273,17 @@ pub async fn get_public_event(
     response_fields.insert(
         "post_event_registration_accepting".to_string(),
         serde_json::Value::Bool(post_event_registration_accepting),
+    );
+    // The organization's display name only — never its id, sheets or owners.
+    // Empty = no org, or it could not be read; the page then omits the line.
+    response_fields.insert(
+        "organizer_name".to_string(),
+        serde_json::Value::String(organizer_name),
+    );
+    // Already https-only and bounded: `normalize_sponsors` ran at the write.
+    response_fields.insert(
+        "sponsors".to_string(),
+        serde_json::to_value(&config.sponsors).unwrap_or_else(|_| json!([])),
     );
 
     // A private event's body is per-viewer: it must not land in a shared
@@ -517,6 +529,23 @@ fn public_learning_resources(
             })
         })
         .collect()
+}
+
+/// Display name of the event's organization, for the "organized by" line.
+/// Empty when the event has no organization, D1 is absent, or the read fails:
+/// attribution is decoration, so a failed read must not fail the page.
+async fn resolve_organizer_name(state: &AppState, organization_id: &str) -> String {
+    let (Some(db), false) = (state.d1.as_deref(), organization_id.is_empty()) else {
+        return String::new();
+    };
+    match crate::org_store::get_org_config(db, organization_id).await {
+        Ok(Some(org)) => org.name.trim().to_string(),
+        Ok(None) => String::new(),
+        Err(e) => {
+            tracing::warn!(error = %e, "organizer name lookup failed");
+            String::new()
+        }
+    }
 }
 
 /// Count attendees by track for the capacity display.

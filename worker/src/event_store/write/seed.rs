@@ -67,6 +67,7 @@ pub async fn seed_from_config(
         ticket_note_online: String::new(),
         // Nor is it postponed.
         postponed_note: String::new(),
+        sponsors: Vec::new(),
         status: EventStatus::Active,
         event_start_ms: defaults.start_ms,
         event_end_ms: defaults.end_ms,

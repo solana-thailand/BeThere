@@ -217,6 +217,9 @@ pub async fn duplicate_event(
         // postponed event, and inheriting the banner would tell its attendees
         // a date change that never happened.
         postponed_note: String::new(),
+        // Carried forward: a recurring series usually keeps its sponsors, and
+        // the copy lands in draft, where the organizer can edit the list.
+        sponsors: source.sponsors.clone(),
         calendar_subscribe_url: source.calendar_subscribe_url.clone(),
     };
 
