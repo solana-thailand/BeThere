@@ -480,7 +480,7 @@ fn render_loaded_event(
     // identical buttons on one screen, and the bar would cover the WHEN row
     // (QA 2026-09-29, item 1). It appears once the hero CTA scrolls away.
     let (hero_cta_in_view, set_hero_cta_in_view) = signal(true);
-    let scroll = window_event_listener(leptos::ev::scroll, move |_| {
+    let measure = move || {
         let viewport = window()
             .inner_height()
             .ok()
@@ -503,7 +503,12 @@ fn render_loaded_event(
         if hero_in_view != hero_cta_in_view.get_untracked() {
             set_hero_cta_in_view.set(hero_in_view);
         }
-    });
+    };
+    let scroll = window_event_listener(leptos::ev::scroll, move |_| measure());
+    // Measure once after mount too: on a short screen the hero CTA starts
+    // below the fold, and without this the first screen had no Reserve
+    // action at all until the first scroll (390x600, .issues/182).
+    request_animation_frame(measure);
     // Dropping a `WindowListenerHandle` does not remove the listener.
     on_cleanup(move || scroll.remove());
 

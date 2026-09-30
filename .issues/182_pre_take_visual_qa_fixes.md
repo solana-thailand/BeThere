@@ -34,3 +34,51 @@ landing, discover, privacy, faq, ticket and claim (mobile and desktop); admin
 (the dates). The event baselines were already removed in `ec458a89`. Staff,
 `privacy-notice` and the `landing-ticket-*` element crops are unaffected.
 After the next CI run, commit the PNGs from the `visual-baselines` artifact.
+
+## Browser re-check (2026-10-01, session `event-checkin-da`)
+
+This is a second, independent look at the rebased branch (`91aa28db`, on
+`develop` `6604beee`) before the merge. It follows
+`docs/web-verification-runbook.md`: `frontend-leptos/build.sh`, then a
+credential-free local worker. The worker ran with its own
+`CARGO_TARGET_DIR`, `--env-file` empty, and the CI e2e `--var`s. It served the
+e2e seed plus `reseed-kv` (2 events synced). The browser was headless Chrome
+at 390x844, DPR 2, in EN and TH (`bethere.lang`). Service workers were
+bypassed. The served wasm hash was checked against `dist/` after every
+rebuild. No page errors on any page.
+
+**Found and fixed: one regression from item 1.** The "hero CTA in view" signal
+started as `true` and was only recomputed on scroll. On a screen short enough
+that the hero CTA starts below the fold, the first screen showed neither the
+hero CTA nor the sticky bar until the first scroll. Before this branch, the bar
+was always on the first screen. The fix in `public_event/page.rs` moves the
+check into one `measure` closure, run on scroll and once after mount through
+`request_animation_frame`. It is not visible at 390x844, where the hero CTA is
+on the first screen.
+
+Probe results, taken from the DOM (bounding rects, 100 px scroll steps):
+
+| Check | EN | TH |
+|---|---|---|
+| 1, 390x844 | First view: the hero CTA is visible, and the bar is absent. The bar never shows at any scroll step up to `max_y` 1646; the hero CTA stays in view until `#reserve` does. | The same (`max_y` 1610). |
+| 1, 390x600, before the fix | First view: no bar, and the hero CTA is **not** visible (the regression). The bar shows from y=100. | The same. |
+| 1, 390x600, after the fix | The bar shows at y=0, 100 and 800-1000, and never while the hero CTA or `#reserve` is visible. It never overlaps a visible WHEN row. | The bar shows at y=0, 100, 800 and 900. The rest is the same. |
+| 2 | `.pe-refund-note` is outside `.pe-refund-list` and below its last item. No "PromptPay" text is left in the list. Both ticks sit on the first line of their item (1 and 4 lines). | The same with "พร้อมเพย์" (items of 1 and 3 lines). |
+| 3 | The link text is "View Event Page →" and its href is the event link. No `http(s)://` text on the page. | "ดูหน้างาน →". |
+| 4 | 0 `[class*=heart]` nodes and no ♥ glyph. | The same. |
+| 5 | The footer has one "Built with" line. | One "สร้างด้วย" line. |
+| 6 | The chip's top is at 15 px, and the tap target is 44 px high. | The same. |
+| 7 | Cards show `22 Jan 2030, 12:00 GMT+7` and 3 more in that format. No raw `YYYY-MM-DD hh:mm:ss UTC±hh:mm`. | `22 ม.ค. 2573 12:00 GMT+7` (Buddhist-era year, from the shared formatter). |
+
+The screenshots (not committed; fixture data only) are in
+`/tmp/ec-qa-probe/out` (before the fix) and `/tmp/ec-qa-probe/out-fix`. The
+probes are `/tmp/ec-qa-probe/items12.mjs` and `items37.mjs`. The before/after
+run on item 1 is the check that the probe can fail.
+
+Gates after the fix: frontend `cargo fmt --check` passes; clippy
+`--target wasm32-unknown-unknown -D warnings` passes for the default build and
+`--features staff`. `cargo test --locked` passes 316 tests in 39 binaries.
+Playwright a11y is 11/11 and the allowlist is still `{}`. The baseline set is
+unchanged by the fix: the event baselines were already removed, and the
+language switch renders only on attendee paths (`is_attendee_path`), so the
+staff baselines stay.
