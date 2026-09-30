@@ -2,6 +2,8 @@
 
 use worker::KvStore;
 
+use event_checkin_domain::models::error::MintError;
+
 use crate::solana::{MintRequest, MintResult};
 use crate::state::AppState;
 
@@ -20,7 +22,7 @@ pub(super) async fn mint_with_journal(
     wallet: &str,
     request: &MintRequest<'_>,
     kv: Option<&KvStore>,
-) -> Result<MintResult, String> {
+) -> Result<MintResult, MintError> {
     let provider_mint_id = crate::solana::crossmint_mint_id(request.idempotency_key)
         .ok_or_else(|| "durable mint requires an idempotency key".to_string())?;
     if let Some(db) = state.d1.as_deref()
@@ -90,9 +92,9 @@ pub(super) async fn mint_with_journal(
         None => false,
     };
     if state.d1.is_some() && !d1_saved && !kv_saved {
-        return Err(
+        return Err(MintError::Failed(
             "mint confirmed externally but durable result recording failed; retry later".into(),
-        );
+        ));
     }
     Ok(result)
 }

@@ -133,11 +133,9 @@ pub(super) async fn execute_walkin_claim(
                 )
                 .await;
             }
-            return Err(AppError::External {
-                service: "crossmint".into(),
-                status: 502,
-                body: e.to_string(),
-            });
+            // A pending mint is a 504 the claim page retries; the retry
+            // resumes the same provider mint (issue 180).
+            return Err(e.clone().into_resumable_app_error("crossmint"));
         }
     };
 

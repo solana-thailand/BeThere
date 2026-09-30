@@ -10,6 +10,7 @@
 //! endpoint, then poll until confirmation yields a signature + asset id.
 //! DAS reads (`getAssetsByOwner`, below) still use Helius and are unaffected.
 
+use event_checkin_domain::models::error::MintError;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use worker::{Fetch, Headers, Method, Request, RequestInit};
@@ -87,6 +88,8 @@ pub(crate) fn crossmint_mint_id(idempotency_key: &str) -> Option<String> {
 /// transaction signature and asset id. Returns `Err` (which releases the claim
 /// lock upstream so the attendee can retry) on misconfiguration, an API error,
 /// a failed mint, or if confirmation is still pending after the poll budget.
+/// A resumable mint that is still pending returns [`MintError::Pending`], so
+/// the claim page can retry instead of reporting a failure (issue 180).
 ///
 /// See [`MintRequest`] for field documentation. KV caches the provider id for
 /// polling, while Crossmint's custom mint id prevents duplicate submission even
@@ -98,10 +101,10 @@ pub(crate) fn crossmint_mint_id(idempotency_key: &str) -> Option<String> {
 pub async fn mint_compressed_nft(
     req: &MintRequest<'_>,
     kv: Option<&worker::KvStore>,
-) -> Result<MintResult, String> {
+) -> Result<MintResult, MintError> {
     mint_compressed_nft_unscrubbed(req, kv)
         .await
-        .map_err(|e| scrub_recipient(&e, req.wallet_address))
+        .map_err(|e| e.map_detail(|detail| scrub_recipient(detail, req.wallet_address)))
 }
 
 /// Replace the recipient wallet in Crossmint-derived text with a placeholder.
@@ -115,12 +118,16 @@ fn scrub_recipient(text: &str, wallet_address: &str) -> String {
 async fn mint_compressed_nft_unscrubbed(
     req: &MintRequest<'_>,
     kv: Option<&worker::KvStore>,
-) -> Result<MintResult, String> {
+) -> Result<MintResult, MintError> {
     if req.api_key.is_empty() {
-        return Err("crossmint not configured: missing CROSSMINT_API_KEY".to_string());
+        return Err("crossmint not configured: missing CROSSMINT_API_KEY"
+            .to_string()
+            .into());
     }
     if req.collection_id.is_empty() {
-        return Err("crossmint not configured: missing CROSSMINT_COLLECTION_ID".to_string());
+        return Err("crossmint not configured: missing CROSSMINT_COLLECTION_ID"
+            .to_string()
+            .into());
     }
     let host = if req.host.is_empty() {
         "staging.crossmint.com"
@@ -250,16 +257,21 @@ async fn mint_compressed_nft_unscrubbed(
             Some("failed") | Some("rejected") | Some("error") => {
                 // Definitive failure — clear the marker so a retry mints fresh.
                 clear_pending().await;
-                return Err(format!("crossmint mint failed: {poll_json}"));
+                return Err(format!("crossmint mint failed: {poll_json}").into());
             }
             _ => { /* pending — keep polling */ }
         }
     }
 
     // Timeout: leave the pending marker in place so the next attempt resumes.
-    Err(format!(
-        "crossmint mint still pending after {CROSSMINT_MAX_POLLS} polls (nft_id={nft_id})"
-    ))
+    // Only a mint with a provider id or a KV marker can resume; without either
+    // a retry would fire a second mint, so that timeout stays a failure.
+    let detail =
+        format!("crossmint mint still pending after {CROSSMINT_MAX_POLLS} polls (nft_id={nft_id})");
+    match idempotent_id.is_some() || pending_kv.is_some() {
+        true => Err(MintError::Pending(detail)),
+        false => Err(MintError::Failed(detail)),
+    }
 }
 
 /// Send a Crossmint REST request and parse the JSON body. Non-2xx is an error.

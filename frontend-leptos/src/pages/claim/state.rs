@@ -57,6 +57,6 @@ pub(super) enum ClaimState {
     Success(ClaimMintData),
     /// Already claimed previously.
     AlreadyClaimed(ClaimLookupData),
-    /// Error during minting.
-    MintError(ClaimLookupData, String),
+    /// Minting failed, or is still pending after the automatic retries.
+    MintError(ClaimLookupData, super::mint_retry::MintFailure),
 }

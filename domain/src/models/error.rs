@@ -25,6 +25,9 @@ pub enum AppError {
         status: u16,
         body: String,
     },
+    /// An upstream accepted the request but has not finished it yet (504).
+    /// The caller may retry the same request; it resumes, it does not repeat.
+    UpstreamPending(String),
     /// Rate limit exceeded (429)
     RateLimited(String),
     /// Internal server error (500)
@@ -50,6 +53,7 @@ impl fmt::Display for AppError {
                     "external service error: {service} returned {status}: {body}"
                 )
             }
+            Self::UpstreamPending(msg) => write!(f, "upstream pending: {msg}"),
             Self::RateLimited(msg) => write!(f, "rate limited: {msg}"),
             Self::Internal(msg) => write!(f, "internal error: {msg}"),
         }
@@ -81,6 +85,7 @@ impl AppError {
             Self::Conflict(_) => 409,
             Self::Gone(_) => 410,
             Self::External { .. } => 502,
+            Self::UpstreamPending(_) => 504,
             Self::RateLimited(_) => 429,
             Self::Internal(_) => 500,
         }
@@ -119,12 +124,68 @@ impl AppError {
     pub fn public_message(&self) -> Cow<'_, str> {
         match self {
             Self::Internal(_) => Cow::Borrowed("internal error"),
+            Self::UpstreamPending(_) => Cow::Borrowed(UPSTREAM_PENDING_MESSAGE),
             Self::External {
                 service, status, ..
             } => Cow::Owned(format!(
                 "external service error: {service} returned {status}"
             )),
             _ => Cow::Owned(redact_urls(&self.to_string()).into_owned()),
+        }
+    }
+}
+
+/// Public body of [`AppError::UpstreamPending`]. Fixed text: the detail names
+/// the provider's job id and stays on the log line.
+pub const UPSTREAM_PENDING_MESSAGE: &str = "still processing; retry the same request shortly";
+
+/// Why an NFT mint did not return a result.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MintError {
+    /// The provider accepted the mint and has not confirmed it within the poll
+    /// budget. Retrying the same claim resumes this mint; it does not start
+    /// another (issue 180).
+    Pending(String),
+    /// The mint failed or was never accepted.
+    Failed(String),
+}
+
+impl fmt::Display for MintError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Pending(msg) => write!(f, "mint pending: {msg}"),
+            Self::Failed(msg) => write!(f, "{msg}"),
+        }
+    }
+}
+
+impl std::error::Error for MintError {}
+
+impl From<String> for MintError {
+    fn from(s: String) -> Self {
+        Self::Failed(s)
+    }
+}
+
+impl MintError {
+    /// Rewrite the detail text, keeping the variant (used to scrub a wallet).
+    pub fn map_detail(self, f: impl FnOnce(&str) -> String) -> Self {
+        match self {
+            Self::Pending(msg) => Self::Pending(f(&msg)),
+            Self::Failed(msg) => Self::Failed(f(&msg)),
+        }
+    }
+
+    /// The API error for a claim mint that can resume: a pending mint is a 504
+    /// the page retries, anything else is a 502 from `service`.
+    pub fn into_resumable_app_error(self, service: &str) -> AppError {
+        match self {
+            Self::Pending(msg) => AppError::UpstreamPending(msg),
+            Self::Failed(body) => AppError::External {
+                service: service.to_string(),
+                status: 502,
+                body,
+            },
         }
     }
 }
