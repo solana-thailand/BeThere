@@ -121,6 +121,16 @@ that cannot fail is not a gate.
 | `staff_css_fence.py` | a `styles/*.staff.css` selector the attendee wasm can match (it would render unstyled in the attendee shell) |
 | `bench_records.py` | `.benchmarks/` record headers (green gate, interleaved lanes, retractions) and citations that resolve |
 
+These are run by hand. Each script's header has its usage.
+- **Remote D1 reports, read-only** (via `d1_remote.py`):
+  `refund_window_report.py` (THB refunds past 7 days, D3) and
+  `slip_agent_report.py` (false accepts must be 0). CI runs only their
+  self-tests.
+- **Other remote D1 reports:** `thb_duplicate_report.sh` (`.issues/127`,
+  read-only) and `onchain_event_id_audit.py` (`.issues/085`; `--repair`
+  writes D1).
+- **Staging probe:** `claim_token_window_staging.sh` (`.issues/071`).
+
 ## Deploy (owner-gated)
 
 - Runbooks: `docs/staging_deploy_runbook.md`, `docs/gradual_deploy_runbook.md`.

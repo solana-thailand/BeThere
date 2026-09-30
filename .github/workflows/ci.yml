@@ -628,6 +628,17 @@ jobs:
         #   python3 scripts/verify/event_invariants_audit.py --db bethere-db
         run: python3 scripts/verify/event_invariants_audit.py --self-test
 
+      - name: Deposit report self-tests
+        # Owner decision D3 (THB back within 7 days) is checked by
+        # refund_window_report.py; plan 033's slip-agent number comes from
+        # slip_agent_report.py. Both are run by hand against remote D1, so a
+        # migration that renames or drops a column they read would only show
+        # up on the day someone needs the number. Their self-tests build the
+        # schema from worker/migrations/ and pin the query on fixtures.
+        run: |
+          python3 scripts/verify/refund_window_report.py --self-test
+          python3 scripts/verify/slip_agent_report.py --self-test
+
       - name: Deploy fallback unit tests
         # MIME mapping (a wrong Content-Type took the frontend down on
         # 2026-07-26) and metadata binding completeness against the real
