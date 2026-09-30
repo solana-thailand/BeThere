@@ -67,6 +67,11 @@ the Linux baselines were re-taken.
   stale):** "do you approve `.issues/178` as written: a random 6-character
   per-event `display_code` column, a staff-only lookup, and a backfill
   migration, landing after the 8 Oct take?"
+  **Reopen trigger (2026-10-01, `event-checkin-4f`):** the owner approves
+  `.issues/178` (as written or amended) **and** the 8 Oct take is done. Build
+  order: the migration, then the backfill, then the `Nº` row on the ticket;
+  verify at 390×844 EN + TH. Nothing here can start earlier: the brief
+  forbids deriving the number from IDs, so there is no interim version.
 - Verified at 390×844 EN + TH; a11y allowlist still empty. CI after push:
   only the 2 re-taken ticket baselines failed, as designed.
 
@@ -91,6 +96,13 @@ the Linux baselines were re-taken.
   Recommendation: Worker splices per-event tags into `/e/{slug}`, and the
   organizer's browser makes the PNG on save (no Worker CPU). A one-file quick
   win (`badge.png`) is the owner's call. Build after the take.
+  **Reopen trigger (2026-10-01, `event-checkin-4f`):** the owner picks an
+  option in `.issues/183` (the recommended splice + browser-made PNG, a paid
+  plan, or the `badge.png` quick win alone). The quick win may land before
+  the take if the owner says so; the rest waits until after 8 Oct. Re-probed
+  on prod 2026-10-01: `/discover` and `/e/x` both serve the static head with
+  `og:image` = `/api/badge.svg` (`image/svg+xml`), so 183's finding still
+  holds.
 
 ## Remaining
 
