@@ -132,6 +132,8 @@ reflex-site has no license, so its code is a pattern only.
   - [ ] Merge after RTM #6, then open the staging page (owner-gated deploy).
     **Blocked (2026-09-29, `event-checkin-8c`):** owner go for the merge + staging deploy; after the 6–8 Oct freeze.
     **Owner question:** "may `feature/031-remap-path-prefix` (`9c13c05e`) merge into `develop` after the 8 Oct take and go to staging, at +2.1 KB br4 on the staff shell?"
+    **Reopen trigger (2026-10-01, `event-checkin-45`):** the 8 Oct take is
+    done and the owner says go; it merges first of remap → stamp → pin.
 - [ ] Toolchain pin (`.plans/030` §3): declare `components` and `targets`.
   **Built on branch `feature/030-toolchain-pin` (2026-09-28, session
   `event-checkin-00`); committed and rebased onto `develop` as `020fdc0b`
@@ -143,10 +145,13 @@ reflex-site has no license, so its code is a pattern only.
     `targets = ["wasm32-unknown-unknown"]` declared in `rust-toolchain.toml`.
   - [ ] Merge after RTM #6, after the remap and build-stamp branches.
     **Blocked:** owner go; after the 6–8 Oct freeze and the two merges before it.
+    **Reopen trigger (2026-10-01, `event-checkin-45`):** the remap and stamp
+    branches are merged, and the owner says go (`.plans/030` §3 carries the same trigger).
 - [ ] Build stamp on `/api/health`: git sha, `BUILD_TAG`, and "stale" when
   built outside `deploy.sh`.
   **Built on branch `feature/031-health-build-stamp` (`2bc919f0`, 2026-09-28,
-  session `event-checkin-82`), not merged** (RTM #6 hold).
+  session `event-checkin-82`; tip now `0cff7525` with the smoke assertion,
+  2026-10-01), not merged** (RTM #6 hold).
   **Blocked (2026-09-29, `event-checkin-8c`):** open only on its merge sub-step below (owner go, demo freeze).
   - [x] `deploy.sh` exports `BETHERE_BUILD` as its existing provenance string
     (`git:<sha>[+dirty]`, the same one the Version message carries), and
@@ -159,12 +164,22 @@ reflex-site has no license, so its code is a pattern only.
     fallback string turns it red. Workspace clippy is clean, 103 binaries pass,
     and the floor went up by 1.
   - Not done: `BUILD_TAG`. It is a frontend constant, and the stamp's git sha
-    already identifies the tree it came from. Also not done: a
-    `post_deploy_smoke.sh` assertion on the stamp, because prod is unstamped
-    until the first deploy that carries this change.
+    already identifies the tree it came from.
+  - [x] `post_deploy_smoke.sh --expect-build <string>` (`0cff7525` on the
+    branch, 2026-10-01, `event-checkin-45`): fails unless `/api/health`'s
+    `build` is exactly that string, so "unstamped", a missing field or the
+    previous deploy's sha all fail. Without the flag it only prints the build,
+    so today's unstamped prod does not turn the smoke red. Proven against a
+    stub health endpoint in both directions (match passes; mismatch,
+    unstamped and absent fail; an empty value is refused); ShellCheck 0.11.0
+    clean. The deploy-guard skill and the deploy runbook pass
+    `"git:$(git rev-parse HEAD)"`.
   - [ ] Merge after RTM #6; the first deploy then shows the stamp on prod.
     **Blocked:** owner go + prod deploy; edits `worker/` (peer `event-checkin-16`); after the 6–8 Oct freeze.
     **Rechecked 2026-09-30 (`event-checkin-aa`):** `git merge-tree` against `develop` `04ab57b5` is clean, so no rebase is needed yet. The peer clause is stale (`event-checkin-16` is gone). **Owner question:** "may `feature/031-health-build-stamp` merge after the remap branch, after the 8 Oct take?"
+    **Reopen trigger (2026-10-01, `event-checkin-45`):** the remap branch is
+    merged and the owner says go; the first staging deploy after it runs the
+    smoke with `--expect-build`.
 
 ### reflex, after 12 Oct (research only)
 
@@ -175,10 +190,14 @@ and publishes 0.22–0.51 accuracy. So nothing ships in the product.
 - [ ] Offline A/B: replay RTM #6 W1 shadow-mode decisions through reflex and
   compare agreement with the deterministic checks. Record under `.benchmarks/`.
   **Blocked:** data; the RTM #6 (4 Oct) W1 decisions don't exist yet, and they live in prod D1 (owner access). Dated after 12 Oct.
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** 12 Oct has passed and
+  the owner exports the RTM #6 W1 shadow-mode rows from prod D1 (read-only).
 - [ ] No-show prediction: can past check-in history predict a no-show well
   enough to matter for D1a's T-48h confirm (`docs/deposit-commitment-model.md`)?
   Needs labeled data from at least two deposit events first.
   **Blocked:** data; two labeled deposit events don't exist yet.
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** a second deposit event
+  has ended with its check-ins recorded, so there are two labeled events.
 
 **Checked 2026-09-29 (session `event-checkin-4e`), nothing taken:** the
 three held merges (remap, toolchain pin, build stamp) change every shipped
@@ -223,13 +242,37 @@ Done this pass:
   passes, every workflow's YAML parses, and both the `toolchain_pin_gate`
   row and the new report index are in `CLAUDE.md`. No branch moved.
 
+**Combined-tree cargo run, 2026-10-01 (session `event-checkin-45`).** This
+fills the "Not run" gap above. On a throwaway worktree, `develop` `81d085e0`
+was merged with all 8 queued branches, in order: `qa-take-fixes` `549f0705`,
+remap `9c13c05e`, stamp `0cff7525`, pin `020fdc0b`, 052 db `15a188da`,
+052 quiz `a6aa8340`, 162 `a0eb09ca` and 163 `a843c063`. There were no
+conflicts. On that tree, with the pinned rustc 1.98.1, a private target dir
+and CI's `dist/index.html` stub:
+- workspace: `fmt --check`, `clippy --all-targets -D warnings` and 1135
+  tests in 117 binaries all pass;
+- frontend: `fmt --check`, wasm32 clippy `-D warnings` (default and
+  `--features staff`) and 316 tests in 39 binaries all pass;
+- `test_count_floor.py`: both suites sit exactly on their merged floors
+  (1135 and 316), so no branch's floor bump was lost in the merge;
+- `toolchain_pin_gate.py`, ShellCheck 0.11.0, the `wasm_rustflags.sh`
+  self-test, `numbering_gate.py` and YAML parsing of all 4 workflows pass.
+Still not run: `build.sh` / `worker-build`, the size budgets and the leak
+scans on the combined tree. CI runs them after the push, and each branch
+already measured its own delta.
+
 ## 4. Owner decisions
 
 - [ ] Parity-before-use in the lucky-draw spec (`.plans/030` §4): the browser
   replays pinned server outputs bit-exactly before showing its own re-run.
   **Blocked:** owner; depends on the lucky-draw product decision in `.plans/030` §4.
   **Owner question:** the same as `.plans/030` §4, "does any event run a lucky draw that attendees need to audit?" A yes opens this item with the draw.
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** the owner answers yes
+  to the `.plans/030` §4 lucky-draw question (a no closes both as declined).
 - [ ] Whether to keep `dev_mode` and the Solana readiness block public on
   `/api/health` (`.issues/147`, "Not in scope").
   **Blocked:** owner: security/product decision.
   **Owner question:** "should unauthenticated `/api/health` keep returning `dev_mode` and the Solana readiness block, or should they move behind staff auth and leave the public body as status only?"
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** the owner answers. The
+  build stamp branch adds a public `build` field too, so the answer should
+  cover it.

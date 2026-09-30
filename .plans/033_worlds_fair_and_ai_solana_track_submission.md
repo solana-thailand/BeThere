@@ -522,3 +522,5 @@ Session `event-checkin-cf`. Staging only, on version `814738a8` = git `a3d4e7a9`
 - [x] A scannable fixture that ends about 10 minutes after check-in. `demo_fixture` hardcodes 3 h, see `.issues/164` gap 2. **Done:** `BETHERE_DEMO_END_MIN` (`0da1be79`, on `develop`), rehearsed on staging per `.issues/164`; used by `.benchmarks/007`.
 - [ ] The final take (Thu 8 Oct), filmed with the explorer open. The badge clip is filmed on prod.
   **Blocked:** owner and the date; filmed on prod on Thu 8 Oct, inside the demo freeze. No question is open; it is dated.
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** Thu 8 Oct, with the owner at the
+  camera; the post-take merge queue (`.issues/052`, `.plans/031` §3) opens after it.

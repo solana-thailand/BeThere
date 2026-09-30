@@ -28,6 +28,8 @@ Wave 1 (`.plans/037`).
   deliverable. The memory `cargo-heal-not-adopted` records a 2026-09-13
   evaluation.
   **Not closable:** a standing practice, not a deliverable (`cargo-heal-not-adopted`); nothing blocks it.
+  **No reopen trigger (2026-10-01, `event-checkin-45`):** it has no gate to
+  lift; it stays open as a practice and closes with the plan.
 - [x] **D5:** loop discipline, followed throughout.
 
 ## P0

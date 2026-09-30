@@ -27,6 +27,9 @@ groups and a backlog.
   **Owner question (2026-09-30, `event-checkin-aa`):** "may we share a sheet
   with the Luma header row with the staging service account, knowing the
   repro appends a registration row to it?"
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** the owner shares a sheet with the
+  Luma header with the staging service account (the same answer opens the
+  two-event run below).
 - [ ] Part B of `.issues/167`: the dedup falls back to a shared sheet across
   events. Needs a product decision.
   **Blocked:** the owner decided on 2026-09-29 (`.issues/167`), but the implementation is in `worker/`, peer `event-checkin-16`'s area.
@@ -149,6 +152,8 @@ Owner decisions raised by phase 3:
   **Owner question (2026-09-30, `event-checkin-aa`):** "has the legal review
   of the PDPA section numbers (s.37, s.29, s.38 vs. s.33 and s.24(3)) come
   back, and with which numbers?"
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** the legal review returns section
+  numbers; then change EN and TH together.
 - [x] **Kept (2026-09-29):** it renders only in `usdc_payment.rs`, the escrow
   path where an unclaimed deposit is really lost.
   Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
@@ -267,6 +272,7 @@ Owner decisions raised by phase 3:
   `event-checkin-4e`): it moves layout on every demo-facing page one week
   before the 6–8 Oct freeze; start it after the take.
   **Blocked:** the 6–8 Oct demo freeze; start after the take. No owner question; it is dated.
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** the 8 Oct take is filmed.
 - [x] Remaining hardcoded colours in other Rust files (2026-09-29, session
   `event-checkin-4e`). 20 inline text colours in 6 files now use tokens:
   `#94a3b8`/`#64748b` → `--text-muted`, `#cbd5e1` → `--text-secondary`,
