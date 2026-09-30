@@ -10,5 +10,6 @@
 mod editor;
 mod helpers;
 mod preview;
+mod questions;
 
 pub use editor::QuizEditor;

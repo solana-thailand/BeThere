@@ -174,6 +174,19 @@ in `playtest.rs` (658 lines). The move is verbatim and all 42 tests still pass. 
 `--lib --tests -D warnings` and `fmt --check` are clean. That leaves `scanner/page.rs` and `quiz_editor/editor.rs`
 in the frontend. Both are single-component `view!` splits, so both wait until after the freeze.
 
+2026-10-01 (`event-checkin-e0`, branch `feature/052-quiz-editor-split`, not merged): `quiz_editor/editor.rs`
+is split. The question list (the `{move || …}` block under "Questions list") moved verbatim into
+`questions.rs` as `render_questions(config, set_config, confirm_delete_q, set_confirm_delete_q) -> AnyView`,
+called from the same reactive closure, so the tracking boundary is unchanged. `editor.rs` 1075 → 729,
+`questions.rs` 363. Gates: frontend `fmt --check`, wasm32 clippy `-D warnings` (default and `--features staff`),
+316 tests in 39 binaries. DOM A/B in headless Chrome against a local worker with the e2e seed, `develop`
+build vs. branch build (different served wasm hashes checked): 18 editor states (empty, create, edit text and
+option, set correct, add option, add question, move up, toggle, delete arm/confirm, preview, edit, import open,
+import merge, save, reload) are byte-identical in markup, form values and toasts, with no page errors; every
+step changes the DOM, so the probe can fail. The quiz editor is staff-only and not in the take script, but
+the branch still merges after the 8 Oct take with the others. `scanner/page.rs` (1304) is the last frontend
+file over the line; it stays after the freeze because it is demo-critical.
+
 Backend re-measure, same day: `worker/src/db/events.rs` is **1114 at HEAD** (1125 with the uncommitted F7
 sponsor edits). The "backend queue is empty" note below is stale. Split it after F7 lands; F7 owns the file
 until then. Also done: `worker/src/sheets/mod.rs` (953 lines of logic behind an index, not over the line
