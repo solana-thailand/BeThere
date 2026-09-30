@@ -88,6 +88,7 @@ the Linux baselines were re-taken.
 
 ## Remaining
 
-- [ ] **F5** LINE in-app browser login on staging — owner phone test.
+- [x] **F5** LINE in-app browser login on staging — owner phone test.
+  **Done (2026-09-30, owner, reported to `event-checkin-b5`):** the owner has logged in on a phone and it worked. That also closes `.plans/038` P3-e.
   **Blocked (2026-09-29, `event-checkin-1a`):** owner, on a real phone with LINE (same gate as plan 038 P3-e).
   **Owner question:** the one in `.plans/038` P3-e; one phone run closes both.

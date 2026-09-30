@@ -197,7 +197,7 @@ Wave 1 (`.plans/037`).
   - Probe at 320/390/768/1024/1440 in EN and TH: no page overflow and no
     element spill on event, ticket or claim. The h1 scales 24–28 → 35 px.
   - css_class_audit passes. +517 B br4.
-- [ ] **P3-e:** LINE in-app browser auth. Needs staging and a phone, so it is
+- [x] **P3-e:** LINE in-app browser auth. **Done (2026-09-30):** the owner's phone login works (see `.plans/039` F5). Needs staging and a phone, so it is
   owner-run.
   **Blocked:** owner; it needs a real phone with LINE.
   **Owner question (2026-09-30, `event-checkin-aa`):** "can you open a

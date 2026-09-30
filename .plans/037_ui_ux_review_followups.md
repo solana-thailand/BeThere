@@ -40,8 +40,16 @@ groups and a backlog.
     Guard `worker/tests/empty_roster_policy.rs` (4, floored); two mutants
     turn it red. Workspace clippy, 79 worker binaries and 104 Python tests
     are green. Details are in `.issues/167`.
-  - [ ] Merge and a staging run with two events sharing one sheet.
-    **Owner questions:** "may `feature/167-empty-roster` merge into
+  - [x] Merge: `58fc5186` on `develop`, on staging 2026-09-30 (`event-checkin-b5`).
+    **Answered (2026-09-30):** the RTM #6 event shares no sheet. The prod
+    date question is moot: a read-only prod D1 query shows the only events
+    created after the cutoff are the RTM #6 event (57 D1 attendees, so its
+    roster read is unchanged) and a ComfyUI draft (0). `fa0dca12` reached
+    `main` on 13 Aug (`f3c66652`); Cloudflare keeps only 10 deployments, so
+    the exact prod date cannot be read back. The staging smoke's roster read
+    ran through the new path and passed.
+  - [ ] A staging run with two events sharing one sheet (optional now).
+    **Former owner questions:** "may `feature/167-empty-roster` merge into
     `develop` before RTM #6 (4 Oct), or after the 8 Oct take?" and "did prod
     first get `fa0dca12` later than 12 Aug? If so, on what date? The cutoff
     constant moves to it."
