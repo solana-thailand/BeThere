@@ -86,6 +86,9 @@ cargo test -p event-checkin-domain --locked --features wire,alloc_count \
   --test alloc_count -- --test-threads=1
 ```
 
+- `rust-toolchain.toml` pins the channel for CI and deploys. Agent shells
+  export `RUSTUP_TOOLCHAIN`, which outranks the file; prefix local cargo runs
+  with `env -u RUSTUP_TOOLCHAIN` to build on the pin.
 - Tests go in each crate's `tests/` folder.
 - **Pre-push hook:** `git config core.hooksPath scripts/hooks` once per clone. It runs
   `cargo fmt --check` (CI's most common failure) on pushes that touch Rust;
@@ -126,6 +129,7 @@ that cannot fail is not a gate.
 | `third_party_licenses.sh` | `THIRD_PARTY_LICENSES.md` drift vs. the lockfiles (licence gate itself: `cargo deny check licenses`) |
 | `staff_css_fence.py` | a `styles/*.staff.css` selector the attendee wasm can match (it would render unstyled in the attendee shell) |
 | `e2e_lib_smoke.sh` | `scripts/e2e/lib/` helpers that need no chain or Worker (`.issues/076`) |
+| `toolchain_pin_gate.py` | CI `toolchain:` drift from `rust-toolchain.toml` (only the weekly rot lane may say `stable`) |
 | `bench_records.py` | `.benchmarks/` record headers (green gate, interleaved lanes, retractions) and citations that resolve |
 
 These are run by hand. Each script's header has its usage.

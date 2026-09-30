@@ -9,6 +9,11 @@
 
 set -euo pipefail
 
+# Build on the channel in rust-toolchain.toml, not the caller's RUSTUP_TOOLCHAIN.
+# shellcheck source=../scripts/pinned_toolchain.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../scripts/pinned_toolchain.sh"
+use_pinned_toolchain
+
 # Trunk reads NO_COLOR as a boolean option. Some shells and agent runtimes use
 # the conventional NO_COLOR=1 form, which Trunk 0.21 rejects before building.
 if [[ -n "${NO_COLOR:-}" && "${NO_COLOR}" != "true" && "${NO_COLOR}" != "false" ]]; then
