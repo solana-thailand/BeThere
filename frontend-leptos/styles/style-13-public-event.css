@@ -142,12 +142,27 @@
 
 .pe-refund-item {
     display: flex;
-    align-items: center;
+    /* Top-aligned: a centred tick sits beside the middle of a wrapped line. */
+    align-items: flex-start;
     gap: 0.4rem;
 }
 
 .pe-check {
     color: #34d399;
+    display: inline-flex;
+    /* One line of .pe-refund-text (0.85rem x the body line height). */
+    min-height: 1.4em;
+    align-items: center;
+    font-size: 0.85rem;
+}
+
+.pe-refund-note {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    margin: 0.75rem 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
 }
 
 .pe-refund-text {

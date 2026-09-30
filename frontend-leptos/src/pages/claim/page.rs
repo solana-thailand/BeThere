@@ -317,9 +317,10 @@ pub fn Claim() -> impl IntoView {
                 <p class="claim-tagline">
                     {move || evt_tagline.get()}
                 </p>
-                <p class="claim-event-link">
+                // A labelled link, not the bare URL (QA 2026-09-29, item 3).
+                <p class="claim-event-link" class:hidden=move || evt_link.with(String::is_empty)>
                     <a href=move || evt_link.get() target="_blank" rel="noopener noreferrer">
-                        {move || evt_link.get()}
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.view_event_page))}
                     </a>
                 </p>
 
@@ -971,19 +972,6 @@ pub fn Claim() -> impl IntoView {
                             }
                                 .into_any()
                         }
-                    }
-                }}
-
-                // Fun: hearts reaction widget (only on loaded/engaged states)
-                {move || {
-                    match state.get() {
-                        ClaimState::NftComingSoon(_) |
-                        ClaimState::Ready(_) |
-                        ClaimState::Success(_) |
-                        ClaimState::AlreadyClaimed(_) => {
-                            view! { <HeartsWidget /> }.into_any()
-                        }
-                        _ => view! { <div></div> }.into_any()
                     }
                 }}
 

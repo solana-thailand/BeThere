@@ -351,20 +351,6 @@
     color: var(--text-muted);
 }
 
-.landing-footer-powered {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
-
-.landing-footer-powered svg {
-    width: 14px;
-    height: 14px;
-    color: var(--solana);
-}
-
 @keyframes swimlane-fade-in {
     from {
         opacity: 0;

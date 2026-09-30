@@ -15,59 +15,6 @@ const PHASE_ENDED: &str = "ended";
 // Interactive widgets (client-side only)
 // ---------------------------------------------------------------------------
 
-/// Floating hearts widget — audience taps to send hearts.
-/// Purely cosmetic, client-side only. Hearts float up and fade out.
-#[component]
-pub(super) fn HeartsWidget() -> impl IntoView {
-    let (hearts, set_hearts) = signal(Vec::<u32>::new());
-    let (count, set_count) = signal(0u32);
-    let heart_id = std::cell::Cell::new(0u32);
-
-    let send_heart = move |_: web_sys::MouseEvent| {
-        let id = heart_id.get();
-        heart_id.set(id + 1);
-        set_hearts.update(|h| h.push(id));
-        set_count.update(|c| *c += 1);
-
-        // Remove heart after animation (3 seconds)
-        let set_h = set_hearts;
-        set_timeout(
-            move || {
-                set_h.update(|h| h.retain(|&x| x != id));
-            },
-            std::time::Duration::from_secs(3),
-        );
-    };
-
-    view! {
-        <div class="hearts-widget">
-            <button class="heart-btn" on:click=send_heart>
-                <svg viewBox="0 0 24 24" width="28" height="28">
-                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#ef4444"/>
-                </svg>
-                <span class="heart-count">{move || count.get()}</span>
-            </button>
-            <div class="hearts-container">
-                {move || hearts.get().iter().map(|&id| {
-                    let left = (id % 5) as f64 * 15.0 + 10.0;
-                    let delay = (id % 3) as f64 * 0.2;
-                    let style = format!(
-                        "left:{}%;animation-delay:{}s;",
-                        left, delay
-                    );
-                    view! {
-                        <span class="floating-heart" style=style>
-                            <svg viewBox="0 0 24 24" width="20" height="20">
-                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#ef4444"/>
-                            </svg>
-                        </span>
-                    }
-                }).collect_view()}
-            </div>
-        </div>
-    }
-}
-
 /// Live session timer showing event progress.
 /// Shows elapsed time since event start or countdown to start.
 #[component]

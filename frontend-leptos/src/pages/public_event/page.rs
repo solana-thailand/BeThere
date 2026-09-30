@@ -476,6 +476,10 @@ fn render_loaded_event(
     let i18n = use_i18n();
 
     let (reserve_in_view, set_reserve_in_view) = signal(false);
+    // The hero CTA sits in the first screen, so the bar starts hidden: two
+    // identical buttons on one screen, and the bar would cover the WHEN row
+    // (QA 2026-09-29, item 1). It appears once the hero CTA scrolls away.
+    let (hero_cta_in_view, set_hero_cta_in_view) = signal(true);
     let scroll = window_event_listener(leptos::ev::scroll, move |_| {
         let viewport = window()
             .inner_height()
@@ -487,6 +491,17 @@ fn render_loaded_event(
             .is_some_and(|el| el.get_bounding_client_rect().top() < viewport);
         if in_view != reserve_in_view.get_untracked() {
             set_reserve_in_view.set(in_view);
+        }
+        let hero_in_view = document()
+            .query_selector(".pe-hero-cta")
+            .ok()
+            .flatten()
+            .is_some_and(|el| {
+                let rect = el.get_bounding_client_rect();
+                rect.bottom() > 0.0 && rect.top() < viewport
+            });
+        if hero_in_view != hero_cta_in_view.get_untracked() {
+            set_hero_cta_in_view.set(hero_in_view);
         }
     });
     // Dropping a `WindowListenerHandle` does not remove the listener.
@@ -610,10 +625,10 @@ fn render_loaded_event(
 
         // Sticky mobile CTA — a persistent bottom action bar on phones (CSS hides
         // it on desktop). Keeps the primary action one tap away while scrolling,
-        // and goes away once the reserve zone is on screen: it would otherwise
-        // be a third "Reserve" button over the form (.issues/173 C4).
+        // and stays away while the hero CTA or the reserve zone is on screen:
+        // it would otherwise double a "Reserve" button (.issues/173 C4).
         {move || {
-            if !show_reg_form || reserve_in_view.get() {
+            if !show_reg_form || reserve_in_view.get() || hero_cta_in_view.get() {
                 return ().into_any();
             }
             let label = match reg_lookup.get() {
