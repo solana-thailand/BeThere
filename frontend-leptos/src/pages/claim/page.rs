@@ -936,7 +936,10 @@ pub fn Claim() -> impl IntoView {
                                 false => (crate::components::StatusTone::Failed, crate::locale::tr(|l| crate::i18n::td_string!(l, claim.mint_error.title))),
                             };
                             view! {
-                                <div class="claim-error">
+                                <div class=match pending {
+                                    true => "claim-error claim-pending",
+                                    false => "claim-error",
+                                }>
                                     {move || view! {
                                         <crate::components::StatusBadge
                                             tone=tone
