@@ -57,11 +57,11 @@
     outline-offset: 3px;
 }
 
-/* On small screens, let the poster breathe within the card while
-   staying readable — cap at viewport width minus card padding. */
+/* On small screens, cap the height only. The width stays capped by the base
+   rule's 100%, the column; a viewport-based cap ignores the column's padding
+   and pushed the poster past its right edge at 390 px. */
 @media (max-width: 480px) {
     .pe-hero-img {
-        max-width: calc(100vw - 2.5rem);
         max-height: 70vh;
     }
 }
@@ -142,12 +142,27 @@
 
 .pe-refund-item {
     display: flex;
-    align-items: center;
+    /* Top-aligned: a centred tick sits beside the middle of a wrapped line. */
+    align-items: flex-start;
     gap: 0.4rem;
 }
 
 .pe-check {
     color: #34d399;
+    display: inline-flex;
+    /* One line of .pe-refund-text (0.85rem x the body line height). */
+    min-height: 1.4em;
+    align-items: center;
+    font-size: 0.85rem;
+}
+
+.pe-refund-note {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.5;
+    margin: 0.75rem 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
 }
 
 .pe-refund-text {

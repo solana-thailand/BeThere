@@ -13,8 +13,7 @@
   "hero": {
     "headline_1": "Show up.",
     "headline_2": "Get your money back.",
-    "value": "Deposit to reserve · show up · get 100% back",
-    "built_on_solana": "Built on Solana"
+    "value": "Deposit to reserve · show up · get 100% back"
   },
   "cta": {
     "dashboard": "Go to Dashboard →",
