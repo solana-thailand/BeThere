@@ -1,6 +1,6 @@
 # 182: Pre-take visual QA fixes (7 on-camera items from the 2026-09-29 baselines)
 
-**Status:** in progress: fixed on `feature/qa-take-fixes` (2026-10-01, session `event-checkin-b5`; rebased onto develop `6604beee` by `event-checkin-da`), not yet merged to develop. Not pushed. Closes once the owner merges it and CI re-takes the baselines. The Linux baselines for the changed pages are removed so CI can re-take them.
+**Status:** fixed on develop (2026-10-01, session `event-checkin-4f`): items 1-8 merged via `937d87bd` (owner pre-approved) and pushed; CI run 36801022129 re-took the 16 missing Linux baselines, committed as `66c8b033` after an image check that shows all 8 fixed. Not deployed. First fixed on `feature/qa-take-fixes` by `event-checkin-b5`, item 8 on `feature/hero-poster-overflow`.
 
 Found in the visual QA of the committed e2e baselines (2026-09-29). All seven
 are on camera for the 8 Oct take. Each was checked on a credential-free local
