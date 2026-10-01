@@ -57,11 +57,11 @@
     outline-offset: 3px;
 }
 
-/* On small screens, let the poster breathe within the card while
-   staying readable — cap at viewport width minus card padding. */
+/* On small screens, cap the height only. The width stays capped by the base
+   rule's 100%, the column; a viewport-based cap ignores the column's padding
+   and pushed the poster past its right edge at 390 px. */
 @media (max-width: 480px) {
     .pe-hero-img {
-        max-width: calc(100vw - 2.5rem);
         max-height: 70vh;
     }
 }

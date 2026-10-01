@@ -16,6 +16,37 @@ worker with the e2e seed at 390x844, in EN and TH.
 | 6 | The language chip at y=0 is cramped | `.lang-bar` has 6 px of top padding. The label is a bordered pill (`.lang-switch-chip`) inside the 44 px tap target, and the border turns accent on hover and focus. | EN and TH landing and claim screenshots. |
 | 7 | Admin mobile START/END show raw `2030-01-22 12:00:00 UTC+07:00` | `card_datetime` in `events_page.rs` uses the shared day-first `utils::format_event_datetime` plus `local_tz_label`, giving `22 Jan 2030, 12:00 GMT+7`. `format_date_display` stays for the form's refund-deadline line. | Admin screenshot at 390 px. |
 
+## Item 8: the event poster overflows the column on phones (2026-10-01, session `event-checkin-4f`)
+
+Found in the item 1 screenshot during a review of this branch; not one of the
+seven QA items. It is on its own branch, `feature/hero-poster-overflow`, stacked on
+`feature/qa-take-fixes`, so the seven-item branch stays as reviewed.
+
+- **Cause:** at `max-width: 480px`, `.pe-hero-img` got
+  `max-width: calc(100vw - 2.5rem)`. That cap ignores the column's padding:
+  at 390 px it allows 350 px in a 318 px column, and `margin: auto` cannot
+  center an image wider than its box, so it spills right. It applies to the
+  generated poster and to uploaded posters and badges alike (all use
+  `.pe-hero-img`), so it is on camera for any event.
+- **Fix:** the media query keeps only `max-height: 70vh`; the base rule's
+  `min(460px, 100%)` already caps the width at the column.
+- **Verified** on a credential-free local worker (e2e seed, `reseed-kv`
+  synced 2), headless Chrome, DPR 2, EN and TH, served CSS byte-identical to
+  `dist/`. Bounding rects of `.pe-hero-img` vs `.pe-hero` and `.pe-hero-cta`:
+
+  | Width | Before (old rule re-injected) | After |
+  |---|---|---|
+  | 390 | img 36-386, column 36-354: overflow 32 px | img 36-354, centered |
+  | 360 | 36-356 vs 36-324 | 36-324 |
+  | 430 | 36-426 vs 36-394 | 36-394 |
+  | 1280 | 440-840 inside 296-984 (unchanged) | the same |
+
+  Same in TH. No page errors. The "before" run is the check that the probe
+  can fail.
+- **Gates:** frontend `cargo fmt --check` and `cargo test --locked` (316 tests,
+  39 binaries) pass. CSS only, so clippy has nothing new to see. No committed
+  baseline shows the event page (removed in `ec458a89`), so none to re-take.
+
 ## Gates
 
 - Frontend: fmt, clippy `-D warnings` (default and `--features staff`) and
