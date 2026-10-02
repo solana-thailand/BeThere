@@ -30,6 +30,18 @@ groups and a backlog.
   **Reopen trigger (2026-10-01, `event-checkin-45`):** the owner shares a sheet with the
   Luma header with the staging service account (the same answer opens the
   two-event run below).
+  **Partial run (2026-10-02, `event-checkin-4f`):** the owner shared sheet
+  `19DIsrxl…` with staging. Staging can read it (sync `success`,
+  `total_in_sheet` 0 before the run). But its header row is BeThere's own
+  named layout (`contact_handle` at 11, `claim_token` at 21), **not** a Luma
+  export, so it cannot reproduce 167 part A. On it, event `r037-a-1790927701`
+  appended a row with the handle at 11 and the claim token at 21. A
+  sheet→D1 sync and a duplicate registration both returned the UUID
+  `…5b2d81`, not `@r037_handle_alpha`. Correct mapping, but not the Luma case.
+  **Reopen trigger:** the owner puts the real Luma header row on the sheet
+  (or shares a Luma-export sheet), or OKs this session writing that header to
+  the throwaway sheet. Then rerun: register, sync, check that `claim_token`
+  stays a UUID and the handle lands in the Luma handle column.
 - [ ] Part B of `.issues/167`: the dedup falls back to a shared sheet across
   events. Needs a product decision.
   **Blocked:** the owner decided on 2026-09-29 (`.issues/167`), but the implementation is in `worker/`, peer `event-checkin-16`'s area.
@@ -51,7 +63,17 @@ groups and a backlog.
     `main` on 13 Aug (`f3c66652`); Cloudflare keeps only 10 deployments, so
     the exact prod date cannot be read back. The staging smoke's roster read
     ran through the new path and passed.
-  - [ ] A staging run with two events sharing one sheet (optional now).
+  - [x] A staging run with two events sharing one sheet (optional now).
+    **Done (2026-10-02, `event-checkin-4f`)** on staging, on sheet
+    `19DIsrxl…` (the header doesn't matter here), with `dev-token`. Events
+    `r037-a-1790927701` (A) and `r037-b-1790927850` (B) were both created
+    after the cutoff. Before any registration on B, B's roster read 0, not
+    A's row. The same account then registered on B and got a new attendee
+    (`…1cb7fe`) and claim token (`…e13e83`), not A's (`…7dcbeb`/`…5b2d81`), so
+    there was no cross-event dedup. Each roster lists only its own attendee.
+    B's sheet sync counts 1 of the sheet's 2 rows and leaves B's roster at 1.
+    The sheet holds both rows, each with its own handle and token. Both
+    events are archived afterwards; their D1 rows and the 2 sheet rows remain.
     Both former owner questions (merge timing, prod date of `fa0dca12`) are
     answered above.
     **Gate (2026-10-01, `event-checkin-a6`):** the same one as the staging
