@@ -742,6 +742,32 @@
     font-weight: 600;
 }
 
+/* Attendance row: one block per track, a thin fill bar for a capped one. */
+.pe-attendance-track {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    margin-bottom: 0.4rem;
+}
+
+.pe-cap-bar {
+    height: 6px;
+    border-radius: 999px;
+    background: var(--border);
+    overflow: hidden;
+}
+
+.pe-cap-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+}
+
+.pe-cap-bar-full .pe-cap-bar-fill {
+    background: var(--danger-bright);
+}
+
 /* Build line in the landing footer (.plans/038 P2-f). */
 .landing-footer-version {
     font-family: var(--font-mono);
