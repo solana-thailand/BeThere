@@ -761,6 +761,13 @@
     color: var(--text-secondary);
 }
 
+/* Wide screens show the attendance row beside the button; the caption would repeat it. */
+@media (min-width: 641px) {
+    .pe-hero-cta-caption {
+        display: none;
+    }
+}
+
 .pe-cap-bar {
     height: 6px;
     border-radius: 999px;
