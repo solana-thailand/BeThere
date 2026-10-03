@@ -21,7 +21,8 @@ groups and a backlog.
   - unmapped keys borrowed the standard slots.
 - [x] Fix: `ColumnMapping::resolve` everywhere. Regression test with the
   real header row. Commit `31c5d469`, `.issues/167`.
-- [ ] Staging repro. The fix is not on staging and this session may not
+- [x] Staging repro. **Done (2026-10-03, `event-checkin-0b`)**, see the last
+  paragraph of this item. The fix is not on staging and this session may not
   deploy, so this waits for the next staging deploy (owner).
   **Blocked (2026-09-29, `event-checkin-8c`):** the fix is now on staging (`bb8ac906`) and prod, but the repro needs a sheet with the Luma header shared with staging, which staging lacks (owner), and it would append rows to that sheet.
   **Owner question (2026-09-30, `event-checkin-aa`):** "may we share a sheet
@@ -42,6 +43,24 @@ groups and a backlog.
   (or shares a Luma-export sheet), or OKs this session writing that header to
   the throwaway sheet. Then rerun: register, sync, check that `claim_token`
   stays a UUID and the handle lands in the Luma handle column.
+  **Done (2026-10-03, `event-checkin-0b`).** The owner lifted the row-1
+  protection; the session wrote the 33-column Luma header (from
+  `domain/tests/unmapped_column_aliasing.rs`) to sheet `19DIsrxl…`, which
+  also cleared the 2 old test rows. On staging, event `r037-c-1791038583`
+  (created, activated, KV visible): one registration appended one row.
+  `claim_token` (L, index 11) holds the UUID `…24190d`; `api_id`, name,
+  email, `created_at`, `approval_status`, `ticket_name` and
+  `Participation_Type` landed in their Luma columns. `qr_code_url` (10),
+  `amount_tax` (12), the handle column (30) and `payment_status` (32) stayed
+  empty. A sheet→D1 sync returned `updated 1, errors 0`, and a duplicate
+  registration returned the same attendee and the same UUID token, not
+  `@r037_handle_gamma`. So 167 part A holds end to end.
+  **Correction to the reopen note above:** the handle does *not* land in the
+  Luma `Contact Handle / โปรดระบุ Username` column. The header has no handle
+  key `ColumnMapping` knows, and the regression test asserts index 30 stays
+  empty. The handle lives in D1 only. Aliasing that header is a product call
+  (organizers would then see handles in their sheet); it is not part of 167.
+  Event C is archived; its attendee row stays in staging D1 and one row in the sheet.
 - [ ] Part B of `.issues/167`: the dedup falls back to a shared sheet across
   events. Needs a product decision.
   **Blocked:** the owner decided on 2026-09-29 (`.issues/167`), but the implementation is in `worker/`, peer `event-checkin-16`'s area.
