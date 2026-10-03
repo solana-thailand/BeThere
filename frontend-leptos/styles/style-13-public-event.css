@@ -747,6 +747,9 @@
     display: flex;
     flex-direction: column;
     gap: 0.3rem;
+    /* The body shrinks to its text; give the bar a real length. */
+    width: 14rem;
+    max-width: 100%;
     margin-bottom: 0.4rem;
 }
 

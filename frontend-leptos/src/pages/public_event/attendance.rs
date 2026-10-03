@@ -109,7 +109,7 @@ pub fn attendance_row(
     Some(
         view! {
             <div class="pe-meta-row">
-                <Icon icon=IconName::User class="icon-sm icon-muted" />
+                <Icon icon=IconName::Ticket class="icon-sm icon-muted" />
                 <div class="pe-meta-body">
                     <span class="pe-meta-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.meta_attendance))}</span>
                     {tracks.into_iter().map(|t| view! {
