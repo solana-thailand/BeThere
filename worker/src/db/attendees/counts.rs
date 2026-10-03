@@ -39,3 +39,27 @@ pub(crate) async fn count_tracks_by_event(
     }
     Ok(Some(counts))
 }
+
+/// How many attendees of `event_id` have been checked in, from D1.
+///
+/// Display only: no gate reads this, so a failure is the caller's to show as
+/// "unknown", never as zero. An event whose attendees live only in its sheet has
+/// no check-in time in D1 and counts 0 here.
+pub(crate) async fn count_checked_in_by_event(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<u32, String> {
+    let rows = crate::db::d1_safe::query_rows_by_text(
+        db,
+        include_str!("../sql/attendee_checked_in_count.sql"),
+        event_id,
+    )
+    .await
+    .map_err(|e| format!("D1 count_checked_in_by_event: {e}"))?;
+    let n = rows
+        .first()
+        .and_then(|row| row.get("n"))
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| "D1 count_checked_in_by_event: no count row".to_string())?;
+    Ok(u32::try_from(n).unwrap_or(u32::MAX))
+}

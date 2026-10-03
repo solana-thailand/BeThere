@@ -237,6 +237,9 @@ pub struct PublicEventData {
     pub online_capacity: Option<u32>,
     pub in_person_count: Option<u32>,
     pub online_count: Option<u32>,
+    /// Checked-in head-count; the Worker sends `null` before the event starts or when unknown.
+    #[serde(default)]
+    pub checked_in_count: Option<u32>,
     pub in_person_remaining: Option<u32>,
     pub online_remaining: Option<u32>,
     pub in_person_available: bool,

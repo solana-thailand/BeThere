@@ -188,6 +188,10 @@ pub async fn get_public_event(
         .online_capacity
         .map(|cap| cap.saturating_sub(online_count));
 
+    // Who is actually in the room. Only once the event has started, so the
+    // busy pre-event page costs no extra D1 read; `null` when unknown.
+    let checked_in_count = count_checked_in_when_started(&state, &config).await;
+
     // Determine track availability for frontend gating
     let in_person_available =
         config.event_format.has_in_person() && in_person_remaining.is_none_or(|r| r > 0);
@@ -254,6 +258,8 @@ pub async fn get_public_event(
     let response_fields = response.as_object_mut().ok_or_else(|| {
         AppError::Internal("public event response serialization produced a non-object".to_string())
     })?;
+    // Inserted here, not in `json!` above: that literal is at the macro recursion limit.
+    response_fields.insert("checked_in_count".to_string(), json!(checked_in_count));
     // A completed-event gateway links only to the canonical Genesis archive.
     // `link` remains the organizer-configured external URL for ordinary event
     // pages; it is never trusted as an archive by default.
@@ -561,6 +567,22 @@ async fn count_attendees_by_track(
             tracing::warn!(error = %e, "failed to count attendees for capacity");
             TrackCounts::default()
         })
+}
+
+/// Checked-in head-count for the public page: `None` before the event starts,
+/// without a D1 binding, or when the read fails (shown as unknown, not zero).
+async fn count_checked_in_when_started(
+    state: &AppState,
+    config: &event_checkin_domain::models::event::EventConfig,
+) -> Option<u32> {
+    if chrono::Utc::now().timestamp_millis() < config.event_start_ms {
+        return None;
+    }
+    let db = state.d1.as_deref()?;
+    crate::db::attendees::count_checked_in_by_event(db, &config.id)
+        .await
+        .map_err(|e| tracing::warn!(error = %e, "failed to count checked-in attendees"))
+        .ok()
 }
 
 /// Check whether online registration is currently open based on `OnlineOpenMode`.

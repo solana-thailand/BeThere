@@ -1,7 +1,7 @@
 //! The event page's attendance row: what is shown per track, and when.
 
 use event_checkin_frontend::pages::public_event::attendance::{
-    MIN_PUBLIC_UNCAPPED_COUNT, Track, TrackAttendance, total_when_both,
+    MIN_PUBLIC_UNCAPPED_COUNT, Track, TrackAttendance, checked_in_to_show, total_when_both,
 };
 
 #[test]
@@ -47,4 +47,15 @@ fn total_needs_two_populated_tracks() {
     let empty_on = TrackAttendance::new(Track::Online, 0, Some(20)).unwrap();
     assert_eq!(total_when_both(&[ip, empty_on]), None);
     assert_eq!(total_when_both(&[ip]), None);
+}
+
+#[test]
+fn checked_in_line_needs_a_known_non_zero_count() {
+    assert_eq!(checked_in_to_show(None), None, "unknown is not zero");
+    assert_eq!(
+        checked_in_to_show(Some(0)),
+        None,
+        "a sheet-only event reads 0"
+    );
+    assert_eq!(checked_in_to_show(Some(12)), Some(12));
 }

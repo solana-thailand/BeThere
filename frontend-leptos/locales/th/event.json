@@ -61,12 +61,13 @@
   "link_copied": "คัดลอกลิงก์แล้ว!",
 
   "capacity_title": "จำนวนที่นั่ง",
-  "meta_attendance": "ผู้ลงทะเบียน",
+  "meta_attendance": "ผู้เข้าร่วม",
   "attendance_in_person": "ออนไซต์",
   "attendance_online": "ออนไลน์",
   "attendance_total": "รวมทั้งหมด",
   "attendance_spots_left": "ที่นั่งที่เหลือ",
   "attendance_full": "เต็มแล้ว",
+  "attendance_checked_in": "เข้างานแล้ว",
 
   "deposit_title": "เงินมัดจำยืนยันการเข้าร่วม",
   "promptpay_subtext": "มัดจำแบบ off-chain ผ่าน QR พร้อมเพย์ ใช้แอปธนาคารไทยได้ทุกแอป",

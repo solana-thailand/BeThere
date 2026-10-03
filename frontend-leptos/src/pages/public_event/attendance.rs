@@ -74,6 +74,13 @@ pub fn attendance_tracks(data: &PublicEventData) -> Vec<TrackAttendance> {
     .collect()
 }
 
+/// The checked-in count worth a line: only a known, non-zero number. Zero or
+/// unknown falls back to the registered counts, so a sheet-only event (which has
+/// no check-in time in D1) never reads "0 checked in".
+pub fn checked_in_to_show(checked_in_count: Option<u32>) -> Option<u32> {
+    checked_in_count.filter(|n| *n > 0)
+}
+
 /// A total line is only worth its row when two tracks have people.
 pub fn total_when_both(tracks: &[TrackAttendance]) -> Option<u32> {
     let populated = tracks.iter().filter(|t| t.count > 0).count();
@@ -101,7 +108,8 @@ pub fn attendance_row(
     event_completed: ReadSignal<bool>,
 ) -> Option<AnyView> {
     let tracks = attendance_tracks(data);
-    if tracks.is_empty() {
+    let checked_in = checked_in_to_show(data.checked_in_count);
+    if tracks.is_empty() && checked_in.is_none() {
         return None;
     }
     let total = total_when_both(&tracks);
@@ -112,6 +120,12 @@ pub fn attendance_row(
                 <Icon icon=IconName::Ticket class="icon-sm icon-muted" />
                 <div class="pe-meta-body">
                     <span class="pe-meta-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.meta_attendance))}</span>
+                    // Who is in the room leads once check-ins have begun.
+                    {checked_in.map(|n| view! {
+                        <span class="pe-detail-text">
+                            {move || format!("{n} · {}", td_string!(i18n.get_locale(), event.attendance_checked_in))}
+                        </span>
+                    })}
                     {tracks.into_iter().map(|t| view! {
                         <div class="pe-attendance-track">
                             <span class="pe-detail-text" class:pe-meta-full=move || t.is_full() && !event_completed.get()>
