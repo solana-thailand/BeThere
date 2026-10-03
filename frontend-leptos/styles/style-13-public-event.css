@@ -753,6 +753,14 @@
     margin-bottom: 0.4rem;
 }
 
+/* One line under the reserve button: who is in, and the room left. */
+.pe-hero-cta-caption {
+    margin: 0.5rem 0 0;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
 .pe-cap-bar {
     height: 6px;
     border-radius: 999px;

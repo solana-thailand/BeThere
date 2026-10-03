@@ -68,6 +68,7 @@
   "attendance_spots_left": "ที่นั่งที่เหลือ",
   "attendance_full": "เต็มแล้ว",
   "attendance_checked_in": "เข้างานแล้ว",
+  "cta_caption_registered": "ลงทะเบียนแล้ว",
 
   "deposit_title": "เงินมัดจำยืนยันการเข้าร่วม",
   "promptpay_subtext": "มัดจำแบบ off-chain ผ่าน QR พร้อมเพย์ ใช้แอปธนาคารไทยได้ทุกแอป",

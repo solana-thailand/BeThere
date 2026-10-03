@@ -68,6 +68,7 @@
   "attendance_spots_left": "spots left",
   "attendance_full": "Full",
   "attendance_checked_in": "Checked in",
+  "cta_caption_registered": "registered",
 
   "deposit_title": "Deposit Commitment",
   "promptpay_subtext": "Off-Chain deposit via PromptPay QR Code using any Thai banking app.",

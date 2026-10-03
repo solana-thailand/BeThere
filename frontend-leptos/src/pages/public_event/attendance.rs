@@ -87,6 +87,71 @@ pub fn total_when_both(tracks: &[TrackAttendance]) -> Option<u32> {
     (populated == 2).then(|| tracks.iter().map(|t| t.count).fold(0, u32::saturating_add))
 }
 
+/// What the one-line caption under the reserve button says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CtaCaption {
+    /// People are in the room: lead with that.
+    CheckedIn(u32),
+    /// Registered so far; `left` is set only when every shown track is capped,
+    /// since a sum with an uncapped track has no honest "seats left".
+    Registered { count: u32, left: Option<u32> },
+}
+
+/// The caption for the reserve button, or `None` when there is nothing to say.
+pub fn cta_caption(tracks: &[TrackAttendance], checked_in: Option<u32>) -> Option<CtaCaption> {
+    if let Some(n) = checked_in_to_show(checked_in) {
+        return Some(CtaCaption::CheckedIn(n));
+    }
+    if tracks.is_empty() {
+        return None;
+    }
+    let count = tracks.iter().map(|t| t.count).fold(0, u32::saturating_add);
+    let left = tracks
+        .iter()
+        .map(TrackAttendance::left)
+        .try_fold(0u32, |sum, left| left.map(|l| sum.saturating_add(l)));
+    Some(CtaCaption::Registered { count, left })
+}
+
+/// The caption for an event page's data.
+pub fn cta_caption_of(data: &PublicEventData) -> Option<CtaCaption> {
+    cta_caption(&attendance_tracks(data), data.checked_in_count)
+}
+
+/// The caption line under the reserve button.
+pub fn cta_caption_view(caption: CtaCaption) -> AnyView {
+    let i18n = use_i18n();
+    let full = matches!(caption, CtaCaption::Registered { left: Some(0), .. });
+    {
+        view! {
+            <p class="pe-hero-cta-caption" class:pe-meta-full=full>
+                {move || {
+                    let locale = i18n.get_locale();
+                    match caption {
+                        CtaCaption::CheckedIn(n) => {
+                            format!("{n} {}", td_string!(locale, event.attendance_checked_in))
+                        }
+                        CtaCaption::Registered { count, left: None } => {
+                            format!("{count} {}", td_string!(locale, event.cta_caption_registered))
+                        }
+                        CtaCaption::Registered { count, left: Some(0) } => format!(
+                            "{count} {} · {}",
+                            td_string!(locale, event.cta_caption_registered),
+                            td_string!(locale, event.attendance_full)
+                        ),
+                        CtaCaption::Registered { count, left: Some(left) } => format!(
+                            "{count} {} · {left} {}",
+                            td_string!(locale, event.cta_caption_registered),
+                            td_string!(locale, event.attendance_spots_left)
+                        ),
+                    }
+                }}
+            </p>
+        }
+        .into_any()
+    }
+}
+
 fn track_label(locale: Locale, track: Track) -> &'static str {
     match track {
         Track::InPerson => td_string!(locale, event.attendance_in_person),

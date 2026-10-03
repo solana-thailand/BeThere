@@ -513,6 +513,7 @@ fn render_loaded_event(
     on_cleanup(move || scroll.remove());
 
     let has_nft_image = !data.nft_image_url.is_empty();
+    let cta_caption = super::attendance::cta_caption_of(&data);
     let has_description = !data.description.is_empty();
     let has_link = !data.link.is_empty();
     let has_deposit =
@@ -625,6 +626,7 @@ fn render_loaded_event(
             };
             view! {
                 <a href="#reserve" class="btn btn-primary btn-block pe-hero-cta">{label}</a>
+                {cta_caption.map(super::attendance::cta_caption_view)}
             }.into_any()
         }}
 
