@@ -305,17 +305,20 @@ pub async fn register_attendee(
 
         let next_step = if deadline_expired {
             // Deadline expired — check if reclaim is possible
-            let capacity_available = if let Some(cap) = config.in_person_capacity {
-                // The list is already in hand; tally it the way `count_tracks`
-                // does, so its walk-in rows take in-person spots (.issues/157).
-                let in_person_count = TrackCounts::from_participation_types(
-                    attendees.iter().map(|a| a.participation_type.as_str()),
-                )
-                .in_person;
-                in_person_count < cap
-            } else {
-                true // No capacity limit = reclaim available
-            };
+            // Same rule as `capacity::has_in_person_room`: no reclaim after the end.
+            let ended = config.in_person_registration_closed(chrono::Utc::now().timestamp_millis());
+            let capacity_available = !ended
+                && if let Some(cap) = config.in_person_capacity {
+                    // The list is already in hand; tally it the way `count_tracks`
+                    // does, so its walk-in rows take in-person spots (.issues/157).
+                    let in_person_count = TrackCounts::from_participation_types(
+                        attendees.iter().map(|a| a.participation_type.as_str()),
+                    )
+                    .in_person;
+                    in_person_count < cap
+                } else {
+                    true // No capacity limit = reclaim available
+                };
 
             if capacity_available && deposit.is_none() {
                 // Reclaim: send to deposit page — the deposit handler will

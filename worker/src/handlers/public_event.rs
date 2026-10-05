@@ -193,8 +193,11 @@ pub async fn get_public_event(
     let checked_in_count = count_checked_in_when_started(&state, &config).await;
 
     // Determine track availability for frontend gating
-    let in_person_available =
-        config.event_format.has_in_person() && in_person_remaining.is_none_or(|r| r > 0);
+    // The in-person track closes when the event ends (online stays open, and in
+    // AutoOnFull mode opens because in-person is no longer available).
+    let in_person_available = config.event_format.has_in_person()
+        && in_person_remaining.is_none_or(|r| r > 0)
+        && !config.in_person_registration_closed(chrono::Utc::now().timestamp_millis());
     let online_available = config.event_format.has_online()
         && online_remaining.is_none_or(|r| r > 0)
         && is_online_registration_open(&config, in_person_available);

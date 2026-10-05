@@ -42,7 +42,20 @@ pub(super) async fn enforce_capacity(
         "capacity check"
     );
 
+    // The in-person track closes when the event ends; online stays open.
+    let in_person_closed =
+        config.in_person_registration_closed(chrono::Utc::now().timestamp_millis());
+
     if is_in_person {
+        if in_person_closed {
+            let msg = match config.event_format.has_online() {
+                true => {
+                    "In-person registration closed when the event ended. You can still register for the online track."
+                }
+                false => "Registration closed when the event ended.",
+            };
+            return Err(AppError::Validation(msg.to_string()));
+        }
         // Check in-person capacity
         if !config.has_in_person_capacity(in_person_count) {
             return Err(AppError::Validation(
@@ -59,7 +72,8 @@ pub(super) async fn enforce_capacity(
         }
 
         // Check online registration gating
-        let in_person_available = config.has_in_person_capacity(in_person_count);
+        let in_person_available =
+            !in_person_closed && config.has_in_person_capacity(in_person_count);
 
         let online_open = match config.online_open_mode {
             OnlineOpenMode::Always => true,
