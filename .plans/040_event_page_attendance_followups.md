@@ -37,3 +37,12 @@ which shipped before the 6 Oct freeze.
 
 - [ ] **Uncapped threshold (10) is my call, not the owner's.** Change
   `MIN_PUBLIC_UNCAPPED_COUNT` if the owner wants small numbers shown.
+
+## Deploys
+
+- Staging 2026-10-05: `58f4f9cc` (git `c4a33b25`). Opened on a disposable event:
+  attendance row "1 / 20", caption under the button, a checked-in attendee
+  lands on the ticket with the claim card and the Resources card.
+- Prod 2026-10-05 (owner go): release merge `da6da377`, version `69b5cf19`,
+  D1 migration 0057 applied first, backup taken. Prod write smoke did not run
+  (needs `SMOKE_TOKEN`; `dev-token` gets 401); reads and asset types pass.
