@@ -74,4 +74,21 @@ then the landing, then the share tags. Each item ships on its own.
 
 ## Status
 
-- [ ] 0.1 · [ ] 0.2 · [ ] 0.3 · [ ] 0.4 · [ ] 0.5 · [ ] 0.6
+- [x] **0.1** `8f67b707`. Verified on staging + devnet 2026-10-06: deposit
+  `4FypX24c…`, `mark_checked_in` `3zmwz7ki…`, refund `2xdP8JSu…`, all
+  finalized, agent USDC back at 38; a second claim says "already claimed"
+  (`bethere-mcp/README.md`).
+- [x] **0.2** `8773eaaa`. The phrase was rendered only by the landing footer.
+  Open for 0.5: the landing FAQ `deposit_a` still carries
+  `{{ never_forfeited }}` and the credit exit, against build-plan rule 3.
+- [x] **0.3** `85296121`. Prod, read-only, 2026-10-06: 14 held, 141 on site,
+  111 door scans, 385 online, 68 deposits / ฿34,000, 50 of 54 on-site payers
+  came. Differences from the handoff literals, all on purpose:
+  - 14, not 13: RTM #6 ran on 4 Oct and is still `active`.
+  - 141, not 142: one in-person row belongs to an event that no longer exists.
+  - "73 of 76 (RTM #1–#5)" and the RTM #1 ladder (25/45, 25/30, 16/16) are
+    not in D1: deposits before RTM #4 were taken by hand. D1 holds RTM #4–#6
+    only, and RTM #6 was postponed by the flood (several payers moved
+    online). Owner call: import that history, or show only what the system
+    holds.
+- [ ] 0.4 · [ ] 0.5 · [ ] 0.6
