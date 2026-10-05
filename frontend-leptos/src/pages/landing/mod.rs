@@ -17,6 +17,8 @@ mod notifications;
 mod page;
 mod registrations;
 mod sofar;
+/// Sponsor placements; public for `tests/landing_sponsors.rs`.
+pub mod sponsors;
 /// The shared stats fetch and duration label; public for tests.
 pub mod stats;
 pub mod theme;

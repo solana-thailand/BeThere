@@ -89,7 +89,16 @@ follow-up, not part of 0.5.
   visually hidden copy, never the zeros. Community row: our own name as a
   text wordmark plus "+ your community" (rule 5). The tape label repeats 32
   times so the loop never shows a gap at 1440 px.
-- [ ] L6–L10, L12
+- [x] L6 sponsors (`landing/sponsors.rs` + tests): six placements as
+  wireframes with empty dashed slots (no other organisation's logo), LIVE
+  for the three that ship (event-page row, poster line, group photo) and
+  PROPOSED for recording card, ticket line and badge (pinned by a test); a
+  category filter; tiers with no price (a test bans ฿ $ THB USD บาท in the
+  sponsor copy); the contact card with the name, role, Facebook, Discord and
+  a .vcf the owner gave the prototype. **Owner:** the prototype's avatar is
+  a photo of a person, kept out of the public repo until you say so; email,
+  phone and LINE were never given.
+- [ ] L7–L10, L12
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.

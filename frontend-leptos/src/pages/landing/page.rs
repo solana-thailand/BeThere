@@ -12,6 +12,7 @@ use super::how::HowItWorks;
 use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
 use super::sofar::SoFar;
+use super::sponsors::Sponsors;
 use super::stats::provide_landing_stats;
 use super::theme::initial_theme;
 use super::upcoming::UpcomingEvents;
@@ -84,6 +85,9 @@ pub fn Landing() -> impl IntoView {
 
             // ===== So far: the numbers from the system (.plans/043 L5) =====
             <SoFar />
+
+            // ===== Sponsors: where a logo goes (.plans/043 L6) =====
+            <Sponsors />
 
             // ===== Organizers: one line (F1-d) =====
             // Organizers go straight to /admin. Everyone else gets the same
