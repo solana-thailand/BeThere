@@ -394,3 +394,319 @@ a.lp-event:focus-visible {
         grid-template-columns: 1fr;
     }
 }
+
+/* 3 · how it works: a swimlane. Columns are the four steps, rows the routes */
+.lp {
+    --lp-sol: #12b886;
+    --lp-t-sol: #0b7354;
+    --lp-ai: #ff5c39;
+    --lp-t-ok: #167147;
+    --lp-t-dev: #875916;
+}
+.lp[data-theme="dark"] {
+    --lp-sol: #3ccf9e;
+    --lp-t-sol: #3ccf9e;
+    --lp-t-ok: #3ccf8e;
+    --lp-t-dev: #e0a84a;
+}
+.lp-how {
+    background: var(--lp-paper-2);
+    color: var(--lp-ink);
+    font: 400 17px/1.6 var(--lp-sans);
+    border-bottom: 2px solid var(--lp-ink);
+    padding: 72px 0;
+}
+.lp-lede {
+    color: var(--lp-ink-2);
+    font-size: 19px;
+    margin: -8px 0 32px;
+    max-width: 36em;
+    white-space: pre-line;
+}
+.lp-fineprint {
+    font-size: 13px;
+    color: var(--lp-ink-3);
+    margin: 14px 0 0;
+}
+.lp-tag {
+    font: 600 10px/1 var(--lp-sans);
+    letter-spacing: 0.12em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.lp-tag::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+}
+.lp-live {
+    color: var(--lp-t-ok);
+}
+.lp-devnet {
+    color: var(--lp-t-dev);
+}
+.lp-lanes {
+    display: grid;
+    grid-template-columns: 200px repeat(4, 1fr);
+    border: 2px solid var(--lp-ink);
+    background: var(--lp-paper);
+}
+.lp-shead {
+    padding: 16px 14px 12px;
+    border-bottom: 2px solid var(--lp-ink);
+    border-left: 1px solid var(--lp-line);
+}
+.lp-shead.lp-corner {
+    border-left: 0;
+}
+.lp-shead h3 {
+    margin: 2px 0 0;
+    font-size: 19px;
+    color: var(--lp-ink);
+}
+.lp-n {
+    font: 700 12px/1 var(--lp-sans);
+    color: var(--lp-ink-3);
+}
+.lp-lane {
+    display: contents;
+}
+.lp-lane-thb {
+    --lp-c: var(--lp-field);
+    --lp-ct: var(--lp-t-field);
+}
+.lp-lane-sol {
+    --lp-c: var(--lp-sol);
+    --lp-ct: var(--lp-t-sol);
+}
+.lp-lane-ai {
+    --lp-c: var(--lp-ai);
+    --lp-ct: var(--lp-t-warm);
+}
+.lp-lane-toggle {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    text-align: left;
+    padding: 16px 14px;
+    background: none;
+    border: 0;
+    border-top: 1px solid var(--lp-line);
+    cursor: pointer;
+    color: var(--lp-ink);
+    font: inherit;
+}
+.lp-lane-toggle:focus-visible {
+    outline: 3px solid var(--lp-field);
+    outline-offset: -3px;
+}
+.lp-ln {
+    display: grid;
+    flex: 1;
+}
+.lp-ln b {
+    font-size: 15px;
+    line-height: 1.3;
+}
+.lp-ln small {
+    font-size: 12px;
+    color: var(--lp-ink-3);
+}
+.lp-lane-toggle .lp-tag {
+    margin-top: 3px;
+}
+.lp-box {
+    width: 18px;
+    height: 18px;
+    flex: none;
+    border: 2px solid var(--lp-c);
+    display: grid;
+    place-items: center;
+    font: 800 12px/1 var(--lp-sans);
+    font-style: normal;
+    color: var(--lp-paper);
+    margin-top: 1px;
+}
+.lp-lane-toggle[aria-pressed="true"] .lp-box {
+    background: var(--lp-c);
+}
+.lp-lane-toggle[aria-pressed="true"] .lp-box::after {
+    content: "\2713";
+}
+.lp-cell {
+    position: relative;
+    padding: 26px 14px 16px;
+    border-top: 1px solid var(--lp-line);
+    border-left: 1px solid var(--lp-line);
+    transition: opacity var(--lp-micro) var(--lp-ease);
+}
+.lp-cell::before {
+    content: "";
+    position: absolute;
+    top: 12px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--lp-c) 0 10px, transparent 10px 16px);
+    animation: lp-flow 1s linear infinite;
+}
+.lp-cell::after {
+    content: "";
+    position: absolute;
+    top: 7px;
+    left: 14px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--lp-paper);
+    border: 2px solid var(--lp-c);
+}
+@keyframes lp-flow {
+    to {
+        background-position: 16px 0;
+    }
+}
+.lp-stp {
+    display: none;
+    font: 700 12px/1.3 var(--lp-sans);
+    color: var(--lp-ink);
+    margin-bottom: 2px;
+}
+.lp-cell p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--lp-ink-2);
+}
+.lp-cell em {
+    display: block;
+    font: 700 12px/1.4 var(--lp-sans);
+    font-style: normal;
+    color: var(--lp-ct);
+    margin-top: 4px;
+}
+.lp-off .lp-cell {
+    opacity: 0.22;
+}
+.lp-off .lp-cell::before {
+    animation: none;
+}
+.lp-off .lp-lane-toggle {
+    color: var(--lp-ink-3);
+}
+.lp-r {
+    font: 600 11px/1 var(--lp-sans);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1.5px solid var(--lp-ink);
+    padding: 3px 5px;
+    margin-right: 4px;
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+}
+:lang(th) .lp-r {
+    letter-spacing: 0;
+    font-size: 12px;
+}
+.lp-r-you {
+    background: var(--lp-ink);
+    color: var(--lp-paper);
+}
+.lp-r-prog {
+    background: #0b7354;
+    color: #f4f0e6;
+    border-color: #0b7354;
+}
+.lp-r-agent {
+    background: #167147;
+    color: #f4f0e6;
+    border-color: #167147;
+}
+.lp-lane-tabs {
+    display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+    .lp-cell::before {
+        animation: none;
+    }
+    .lp-cell {
+        transition: none;
+    }
+}
+@media (max-width: 860px) {
+    .lp-lanes {
+        display: block;
+        border: 0;
+        background: none;
+    }
+    .lp-shead {
+        display: none;
+    }
+    .lp-lane-tabs {
+        display: flex;
+        border: 2px solid var(--lp-ink);
+        margin-bottom: 12px;
+    }
+    .lp-lane-tabs button {
+        flex: 1;
+        font: 700 14px/1 var(--lp-sans);
+        padding: 12px 6px;
+        background: var(--lp-paper);
+        color: var(--lp-ink);
+        border: 0;
+        border-left: 2px solid var(--lp-ink);
+        cursor: pointer;
+    }
+    .lp-lane-tabs button:first-child {
+        border-left: 0;
+    }
+    .lp-lane-tabs button[aria-selected="true"] {
+        background: var(--lp-ink);
+        color: var(--lp-paper);
+    }
+    .lp-lane:not(.lp-shown) {
+        display: none;
+    }
+    .lp-lane {
+        display: block;
+        border: 2px solid var(--lp-ink);
+        margin-bottom: 12px;
+        background: var(--lp-paper);
+    }
+    .lp-lane-toggle {
+        width: 100%;
+        border-top: 0;
+        border-bottom: 2px solid var(--lp-ink);
+        cursor: default;
+    }
+    .lp-lane-toggle .lp-box {
+        display: none;
+    }
+    /* One route at a time here, so a faded row would be the only row. */
+    .lp-off .lp-cell {
+        opacity: 1;
+    }
+    .lp-cell {
+        border-left: 0;
+        padding: 14px 14px 14px 44px;
+    }
+    .lp-stp {
+        display: block;
+    }
+    .lp-cell::before {
+        top: 0;
+        bottom: 0;
+        left: 21px;
+        right: auto;
+        width: 2px;
+        height: auto;
+        background: repeating-linear-gradient(180deg, var(--lp-c) 0 10px, transparent 10px 16px);
+    }
+    .lp-cell::after {
+        top: 18px;
+        left: 15px;
+    }
+}

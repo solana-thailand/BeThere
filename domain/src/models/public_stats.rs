@@ -17,6 +17,13 @@
 //!   attendee is still on the on-site track, and how many of them were checked
 //!   in. Only events whose deposits BeThere recorded: deposits taken by hand
 //!   before the system are not in it.
+//! - `slip_check`: minutes from a slip's upload to its verification, over the
+//!   same deposits.
+//! - `refund_after_end`: minutes from the event's end to a refund's recorded
+//!   time (0 for a refund made before the end), over refunded deposits that
+//!   carry a time. Many older refunds carry none, so the sample is small; it
+//!   is published with its size, and not at all under
+//!   [`MIN_TIMING_SAMPLES`].
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +39,41 @@ pub struct PublicStats {
     pub deposits_handled_thb: u64,
     pub deposit_payers: u32,
     pub deposit_payers_came: u32,
+    #[serde(default)]
+    pub slip_check: Option<Timing>,
+    #[serde(default)]
+    pub refund_after_end: Option<Timing>,
+}
+
+/// A median duration and how many cases it is over.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Timing {
+    pub median_minutes: u32,
+    pub samples: u32,
+}
+
+/// Fewer cases than this and a median says more about the cases than the
+/// process; the landing shows no timing instead.
+pub const MIN_TIMING_SAMPLES: usize = 5;
+
+impl Timing {
+    /// Median of durations in seconds, rounded to whole minutes (the mean of
+    /// the two middle values for an even count). `None` under the minimum.
+    pub fn from_seconds(mut seconds: Vec<u64>) -> Option<Timing> {
+        if seconds.len() < MIN_TIMING_SAMPLES {
+            return None;
+        }
+        seconds.sort_unstable();
+        let mid = seconds.len() / 2;
+        let median_s = match seconds.len() % 2 {
+            1 => seconds[mid] as f64,
+            _ => (seconds[mid - 1] as f64 + seconds[mid] as f64) / 2.0,
+        };
+        Some(Timing {
+            median_minutes: u32::try_from((median_s / 60.0).round() as u64).unwrap_or(u32::MAX),
+            samples: u32::try_from(seconds.len()).unwrap_or(u32::MAX),
+        })
+    }
 }
 
 /// Which landing count a stored `participation_type` belongs to.
@@ -73,6 +115,7 @@ pub fn fold_stats(rows: &[StatsRow], measured_at: String) -> PublicStats {
         measured_at,
         ..PublicStats::default()
     };
+    let (mut slip_s, mut refund_s) = (Vec::new(), Vec::new());
     for r in rows {
         let track = stats_track(&r.participation_type);
         match (r.kind.as_str(), track) {
@@ -93,8 +136,12 @@ pub fn fold_stats(rows: &[StatsRow], measured_at: String) -> PublicStats {
                 }
             }
             ("thb", _) => s.deposits_handled_thb = r.n,
+            ("slip_s", _) => slip_s.push(r.n),
+            ("refund_s", _) => refund_s.push(r.n),
             _ => {}
         }
     }
+    s.slip_check = Timing::from_seconds(slip_s);
+    s.refund_after_end = Timing::from_seconds(refund_s);
     s
 }

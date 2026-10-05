@@ -614,27 +614,9 @@
 
 /* ── Landing Sections ────────────────────────────────────────────── */
 
-.landing-section {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 3rem 1.5rem 4rem;
-}
-
 /* ── Landing Section Headers ─────────────────────────────────────── */
 
-.landing-section-header {
-    text-align: center;
-    margin-bottom: 2.5rem;
-}
-
 /* ── Landing Typography ──────────────────────────────────────────── */
-
-.landing-h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 0.5rem;
-}
 
 .landing-email-text {
     color: var(--text-secondary);

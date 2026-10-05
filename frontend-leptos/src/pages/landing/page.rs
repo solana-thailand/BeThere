@@ -8,8 +8,10 @@ use crate::icons::{Icon, IconName};
 
 use super::auth::AuthState;
 use super::hero::Hero;
+use super::how::HowItWorks;
 use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
+use super::stats::provide_landing_stats;
 use super::theme::initial_theme;
 use super::upcoming::UpcomingEvents;
 use super::waitlist::WaitlistForm;
@@ -21,6 +23,8 @@ pub fn Landing() -> impl IntoView {
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (user_role, set_user_role) = signal(String::new());
     let theme = RwSignal::new(initial_theme());
+    // One stats fetch for every section that shows a number (rule 1).
+    provide_landing_stats();
 
     // Check auth on mount
     Effect::new(move |_| {
@@ -74,28 +78,8 @@ pub fn Landing() -> impl IntoView {
             // ===== Upcoming Events (two cards + see all) =====
             <UpcomingEvents />
 
-            // ===== How It Works — three steps on one line =====
-            <section id="how-it-works" class="landing-section">
-                <div class="landing-section-header">
-                    <h2 class="landing-h2">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.title))}
-                    </h2>
-                </div>
-                <ol class="landing-how-row">
-                    <li class="landing-how-step">
-                        <Icon icon=IconName::Ticket class="icon-md"/>
-                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s1_title))}</span>
-                    </li>
-                    <li class="landing-how-step">
-                        <Icon icon=IconName::QrCode class="icon-md"/>
-                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s2_title))}</span>
-                    </li>
-                    <li class="landing-how-step">
-                        <Icon icon=IconName::Recycle class="icon-md"/>
-                        <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.how.attendee.s4_title))}</span>
-                    </li>
-                </ol>
-            </section>
+            // ===== How it works: the swimlane (.plans/043 L4) =====
+            <HowItWorks />
 
             // ===== Organizers: one line (F1-d) =====
             // Organizers go straight to /admin. Everyone else gets the same
@@ -180,7 +164,7 @@ pub fn Landing() -> impl IntoView {
                     // Column 2 — Product
                     <div class="landing-footer-col">
                         <h4>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.product))}</h4>
-                        <a href="#how-it-works">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.how))}</a>
+                        <a href="#how">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.how))}</a>
                         <a href="/faq">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.faq))}</a>
                         <A href="/login">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.staff_portal))}</A>
                     </div>

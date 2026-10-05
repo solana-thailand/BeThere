@@ -66,7 +66,21 @@ follow-up, not part of 0.5.
   event if one is set, else Discord. No seat chips: the listing has no
   counts. 21 dead `landing-*` rules removed. Checked 390/1440, TH/EN, both
   themes (found and fixed the app's global `h3` colour winning in light).
-- [ ] L4–L10, L12
+- [x] L4 how it works (`landing/how.rs`, `landing/stats.rs` + tests): the
+  swimlane, three routes (baht LIVE, USDC DEVNET, agent DEVNET), the last
+  route on cannot be turned off, tabs on phones, `?track=sol|ai`. The baht
+  timings are medians from `GET /api/public/stats`, now with `slip_check` and
+  `refund_after_end` (second D1 statement: D1 rejects a 6-term compound
+  SELECT). Prod, read-only, 2026-10-06: slips 68, median 5.7 min; refunds
+  with a time only 8, median 67 h, not the handoff's "31 h over 22". A
+  timing under 5 cases is not published, and the footnote names only the
+  published ones with their sample size. Agent claim back is no longer
+  "proposed" (0.1 shipped on devnet); the cap is "the cap you set", not a
+  literal 10 USDC; "฿500 by PromptPay" became "the deposit by PromptPay".
+  The "why USDC" panel and the sandbox block wait for 0.4. Checked at
+  390/1440, TH/EN, both themes, with a mocked stats response and with stats
+  failing; every colour pair ≥ 4.76:1.
+- [ ] L5–L10, L12
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.

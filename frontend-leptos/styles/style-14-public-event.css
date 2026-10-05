@@ -115,29 +115,6 @@
 /* ── Landing Events ──────────────────────────────────────────────── */
 
 /* How it works: three steps on one line (.plans/038 P1-1). */
-.landing-how-row {
-    list-style: none;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.75rem;
-    max-width: 640px;
-    margin: 0 auto;
-    padding: 0;
-}
-
-.landing-how-step {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    text-align: center;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-}
-
-.landing-how-step .icon-md {
-    color: var(--accent);
-}
 
 /* ── Sandbox Demo Card ───────────────────────────────────────────── */
 

@@ -1,5 +1,7 @@
 -- GET /api/public/stats: aggregates as (kind, stored participation_type, n,
--- checked_in) rows. The track of each stored value is decided in Rust by
+-- checked_in) rows. Timings are a separate statement
+-- (public_stats_timings.sql): D1 caps a compound SELECT at a few terms. The
+-- track of each stored value is decided in Rust by
 -- ParticipationType::parse (domain/src/models/public_stats.rs), never by a
 -- SQL predicate, so the two cannot drift (same rule as track_counts.rs).
 WITH

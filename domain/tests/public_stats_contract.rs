@@ -24,6 +24,8 @@ fn field_names_are_the_landing_contract() {
             "measured_at",
             "online_registrations",
             "onsite_registrations",
+            "refund_after_end",
+            "slip_check",
         ]
     );
 }
@@ -77,4 +79,53 @@ fn rows_fold_into_the_landing_numbers() {
         (68, 34_000)
     );
     assert_eq!((s.deposit_payers, s.deposit_payers_came), (54, 50));
+}
+
+use event_checkin_domain::models::public_stats::{MIN_TIMING_SAMPLES, Timing};
+
+#[test]
+fn timings_are_medians_with_their_sample_size() {
+    let mut rows: Vec<StatsRow> = [60, 600, 300, 120, 900]
+        .iter()
+        .map(|&s| row("slip_s", "", s, 0))
+        .collect();
+    rows.extend(
+        [3600, 7200, 10800, 14400, 18000, 21600]
+            .iter()
+            .map(|&s| row("refund_s", "", s, 0)),
+    );
+    let s = fold_stats(&rows, String::new());
+    // 60 120 300 600 900 → 300 s.
+    assert_eq!(
+        s.slip_check,
+        Some(Timing {
+            median_minutes: 5,
+            samples: 5
+        })
+    );
+    // Even count: (10800 + 14400) / 2 = 12600 s = 210 min.
+    assert_eq!(
+        s.refund_after_end,
+        Some(Timing {
+            median_minutes: 210,
+            samples: 6
+        })
+    );
+}
+
+#[test]
+fn too_few_cases_publish_no_timing() {
+    let rows: Vec<StatsRow> = (0..MIN_TIMING_SAMPLES - 1)
+        .map(|_| row("refund_s", "", 60, 0))
+        .collect();
+    assert_eq!(fold_stats(&rows, String::new()).refund_after_end, None);
+    assert_eq!(Timing::from_seconds(Vec::new()), None);
+}
+
+#[test]
+fn a_payload_without_timings_still_parses() {
+    let old = r#"{"measured_at":"","events_held":1,"onsite_registrations":0,"online_registrations":0,"door_scans":0,"deposits_handled_count":0,"deposits_handled_thb":0,"deposit_payers":0,"deposit_payers_came":0}"#;
+    let s: event_checkin_domain::models::public_stats::PublicStats =
+        serde_json::from_str(old).expect("parses");
+    assert_eq!((s.slip_check, s.refund_after_end), (None, None));
 }
