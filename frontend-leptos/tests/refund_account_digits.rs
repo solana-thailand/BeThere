@@ -31,6 +31,10 @@ fn the_note_fits_the_bank_apps_40_char_limit() {
     let note = refund_note("Solana Thailand x AI Builder Night Bangkok Edition #6");
     assert!(note.chars().count() <= MAX_REFUND_NOTE_CHARS, "{note}");
     assert!(note.starts_with("คืนค่างาน Solana"));
+    assert!(
+        note.ends_with(" #6"),
+        "the edition survives the cut: {note}"
+    );
     assert!(!note.ends_with(' '));
 }
 
@@ -42,4 +46,23 @@ fn a_cut_never_strands_a_thai_mark() {
     assert_eq!(fit_chars("คืน", 2), "คื");
     assert_eq!(fit_chars("abc", 2), "ab");
     assert_eq!(fit_chars("short", 40), "short");
+}
+
+#[test]
+fn series_names_keep_their_edition() {
+    use event_checkin_frontend::pages::admin_deposit_bank_info::{refund_note, short_event_name};
+    assert_eq!(
+        short_event_name("Solana x AI Builders: The Road to Mainnet #6 (Bangkok)"),
+        "Solana x AI Builders #6"
+    );
+    assert_eq!(
+        refund_note("Solana x AI Builders: The Road to Mainnet #5 (Bangkok)"),
+        "คืนค่างาน Solana x AI Builders #5"
+    );
+    assert_eq!(
+        short_event_name("Solana in Latent Space Part 7"),
+        "Solana in Latent Space Part 7"
+    );
+    assert_eq!(short_event_name("IslandDAO V4 Demo"), "IslandDAO V4 Demo");
+    assert_eq!(short_event_name("Meetup: Night ครั้งที่ 3"), "Meetup ครั้งที่ 3");
 }

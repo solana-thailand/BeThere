@@ -19,7 +19,9 @@ use crate::api::{
 };
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
-use crate::pages::admin_deposit_bank_info::{refund_bank_info, refund_copy_buttons, refund_note};
+use crate::pages::admin_deposit_bank_info::{
+    load_refund_note, refund_bank_info, refund_copy_buttons, refund_note_editor,
+};
 use crate::pages::admin_deposit_credit_requests::CreditRefundRequests;
 use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
@@ -481,6 +483,18 @@ pub fn AdminDeposits(
 
     let has_event = move || active_event_id.get().is_some();
 
+    // One transfer note per event, shared by every row's Copy note button:
+    // the organizer's saved edit, else a default from the event name.
+    let (refund_note_text, set_refund_note_text) = signal(String::new());
+    Effect::new(move |_| {
+        let name = event_name.get();
+        let note = match active_event_id.get() {
+            Some(id) => load_refund_note(&id, &name),
+            None => String::new(),
+        };
+        set_refund_note_text.set(note);
+    });
+
     view! {
         <div class="admin-deposits">
             // No event selected
@@ -730,6 +744,8 @@ pub fn AdminDeposits(
                         </div>
                     </Show>
 
+                    {refund_note_editor(refund_note_text, set_refund_note_text, active_event_id.into())}
+
                     <RefundQueueFilterBar
                         refunds=refunds
                         context=refund_context
@@ -778,7 +794,7 @@ pub fn AdminDeposits(
                             let copy_buttons = refund_copy_buttons(
                                 item.bank_account.clone(),
                                 item.amount_thb,
-                                refund_note(&event_name.get()),
+                                refund_note_text.into(),
                                 set_toast,
                             );
                             // Came to the event: refund these first.
