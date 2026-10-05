@@ -103,6 +103,10 @@ follow-up, not part of 0.5.
   role logic `page.rs` had (admin/organizer → dashboard, signed in → DM,
   else the waitlist form, restyled in place). `#waitlist` anchors now point
   at `#join`. Checked signed out and signed in, both themes.
+- [x] "Why USDC on Solana" (`#usdc`, under the swimlane, DEVNET tag): no
+  gated content in it; the prototype's sandbox block stays out until 0.4.
+  The hero's "show up" keyword points at `#goal` until the ladder (`#story`,
+  L8) exists; a browser check finds no dead in-page anchor.
 - [ ] L8–L10, L12; the footer is still the app's (restyle after L10).
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the

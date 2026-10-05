@@ -1099,3 +1099,68 @@ a.lp-event:focus-visible {
 .lp-join .landing-waitlist-error {
     color: var(--lp-ink-2);
 }
+
+/* how it works: "why USDC on Solana", under the swimlane */
+.lp-usdc {
+    margin-top: 28px;
+    padding: 26px;
+    display: grid;
+    grid-template-columns: 0.8fr 1.2fr;
+    gap: 10px 32px;
+    border-top: 0;
+    background-image: linear-gradient(90deg, #9945ff, #8752f3 25%, #5497d5 50%, #43b4ca 70%, #19fb9b);
+    background-size: 100% 4px;
+    background-repeat: no-repeat;
+}
+.lp-usdc .lp-kicker {
+    color: var(--lp-t-field);
+}
+.lp-usdc h3 {
+    margin: 0;
+    font-size: 30px;
+    letter-spacing: -0.03em;
+    line-height: 1.15;
+    white-space: pre-line;
+    color: var(--lp-ink);
+}
+.lp-ref {
+    margin: 12px 0 0;
+    font-size: 14px;
+    color: var(--lp-ink-2);
+}
+.lp-usdc ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 12px;
+    counter-reset: lp-u;
+}
+.lp-usdc li {
+    display: grid;
+    gap: 2px;
+    counter-increment: lp-u;
+    padding-left: 34px;
+    position: relative;
+}
+.lp-usdc li::before {
+    content: counter(lp-u);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--lp-ink);
+    display: grid;
+    place-items: center;
+    font: 700 12px/1 var(--lp-sans);
+}
+.lp-usdc li span {
+    color: var(--lp-ink-2);
+    font-size: 15px;
+}
+@media (max-width: 860px) {
+    .lp-usdc {
+        grid-template-columns: 1fr;
+    }
+}

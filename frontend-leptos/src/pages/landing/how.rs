@@ -361,7 +361,43 @@ pub fn HowItWorks() -> impl IntoView {
                     {Route::ALL.into_iter().map(lane).collect::<Vec<_>>()}
                 </div>
                 <p class="lp-fineprint">{footnote}</p>
+                <UsdcPanel />
             </div>
         </section>
+    }
+}
+
+/// The thesis the panel quotes (ASKS-4 §11, the prototype's link).
+const SOLANA_AI_THESIS: &str = "https://solana.com/news/solana-ai-the-democratization-layer";
+
+/// "Why USDC on Solana": where the product is going, labelled DEVNET because
+/// that is where the escrow runs. The prototype's sandbox block waits for
+/// build plan 0.4.
+#[component]
+fn UsdcPanel() -> impl IntoView {
+    let tr = crate::locale::tr;
+    view! {
+        <div class="lp-card lp-usdc" id="usdc">
+            <div>
+                <p class="lp-kicker">{tr(|l| td_string!(l, landing.how.usdc_kicker))}" "<span class="lp-tag lp-devnet">"DEVNET"</span></p>
+                <h3>{tr(|l| td_string!(l, landing.how.usdc_title))}</h3>
+                <p class="lp-ref">
+                    {tr(|l| td_string!(l, landing.how.usdc_ref))}" "
+                    <a class="lp-kw" href=SOLANA_AI_THESIS target="_blank" rel="noopener noreferrer">
+                        {tr(|l| td_string!(l, landing.how.usdc_ref_link))}" ↗"
+                    </a>
+                </p>
+            </div>
+            <ol>
+                <li>
+                    <b>{tr(|l| td_string!(l, landing.how.usdc_1_t))}</b>
+                    <span>{tr(|l| td_string!(l, landing.how.usdc_1_d))}</span>
+                </li>
+                <li>
+                    <b>{tr(|l| td_string!(l, landing.how.usdc_2_t))}</b>
+                    <span><Markup text=tr(|l| td_string!(l, landing.how.usdc_2_d)) /></span>
+                </li>
+            </ol>
+        </div>
     }
 }
