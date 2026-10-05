@@ -91,4 +91,14 @@ then the landing, then the share tags. Each item ships on its own.
     only, and RTM #6 was postponed by the flood (several payers moved
     online). Owner call: import that history, or show only what the system
     holds.
-- [ ] 0.4 · [ ] 0.5 · [ ] 0.6
+- [ ] 0.4 · [ ] 0.5
+- [~] **0.6** built on `develop`: `og:image` / `twitter:image` were the 400×400
+  `/api/badge.svg`, which X, Facebook and LINE do not render; now
+  `/og-image.png`, 1200×630, one bilingual card (crawlers do not run the SPA,
+  so the head cannot pick a language). Favicon and apple-touch-icon are the
+  brand PNGs (64, 180). Source `frontend-leptos/share/og-card.html`, re-render
+  with `share/render_og.mjs`. The tags are absolute prod URLs, so the
+  "Done when" (X, Facebook, LINE previews) can only be checked after a prod
+  deploy, with each platform's debugger. Not in scope: per-event previews
+  (needs the Worker to rewrite the head of `/e/*`), PWA manifest icons
+  (still the SVG).
