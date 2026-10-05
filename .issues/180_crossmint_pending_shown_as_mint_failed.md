@@ -1,6 +1,6 @@
 # 180: A slow Crossmint mainnet mint is shown as "Minting Failed" (502)
 
-**Status:** fixed on develop (`b99ee8f4` merge of `8a777b36`, plus `1598dd0f`; 2026-09-30, session `event-checkin-b5`). On staging `1598dd0f`; not on prod. Was: open (2026-09-30). Found by the owner on prod `438c392d` while claiming a badge; diagnosed from `wrangler tail` by session `event-checkin-b5`.
+**Status:** deployed to prod `dbd342c9` (2026-09-30, `deploy/production/20260930T064022Z`, version `60bcd02d`, session `event-checkin-b5`; staging ran the same tree first, and the claim 504/502 A/B was re-run on it). The served wasm carries `claim-pending` and "Still minting". Was: fixed on develop (`b99ee8f4` merge of `8a777b36`, plus `1598dd0f`; 2026-09-30, session `event-checkin-b5`). On staging `1598dd0f`; not on prod. Was: open (2026-09-30). Found by the owner on prod `438c392d` while claiming a badge; diagnosed from `wrangler tail` by session `event-checkin-b5`.
 
 ## What happened
 

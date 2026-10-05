@@ -46,7 +46,6 @@
   "meta_when": "เมื่อไร",
   "meta_where": "ที่ไหน",
   "meta_format": "รูปแบบ",
-  "meta_capacity": "จำนวนที่นั่ง",
   "time_tba": "เวลาแจ้งภายหลัง",
   "time_unit": " น.",
   "event_completed": "งานจบแล้ว",
@@ -62,10 +61,14 @@
   "link_copied": "คัดลอกลิงก์แล้ว!",
 
   "capacity_title": "จำนวนที่นั่ง",
-  "capacity_in_person_left": "ที่นั่งออนไซต์ที่เหลือ",
-  "capacity_in_person_full": "ออนไซต์ — เต็มแล้ว",
-  "capacity_online_left": "ที่นั่งออนไลน์ที่เหลือ",
-  "capacity_online_full": "ออนไลน์ — เต็มแล้ว",
+  "meta_attendance": "ผู้เข้าร่วม",
+  "attendance_in_person": "ออนไซต์",
+  "attendance_online": "ออนไลน์",
+  "attendance_total": "รวมทั้งหมด",
+  "attendance_spots_left": "ที่นั่งที่เหลือ",
+  "attendance_full": "เต็มแล้ว",
+  "attendance_checked_in": "เข้างานแล้ว",
+  "cta_caption_registered": "ลงทะเบียนแล้ว",
 
   "deposit_title": "เงินมัดจำยืนยันการเข้าร่วม",
   "promptpay_subtext": "มัดจำแบบ off-chain ผ่าน QR พร้อมเพย์ ใช้แอปธนาคารไทยได้ทุกแอป",
@@ -148,5 +151,7 @@
   "err_parse": "ข้อมูลตอบกลับผิดรูปแบบ",
   "err_read": "อ่านข้อมูลไม่สำเร็จ",
   "err_network": "เครือข่ายขัดข้อง",
-  "err_bot_check": "การยืนยันว่าเป็นคนจริงไม่ผ่านหรือหมดเวลา กรุณาลองอีกครั้ง"
+  "err_bot_check": "การยืนยันว่าเป็นคนจริงไม่ผ่านหรือหมดเวลา กรุณาลองอีกครั้ง",
+  "organized_by": "จัดโดย",
+  "sponsors_title": "ผู้สนับสนุน"
 }

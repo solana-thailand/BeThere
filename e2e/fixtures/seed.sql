@@ -60,3 +60,12 @@ INSERT OR REPLACE INTO attendees (
 -- A poster (inline SVG, no network) so the /discover card layout and the
 -- event hero image are covered by the snapshots (.plans/038 P3-b).
 UPDATE events SET poster_url = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNTAwIj48ZGVmcz48bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwIiB5MT0iMCIgeDI9IjEiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNmZjVjMzkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMzYjFkNmUiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjUwMCIgZmlsbD0idXJsKCNnKSIvPjx0ZXh0IHg9IjMwIiB5PSI0NDAiIGZvbnQtc2l6ZT0iNTYiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmaWxsPSIjZmZmIj5XT1JLU0hPUDwvdGV4dD48L3N2Zz4=' WHERE id = 'e2e-free';
+
+-- Organizer attribution and a sponsor row on the event page snapshot
+-- (plan 039 F7). Sponsors carry no logo URL: a logo is https-only, which
+-- would make the snapshot depend on the network, so the names render instead.
+INSERT OR REPLACE INTO organizations (id, name, created_at, updated_at)
+VALUES ('e2e-org', 'E2E Community', '2029-12-01T00:00:00Z', '2029-12-01T00:00:00Z');
+UPDATE events SET organization_id = 'e2e-org',
+  sponsors_json = '[{"name":"Example Labs","logo_url":"","link":"https://example.com"},{"name":"Sample Co","logo_url":"","link":""}]'
+  WHERE id = 'e2e-event';

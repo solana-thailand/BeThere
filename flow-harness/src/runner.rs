@@ -63,6 +63,9 @@ use crate::error::{HarnessError, HarnessResult};
 ///
 /// `async_trait` is used so flows can be held as `Box<dyn Flow>` (heterogeneous
 /// collection). Native async traits are not yet object-safe on stable Rust.
+// rustc 1.99 clippy flags the `#[must_use]` that `async_trait` puts on the boxed
+// future it generates: the lint fires on expanded code we do not write.
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait Flow: Send + Sync {
     /// Stable flow identifier used in `summary.json` and logs. Conventionally

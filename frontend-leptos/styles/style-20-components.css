@@ -294,12 +294,16 @@
     justify-content: flex-end;
     max-width: 1120px;
     margin: 0 auto;
-    padding: 0 12px;
+    /* Off the top edge, so the chip does not read as clipped (QA item 6). */
+    padding: 6px 12px 2px;
 }
 
+/* The button keeps a 44 px tap target; the chip inside is what is drawn. */
 .lang-switch {
     min-height: 44px;
-    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 4px;
     background: none;
     border: none;
     color: var(--text-secondary);
@@ -308,9 +312,22 @@
     cursor: pointer;
 }
 
+.lang-switch-chip {
+    display: inline-block;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    line-height: 1.3;
+}
+
 .lang-switch:hover,
 .lang-switch:focus-visible {
     color: var(--accent);
+}
+
+.lang-switch:hover .lang-switch-chip,
+.lang-switch:focus-visible .lang-switch-chip {
+    border-color: var(--accent);
 }
 
 /* Toast (components::Toast). Moved out of inline styles; same look. The

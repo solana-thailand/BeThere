@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::config::CommunityLink;
 use super::defaults::default_true;
 use super::enums::{EscrowStatus, EventFormat, EventStatus, EventVisibility, OnlineOpenMode};
+use super::sponsor::Sponsor;
 
 /// Request body for POST /api/events — create a new event.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,6 +159,9 @@ pub struct CreateEventRequest {
     /// Community/social links.
     #[serde(default)]
     pub community_links: Vec<CommunityLink>,
+    /// Sponsors for the public page logo row (migration 0057).
+    #[serde(default)]
+    pub sponsors: Vec<Sponsor>,
     /// Organization calendar subscribe URL (Google Calendar embed URL).
     #[serde(default)]
     pub calendar_subscribe_url: String,
@@ -355,6 +359,9 @@ pub struct UpdateEventRequest {
     /// Community/social links. Replaces all existing links.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community_links: Option<Vec<CommunityLink>>,
+    /// Sponsors. Replaces the whole list; `Some(vec![])` removes the row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sponsors: Option<Vec<Sponsor>>,
     /// Organization calendar subscribe URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub calendar_subscribe_url: Option<String>,

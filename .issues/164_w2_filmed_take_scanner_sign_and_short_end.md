@@ -1,6 +1,6 @@
 # 164: The W2 filmed take has two unrehearsed steps: the scanner's wallet sign and a short event end
 
-**Status:** open (2026-09-29): gap 2 fixed on develop (`0da1be79`, 2026-09-29) and rehearsed on staging; gap 1 (the owner's Phantom walk-through) is still open. Found by session `event-checkin-cf` during the W2 devnet rehearsal (`.plans/033` §6). Both gaps must be closed before the final demo take on Thu 8 Oct.
+**Status:** closed (2026-10-01): gap 1 was walked by the owner in a browser on staging, and the on-chain check-in `4BWFwqJQ…` finalized on devnet, signed by the organizer `9Bz7…` in Phantom. Gap 2 (`0da1be79`) is on prod since `438c392d`. Was: open (2026-09-29): gap 2 fixed on develop (`0da1be79`, 2026-09-29) and rehearsed on staging; gap 1 (the owner's Phantom walk-through) is still open. Found by session `event-checkin-cf` during the W2 devnet rehearsal (`.plans/033` §6). Both gaps must be closed before the final demo take on Thu 8 Oct.
 
 ## What the rehearsal covered
 
@@ -67,3 +67,37 @@ The staff-scan CPU from this run is `.benchmarks/007`.
 
 - `solana transfer` and `spl-token transfer` now work against devnet (both finalized, 28 Sep). The 27 Sep "error sending request" did not reproduce.
 - Badge minting can't be filmed on staging (no Crossmint secret). W2 already plans to film the badge on prod, where it is live, so it is a separate clip.
+
+## Gap 1 rehearsal fixture (2026-09-30, session `event-checkin-b5`)
+
+Staging, devnet. Built with `demo_fixture` plus `bethere-mcp` `register` and
+`pay_deposit` (the first half of `/tmp/gap2/run.py`; driver
+`/tmp/ec-b5-rehearsal/setup.py`, outside the repo). Check-in was left undone
+for the owner's Phantom run:
+
+- Event `agent-demo-meetup-1790757649`, active. It ends Tue 6 Oct 23:58 ICT;
+  `mark_checked_in` needs `clock <= event_end`.
+- Escrow `97cGnfZCWQC43AwycSWV3yPQUq9GvbAuvNxL87od7bau`, initialized. The
+  scanner's on-chain prompt shows because `deposit_enabled` is true and
+  `escrow_address` is set.
+- Attendee `01a0f179-9b4a-7a13-82a0-cf4d2d629dfe` ("Phantom Rehearsal"). It
+  paid 1 USDC from agent wallet `54GK…` (verified), and D1 `checked_in_at` is
+  NULL.
+- Ticket (QR):
+  `https://bethere-staging.solana-thailand.workers.dev/ticket/01a0f179-9b4a-7a13-82a0-cf4d2d629dfe?event_id=agent-demo-meetup-1790757649`
+- The organizer to sign in Phantom (devnet) is `9Bz7p4RWdX7eaR4hFUeCc7aSZjDHsie8q1u8imwavkBN`.
+
+## Gap 1 walked (2026-10-01, owner; verified by session `event-checkin-b5`)
+
+The owner used desktop Chrome with the Phantom extension on Devnet, and the staging scanner (`/staff`, signed in as super_admin) against the fixture above:
+- The event was selected. `escrow_enabled=true format=InPerson`.
+- The ticket QR was scanned (BarcodeDetector) and gave `check-in successful: Phantom Rehearsal`.
+- Mark Checked In On-Chain → Connect Phantom → `9Bz7p4RW…wavkBN` → Sign TX.
+- Signature `4BWFwqJQFF5pfQ6Pr9SWU6q5BRVD6DKdfvYcTXQqRrzJ6yvRbHuDvShqgrQidTWaFJ2xXW3TDnTc1WvVDG2oJscp`
+  is `finalized` with `err: null`. It invoked the escrow program `C6HDeZ…`, and the signer is the organizer.
+
+Warnings in the console, none blocking:
+- The wallet cluster could not be detected, so the cluster check was skipped.
+- The pre-send simulation was skipped ("no RPC URL").
+- The page signs with `signTransaction` and broadcasts to `api.devnet.solana.com` itself, so Phantom's network setting does not decide where the transaction lands.
+- `@solana/web3.js` loads from unpkg, but it is version-pinned (1.95.3) with SRI (`solana_wallet.js` `WEB3_INTEGRITY`).

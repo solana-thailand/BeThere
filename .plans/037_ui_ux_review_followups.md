@@ -21,12 +21,46 @@ groups and a backlog.
   - unmapped keys borrowed the standard slots.
 - [x] Fix: `ColumnMapping::resolve` everywhere. Regression test with the
   real header row. Commit `31c5d469`, `.issues/167`.
-- [ ] Staging repro. The fix is not on staging and this session may not
+- [x] Staging repro. **Done (2026-10-03, `event-checkin-0b`)**, see the last
+  paragraph of this item. The fix is not on staging and this session may not
   deploy, so this waits for the next staging deploy (owner).
   **Blocked (2026-09-29, `event-checkin-8c`):** the fix is now on staging (`bb8ac906`) and prod, but the repro needs a sheet with the Luma header shared with staging, which staging lacks (owner), and it would append rows to that sheet.
   **Owner question (2026-09-30, `event-checkin-aa`):** "may we share a sheet
   with the Luma header row with the staging service account, knowing the
   repro appends a registration row to it?"
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** the owner shares a sheet with the
+  Luma header with the staging service account (the same answer opens the
+  two-event run below).
+  **Partial run (2026-10-02, `event-checkin-4f`):** the owner shared sheet
+  `19DIsrxl…` with staging. Staging can read it (sync `success`,
+  `total_in_sheet` 0 before the run). But its header row is BeThere's own
+  named layout (`contact_handle` at 11, `claim_token` at 21), **not** a Luma
+  export, so it cannot reproduce 167 part A. On it, event `r037-a-1790927701`
+  appended a row with the handle at 11 and the claim token at 21. A
+  sheet→D1 sync and a duplicate registration both returned the UUID
+  `…5b2d81`, not `@r037_handle_alpha`. Correct mapping, but not the Luma case.
+  **Reopen trigger:** the owner puts the real Luma header row on the sheet
+  (or shares a Luma-export sheet), or OKs this session writing that header to
+  the throwaway sheet. Then rerun: register, sync, check that `claim_token`
+  stays a UUID and the handle lands in the Luma handle column.
+  **Done (2026-10-03, `event-checkin-0b`).** The owner lifted the row-1
+  protection; the session wrote the 33-column Luma header (from
+  `domain/tests/unmapped_column_aliasing.rs`) to sheet `19DIsrxl…`, which
+  also cleared the 2 old test rows. On staging, event `r037-c-1791038583`
+  (created, activated, KV visible): one registration appended one row.
+  `claim_token` (L, index 11) holds the UUID `…24190d`; `api_id`, name,
+  email, `created_at`, `approval_status`, `ticket_name` and
+  `Participation_Type` landed in their Luma columns. `qr_code_url` (10),
+  `amount_tax` (12), the handle column (30) and `payment_status` (32) stayed
+  empty. A sheet→D1 sync returned `updated 1, errors 0`, and a duplicate
+  registration returned the same attendee and the same UUID token, not
+  `@r037_handle_gamma`. So 167 part A holds end to end.
+  **Correction to the reopen note above:** the handle does *not* land in the
+  Luma `Contact Handle / โปรดระบุ Username` column. The header has no handle
+  key `ColumnMapping` knows, and the regression test asserts index 30 stays
+  empty. The handle lives in D1 only. Aliasing that header is a product call
+  (organizers would then see handles in their sheet); it is not part of 167.
+  Event C is archived; its attendee row stays in staging D1 and one row in the sheet.
 - [ ] Part B of `.issues/167`: the dedup falls back to a shared sheet across
   events. Needs a product decision.
   **Blocked:** the owner decided on 2026-09-29 (`.issues/167`), but the implementation is in `worker/`, peer `event-checkin-16`'s area.
@@ -48,11 +82,26 @@ groups and a backlog.
     `main` on 13 Aug (`f3c66652`); Cloudflare keeps only 10 deployments, so
     the exact prod date cannot be read back. The staging smoke's roster read
     ran through the new path and passed.
-  - [ ] A staging run with two events sharing one sheet (optional now).
-    **Former owner questions:** "may `feature/167-empty-roster` merge into
-    `develop` before RTM #6 (4 Oct), or after the 8 Oct take?" and "did prod
-    first get `fa0dca12` later than 12 Aug? If so, on what date? The cutoff
-    constant moves to it."
+  - [x] A staging run with two events sharing one sheet (optional now).
+    **Done (2026-10-02, `event-checkin-4f`)** on staging, on sheet
+    `19DIsrxl…` (the header doesn't matter here), with `dev-token`. Events
+    `r037-a-1790927701` (A) and `r037-b-1790927850` (B) were both created
+    after the cutoff. Before any registration on B, B's roster read 0, not
+    A's row. The same account then registered on B and got a new attendee
+    (`…1cb7fe`) and claim token (`…e13e83`), not A's (`…7dcbeb`/`…5b2d81`), so
+    there was no cross-event dedup. Each roster lists only its own attendee.
+    B's sheet sync counts 1 of the sheet's 2 rows and leaves B's roster at 1.
+    The sheet holds both rows, each with its own handle and token. Both
+    events are archived afterwards; their D1 rows and the 2 sheet rows remain.
+    Both former owner questions (merge timing, prod date of `fa0dca12`) are
+    answered above.
+    **Gate (2026-10-01, `event-checkin-a6`):** the same one as the staging
+    repro at the top of this section. Staging has no sheet shared with its
+    service account (no `CONTACTS_SHEET_ID`), and the run appends rows to
+    whatever sheet it uses. The code needs no deploy; it is on staging and
+    prod. Unit coverage is `worker/tests/empty_roster_policy.rs`.
+    **Reopen trigger:** the owner shares a sheet with the staging service
+    account (the same answer unblocks both items).
 
 ## 2. EN + TH for attendee pages
 
@@ -144,6 +193,8 @@ Owner decisions raised by phase 3:
   **Owner question (2026-09-30, `event-checkin-aa`):** "has the legal review
   of the PDPA section numbers (s.37, s.29, s.38 vs. s.33 and s.24(3)) come
   back, and with which numbers?"
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** the legal review returns section
+  numbers; then change EN and TH together.
 - [x] **Kept (2026-09-29):** it renders only in `usdc_payment.rs`, the escrow
   path where an unclaimed deposit is really lost.
   Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
@@ -262,6 +313,7 @@ Owner decisions raised by phase 3:
   `event-checkin-4e`): it moves layout on every demo-facing page one week
   before the 6–8 Oct freeze; start it after the take.
   **Blocked:** the 6–8 Oct demo freeze; start after the take. No owner question; it is dated.
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** the 8 Oct take is filmed.
 - [x] Remaining hardcoded colours in other Rust files (2026-09-29, session
   `event-checkin-4e`). 20 inline text colours in 6 files now use tokens:
   `#94a3b8`/`#64748b` → `--text-muted`, `#cbd5e1` → `--text-secondary`,

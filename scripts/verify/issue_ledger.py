@@ -53,6 +53,9 @@ STATUS_RE = re.compile(r"^\W*status\W*:?", re.IGNORECASE)
 FIELD_RE = re.compile(r"^[>\s]*(?:\*\*)?[A-Z][\w ]{1,40}(?:\*\*)?\s*:")
 SHA_RE = re.compile(r"`([0-9a-f]{7,40})`")
 BRANCH_RE = re.compile(r"`((?:feature|hotfix|release|fix)/[\w./-]+)`")
+# How a merge commit names its source: "Merge branch feature/x into develop",
+# "Merge feature/x into the post-RTM6 integration branch", "Merge branch 'feature/x'".
+MERGE_RE = re.compile(r"^Merge (?:branch )?'?((?:feature|hotfix|release|fix)/[\w./-]+?)'?(?:\s|$)")
 # How commit messages name an issue: `.issues/138`, `#138`, `docs(138)`, `issue 138`.
 LINK_RE = re.compile(r"(?:\.issues/|#|\(|\b[Ii]ssue )(\d{3})\b")
 # Doc-only commits land after the deploy they describe; they are not the fix.
@@ -133,6 +136,15 @@ def commits_by_issue() -> dict[str, list[str]]:
     return index
 
 
+def merged_branch_names(subjects: list[str]) -> set[str]:
+    """Branches a merge commit names as its source; deleting them after the merge loses nothing."""
+    return {m.group(1) for s in subjects if (m := MERGE_RE.match(s))}
+
+
+def merged_into_head() -> set[str]:
+    return merged_branch_names(git("log", "--merges", "--format=%s", "HEAD").stdout.splitlines())
+
+
 def status_block(text: str) -> str:
     lines = text.splitlines()[:40]
     for i, line in enumerate(lines):
@@ -192,7 +204,7 @@ def classify(block: str) -> Claim:
             return Claim.OTHER
 
 
-def judge(path: Path, prod: str | None, links: dict[str, list[str]]) -> Verdict:
+def judge(path: Path, prod: str | None, links: dict[str, list[str]], merged: set[str]) -> Verdict:
     block = status_block(path.read_text(encoding="utf-8"))
     verdict = Verdict(path, classify(block))
     verdict.flags.extend(vocab_flags(path, block))
@@ -207,6 +219,8 @@ def judge(path: Path, prod: str | None, links: dict[str, list[str]]) -> Verdict:
     if any(not is_ancestor(c, "HEAD") for c in verdict.commits):
         verdict.flags.append(Flag.NOT_ON_HEAD)
     for branch in BRANCH_RE.findall(block):
+        if branch in merged:
+            continue
         if git("rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode != 0:
             verdict.flags.append(Flag.BRANCH_GONE)
             break
@@ -283,7 +297,23 @@ def self_test() -> int:
         block_failures += not ok
         print(f"{'✅' if ok else '❌'} {label}: {got.name}")
     print(f"{'❌' if block_failures else '✅'} {len(blocks) - block_failures}/{len(blocks)} status-block cases behaved as expected.")
-    return 1 if failures or block_failures else 0
+
+    # A branch deleted after its merge is history, not lost work.
+    subjects: list[tuple[str, str, set[str]]] = [
+        ("merge branch into develop", "Merge branch feature/180-mint-pending into develop", {"feature/180-mint-pending"}),
+        ("merge into an integration branch", "Merge feature/028-w3-track-counts into the post-RTM6 integration branch", {"feature/028-w3-track-counts"}),
+        ("git default subject", "Merge branch 'hotfix/csp' into main", {"hotfix/csp"}),
+        ("release merge names no branch", "release: merge develop into main (feature/x notes)", set()),
+        ("a mention is not a merge", "docs(issues): note W3 on feature/028-w3-track-counts", set()),
+    ]
+    merge_failures = 0
+    for label, subject, want in subjects:
+        got = merged_branch_names([subject])
+        ok = got == want
+        merge_failures += not ok
+        print(f"{'✅' if ok else '❌'} {label}: {sorted(got)}")
+    print(f"{'❌' if merge_failures else '✅'} {len(subjects) - merge_failures}/{len(subjects)} merge-subject cases behaved as expected.")
+    return 1 if failures or block_failures or merge_failures else 0
 
 
 def main() -> int:
@@ -302,7 +332,8 @@ def main() -> int:
 
     prod = args.prod_ref or newest_prod_tag()
     links = commits_by_issue()
-    verdicts = [judge(p, prod, links) for p in sorted(ISSUES.glob("[0-9][0-9][0-9]_*.md"))]
+    merged = merged_into_head()
+    verdicts = [judge(p, prod, links, merged) for p in sorted(ISSUES.glob("[0-9][0-9][0-9]_*.md"))]
 
     print(f"prod reference: {prod or 'NONE — no deploy/production/* tag yet; deploy state is UNKNOWN'}")
     counts: dict[Claim, int] = {}

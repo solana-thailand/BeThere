@@ -12,6 +12,7 @@ use super::people::{AnnouncementsSection, PeopleSection};
 use super::poster::PosterSection;
 use super::settings::{CapacitySection, SettingsSection};
 use super::sheets::SheetsSection;
+use super::sponsors::SponsorsSection;
 use super::types::{EventForm, OnDone};
 use crate::{api, components};
 
@@ -30,6 +31,7 @@ pub fn EventFormComponent(
     #[prop(name = "on_done")] on_done: OnDone,
 ) -> impl IntoView {
     let (cl_links, set_cl_links) = signal(form.get().community_links.clone());
+    let sponsors = RwSignal::new(form.get().sponsors.clone());
     let (slug_taken, set_slug_taken) = signal(false);
     let (saving, set_saving) = signal(false);
     let (poster_busy, set_poster_busy) = signal(false);
@@ -51,6 +53,7 @@ pub fn EventFormComponent(
         set_slug_taken,
         cl_links,
         set_cl_links,
+        sponsors,
         create_wallet_name,
         set_create_wallet_name,
         create_wallet_pk,
@@ -98,6 +101,7 @@ pub fn EventFormComponent(
             <PeopleSection ctx=ctx />
             <AnnouncementsSection ctx=ctx />
             <CommunitySection ctx=ctx />
+            <SponsorsSection ctx=ctx />
             <FormActions ctx=ctx on_done=on_done />
         </div>
     }

@@ -5,8 +5,7 @@ use leptos::prelude::*;
 use crate::api::CommunityLink;
 use crate::i18n::{Locale, td_string, use_i18n};
 use crate::pages::ticket::access_logistics::GUIDE_PLATFORM;
-
-const LEARNING_RESOURCE_PLATFORMS: &[&str] = &["resource", "slides", "source", "download"];
+use crate::pages::ticket::resources::LEARNING_RESOURCE_PLATFORMS;
 
 fn is_community_link(link: &CommunityLink) -> bool {
     !link.url.is_empty()

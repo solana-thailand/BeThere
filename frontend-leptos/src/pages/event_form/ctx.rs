@@ -2,6 +2,8 @@
 
 use leptos::prelude::*;
 
+use event_checkin_domain::models::event::Sponsor;
+
 use super::types::EventForm;
 use crate::{api, components};
 
@@ -24,6 +26,8 @@ pub(super) struct FormCtx {
     /// Community links, kept apart from `form` for row-level editing.
     pub cl_links: ReadSignal<Vec<api::CommunityLink>>,
     pub set_cl_links: WriteSignal<Vec<api::CommunityLink>>,
+    /// Sponsors, kept apart from `form` for the same reason.
+    pub sponsors: RwSignal<Vec<Sponsor>>,
     /// Wallet state for the combined Create Event + Escrow Init flow.
     pub create_wallet_name: ReadSignal<String>,
     pub set_create_wallet_name: WriteSignal<String>,

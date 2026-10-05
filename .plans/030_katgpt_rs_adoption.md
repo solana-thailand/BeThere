@@ -96,6 +96,8 @@ owner decision.
     changes where the team looks for history.
   - **Blocked (2026-09-29, `event-checkin-8c`):** owner OK pending; it also moves files in `.issues/`, peer `event-checkin-16`'s area.
   - **Rechecked 2026-09-30 (`event-checkin-c7`):** peer `event-checkin-16` is no longer running, so only one gate is left. The owner must answer: "may closed issues leave `.issues/` for a dated `HISTORY.md` entry?" `issue_ledger.py` and `numbering_gate.py` read `.issues/`, so a yes also means changing both gates.
+  - **Reopen trigger (2026-10-01, `event-checkin-a6`):** the owner answers
+    yes to that question. Not date-gated; nothing can be built before the answer.
 - [x] **Pinned golden vectors.** Done 2026-09-29 (consumers below). Part done 2026-09-24:
   `domain/tests/fixtures/golden_vectors.json` pins USDC string/float → atomic
   (issue 146), the on-chain event id (now `domain::onchain`) and escrow /
@@ -209,9 +211,11 @@ owner decision.
   rot lane. **After RTM#6**, because it can change builds.
   **Blocked (2026-09-29, `event-checkin-8c`):** open only on the commit + merge sub-step below (owner, demo freeze).
   **Built on branch `feature/030-toolchain-pin` (worktree `/tmp/ec-pin`, cut
-  from `develop` `83241bd9`, 2026-09-28, session `event-checkin-00`), not
-  committed yet and not merged** (RTM #6 hold; merge after the remap and
-  build-stamp branches, which also edit `build.sh`).
+  from `develop` `83241bd9`, 2026-09-28, session `event-checkin-00`),
+  committed as `020fdc0b` (2026-10-01) and not merged** (RTM #6 hold; merge
+  after the remap and build-stamp branches, which also edit `build.sh`).
+  **Reopen trigger (2026-10-01, `event-checkin-a6`):** the 8 Oct take is done
+  and the owner says go for the merge sub-step below; nothing else is open.
   - [x] `rust-toolchain.toml`: `channel = "1.98.1"`, clippy + rustfmt,
     `targets = ["wasm32-unknown-unknown"]`, `profile = "minimal"`.
   - [x] `scripts/pinned_toolchain.sh`, sourced by `worker/deploy.sh` and
@@ -236,9 +240,18 @@ owner decision.
     Trunk reorders `modulepreload` links, so `index.html` and the SW
     `CACHE_VERSION` change on every rebuild, and the worker wasm hash
     changes; that is a few bytes of noise.
-  - [ ] Commit on the branch (owner, pending); merge after RTM #6.
+  - [x] Commit on the branch: `f063100c` (2026-10-01, `event-checkin-53`),
+    then rebased onto `develop` `1d67e75d` as `020fdc0b`. The one conflict
+    was the `CLAUDE.md` gates table; both rows kept.
+    Committed because the only copy was uncommitted in `/tmp/ec-pin`, which
+    macOS can clean. A local feature-branch commit is not a push, a migration
+    or a deploy. Gates re-run first: `toolchain_pin_gate.py --self-test` 7/7
+    and clean, ShellCheck 0.11.0 clean over 39 scripts.
+  - [ ] Merge into `develop` after the 8 Oct take, after the remap and
+    build-stamp branches. Push is the owner's.
     **Blocked (2026-09-29, `event-checkin-8c`):** owner go; the uncommitted `/tmp/ec-pin` diff edits `worker/deploy.sh` + `CLAUDE.md` (peer `event-checkin-16`'s area), and the merge waits for the 6–8 Oct freeze.
     **Rechecked 2026-09-30 (`event-checkin-c7`):** `/tmp/ec-pin` is still at `83241bd9` with 4 modified and 4 new files, none committed. Two gates are left: an owner go for the commit, and the merge after the 6–8 Oct freeze. The peer-area clause no longer applies, because `event-checkin-16` is not running.
+    **Gate (rechecked 2026-10-01, `event-checkin-13`):** the commit gate is gone (`020fdc0b`). What is left is the owner's go for the merge after the 8 Oct take, and the owner's push. A simulated merge of remap, then stamp, then pin onto `develop` `d0d62a2f` is conflict-free. On the combined tree, `toolchain_pin_gate.py` passes, every workflow's YAML parses, and the new deposit-report CI step is still there.
 
   **Version check, 2026-09-24.**
   - Latest stable is 1.98.1 (`rustup check`). CI's `toolchain: stable` resolves to it.
@@ -257,21 +270,28 @@ owner decision.
   - 1.97 switched to v0 symbol mangling by default. Re-measure `worker_size_budget.sh` and `frontend_size_budget.sh`.
   - 1.96 stopped passing `--allow-undefined` on wasm. The local wasm32 clippy builds on 1.98.1 pass; a full `worker-build` on 1.98.1 has not been run.
 
+**All remaining 030 work is owner-gated (2026-10-01, `event-checkin-53`).**
+- HISTORY.md close protocol: needs the owner's yes to move closed issues
+  out of `.issues/`.
+- Toolchain pin: committed. Only the merge is left, and it waits for the
+  demo freeze (6–8 Oct) plus the owner's push.
+- §4: four product and process decisions, each with its question below.
+
 ## 4. Owner decisions (product)
 
 Each item below is a product decision: **blocked on the owner** (checked 2026-09-29, sessions `event-checkin-4e`, `event-checkin-8c`).
 
-**Rechecked 2026-09-30 (session `event-checkin-aa`):** no gate moved. Every open item in §3 and §4 waits on the owner question written under it, and `/tmp/ec-pin` is still uncommitted at `83241bd9`. The pin commit's question is "may `feature/030-toolchain-pin` be committed now (it edits `worker/deploy.sh`, `frontend-leptos/build.sh`, CI and `CLAUDE.md`) and merged after the remap and build-stamp branches, after the 8 Oct take?"
+**Rechecked 2026-09-30 (session `event-checkin-aa`):** no gate moved. Every open item in §3 and §4 waits on the owner question written under it, and `/tmp/ec-pin` is still uncommitted at `83241bd9` (committed since, as `020fdc0b` on 2026-10-01). The pin commit's question is "may `feature/030-toolchain-pin` be committed now (it edits `worker/deploy.sh`, `frontend-leptos/build.sh`, CI and `CLAUDE.md`) and merged after the remap and build-stamp branches, after the 8 Oct take?"
 
 - [ ] **Verifiable lucky draw**, from `katgpt-device-verify` fair_roll: commit,
   then reveal with a Solana blockhash, re-runnable in the browser. About 1.5 d.
-  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "does any event run a lucky draw that attendees need to audit?"
+  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "does any event run a lucky draw that attendees need to audit?" Reopen trigger: the owner answers yes (a no closes it as declined).
 - [ ] **Tamper-evident check-in log:** Merkle root at event close plus an
   inclusion proof on the ticket. About 2 d.
-  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is an attendee-verifiable attendance proof worth a ticket-page change?"
+  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is an attendee-verifiable attendance proof worth a ticket-page change?" Reopen trigger: the owner answers yes (a no closes it as declined).
 - [ ] **LtHash checksum** on the deposits/credits ledger with a nightly drift
   alert. About 1 d.
-  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is ledger drift a risk worth a nightly cron and alert channel?" The cron runs under the free-plan CPU cap.
+  **Blocked:** owner: product decision. Rechecked 2026-09-30: the question is "is ledger drift a risk worth a nightly cron and alert channel?" The cron runs under the free-plan CPU cap. Reopen trigger: the owner answers yes (a no closes it as declined).
 - [ ] Whether to adopt the BOUNDARY.md drift-ledger discipline and the
   second-model AGREE/REVISE review for escrow and money-path plans.
-  **Blocked:** owner: process decision. Rechecked 2026-09-30: the question is "must escrow and money-path plans get a second-model review before merge?"
+  **Blocked:** owner: process decision. Rechecked 2026-09-30: the question is "must escrow and money-path plans get a second-model review before merge?" Reopen trigger: the owner answers yes (a no closes it as declined).

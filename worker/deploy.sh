@@ -264,7 +264,13 @@ verify_content_types() {
   local staff_html="${DIST_DIR}/staff-app.html" staff_js served_js
   if [ -f "$staff_html" ]; then
     staff_js=$(grep -o 'event-checkin-frontend-[a-z0-9]*\.js' "$staff_html" | head -1)
-    served_js=$(curl -s "${base}/admin" | grep -o 'event-checkin-frontend-[a-z0-9]*\.js' | head -1)
+    # Same edge-propagation retry as above: right after a deploy the edge can
+    # still hold the previous staff-app.html (2026-09-30, a false red on prod).
+    for _ in 1 2 3 4 5; do
+      served_js=$(curl -s "${base}/admin" | grep -o 'event-checkin-frontend-[a-z0-9]*\.js' | head -1)
+      [ -n "$staff_js" ] && [ "$served_js" = "$staff_js" ] && break
+      sleep 4
+    done
     if [ -n "$staff_js" ] && [ "$served_js" = "$staff_js" ]; then
       echo "   ✅ /admin → staff shell (${staff_js})"
     else

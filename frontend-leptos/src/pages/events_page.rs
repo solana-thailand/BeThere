@@ -12,8 +12,7 @@ use crate::components;
 use crate::utils;
 
 use super::event_form::{
-    EventFormComponent, default_form, form_from_detail, format_date_display, status_badge_class,
-    status_label,
+    EventFormComponent, default_form, form_from_detail, status_badge_class, status_label,
 };
 
 // ===== View State =====
@@ -198,8 +197,8 @@ pub fn EventsPage(
                                 let ename = utils::escape_html(&evt.name);
                                 let badge_class = status_badge_class(&evt.status);
                                 let status_text = status_label(&evt.status);
-                                let start = format_date_display(evt.event_start_ms);
-                                let end = format_date_display(evt.event_end_ms);
+                                let start = card_datetime(evt.event_start_ms);
+                                let end = card_datetime(evt.event_end_ms);
                                 let sheet_id_copy = evt.sheet_id.clone();
                                 let has_sheet = !evt.sheet_id.trim().is_empty();
                                 let organizers = organizers_label(&evt.organizer_emails);
@@ -578,8 +577,8 @@ pub fn EventsPage(
                             let summary_id = event.id.clone();
                             let badge_class = status_badge_class(&event.status);
                             let status_text = status_label(&event.status);
-                            let start = format_date_display(event.event_start_ms);
-                            let end = format_date_display(event.event_end_ms);
+                            let start = card_datetime(event.event_start_ms);
+                            let end = card_datetime(event.event_end_ms);
                             let is_archived = event.status == api::EventStatus::Archived;
                             let is_draft = event.status == api::EventStatus::Draft;
                             let organizers = organizers_label(&event.organizer_emails);
@@ -960,5 +959,21 @@ pub fn organizers_label(emails: &[String]) -> String {
         0 => "—".to_string(),
         n if n <= SHOWN => emails.join(", "),
         n => format!("{}, +{} more", emails[..SHOWN].join(", "), n - SHOWN),
+    }
+}
+
+/// Start/end on an event card: the shared day-first format plus the viewer's
+/// zone, e.g. `22 Jan 2030, 12:00 GMT+7`, not the raw
+/// `2030-01-22 12:00:00 UTC+07:00` (QA 2026-09-29, item 7).
+fn card_datetime(ms: i64) -> String {
+    match ms {
+        ms if ms <= 0 => "\u{2014}".to_string(),
+        ms => format!(
+            "{} {}",
+            crate::utils::format_event_datetime(ms),
+            crate::utils::local_tz_label(ms)
+        )
+        .trim_end()
+        .to_string(),
     }
 }

@@ -78,6 +78,8 @@ can't come are moved to online and refunded later.
   postponed event be able to answer "can't come" on their own ticket page,
   which switches them to online and puts them on the refund list, or does
   option 2 stay unchosen?"
+  **Reopen trigger (2026-10-01, `event-checkin-45`):** the owner chooses option 2, or a
+  postponed event needs attendee self-service (a no closes it as declined).
 - [x] A failed D1 dual-write on event save (`sync_event_to_d1`) should reach
   the admin who saved, not only a log line (`.issues/152`, "Not done").
   Done on develop 2026-09-26 as a response `warnings` entry and warning toast,

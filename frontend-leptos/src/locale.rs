@@ -185,7 +185,9 @@ pub fn LanguageSwitch() -> impl IntoView {
             on:click=toggle
             aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, lang.switch_aria))
         >
-            {crate::locale::tr(|l| crate::i18n::td_string!(l, lang.switch_label))}
+            <span class="lang-switch-chip">
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, lang.switch_label))}
+            </span>
         </button>
     }
 }

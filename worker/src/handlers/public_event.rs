@@ -188,6 +188,10 @@ pub async fn get_public_event(
         .online_capacity
         .map(|cap| cap.saturating_sub(online_count));
 
+    // Who is actually in the room. Only once the event has started, so the
+    // busy pre-event page costs no extra D1 read; `null` when unknown.
+    let checked_in_count = count_checked_in_when_started(&state, &config).await;
+
     // Determine track availability for frontend gating
     let in_person_available =
         config.event_format.has_in_person() && in_person_remaining.is_none_or(|r| r > 0);
@@ -196,6 +200,7 @@ pub async fn get_public_event(
         && is_online_registration_open(&config, in_person_available);
     let post_event_registration_accepting =
         config.post_event_registration_accepting(chrono::Utc::now().timestamp_millis());
+    let organizer_name = resolve_organizer_name(&state, &config.organization_id).await;
 
     // Return sanitized response — exclude all sensitive/internal fields
     let mut response = json!({
@@ -253,6 +258,8 @@ pub async fn get_public_event(
     let response_fields = response.as_object_mut().ok_or_else(|| {
         AppError::Internal("public event response serialization produced a non-object".to_string())
     })?;
+    // Inserted here, not in `json!` above: that literal is at the macro recursion limit.
+    response_fields.insert("checked_in_count".to_string(), json!(checked_in_count));
     // A completed-event gateway links only to the canonical Genesis archive.
     // `link` remains the organizer-configured external URL for ordinary event
     // pages; it is never trusted as an archive by default.
@@ -272,6 +279,17 @@ pub async fn get_public_event(
     response_fields.insert(
         "post_event_registration_accepting".to_string(),
         serde_json::Value::Bool(post_event_registration_accepting),
+    );
+    // The organization's display name only — never its id, sheets or owners.
+    // Empty = no org, or it could not be read; the page then omits the line.
+    response_fields.insert(
+        "organizer_name".to_string(),
+        serde_json::Value::String(organizer_name),
+    );
+    // Already https-only and bounded: `normalize_sponsors` ran at the write.
+    response_fields.insert(
+        "sponsors".to_string(),
+        serde_json::to_value(&config.sponsors).unwrap_or_else(|_| json!([])),
     );
 
     // A private event's body is per-viewer: it must not land in a shared
@@ -519,6 +537,23 @@ fn public_learning_resources(
         .collect()
 }
 
+/// Display name of the event's organization, for the "organized by" line.
+/// Empty when the event has no organization, D1 is absent, or the read fails:
+/// attribution is decoration, so a failed read must not fail the page.
+async fn resolve_organizer_name(state: &AppState, organization_id: &str) -> String {
+    let (Some(db), false) = (state.d1.as_deref(), organization_id.is_empty()) else {
+        return String::new();
+    };
+    match crate::org_store::get_org_config(db, organization_id).await {
+        Ok(Some(org)) => org.name.trim().to_string(),
+        Ok(None) => String::new(),
+        Err(e) => {
+            tracing::warn!(error = %e, "organizer name lookup failed");
+            String::new()
+        }
+    }
+}
+
 /// Count attendees by track for the capacity display.
 /// An unknown count shows as zero in both tracks.
 async fn count_attendees_by_track(
@@ -532,6 +567,22 @@ async fn count_attendees_by_track(
             tracing::warn!(error = %e, "failed to count attendees for capacity");
             TrackCounts::default()
         })
+}
+
+/// Checked-in head-count for the public page: `None` before the event starts,
+/// without a D1 binding, or when the read fails (shown as unknown, not zero).
+async fn count_checked_in_when_started(
+    state: &AppState,
+    config: &event_checkin_domain::models::event::EventConfig,
+) -> Option<u32> {
+    if chrono::Utc::now().timestamp_millis() < config.event_start_ms {
+        return None;
+    }
+    let db = state.d1.as_deref()?;
+    crate::db::attendees::count_checked_in_by_event(db, &config.id)
+        .await
+        .map_err(|e| tracing::warn!(error = %e, "failed to count checked-in attendees"))
+        .ok()
 }
 
 /// Check whether online registration is currently open based on `OnlineOpenMode`.

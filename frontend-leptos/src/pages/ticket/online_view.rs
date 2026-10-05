@@ -346,6 +346,7 @@ pub fn OnlineView(
 
         // Community links
         {super::announcement::announcement_section(ticket_note.clone())}
+        {crate::pages::ticket::resources::resources_section(community_links.clone())}
         {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::Ticket)}
 
         // 5b. Event series navigation (Plan 013) — "Part of {Series}" + prev/next.

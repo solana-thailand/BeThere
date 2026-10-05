@@ -237,6 +237,9 @@ pub struct PublicEventData {
     pub online_capacity: Option<u32>,
     pub in_person_count: Option<u32>,
     pub online_count: Option<u32>,
+    /// Checked-in head-count; the Worker sends `null` before the event starts or when unknown.
+    #[serde(default)]
+    pub checked_in_count: Option<u32>,
     pub in_person_remaining: Option<u32>,
     pub online_remaining: Option<u32>,
     pub in_person_available: bool,
@@ -265,6 +268,12 @@ pub struct PublicEventData {
     /// Plain text; rendered by `components::postponed_banner`, never as HTML.
     #[serde(default)]
     pub postponed_note: String,
+    /// Display name of the organizing organization. Empty = no line.
+    #[serde(default)]
+    pub organizer_name: String,
+    /// Sponsors for the logo row (migration 0057). Empty = no row.
+    #[serde(default)]
+    pub sponsors: Vec<event_checkin_domain::models::event::Sponsor>,
 }
 
 // ---------------------------------------------------------------------------

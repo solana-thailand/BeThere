@@ -1,3 +1,4 @@
+use super::attribution::{organizer_line, sponsor_row};
 use super::deposit_section::deposit_section;
 use super::details_card::details_card;
 use super::event_hero::event_hero;
@@ -475,7 +476,11 @@ fn render_loaded_event(
     let i18n = use_i18n();
 
     let (reserve_in_view, set_reserve_in_view) = signal(false);
-    let scroll = window_event_listener(leptos::ev::scroll, move |_| {
+    // The hero CTA sits in the first screen, so the bar starts hidden: two
+    // identical buttons on one screen, and the bar would cover the WHEN row
+    // (QA 2026-09-29, item 1). It appears once the hero CTA scrolls away.
+    let (hero_cta_in_view, set_hero_cta_in_view) = signal(true);
+    let measure = move || {
         let viewport = window()
             .inner_height()
             .ok()
@@ -487,11 +492,29 @@ fn render_loaded_event(
         if in_view != reserve_in_view.get_untracked() {
             set_reserve_in_view.set(in_view);
         }
-    });
+        let hero_in_view = document()
+            .query_selector(".pe-hero-cta")
+            .ok()
+            .flatten()
+            .is_some_and(|el| {
+                let rect = el.get_bounding_client_rect();
+                rect.bottom() > 0.0 && rect.top() < viewport
+            });
+        if hero_in_view != hero_cta_in_view.get_untracked() {
+            set_hero_cta_in_view.set(hero_in_view);
+        }
+    };
+    let scroll = window_event_listener(leptos::ev::scroll, move |_| measure());
+    // Measure once after mount too: on a short screen the hero CTA starts
+    // below the fold, and without this the first screen had no Reserve
+    // action at all until the first scroll (390x600, .issues/182).
+    request_animation_frame(measure);
     // Dropping a `WindowListenerHandle` does not remove the listener.
     on_cleanup(move || scroll.remove());
 
     let has_nft_image = !data.nft_image_url.is_empty();
+    let event_id_for_ticket = data.id.clone();
+    let cta_caption = super::attendance::cta_caption_of(&data);
     let has_description = !data.description.is_empty();
     let has_link = !data.link.is_empty();
     let has_deposit =
@@ -576,6 +599,7 @@ fn render_loaded_event(
         // Event Name + Tagline
         <div class="pe-name-block">
             <h1 class="pe-name">{name}</h1>
+            {organizer_line(&data.organizer_name)}
             {if !tagline.is_empty() {
                 let t = tagline.clone();
                 view! {
@@ -603,15 +627,16 @@ fn render_loaded_event(
             };
             view! {
                 <a href="#reserve" class="btn btn-primary btn-block pe-hero-cta">{label}</a>
+                {cta_caption.map(super::attendance::cta_caption_view)}
             }.into_any()
         }}
 
         // Sticky mobile CTA — a persistent bottom action bar on phones (CSS hides
         // it on desktop). Keeps the primary action one tap away while scrolling,
-        // and goes away once the reserve zone is on screen: it would otherwise
-        // be a third "Reserve" button over the form (.issues/173 C4).
+        // and stays away while the hero CTA or the reserve zone is on screen:
+        // it would otherwise double a "Reserve" button (.issues/173 C4).
         {move || {
-            if !show_reg_form || reserve_in_view.get() {
+            if !show_reg_form || reserve_in_view.get() || hero_cta_in_view.get() {
                 return ().into_any();
             }
             let label = match reg_lookup.get() {
@@ -740,7 +765,7 @@ fn render_loaded_event(
                                     }.into_any()
                                 }
                                 RegistrationLookup::Registered(reg_data) => {
-                                    registered_state(reg_data, email, &current_slug)
+                                    registered_state(reg_data, email, &current_slug, &event_id_for_ticket)
                                 }
                                 RegistrationLookup::Error(err_msg) => {
                                     log::warn!("[public_event] registration lookup failed: {err_msg}");
@@ -879,6 +904,9 @@ fn render_loaded_event(
         } else {
             ().into_any()
         }}
+
+        // Sponsors — last, directly above the footer.
+        {sponsor_row(&data.sponsors)}
     }.into_any()
 }
 
@@ -905,6 +933,7 @@ fn completed_event_gateway(
 
         <div class="pe-name-block">
             <h1 class="pe-name">{name}</h1>
+            {organizer_line(&data.organizer_name)}
             {if !tagline.is_empty() {
                 view! { <p class="pe-tagline">{tagline}</p> }.into_any()
             } else {
@@ -960,6 +989,8 @@ fn completed_event_gateway(
             community_links,
             crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent,
         )}
+
+        {sponsor_row(&data.sponsors)}
     }
     .into_any()
 }

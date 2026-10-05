@@ -17,6 +17,7 @@ mod save;
 mod section;
 mod settings;
 mod sheets;
+mod sponsors;
 mod types;
 
 pub use component::EventFormComponent;

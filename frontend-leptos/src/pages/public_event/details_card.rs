@@ -63,7 +63,6 @@ pub fn details_card(
         let query = js_sys::encode_uri_component(&location);
         format!("https://www.google.com/maps/search/?api=1&query={query}")
     });
-    let capacity = capacity_line(data);
 
     view! {
         <div class="pe-card pe-meta">
@@ -120,71 +119,8 @@ pub fn details_card(
                 </div>
             </div>
 
-            // Capacity: open seats while the event is ahead; nothing once it ended.
-            {capacity.map(|lines| view! {
-                <Show when=move || !event_completed.get() fallback=|| ()>
-                    <div class="pe-meta-row">
-                        <Icon icon=IconName::Ticket class="icon-sm icon-muted" />
-                        <div class="pe-meta-body">
-                            <span class="pe-meta-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.meta_capacity))}</span>
-                            {lines.iter().map(|line| {
-                                let line = *line;
-                                view! {
-                                    <span class="pe-detail-text" class:pe-meta-full=line.full>
-                                        {move || line.render(i18n.get_locale())}
-                                    </span>
-                                }
-                            }).collect::<Vec<_>>()}
-                        </div>
-                    </div>
-                </Show>
-            })}
+            // Attendance: who has registered, and the room left on a capped track.
+            {super::attendance::attendance_row(data, event_completed)}
         </div>
     }.into_any()
-}
-
-/// One capacity line: a track, and how many seats it has left.
-#[derive(Clone, Copy)]
-struct CapacityLine {
-    online: bool,
-    remaining: u32,
-    full: bool,
-}
-
-impl CapacityLine {
-    fn render(self, locale: Locale) -> String {
-        match (self.online, self.full) {
-            (false, true) => td_string!(locale, event.capacity_in_person_full).to_string(),
-            (true, true) => td_string!(locale, event.capacity_online_full).to_string(),
-            (false, false) => format!(
-                "{} · {}",
-                self.remaining,
-                td_string!(locale, event.capacity_in_person_left)
-            ),
-            (true, false) => format!(
-                "{} · {}",
-                self.remaining,
-                td_string!(locale, event.capacity_online_left)
-            ),
-        }
-    }
-}
-
-/// The capacity lines for an event, or `None` when neither track is capped.
-fn capacity_line(data: &PublicEventData) -> Option<Vec<CapacityLine>> {
-    let in_person = data.in_person_capacity.map(|_| {
-        let remaining = data.in_person_remaining.unwrap_or(0);
-        CapacityLine {
-            online: false,
-            remaining,
-            full: remaining == 0,
-        }
-    });
-    let online = data.online_remaining.map(|remaining| CapacityLine {
-        online: true,
-        remaining,
-        full: remaining == 0,
-    });
-    let lines: Vec<CapacityLine> = in_person.into_iter().chain(online).collect();
-    (!lines.is_empty()).then_some(lines)
 }

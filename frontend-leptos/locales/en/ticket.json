@@ -82,6 +82,10 @@
     "hint": "Review before you arrive — building access, ID exchange, and transportation.",
     "view_guide": "View Guide"
   },
+  "resources": {
+    "title": "Resources",
+    "hint": "Slides, code and downloads from the organizer."
+  },
   "community": {
     "title": "Join the Community",
     "subtitle": "Connect with fellow attendees before and after the event.",

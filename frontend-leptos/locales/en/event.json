@@ -46,7 +46,6 @@
   "meta_when": "When",
   "meta_where": "Where",
   "meta_format": "Format",
-  "meta_capacity": "Capacity",
   "time_tba": "Time TBA",
   "time_unit": "",
   "event_completed": "Event Completed",
@@ -62,10 +61,14 @@
   "link_copied": "Link copied!",
 
   "capacity_title": "Capacity",
-  "capacity_in_person_left": "In-Person Spots Remaining",
-  "capacity_in_person_full": "In-Person — FULL",
-  "capacity_online_left": "Online Spots Remaining",
-  "capacity_online_full": "Online — FULL",
+  "meta_attendance": "Attendance",
+  "attendance_in_person": "In-Person",
+  "attendance_online": "Online",
+  "attendance_total": "Total",
+  "attendance_spots_left": "spots left",
+  "attendance_full": "Full",
+  "attendance_checked_in": "Checked in",
+  "cta_caption_registered": "registered",
 
   "deposit_title": "Deposit Commitment",
   "promptpay_subtext": "Off-Chain deposit via PromptPay QR Code using any Thai banking app.",
@@ -148,5 +151,7 @@
   "err_parse": "Parse error",
   "err_read": "Read error",
   "err_network": "Network error",
-  "err_bot_check": "The human check failed or expired. Please try again."
+  "err_bot_check": "The human check failed or expired. Please try again.",
+  "organized_by": "Organized by",
+  "sponsors_title": "Supported by"
 }

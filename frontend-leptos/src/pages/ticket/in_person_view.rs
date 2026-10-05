@@ -496,6 +496,8 @@ pub fn InPersonView(
 
         // Community links (social only — guide links are rendered above
         // in the Access & Logistics card)
+        // Slides and other learning resources, in the organizer's order.
+        {crate::pages::ticket::resources::resources_section(social_links.clone())}
         {crate::pages::ticket::community_links::community_links_section(social_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::Ticket)}
 
         // 5b. Event series navigation (Plan 013) — "Part of {Series}" + prev/next.

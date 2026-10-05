@@ -11,6 +11,7 @@ pub mod nft_badge;
 pub mod online_view;
 pub mod page;
 pub mod qr_section;
+pub mod resources;
 pub mod series_nav;
 pub mod timeline;
 pub mod video_section;

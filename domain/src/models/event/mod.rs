@@ -15,6 +15,7 @@ mod requests;
 mod responses;
 mod sheet_name;
 mod slug;
+mod sponsor;
 mod ticket_note;
 
 #[cfg(test)]
@@ -33,6 +34,9 @@ pub use sheet_name::{
     normalize_sheet_name,
 };
 pub use slug::slug_taken_by_other;
+pub use sponsor::{
+    MAX_SPONSOR_NAME_CHARS, MAX_SPONSOR_URL_CHARS, MAX_SPONSORS, Sponsor, normalize_sponsors,
+};
 pub use ticket_note::{
     MAX_POSTPONED_NOTE_CHARS, MAX_TICKET_NOTE_CHARS, normalize_postponed_note,
     normalize_ticket_note,

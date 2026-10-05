@@ -1,6 +1,8 @@
 //! Form state and helpers: `EventForm`, its defaults and the conversions.
 
-use event_checkin_domain::models::event::{DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME};
+use event_checkin_domain::models::event::{
+    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, Sponsor,
+};
 use std::sync::Arc;
 
 use crate::api;
@@ -66,6 +68,8 @@ pub struct EventForm {
     pub visibility: api::EventVisibility,
     pub updated_at: String,
     pub community_links: Vec<crate::api::CommunityLink>,
+    /// Sponsors (migration 0057); edited row by row in `SponsorsSection`.
+    pub sponsors: Vec<Sponsor>,
     pub calendar_subscribe_url: String,
     /// Ticket-page announcement shown to in-person attendees (migration 0049).
     pub ticket_note_in_person: String,
@@ -214,6 +218,7 @@ pub fn default_form() -> EventForm {
         visibility: api::EventVisibility::default(),
         updated_at: String::new(),
         community_links: vec![],
+        sponsors: vec![],
         calendar_subscribe_url: String::new(),
         ticket_note_in_person: String::new(),
         ticket_note_online: String::new(),
@@ -321,6 +326,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         visibility: detail.visibility.clone(),
         updated_at: detail.updated_at.clone(),
         community_links: detail.community_links.clone(),
+        sponsors: detail.sponsors.clone(),
         ticket_note_in_person: detail.ticket_note_in_person.clone(),
         ticket_note_online: detail.ticket_note_online.clone(),
         postponed_note: detail.postponed_note.clone(),

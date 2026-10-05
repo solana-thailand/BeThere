@@ -120,20 +120,17 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                 } else {
                     view! { <div></div> }.into_any()
                 }}
-                {if show_thb {
-                    let window = move || thb_refund_window(i18n.get_locale());
-                    view! {
-                        <div class="pe-refund-item">
-                            <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
-                            <span class="pe-refund-text">
-                                {t!(i18n, event.refund_thb, window)}
-                            </span>
-                        </div>
-                    }.into_any()
-                } else {
-                    view! { <div></div> }.into_any()
-                }}
             </div>
+            // How a PromptPay deposit comes back: a note under the checklist,
+            // not a fourth promise inside it (QA 2026-09-29, item 2).
+            {if show_thb {
+                let window = move || thb_refund_window(i18n.get_locale());
+                view! {
+                    <p class="pe-refund-note">{t!(i18n, event.refund_thb, window)}</p>
+                }.into_any()
+            } else {
+                ().into_any()
+            }}
 
             // Hybrid note
             {if is_hybrid {

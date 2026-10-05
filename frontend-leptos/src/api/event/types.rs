@@ -178,6 +178,9 @@ pub struct EventDetail {
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<crate::api::types::CommunityLink>,
+    /// Sponsors for the public page logo row (migration 0057).
+    #[serde(default)]
+    pub sponsors: Vec<event_checkin_domain::models::event::Sponsor>,
     /// Google Calendar embed URL for the event.
     #[serde(default)]
     pub calendar_subscribe_url: String,
@@ -330,6 +333,9 @@ pub struct CreateEventBody {
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<crate::api::types::CommunityLink>,
+    /// Sponsors for the public page logo row (migration 0057).
+    #[serde(default)]
+    pub sponsors: Vec<event_checkin_domain::models::event::Sponsor>,
     /// Google Calendar embed URL for the event.
     #[serde(default)]
     pub calendar_subscribe_url: String,
@@ -453,6 +459,9 @@ pub struct UpdateEventBody {
     /// Community/social links for the event. Replaces all existing links.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community_links: Option<Vec<crate::api::types::CommunityLink>>,
+    /// Sponsors. Replaces the whole list; `Some(vec![])` removes the row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sponsors: Option<Vec<event_checkin_domain::models::event::Sponsor>>,
     /// Google Calendar embed URL for the event.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub calendar_subscribe_url: Option<String>,
