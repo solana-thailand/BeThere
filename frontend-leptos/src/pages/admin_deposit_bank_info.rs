@@ -38,11 +38,22 @@ pub fn account_digits(account: &str) -> String {
     account.chars().filter(char::is_ascii_digit).collect()
 }
 
-/// One-tap copy of the refund row's account number and amount, so a refund
-/// is copy → paste in the bank app → transfer, without retyping.
+/// The transfer note the organizer types on each refund, e.g.
+/// "คืนค่างาน Solana x AI Builder #6". Bank apps cap the note's length
+/// differently, so it is not truncated here.
+pub fn refund_note(event_name: &str) -> String {
+    match event_name.trim() {
+        "" => "คืนค่ามัดจำ".to_string(),
+        name => format!("คืนค่างาน {name}"),
+    }
+}
+
+/// One-tap copy of the refund row's account number, amount and transfer note,
+/// so a refund is copy → paste in the bank app → transfer, without retyping.
 pub fn refund_copy_buttons(
     bank_account: Option<String>,
     amount_thb: u64,
+    note: String,
     set_toast: WriteSignal<Option<crate::components::ToastMessage>>,
 ) -> AnyView {
     use crate::components::{ToastType, show_toast};
@@ -71,6 +82,9 @@ pub fn refund_copy_buttons(
             })}
             <button class="btn btn-outline btn-sm" on:click=move |_| copy(amount_thb.to_string(), "amount")>
                 {format!("Copy {amount_thb} THB")}
+            </button>
+            <button class="btn btn-outline btn-sm" title=note.clone() on:click=move |_| copy(note.clone(), "note")>
+                "Copy note"
             </button>
         </div>
     }
