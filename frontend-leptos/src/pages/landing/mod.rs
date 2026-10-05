@@ -16,6 +16,7 @@ pub mod nav;
 mod notifications;
 mod page;
 mod registrations;
+mod sofar;
 /// The shared stats fetch and duration label; public for tests.
 pub mod stats;
 pub mod theme;

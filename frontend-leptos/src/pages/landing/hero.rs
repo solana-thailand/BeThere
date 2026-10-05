@@ -12,18 +12,29 @@ use crate::utils::copy_markup::{Segment, parse};
 use super::auth::AuthState;
 
 /// Catalog text with the copy markup rendered: keyword links, highlights,
-/// and newlines left for `white-space: pre-line`.
+/// and newlines left for `white-space: pre-line`. `MarkupText` takes text
+/// built at run time (a catalog string with numbers filled in).
 #[component]
 pub fn Markup(text: Signal<&'static str>) -> impl IntoView {
+    view! { <MarkupText text=Signal::derive(move || text.get().to_string()) /> }
+}
+
+#[component]
+pub fn MarkupText(text: Signal<String>) -> impl IntoView {
     move || {
-        parse(text.get())
+        let text = text.get();
+        parse(&text)
             .into_iter()
             .map(|seg| match seg {
-                Segment::Text(t) => t.into_any(),
+                Segment::Text(t) => t.to_string().into_any(),
                 Segment::Link { text, href } => {
+                    let (text, href) = (text.to_string(), href.to_string());
                     view! { <a class="lp-kw" href=href>{text}</a> }.into_any()
                 }
-                Segment::Highlight(t) => view! { <mark class="lp-hl">{t}</mark> }.into_any(),
+                Segment::Highlight(t) => {
+                    let t = t.to_string();
+                    view! { <mark class="lp-hl">{t}</mark> }.into_any()
+                }
             })
             .collect::<Vec<_>>()
     }

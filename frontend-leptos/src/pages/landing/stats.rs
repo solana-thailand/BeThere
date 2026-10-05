@@ -57,3 +57,30 @@ pub fn measured_at_label(measured_at: &str) -> String {
         false => crate::utils::format_event_datetime(ms as i64),
     }
 }
+
+/// `34000` → `"34,000"`. Thai uses the same grouping.
+pub fn group_thousands(n: u64) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// The count-up's curve: fast, then settling (ASKS-4 §3: one ease, no springs).
+pub fn ease_out(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    1.0 - (1.0 - t).powi(3)
+}
+
+/// The number shown `t` of the way through the count-up; exact at the end.
+pub fn count_at(value: u64, t: f64) -> u64 {
+    match t >= 1.0 {
+        true => value,
+        false => (value as f64 * ease_out(t)).round() as u64,
+    }
+}

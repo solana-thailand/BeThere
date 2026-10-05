@@ -80,7 +80,16 @@ follow-up, not part of 0.5.
   The "why USDC" panel and the sandbox block wait for 0.4. Checked at
   390/1440, TH/EN, both themes, with a mocked stats response and with stats
   failing; every colour pair ≥ 4.76:1.
-- [ ] L5–L10, L12
+- [x] L5 so far (`landing/sofar.rs`): on the night field, "from the system
+  · measured {time}", the totals line and "50 of 54 who paid came" with rule
+  4's caveat (pinned by a test, both languages), all from the shared stats;
+  a failed stats call draws none of it. Counts up once in view (one-shot
+  IntersectionObserver, 1.2 s ease-out, cleared on unmount); reduced motion
+  shows the final figures; screen readers get the final figures from a
+  visually hidden copy, never the zeros. Community row: our own name as a
+  text wordmark plus "+ your community" (rule 5). The tape label repeats 32
+  times so the loop never shows a gap at 1440 px.
+- [ ] L6–L10, L12
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.

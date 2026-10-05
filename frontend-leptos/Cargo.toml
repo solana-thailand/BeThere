@@ -64,6 +64,8 @@ web-sys = { version = "0.3", features = [
   "Window",
   "HtmlElement",
   "HtmlInputElement",
+  "IntersectionObserver",
+  "IntersectionObserverEntry",
   "Headers",
   "MediaQueryList",
   "Performance",

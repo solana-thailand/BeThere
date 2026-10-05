@@ -11,6 +11,7 @@ use super::hero::Hero;
 use super::how::HowItWorks;
 use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
+use super::sofar::SoFar;
 use super::stats::provide_landing_stats;
 use super::theme::initial_theme;
 use super::upcoming::UpcomingEvents;
@@ -80,6 +81,9 @@ pub fn Landing() -> impl IntoView {
 
             // ===== How it works: the swimlane (.plans/043 L4) =====
             <HowItWorks />
+
+            // ===== So far: the numbers from the system (.plans/043 L5) =====
+            <SoFar />
 
             // ===== Organizers: one line (F1-d) =====
             // Organizers go straight to /admin. Everyone else gets the same

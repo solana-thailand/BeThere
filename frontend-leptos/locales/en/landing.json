@@ -172,5 +172,14 @@
     "empty": "No notifications yet.",
     "mark_read": "Mark read",
     "older": "Older notifications"
+  },
+  "sofar": {
+    "tape": "SO FAR",
+    "livebar": "From the system · measured {at}",
+    "done": "So far: **{events} events** on BeThere · **{onsite}** on-site registrations · **{door}** through the door · **{online}** online · **฿{thb}** in deposits handled",
+    "payers": "Of the people who paid a deposit, **{came} of {paid}** came",
+    "payers_note": "Deposits recorded by BeThere only; people who pay may have meant to come anyway.",
+    "communities": "Communities on BeThere",
+    "your_community": "+ your community"
   }
 }
