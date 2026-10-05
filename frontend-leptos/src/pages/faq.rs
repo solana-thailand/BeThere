@@ -10,7 +10,7 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 
 use crate::i18n::{Locale, t, td_string, use_i18n};
-use crate::utils::deposit_copy::{never_forfeited, thb_refund_window};
+use crate::utils::deposit_copy::thb_refund_window;
 
 #[derive(Clone, Copy, PartialEq)]
 enum Audience {
@@ -113,8 +113,7 @@ pub fn Faq() -> impl IntoView {
                                 {t!(
                                     i18n,
                                     landing.faq.deposit_a,
-                                    refund_window = move || thb_refund_window(i18n.get_locale()),
-                                    never_forfeited = move || never_forfeited(i18n.get_locale())
+                                    refund_window = move || thb_refund_window(i18n.get_locale())
                                 )}
                             </p>
                         </details>

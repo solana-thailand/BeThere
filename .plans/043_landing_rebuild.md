@@ -47,4 +47,14 @@ follow-up, not part of 0.5.
 
 ## Status
 
-- [ ] L1 … L12
+- [ ] L1–L10, L12
+- [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
+  forfeited" or the credit exit; neutral "tell the organizer before the
+  cut-off; the organizer sets the rule". Checked in the browser, EN and TH.
+  `org_settle_a` (organizer tab) still names the credit: it tells organizers
+  how settlement works, it does not sell the exit to attendees.
+- **Open, after the take (frozen page):** the event page deposit section
+  (`public_event/deposit_section.rs`) still renders `never_forfeited` (D1 in
+  `utils/deposit_copy.rs`, from the 2026-09-28 policy round). Build-plan rule
+  3 (6 Oct) says never write it; the newer rule wins, but the page is
+  demo-facing until 8 Oct. When it goes, delete `NEVER_FORFEITED*` too.

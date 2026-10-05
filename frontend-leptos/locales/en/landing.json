@@ -35,7 +35,7 @@
     "wallet_q": "Do attendees need a crypto wallet?",
     "wallet_a": "No. Checking in and paying by PromptPay work on any phone. A wallet is only needed to pay a USDC deposit or to claim the NFT badge.",
     "deposit_q": "How does the deposit work?",
-    "deposit_a": "Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back {{ refund_window }}, or you keep it as credit for your next event. {{ never_forfeited }} If you can't make it, tell the organizer. USDC deposits sit in a Solana escrow (on devnet for now) and you claim them back after the event ends.",
+    "deposit_a": "Organizers set a deposit amount (e.g., 500 THB). PromptPay deposits are off-chain: the organizer transfers it back {{ refund_window }}. If you can't make it, tell the organizer before the cut-off; the organizer sets the rule. USDC deposits sit in a Solana escrow (on devnet for now) and you claim them back after the event ends.",
     "crypto_q": "Is it only for crypto events?",
     "crypto_a": "It works for any event — meetups, workshops, conferences, hackathons. The blockchain part runs behind the scenes; attendees don't need to know anything about crypto.",
     "host_cta": "Host your event →",
