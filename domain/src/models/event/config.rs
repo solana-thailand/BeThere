@@ -507,6 +507,19 @@ impl EventConfig {
             && (self.event_start_ms == 0 || now_ms < self.event_start_ms)
     }
 
+    /// Has the in-person track stopped taking new attendees at `now_ms`? It closes
+    /// when the event ends; the online track stays open. A TBA event stores
+    /// date-only times, so its end counts from the end of that day. An end of `0`
+    /// (never set) never closes it.
+    pub fn in_person_registration_closed(&self, now_ms: i64) -> bool {
+        const DAY_MS: i64 = 86_400_000;
+        match self.event_end_ms {
+            0 => false,
+            end if self.time_tba => now_ms >= end.saturating_add(DAY_MS),
+            end => now_ms >= end,
+        }
+    }
+
     /// Is the refund deadline still in the future?
     /// Deadline = event_end_ms + refund_deadline_hours * 3600_000 ms.
     pub fn is_refund_eligible(&self, now_ms: i64) -> bool {

@@ -104,6 +104,10 @@ pub(crate) async fn has_in_person_room(
     event: &EventConfig,
     kv: Option<&KvStore>,
 ) -> bool {
+    // No reclaim once the event has ended: the in-person track is closed.
+    if event.in_person_registration_closed(chrono::Utc::now().timestamp_millis()) {
+        return false;
+    }
     if event.in_person_capacity.is_none() {
         return true;
     }
