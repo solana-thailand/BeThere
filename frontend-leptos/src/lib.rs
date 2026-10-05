@@ -57,18 +57,18 @@ extern "C" {
 use crate::pages::{
     Discover, EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister,
     adventure::page::Adventure, claim::Claim, data_privacy::DataPrivacy, deposit::Deposit,
-    dev_dashboard::DevDashboard, dev_profile::DevProfile, faq::Faq, landing::Landing, login::Login,
-    privacy::Privacy, public_event::PublicEvent, ticket::page::Ticket,
+    dev_dashboard::DevDashboard, dev_profile::DevProfile, faq::Faq, login::Login, privacy::Privacy,
+    public_event::PublicEvent, ticket::page::Ticket,
 };
 use crate::staff_routes::{
-    ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack,
+    HomeRoute, ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack,
     ProtectedScanner,
 };
 
 /// Main application component.
 ///
 /// Sets up the Leptos router with routes:
-/// - `/` — Landing page (public marketing page)
+/// - `/` — Landing page (public marketing page; a hand-off in the staff build)
 /// - `/login` — Login page (Google OAuth sign-in)
 /// - `/claim/:token` — NFT claim page for attendees
 /// - `/staff` — Staff scanner page (QR code scanning + manual check-in)
@@ -118,7 +118,7 @@ pub fn App() -> impl IntoView {
                         </div>
                     }
                 }>
-                    <Route path=path!("/") view=Landing />
+                    <Route path=path!("/") view=HomeRoute />
                     <Route path=path!("/login") view=Login />
                     <Route path=path!("/claim/:token") view=Claim />
                     <Route path=path!("/deposit/:attendee_id") view=Deposit />
