@@ -214,5 +214,14 @@
     "silver": "the room and the food for one event",
     "gold": "a whole event, or a series of three",
     "pricing": "Pricing by conversation, contact above · PROPOSED = not built yet"
+  },
+  "join": {
+    "title": "Build it with us",
+    "lede": "Tell everyone, then use it for your own events :)",
+    "share": "Share this page",
+    "copied": "Link copied",
+    "org_title": "Running events?",
+    "org_body": "Know who **can really come** before you order food.\nSet your own deposit, or none at all.\nScan in with any phone · refunds from one queue.",
+    "waitlist_cta": "Join the organizer waitlist →"
   }
 }

@@ -3,12 +3,12 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
-use crate::components::is_admin_role;
 use crate::icons::{Icon, IconName};
 
 use super::auth::AuthState;
 use super::hero::Hero;
 use super::how::HowItWorks;
+use super::join::Join;
 use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
 use super::sofar::SoFar;
@@ -16,7 +16,6 @@ use super::sponsors::Sponsors;
 use super::stats::provide_landing_stats;
 use super::theme::initial_theme;
 use super::upcoming::UpcomingEvents;
-use super::waitlist::WaitlistForm;
 
 /// Landing page component.
 #[component]
@@ -89,52 +88,8 @@ pub fn Landing() -> impl IntoView {
             // ===== Sponsors: where a logo goes (.plans/043 L6) =====
             <Sponsors />
 
-            // ===== Organizers: one line (F1-d) =====
-            // Organizers go straight to /admin. Everyone else gets the same
-            // line as a disclosure over the waitlist: /admin only checks sign-in,
-            // not role, so for a would-be organizer it would be a dead end.
-            <section id="waitlist" class="landing-host-line">
-                {move || {
-                    let role = user_role.get();
-                    match auth_state.get() {
-                        AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => view! {
-                            <A href="/admin" attr:class="landing-host-link">
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.host_cta))}
-                            </A>
-                        }.into_any(),
-                        signed_in => {
-                            let signed_in = matches!(signed_in, AuthState::SignedIn(_));
-                            view! {
-                                <details class="landing-host-details">
-                                    <summary class="landing-host-link">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.faq.host_cta))}
-                                    </summary>
-                                    <div class="landing-waitlist-inner">
-                                        {match signed_in {
-                                            true => view! {
-                                                <div class="landing-waitlist-signed-in">
-                                                    <p class="landing-faq-a">
-                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.signed_in))}
-                                                    </p>
-                                                    <a
-                                                        href="https://x.com/ozoneRatchapon"
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        class="btn btn-outline btn-sm"
-                                                    >
-                                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.waitlist.dm))}
-                                                    </a>
-                                                </div>
-                                            }.into_any(),
-                                            false => view! { <WaitlistForm /> }.into_any(),
-                                        }}
-                                    </div>
-                                </details>
-                            }.into_any()
-                        }
-                    }
-                }}
-            </section>
+            // ===== Join: share, and the organizer card (.plans/043 L7) =====
+            <Join auth_state=auth_state user_role=user_role />
 
             // ===== Footer =====
             <footer class="landing-footer">

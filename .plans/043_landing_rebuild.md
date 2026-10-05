@@ -98,7 +98,12 @@ follow-up, not part of 0.5.
   a .vcf the owner gave the prototype. **Owner:** the prototype's avatar is
   a photo of a person, kept out of the public repo until you say so; email,
   phone and LINE were never given.
-- [ ] L7–L10, L12
+- [x] L7 join (`landing/join.rs`): "Build it with us", a share button
+  (native sheet, else copy the link), and the organizer card with the same
+  role logic `page.rs` had (admin/organizer → dashboard, signed in → DM,
+  else the waitlist form, restyled in place). `#waitlist` anchors now point
+  at `#join`. Checked signed out and signed in, both themes.
+- [ ] L8–L10, L12; the footer is still the app's (restyle after L10).
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.

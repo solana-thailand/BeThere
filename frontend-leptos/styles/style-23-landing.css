@@ -1031,3 +1031,71 @@ a.lp-event:focus-visible {
         font-size: 14px;
     }
 }
+
+/* 6 · join: share, and the organizer card */
+.lp-join {
+    background: var(--lp-paper-2);
+    color: var(--lp-ink);
+    font: 400 17px/1.6 var(--lp-sans);
+    border-bottom: 2px solid var(--lp-ink);
+    padding: 72px 0;
+}
+.lp-join-lede {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.lp-join-card {
+    max-width: 560px;
+    padding: 26px;
+    display: grid;
+    gap: 14px;
+    align-content: start;
+}
+.lp-join-card h3 {
+    margin: 0;
+    font-size: 22px;
+    color: var(--lp-ink);
+}
+.lp-join-card > p {
+    margin: 0;
+    color: var(--lp-ink-2);
+    white-space: pre-line;
+}
+.lp-join-details summary {
+    list-style: none;
+    width: fit-content;
+}
+.lp-join-details summary::-webkit-details-marker {
+    display: none;
+}
+.lp-join-form {
+    margin-top: 14px;
+}
+/* The shared waitlist form, in the landing's palette. */
+.lp-join .landing-waitlist-form {
+    margin: 0;
+    max-width: none;
+}
+.lp-join .landing-waitlist-input {
+    border-radius: 0;
+    border: 2px solid var(--lp-ink);
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+}
+.lp-join .landing-waitlist-input:focus-visible {
+    outline: 3px solid var(--lp-field);
+    outline-offset: 2px;
+}
+.lp-join .landing-waitlist-submit {
+    border-radius: 0;
+    box-shadow: none;
+    background: var(--lp-ink);
+    color: var(--lp-paper);
+    border: 2px solid var(--lp-ink);
+}
+.lp-join .landing-waitlist-success-desc,
+.lp-join .landing-waitlist-error {
+    color: var(--lp-ink-2);
+}

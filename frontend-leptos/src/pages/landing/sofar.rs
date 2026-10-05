@@ -183,7 +183,7 @@ pub fn SoFar() -> impl IntoView {
                     <p class="lp-kicker">{crate::locale::tr(|l| td_string!(l, landing.sofar.communities))}</p>
                     <div class="lp-slots">
                         <span class="lp-slot">"Solana Developer Thailand"</span>
-                        <a class="lp-slot lp-slot-open" href="#waitlist">{crate::locale::tr(|l| td_string!(l, landing.sofar.your_community))}</a>
+                        <a class="lp-slot lp-slot-open" href="#join">{crate::locale::tr(|l| td_string!(l, landing.sofar.your_community))}</a>
                     </div>
                 </div>
             </div>

@@ -14,49 +14,7 @@
     color: var(--solana);
 }
 
-/* ── Landing FAQ ─────────────────────────────────────────────────── */
-
-.landing-faq-a {
-    font-size: 0.9375rem;
-    color: var(--text-secondary);
-    line-height: 1.7;
-}
-
-/* Organizers: one line above the footer (F1-d), a disclosure over the
-   waitlist for everyone who is not an organizer yet. */
-.landing-host-line {
-    text-align: center;
-    margin: 2rem auto 0;
-    padding: 0 1.5rem;
-    max-width: 480px;
-}
-
-.landing-host-link {
-    display: inline-flex;
-    align-items: center;
-    min-height: 44px;
-    color: var(--accent);
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-    list-style: none;
-}
-
-.landing-host-link::-webkit-details-marker {
-    display: none;
-}
-
-.landing-host-details[open] .landing-waitlist-inner {
-    margin-top: 0.75rem;
-}
-
 /* ── Landing Waitlist ────────────────────────────────────────────── */
-
-.landing-waitlist-inner {
-    text-align: center;
-    max-width: 480px;
-    margin: 0 auto;
-}
 
 .landing-waitlist-form {
     display: flex;
@@ -111,28 +69,6 @@
     font-size: 0.8rem;
     margin-top: 0.5rem;
 }
-
-/* ── Landing Events ──────────────────────────────────────────────── */
-
-/* How it works: three steps on one line (.plans/038 P1-1). */
-
-/* ── Sandbox Demo Card ───────────────────────────────────────────── */
-
-.landing-waitlist-signed-in {
-    margin-top: 1rem;
-    text-align: center;
-}
-.landing-waitlist-signed-in .btn {
-    margin-top: 0.5rem;
-}
-
-/* The 80px letterbox was sized for the square NFT badge. Event posters are
- * 4:5 portrait, and cropping one to 80px leaves a horizontal sliver — on RTM #6
- * that was the speaker's chin and some lasers, which identifies nothing.
- *
- * 16:9 with `object-position: top` keeps the band every poster in this
- * programme puts its title, instalment number and branding in, which is the
- * part that answers "which event is this?" (.issues/094). */
 
 /* ── Landing Registrations ───────────────────────────────────────── */
 
