@@ -765,6 +765,9 @@ pub fn AdminDeposits(
                             // `item_id` would be moved twice (prop:value + on:input).
                             let item_id_for_value = item_id.clone();
                             let item_id_for_input = item_id.clone();
+                            // Came to the event: refund these first.
+                            let checked_in =
+                                RefundQueueFilter::row_checked_in(context.get(&item.attendee_id));
 
                             view! {
                                 <div class="card">
@@ -772,6 +775,9 @@ pub fn AdminDeposits(
                                         <div>
                                             <div class="admin-attendee-name">
                                                 {format!("Attendee: {display_name}")}
+                                                {checked_in.then(|| view! {
+                                                    " " <span class="badge badge-success">"Checked in"</span>
+                                                })}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
