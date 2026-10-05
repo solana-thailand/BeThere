@@ -61,8 +61,9 @@ groups and a backlog.
   empty. The handle lives in D1 only. Aliasing that header is a product call
   (organizers would then see handles in their sheet); it is not part of 167.
   Event C is archived; its attendee row stays in staging D1 and one row in the sheet.
-- [ ] Part B of `.issues/167`: the dedup falls back to a shared sheet across
+- [x] Part B of `.issues/167`: the dedup falls back to a shared sheet across
   events. Needs a product decision.
+  **Closed (2026-10-06, `event-checkin-42`):** every sub-step below is done; `58fc5186` is on `main` and on prod since `438c392d`.
   **Blocked:** the owner decided on 2026-09-29 (`.issues/167`), but the implementation is in `worker/`, peer `event-checkin-16`'s area.
   - [x] Built 2026-09-30 (session `event-checkin-aa`), on branch
     `feature/167-empty-roster` (`16de5c3c`, off `develop` `04ab57b5`; the
