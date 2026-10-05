@@ -3,7 +3,7 @@
     "bethere_mcp src/lib.rs": 0,
     "bethere_mcp src/main.rs": 0,
     "doc-tests bethere_mcp": 0,
-    "protocol tests/protocol.rs": 11
+    "protocol tests/protocol.rs": 12
   },
   "domain-alloc-count": {
     "alloc_count tests/alloc_count.rs": 11,
