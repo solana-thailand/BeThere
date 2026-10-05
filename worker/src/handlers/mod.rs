@@ -24,6 +24,7 @@ pub mod orgs;
 pub mod privacy;
 pub mod profile;
 pub mod public_event;
+pub mod public_stats;
 pub mod qr;
 pub mod quiz;
 pub mod register;
@@ -48,6 +49,14 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/public/events",
             get(public_event::list_public_events).layer(middleware::from_fn_with_state(
+                state.clone(),
+                crate::middleware::edge_cache_layer,
+            )),
+        )
+        // Landing numbers (Phase 0.3): aggregates only, 30s edge cache.
+        .route(
+            "/public/stats",
+            get(public_stats::get_public_stats).layer(middleware::from_fn_with_state(
                 state.clone(),
                 crate::middleware::edge_cache_layer,
             )),
