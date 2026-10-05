@@ -13,6 +13,7 @@ pub mod pr_pack;
 pub mod slip_ocr;
 pub mod slip_proposal;
 pub mod slip_verify;
+pub mod slug;
 pub mod turnstile;
 
 #[cfg(feature = "qr")]

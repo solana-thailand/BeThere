@@ -41,15 +41,10 @@ pub struct AdminFeedbackQuery {
     pub scope: Option<String>,
 }
 
+/// The series key body. Deterministic, so an all-Thai series keeps one key
+/// instead of every such series collapsing to `series-`.
 fn slugify(s: &str) -> String {
-    s.to_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
+    event_checkin_domain::slug::Slug::from_text(s).into_inner()
 }
 
 /// Extracts a series title/prefix from an event name.

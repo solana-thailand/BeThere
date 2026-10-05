@@ -186,14 +186,7 @@ pub async fn resolve_contacts_sheet(
 // Helpers
 // ---------------------------------------------------------------------------
 
+/// An all-Thai organization name gets `org-{hash}`, not an empty id.
 fn slugify_org(name: &str) -> String {
-    name.trim()
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
+    event_checkin_domain::slug::Slug::from_text(name).or_prefixed("org")
 }

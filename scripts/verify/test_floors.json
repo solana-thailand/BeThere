@@ -170,6 +170,7 @@
     "sponsors tests/sponsors.rs": 8,
     "sql_interpolation_guard tests/sql_interpolation_guard.rs": 2,
     "sync_deposit_status_guard tests/sync_deposit_status_guard.rs": 2,
+    "thai_safe_slug tests/thai_safe_slug.rs": 8,
     "thb_settlement_ownership_guard tests/thb_settlement_ownership_guard.rs": 6,
     "ticket_name_guards tests/ticket_name_guards.rs": 6,
     "ticket_note tests/ticket_note.rs": 6,

@@ -102,3 +102,11 @@ then the landing, then the share tags. Each item ships on its own.
   deploy, with each platform's debugger. Not in scope: per-event previews
   (needs the Worker to rewrite the head of `/e/*`), PWA manifest icons
   (still the SVG).
+- [x] **Phase 1.0 (Thai-safe slugs), early,** on `develop`: the four builders
+  are one `event_checkin_domain::slug::Slug`. ASCII names keep the slug they
+  had; a name that keeps under 3 ASCII characters after dropping non-ASCII
+  letters (all Thai, emoji, "ครั้งที่ 1") gets a deterministic FNV-1a hash:
+  `event-{6}` / `org-{6}` / `series-{6}`. Deterministic, not random, because the
+  feedback series key is recomputed per request. Tests
+  `domain/tests/thai_safe_slug.rs` (hash pinned). Not touched:
+  `campaigns_page::slugify` (campaign slugs, own length cap).
