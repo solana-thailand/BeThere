@@ -513,6 +513,7 @@ fn render_loaded_event(
     on_cleanup(move || scroll.remove());
 
     let has_nft_image = !data.nft_image_url.is_empty();
+    let event_id_for_ticket = data.id.clone();
     let cta_caption = super::attendance::cta_caption_of(&data);
     let has_description = !data.description.is_empty();
     let has_link = !data.link.is_empty();
@@ -764,7 +765,7 @@ fn render_loaded_event(
                                     }.into_any()
                                 }
                                 RegistrationLookup::Registered(reg_data) => {
-                                    registered_state(reg_data, email, &current_slug)
+                                    registered_state(reg_data, email, &current_slug, &event_id_for_ticket)
                                 }
                                 RegistrationLookup::Error(err_msg) => {
                                     log::warn!("[public_event] registration lookup failed: {err_msg}");

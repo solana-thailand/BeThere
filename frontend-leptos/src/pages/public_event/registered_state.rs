@@ -3,18 +3,27 @@ use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
 
-pub fn registered_state(reg_data: &MyRegistrationData, email: &str, current_slug: &str) -> AnyView {
+pub fn registered_state(
+    reg_data: &MyRegistrationData,
+    email: &str,
+    current_slug: &str,
+    event_id: &str,
+) -> AnyView {
     let i18n = use_i18n();
-    let next_url = reg_data.next_step.url.clone();
-    let step_type = reg_data.next_step._step_type.clone();
+    let step_type = landing_step(&reg_data.next_step._step_type).to_string();
+    let next_url = match reg_data.next_step._step_type.as_str() {
+        "claim" => ticket_url(&reg_data.attendee_id, event_id),
+        _ => reg_data.next_step.url.clone(),
+    };
     let reg_name = reg_data.name.clone();
     let redirect_url = next_url.clone();
     let share_slug = current_slug.to_string();
     let email_display = email.to_string();
     let has_claim_token = !reg_data.claim_token.is_empty();
 
-    // Auto-redirect for actionable steps (claim, deposit) so users don't get stuck
-    // on the event page when they have a clear next action.
+    // Auto-redirect for actionable steps so users don't get stuck on the event
+    // page when they have a clear next action. A ready claim goes to the ticket
+    // (see `landing_step`), whose claim card is one tap away.
     let auto_redirect_url = match step_type.as_str() {
         "claim" | "deposit" | "ticket" | "waiting" => Some(redirect_url.clone()),
         _ => None,
@@ -82,4 +91,20 @@ pub fn registered_state(reg_data: &MyRegistrationData, email: &str, current_slug
             </div>
         </div>
     }.into_any()
+}
+
+/// The step the event page sends a registered attendee to. A ready claim lands
+/// on the ticket, not the claim page: the ticket carries the organizer's slides
+/// and links, and its claim card is one tap away.
+pub fn landing_step(step_type: &str) -> &str {
+    match step_type {
+        "claim" => "ticket",
+        other => other,
+    }
+}
+
+/// The ticket page for one attendee of one event. `event_id` is required: without
+/// it the ticket API answers for the active event instead.
+pub fn ticket_url(attendee_id: &str, event_id: &str) -> String {
+    format!("/ticket/{attendee_id}?event_id={event_id}")
 }
