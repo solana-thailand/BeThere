@@ -47,7 +47,7 @@
     "public_event_attendance tests/public_event_attendance.rs": 9,
     "public_ticket_page_never_redirects tests/public_ticket_page_never_redirects.rs": 3,
     "qr_svg_path tests/qr_svg_path.rs": 2,
-    "refund_account_digits tests/refund_account_digits.rs": 3,
+    "refund_account_digits tests/refund_account_digits.rs": 5,
     "refund_queue_checked_in tests/refund_queue_checked_in.rs": 2,
     "scanner_scan_wakeup tests/scanner_scan_wakeup.rs": 3,
     "scanner_single_detail_fetch tests/scanner_single_detail_fetch.rs": 2,

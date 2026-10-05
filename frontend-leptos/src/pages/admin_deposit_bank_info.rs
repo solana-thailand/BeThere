@@ -38,14 +38,42 @@ pub fn account_digits(account: &str) -> String {
     account.chars().filter(char::is_ascii_digit).collect()
 }
 
+/// Longest transfer note the organizer's bank app accepts (owner, 2026-10-05).
+pub const MAX_REFUND_NOTE_CHARS: usize = 40;
+
 /// The transfer note the organizer types on each refund, e.g.
-/// "คืนค่างาน Solana x AI Builder #6". Bank apps cap the note's length
-/// differently, so it is not truncated here.
+/// "คืนค่างาน Solana x AI Builder #6", cut to [`MAX_REFUND_NOTE_CHARS`].
 pub fn refund_note(event_name: &str) -> String {
-    match event_name.trim() {
+    let note = match event_name.trim() {
         "" => "คืนค่ามัดจำ".to_string(),
         name => format!("คืนค่างาน {name}"),
+    };
+    fit_chars(&note, MAX_REFUND_NOTE_CHARS)
+}
+
+/// `text` cut to at most `max` chars. Counts Unicode scalar values, so a Thai
+/// vowel or tone mark counts on its own: the result fits whether the bank app
+/// counts marks or not. Never ends on a consonant whose mark was cut off.
+pub fn fit_chars(text: &str, max: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max {
+        return text.to_string();
     }
+    let mut end = max;
+    // A mark belongs to the char before it: drop that char rather than split them.
+    while end > 0 && is_thai_combining_mark(chars[end]) {
+        end -= 1;
+    }
+    chars[..end]
+        .iter()
+        .collect::<String>()
+        .trim_end()
+        .to_string()
+}
+
+/// Thai above/below vowels and tone marks (they render on the char before).
+fn is_thai_combining_mark(c: char) -> bool {
+    matches!(c, '\u{0E31}' | '\u{0E34}'..='\u{0E3A}' | '\u{0E47}'..='\u{0E4E}')
 }
 
 /// One-tap copy of the refund row's account number, amount and transfer note,
