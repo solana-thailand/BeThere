@@ -7,8 +7,10 @@ use crate::components::is_admin_role;
 use crate::icons::{Icon, IconName};
 
 use super::auth::AuthState;
+use super::hero::Hero;
 use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
+use super::theme::initial_theme;
 use super::upcoming::UpcomingEvents;
 use super::waitlist::WaitlistForm;
 
@@ -18,6 +20,7 @@ pub fn Landing() -> impl IntoView {
     // Auth state for nav bar
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (user_role, set_user_role) = signal(String::new());
+    let theme = RwSignal::new(initial_theme());
 
     // Check auth on mount
     Effect::new(move |_| {
@@ -57,50 +60,13 @@ pub fn Landing() -> impl IntoView {
     });
 
     view! {
-        <div class="landing-page">
+        <div class="landing-page lp" data-theme=move || theme.get().as_str()>
 
             // ===== Nav Bar =====
-            <SiteHeader auth_state=auth_state user_role=user_role />
+            <SiteHeader auth_state=auth_state user_role=user_role theme=theme />
 
-            // ===== Hero =====
-            // One screen, one decision (.plans/038 P1-1, after lu.ma): a
-            // headline, one line of value, one button. The audience tabs,
-            // stat cards, brand eyebrow and Solana pill are gone: organizers
-            // get the host link above the waitlist, Solana is in the footer.
-            <section class="landing-hero">
-                <h1 class="landing-hero-h1">
-                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.headline_1))}
-                    <br />
-                    <span class="landing-hero-gradient">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.headline_2))}
-                    </span>
-                </h1>
-                <p class="landing-hero-value">
-                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.value))}
-                </p>
-                <div class="landing-ctas">
-                    {move || {
-                        let role = user_role.get();
-                        match auth_state.get() {
-                            AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => view! {
-                                <A href="/admin" attr:class="btn btn-primary landing-cta-link">
-                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.dashboard))}
-                                </A>
-                            }.into_any(),
-                            AuthState::SignedIn(_) if role == "staff" => view! {
-                                <A href="/staff" attr:class="btn btn-primary landing-cta-link">
-                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.scanner))}
-                                </A>
-                            }.into_any(),
-                            _ => view! {
-                                <a href="#events" class="btn btn-primary landing-cta-link">
-                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.cta.find_events))}
-                                </a>
-                            }.into_any(),
-                        }
-                    }}
-                </div>
-            </section>
+            // ===== Hero (build plan 0.5, .plans/043 L2) =====
+            <Hero auth_state=auth_state user_role=user_role />
 
             // ===== My Registrations (signed in) — straight under the hero =====
             <MyRegistrations />

@@ -47,7 +47,18 @@ follow-up, not part of 0.5.
 
 ## Status
 
-- [ ] L1–L10, L12
+- [x] L1 tokens + light/dark (`style-23-landing.css`, `landing/theme.rs`,
+  `bethere.theme`, system until picked). Tokens sit on `.lp`; only ported
+  sections paint paper/navy, so unported ones keep the app palette until
+  their slice lands. Contrast computed for every text pair, both themes:
+  lowest 5.18 (small text), heading 3.95 (large), loop chip label bold.
+  First load +7.7 KB (develop +61,459 → branch +69,135 vs the 29 Sep baseline).
+- [x] L2 hero (`landing/hero.rs`, `utils/copy_markup.rs` + tests): checked at
+  390×844 and 1440×900, TH/EN, light/dark, reduced motion: no overflow, six
+  keyword links. The "why" film button waits for the film to be hosted
+  (3.8 MB, click-to-load); the anchors `#story #usdc #goal #sponsors` land
+  when those slices do.
+- [ ] L3–L10, L12
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.

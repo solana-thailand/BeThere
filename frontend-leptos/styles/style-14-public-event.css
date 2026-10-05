@@ -784,10 +784,6 @@
 /* Phone: the hero plus two event cards fit one 390x844 screen before the
    first scroll (.plans/038 P1-1). */
 @media (max-width: 480px) {
-    .landing-hero {
-        padding: 2rem 1.25rem 1.5rem;
-    }
-
     .landing-section-sm {
         padding: 0.5rem 1.25rem 2rem;
     }

@@ -26,11 +26,15 @@ use crate::components::is_admin_role;
 use crate::icons::{Icon, IconName};
 
 use super::auth::{AuthState, trigger_landing_oauth, trigger_landing_signout};
+use super::theme::{Theme, ThemeToggle};
 
 #[component]
 pub fn SiteHeader(
     auth_state: ReadSignal<AuthState>,
     user_role: ReadSignal<String>,
+    /// The landing's light/dark pick; other pages pass none and get no toggle.
+    #[prop(optional)]
+    theme: Option<RwSignal<Theme>>,
 ) -> impl IntoView {
     let (mobile_menu_open, set_mobile_menu_open) = signal(false);
     view! {
@@ -49,6 +53,7 @@ pub fn SiteHeader(
                     <a href="/#waitlist">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.for_organizers))}</a>
                 </div>
                 <div class="landing-nav-right" style="display:flex;align-items:center;gap:8px;">
+                    {theme.map(|theme| view! { <ThemeToggle theme=theme /> })}
                     <div class="landing-nav-actions">
                         {move || {
                             let state = auth_state.get();

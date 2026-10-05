@@ -64,6 +64,7 @@ web-sys = { version = "0.3", features = [
   "HtmlElement",
   "HtmlInputElement",
   "Headers",
+  "MediaQueryList",
   "Performance",
   "Request",
   "RequestCache",

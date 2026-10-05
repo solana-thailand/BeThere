@@ -5,12 +5,14 @@
 //! No backend calls — purely static marketing content with SPA navigation.
 
 pub mod auth;
+mod hero;
 /// The site header. Public because `/discover` uses it too — it was inline in
 /// `page.rs`, which is why that page had no chrome at all (`.issues/100`).
 pub mod nav;
 mod notifications;
 mod page;
 mod registrations;
+pub mod theme;
 mod upcoming;
 mod waitlist;
 

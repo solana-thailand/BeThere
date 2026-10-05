@@ -652,58 +652,6 @@
     font-size: 0.8rem;
 }
 
-/* ── Landing Hero ────────────────────────────────────────────────── */
-
-.landing-hero {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 5rem 1.5rem 3rem;
-    text-align: center;
-}
-
-.landing-hero-h1 {
-    font-size: clamp(1.9rem, 5.2vw, 3rem);
-    /* Refinement: 700 (not 800) + tight tracking reads editorial, not shouty. */
-    font-weight: 700;
-    letter-spacing: -0.025em;
-    line-height: 1.12;
-    margin-bottom: 1.25rem;
-    color: #fff;
-}
-
-.landing-hero-gradient {
-    /* Calmer two-tone indigo instead of a tri-colour rainbow — restrained but
-       still on-brand. */
-    background: linear-gradient(135deg, #ffa184, #ff7b5c);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-/* ── Landing CTAs ─────────────────────────────────────────────────── */
-
-/* One line of value under the headline (.plans/038 P1-1). */
-.landing-hero-value {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-    line-height: 1.5;
-    max-width: 34rem;
-    margin: 0 auto 1.5rem;
-}
-
-.landing-ctas {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    justify-content: center;
-}
-
-.landing-cta-link {
-    padding: 0.85rem 2rem;
-    font-size: 1rem;
-    text-decoration: none;
-}
-
 /* Event meta rows: labelled When / Where / Format / Capacity (.plans/038 P2-b). */
 .pe-meta {
     display: flex;
