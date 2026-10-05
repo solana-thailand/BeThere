@@ -110,3 +110,8 @@ then the landing, then the share tags. Each item ships on its own.
   feedback series key is recomputed per request. Tests
   `domain/tests/thai_safe_slug.rs` (hash pinned). Not touched:
   `campaigns_page::slugify` (campaign slugs, own length cap).
+- **Staging, 2026-10-06:** `a43fba5c` (0.1–0.3, 0.6, Thai-safe slugs) is
+  version `52d1c9ec`; CI green on that SHA (after three GitHub runner-outage
+  re-runs); smoke reads + writes pass; the page was opened in EN and TH.
+  Prod for 0.2, 0.3, 0.6 and the slugs waits for an owner go. 0.5 is on
+  `feature/042-landing` (`.plans/043`), not on develop.
