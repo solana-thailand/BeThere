@@ -112,7 +112,18 @@ follow-up, not part of 0.5.
   version (the visual spec's mask moved to `.lp-version`). Under reduced
   motion the so-far figures show at once, not only after the strip is seen
   (a full-page capture showed zeros).
-- [ ] L8–L10, L12
+- [~] L12, PR #154 CI:
+  - Size gate: was +110,135 attendee (limit 102,400). Fixed on develop
+    `5a663964` (favicons quantized, 47.7 KB → 22.5 KB) plus
+    event-checkin-ca's staff hand-off of `/` (`a024282b`, staff −99 KB).
+    Now attendee +87,312 and staff +8,643; no baseline bump.
+  - axe (run 37381847919): the so-far tape label, ink on `#6b63f0` = 4.16:1.
+    Fixed in `58e43a02` (paper on `#5a54cb`, 5.18:1).
+  - Visual: landing desktop/mobile, signed-in ticket and privacy notice
+    differ because of the new landing (the notice is translucent; the ticket
+    crop now catches the events border). New Linux baselines come from the
+    run on `58e43a02` once it is checked by eye.
+- [ ] L8–L10
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.
