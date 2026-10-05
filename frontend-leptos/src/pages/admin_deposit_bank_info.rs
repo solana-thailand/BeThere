@@ -41,14 +41,79 @@ pub fn account_digits(account: &str) -> String {
 /// Longest transfer note the organizer's bank app accepts (owner, 2026-10-05).
 pub const MAX_REFUND_NOTE_CHARS: usize = 40;
 
-/// The transfer note the organizer types on each refund, e.g.
-/// "คืนค่างาน Solana x AI Builder #6", cut to [`MAX_REFUND_NOTE_CHARS`].
+/// The default transfer note, e.g. "คืนค่างาน Solana x AI Builders #6": the
+/// event name shortened by [`short_event_name`], then cut to
+/// [`MAX_REFUND_NOTE_CHARS`]. The organizer can edit it above the queue.
 pub fn refund_note(event_name: &str) -> String {
-    let note = match event_name.trim() {
-        "" => "คืนค่ามัดจำ".to_string(),
-        name => format!("คืนค่างาน {name}"),
-    };
-    fit_chars(&note, MAX_REFUND_NOTE_CHARS)
+    const PREFIX: &str = "คืนค่างาน ";
+    let name = short_event_name(event_name);
+    if name.is_empty() {
+        return "คืนค่ามัดจำ".to_string();
+    }
+    let note = format!("{PREFIX}{name}");
+    if note.chars().count() <= MAX_REFUND_NOTE_CHARS {
+        return note;
+    }
+    // Too long: cut the name, never the edition marker, which goes last.
+    match edition_marker(&name) {
+        Some(marker) => {
+            let rest = name.replacen(&marker, "", 1);
+            let rest = rest.split_whitespace().collect::<Vec<_>>().join(" ");
+            let budget = MAX_REFUND_NOTE_CHARS
+                .saturating_sub(PREFIX.chars().count() + 1 + marker.chars().count());
+            format!("{PREFIX}{} {marker}", fit_chars(&rest, budget))
+        }
+        None => fit_chars(&note, MAX_REFUND_NOTE_CHARS),
+    }
+}
+
+/// An event name short enough for a transfer note that still tells editions
+/// apart. Series names put the edition near the end, e.g.
+/// "Solana x AI Builders: The Road to Mainnet #6 (Bangkok)", so cutting the
+/// tail loses "#6". Instead: drop trailing "(…)" groups, keep the part before
+/// a ":" as the series name, and append the edition marker ("#6",
+/// "Part 7", "EP 3", "ครั้งที่ 2") if the kept part lost it.
+/// → "Solana x AI Builders #6".
+pub fn short_event_name(name: &str) -> String {
+    let mut base = name.trim();
+    while base.ends_with(')') {
+        match base.rfind('(') {
+            Some(i) => base = base[..i].trim_end(),
+            None => break,
+        }
+    }
+    let marker = edition_marker(base);
+    let head = base.split_once(':').map_or(base, |(head, _)| head).trim();
+    match marker {
+        Some(m) if !head.contains(&m) => format!("{head} {m}"),
+        _ => head.to_string(),
+    }
+}
+
+/// The last edition marker in `name`: "#6", or a number after "Part", "EP"
+/// or "ครั้งที่".
+fn edition_marker(name: &str) -> Option<String> {
+    let words: Vec<&str> = name.split_whitespace().collect();
+    let is_number = |w: &str| !w.is_empty() && w.chars().all(|c| c.is_ascii_digit());
+    (0..words.len()).rev().find_map(|i| {
+        let w = words[i];
+        if w.len() > 1 && w.starts_with('#') && is_number(&w[1..]) {
+            return Some(w.to_string());
+        }
+        let prev = i.checked_sub(1).map(|j| words[j]);
+        match prev {
+            Some(p)
+                if is_number(w)
+                    && matches!(
+                        p.to_lowercase().trim_end_matches('.'),
+                        "part" | "ep" | "ครั้งที่"
+                    ) =>
+            {
+                Some(format!("{p} {w}"))
+            }
+            _ => None,
+        }
+    })
 }
 
 /// `text` cut to at most `max` chars. Counts Unicode scalar values, so a Thai
@@ -81,7 +146,7 @@ fn is_thai_combining_mark(c: char) -> bool {
 pub fn refund_copy_buttons(
     bank_account: Option<String>,
     amount_thb: u64,
-    note: String,
+    note: Signal<String>,
     set_toast: WriteSignal<Option<crate::components::ToastMessage>>,
 ) -> AnyView {
     use crate::components::{ToastType, show_toast};
@@ -111,9 +176,63 @@ pub fn refund_copy_buttons(
             <button class="btn btn-outline btn-sm" on:click=move |_| copy(amount_thb.to_string(), "amount")>
                 {format!("Copy {amount_thb} THB")}
             </button>
-            <button class="btn btn-outline btn-sm" title=note.clone() on:click=move |_| copy(note.clone(), "note")>
+            <button class="btn btn-outline btn-sm" title=move || note.get() on:click=move |_| copy(note.get_untracked(), "note")>
                 "Copy note"
             </button>
+        </div>
+    }
+    .into_any()
+}
+
+/// localStorage key of the organizer's edited refund note for one event.
+fn note_key(event_id: &str) -> String {
+    format!("bethere.refund_note.{event_id}")
+}
+
+fn local_storage() -> Option<web_sys::Storage> {
+    web_sys::window()?.local_storage().ok()?
+}
+
+/// The refund note for `event_id`: the organizer's saved edit, else the
+/// default from the event name.
+pub fn load_refund_note(event_id: &str, event_name: &str) -> String {
+    local_storage()
+        .and_then(|s| s.get_item(&note_key(event_id)).ok().flatten())
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| refund_note(event_name))
+}
+
+/// Remember the organizer's edit for this event, on this device.
+pub fn save_refund_note(event_id: &str, note: &str) {
+    if let Some(s) = local_storage() {
+        let _ = s.set_item(&note_key(event_id), note);
+    }
+}
+
+/// The editable note above the refund queue, with a live x/40 count.
+pub fn refund_note_editor(
+    note: ReadSignal<String>,
+    set_note: WriteSignal<String>,
+    event_id: Signal<Option<String>>,
+) -> AnyView {
+    let count = move || note.with(|n| n.chars().count());
+    view! {
+        <div class="admin-dep-bank-section">
+            <label class="form-label">"Transfer note (copied by Copy note)"</label>
+            <input
+                type="text"
+                class="form-input dep-input"
+                maxlength=MAX_REFUND_NOTE_CHARS.to_string()
+                prop:value=move || note.get()
+                on:input=move |ev| {
+                    let value = fit_chars(&event_target_value(&ev), MAX_REFUND_NOTE_CHARS);
+                    if let Some(id) = event_id.get_untracked() {
+                        save_refund_note(&id, &value);
+                    }
+                    set_note.set(value);
+                }
+            />
+            <div class="panel-hint">{move || format!("{} / {MAX_REFUND_NOTE_CHARS} characters", count())}</div>
         </div>
     }
     .into_any()
