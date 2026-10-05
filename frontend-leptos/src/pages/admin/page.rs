@@ -181,6 +181,19 @@ pub fn Admin() -> impl IntoView {
     let get_event_id = move || active_event_id.get();
 
     // Current event's format — drives conditional sidebar + attendee UI
+    // The selected event's name, for the refund queue's transfer note.
+    let current_event_name = Memo::new(move |_| {
+        active_event_id
+            .get()
+            .and_then(|id| {
+                events_list
+                    .get()
+                    .iter()
+                    .find(|e| e.id == id)
+                    .map(|e| e.name.clone())
+            })
+            .unwrap_or_default()
+    });
     let current_event_format = Memo::new(move |_| {
         active_event_id
             .get()
@@ -863,6 +876,7 @@ pub fn Admin() -> impl IntoView {
                     <crate::pages::admin_deposit::AdminDeposits
                         set_toast=set_toast
                         active_event_id=active_event_id
+                        event_name=current_event_name
                         pending_attendee_id=pending_record_slip_attendee
                         set_pending_attendee_id=set_pending_record_slip_attendee
                     />

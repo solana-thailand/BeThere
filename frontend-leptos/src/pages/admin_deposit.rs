@@ -19,7 +19,7 @@ use crate::api::{
 };
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
-use crate::pages::admin_deposit_bank_info::{refund_bank_info, refund_copy_buttons};
+use crate::pages::admin_deposit_bank_info::{refund_bank_info, refund_copy_buttons, refund_note};
 use crate::pages::admin_deposit_credit_requests::CreditRefundRequests;
 use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
@@ -55,6 +55,9 @@ const MAX_PROOF_DATA_URL_LEN: usize = 5 * 1024 * 1024;
 pub fn AdminDeposits(
     set_toast: WriteSignal<Option<components::ToastMessage>>,
     active_event_id: ReadSignal<Option<String>>,
+    /// The selected event's name, used in the refund transfer note.
+    #[prop(into)]
+    event_name: Signal<String>,
     /// Deep-link trigger for the Record-Slip modal — when an Attendees-list
     /// row button sets this to `Some(id)`, the modal opens pre-filled.
     /// Owned by the `Admin` parent (so the Attendees section can write it
@@ -775,6 +778,7 @@ pub fn AdminDeposits(
                             let copy_buttons = refund_copy_buttons(
                                 item.bank_account.clone(),
                                 item.amount_thb,
+                                refund_note(&event_name.get()),
                                 set_toast,
                             );
                             // Came to the event: refund these first.
