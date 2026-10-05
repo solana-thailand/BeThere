@@ -18,18 +18,33 @@ pub enum RefundQueueFilter {
     Online,
     /// Answered "can't come" when asked.
     NotComing,
+    /// Checked in: they came, so their deposit is owed back first.
+    CheckedIn,
     /// Not checked in: nobody scanned them at the door.
     NotCheckedIn,
 }
 
 impl RefundQueueFilter {
-    const ALL: [Self; 4] = [Self::All, Self::Online, Self::NotComing, Self::NotCheckedIn];
+    /// Whether the row's attendee was checked in. `false` when the context is
+    /// unknown: the badge only claims what the record says.
+    pub fn row_checked_in(context: Option<&RefundQueueContext>) -> bool {
+        context.is_some_and(|c| c.checked_in)
+    }
+
+    const ALL: [Self; 5] = [
+        Self::All,
+        Self::CheckedIn,
+        Self::NotCheckedIn,
+        Self::Online,
+        Self::NotComing,
+    ];
 
     fn label(self) -> &'static str {
         match self {
             Self::All => "All",
             Self::Online => "Moved online",
             Self::NotComing => "Can't come",
+            Self::CheckedIn => "Checked in",
             Self::NotCheckedIn => "Not checked in",
         }
     }
@@ -42,6 +57,7 @@ impl RefundQueueFilter {
             (_, None) => false,
             (Self::Online, Some(c)) => c.participation_type == ParticipationType::Online,
             (Self::NotComing, Some(c)) => c.attendance_answer == Some(AttendanceAnswer::NotComing),
+            (Self::CheckedIn, Some(c)) => c.checked_in,
             (Self::NotCheckedIn, Some(c)) => !c.checked_in,
         }
     }

@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 
 use leptos::prelude::*;
+use wasm_bindgen::JsValue;
 
 use crate::api::{
     self, AdminHoldRequest, CompDepositRequest, CreditLiability, CreditRefundRequest,
@@ -18,7 +19,7 @@ use crate::api::{
 };
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
-use crate::pages::admin_deposit_bank_info::refund_bank_info;
+use crate::pages::admin_deposit_bank_info::{refund_bank_info, refund_copy_buttons};
 use crate::pages::admin_deposit_credit_requests::CreditRefundRequests;
 use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
@@ -45,6 +46,10 @@ enum AdminDepositTab {
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
+
+/// The Worker's cap on a data-URL proof (`validate_slip_url`: 5 MiB encoded,
+/// about a 3 MB image).
+const MAX_PROOF_DATA_URL_LEN: usize = 5 * 1024 * 1024;
 
 #[component]
 pub fn AdminDeposits(
@@ -705,11 +710,11 @@ pub fn AdminDeposits(
                     <div class="admin-section-header">
                         <h3><Icon icon=IconName::MoneyWings class="icon-sm"/>{format!(" {} pending refund{}", refund_count.get(), if refund_count.get() != 1 { "s" } else { "" })}</h3>
                         <p class="admin-dep-flow-hint">
-                            "Two steps per attendee: click "
+                            "Per attendee: copy the account and amount into your bank app and transfer, then click "
                             <strong>"Enter Refund Proof"</strong>
-                            " → paste the bank transfer receipt URL → click "
+                            " → attach the slip image (or paste a receipt link) → click "
                             <strong>"Confirm Refund"</strong>
-                            ". Each row keeps its own URL — filling one does not affect others."
+                            ". Each row keeps its own proof — filling one does not affect others."
                         </p>
                     </div>
 
@@ -765,6 +770,16 @@ pub fn AdminDeposits(
                             // `item_id` would be moved twice (prop:value + on:input).
                             let item_id_for_value = item_id.clone();
                             let item_id_for_input = item_id.clone();
+                            let item_id_for_file = item_id.clone();
+                            let item_id_for_attached = item_id.clone();
+                            let copy_buttons = refund_copy_buttons(
+                                item.bank_account.clone(),
+                                item.amount_thb,
+                                set_toast,
+                            );
+                            // Came to the event: refund these first.
+                            let checked_in =
+                                RefundQueueFilter::row_checked_in(context.get(&item.attendee_id));
 
                             view! {
                                 <div class="card">
@@ -772,6 +787,9 @@ pub fn AdminDeposits(
                                         <div>
                                             <div class="admin-attendee-name">
                                                 {format!("Attendee: {display_name}")}
+                                                {checked_in.then(|| view! {
+                                                    " " <span class="badge badge-success">"Checked in"</span>
+                                                })}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
@@ -786,6 +804,7 @@ pub fn AdminDeposits(
                                             {slip_link(item.slip_url.clone())}
 
                                             {bank_info}
+                                            {copy_buttons}
                                         </div>
                                         <div>
                                             <button
@@ -806,11 +825,35 @@ pub fn AdminDeposits(
                                             <div
                                                 style=move || if refund_proof_pending_id.get().as_deref() != Some(&item_id) { "display:none" } else { "display:flex;flex-direction:column;gap:0.25rem" }
                                             >
+                                                // The slip straight from the phone's gallery; the
+                                                // Worker stores a data-URL proof in R2 (refund.rs).
+                                                <label class="form-label">"Attach slip image (JPEG, PNG, WebP, max 3MB)"</label>
+                                                <input
+                                                    type="file"
+                                                    accept="image/jpeg,image/png,image/webp"
+                                                    class="file-input-styled"
+                                                    on:change=move |ev| {
+                                                        let id = item_id_for_file.clone();
+                                                        let target: JsValue = event_target::<web_sys::HtmlInputElement>(&ev).into();
+                                                        leptos::task::spawn_local(async move {
+                                                            match crate::pages::deposit::js_interop::read_file_as_data_url(&target).await {
+                                                                Some(data_url) if data_url.len() <= MAX_PROOF_DATA_URL_LEN => {
+                                                                    set_refund_proof_urls.update(|m| { m.insert(id, data_url); });
+                                                                }
+                                                                Some(_) => components::show_toast(&set_toast, "Slip image is over 3MB — take a screenshot of it instead", ToastType::Error),
+                                                                None => components::show_toast(&set_toast, "Could not read that image", ToastType::Error),
+                                                            }
+                                                        });
+                                                    }
+                                                />
+                                                {move || refund_proof_urls.with(|m| m.get(&item_id_for_attached).is_some_and(|v| v.starts_with("data:image/"))).then(|| view! {
+                                                    <span class="badge badge-success" style="align-self:flex-start">"Slip attached"</span>
+                                                })}
                                                 <input
                                                     type="text"
                                                     class="form-input dep-input"
-                                                    placeholder="Paste refund proof URL (transfer receipt)"
-                                                    prop:value=move || refund_proof_urls.get().get(&item_id_for_value).cloned().unwrap_or_default()
+                                                    placeholder="…or paste a receipt link"
+                                                    prop:value=move || refund_proof_urls.get().get(&item_id_for_value).cloned().filter(|v| !v.starts_with("data:")).unwrap_or_default()
                                                     on:input=move |ev| {
                                                         let val = event_target_value(&ev);
                                                         set_refund_proof_urls.update(|m| {
