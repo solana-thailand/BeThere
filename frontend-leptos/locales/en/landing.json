@@ -125,16 +125,11 @@
     "bot_check_failed": "The human check failed or expired. Please try again."
   },
   "footer": {
-    "tagline": "Show up. Get refunded.",
-    "built_with": "Built with ",
-    "rust_solana": " Rust & Solana",
     "deposit_status": "Deposits: THB, organizer-held · escrow: devnet",
     "partner": "Alpha partner: Solana Developer Thailand",
-    "product": "Product",
     "how": "How It Works",
     "faq": "FAQ",
     "staff_portal": "Staff Portal",
-    "community": "Community",
     "copyright": "© 2026 BeThere. All rights reserved."
   },
   "upcoming": {

@@ -125,16 +125,11 @@
     "bot_check_failed": "การยืนยันว่าเป็นคนจริงไม่ผ่านหรือหมดเวลา กรุณาลองอีกครั้ง"
   },
   "footer": {
-    "tagline": "มาร่วมงาน แล้วรับเงินคืน",
-    "built_with": "สร้างด้วย ",
-    "rust_solana": " Rust & Solana",
     "deposit_status": "มัดจำ: บาท ผู้จัดถือ · escrow: devnet",
     "partner": "พาร์ตเนอร์รุ่นแรก: Solana Developer Thailand",
-    "product": "ผลิตภัณฑ์",
     "how": "ใช้งานอย่างไร",
     "faq": "คำถามที่พบบ่อย",
     "staff_portal": "สำหรับทีมงาน",
-    "community": "คอมมูนิตี้",
     "copyright": "© 2026 BeThere สงวนลิขสิทธิ์"
   },
   "upcoming": {

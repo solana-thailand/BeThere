@@ -25,7 +25,7 @@ for (const target of PAGES) {
         // the build line (commit hash; absent from CI's plain trunk build).
         // The scanner <video> fills the viewport, so it is hidden by
         // screenshot.css rather than masked (a mask covers the UI above it).
-        mask: [page.locator(".dashboard-last-updated, canvas, .landing-footer-version")],
+        mask: [page.locator(".dashboard-last-updated, canvas, .lp-version")],
         stylePath: path.join(__dirname, "screenshot.css"),
         maxDiffPixelRatio: 0.01,
       });

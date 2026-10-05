@@ -107,7 +107,12 @@ follow-up, not part of 0.5.
   gated content in it; the prototype's sandbox block stays out until 0.4.
   The hero's "show up" keyword points at `#goal` until the ladder (`#story`,
   L8) exists; a browser check finds no dead in-page anchor.
-- [ ] L8–L10, L12; the footer is still the app's (restyle after L10).
+- [x] Footer: one row of links (how, FAQ, staff portal, Discord, X,
+  GitHub), one of fine print with the 0.2 status line and the build
+  version (the visual spec's mask moved to `.lp-version`). Under reduced
+  motion the so-far figures show at once, not only after the strip is seen
+  (a full-page capture showed zeros).
+- [ ] L8–L10, L12
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.

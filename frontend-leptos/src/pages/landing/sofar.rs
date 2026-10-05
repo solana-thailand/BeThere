@@ -83,11 +83,16 @@ pub fn SoFar() -> impl IntoView {
     // Run the count once: when the strip has been seen and the stats are in.
     let interval = StoredValue::new(None::<IntervalHandle>);
     Effect::new(move |_| {
-        if !seen.get() || stats.with(Option::is_none) || interval.with_value(Option::is_some) {
+        if stats.with(Option::is_none) || interval.with_value(Option::is_some) {
             return;
         }
+        // Nothing moves under reduced motion, so there is nothing to wait for:
+        // the final figures, whether or not the strip has been seen.
         if reduced_motion() {
             progress.set(1.0);
+            return;
+        }
+        if !seen.get() {
             return;
         }
         let start = js_sys::Date::now();

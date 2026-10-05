@@ -12,11 +12,6 @@
 }
 
 /* ===== Landing Waitlist Responsive ===== */
-@media (max-width: 480px) {
-    .landing-footer-grid {
-        grid-template-columns: 1fr;
-    }
-}
 
 /* ===== Landing Nav — Hamburger Menu (Mobile) ===== */
 .landing-nav-hamburger {

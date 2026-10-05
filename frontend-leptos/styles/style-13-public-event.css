@@ -607,11 +607,6 @@
     letter-spacing: 0.06em;
 }
 
-.landing-footer-brand-name {
-    font-weight: 800;
-    font-size: 1.1rem;
-}
-
 /* ── Landing Sections ────────────────────────────────────────────── */
 
 /* ── Landing Section Headers ─────────────────────────────────────── */
@@ -706,11 +701,6 @@
 }
 
 /* Build line in the landing footer (.plans/038 P2-f). */
-.landing-footer-version {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
 
 /* Sponsor logo row (F7-b), last on the page, above the footer. Logos sit on
    the paper tone in greyscale and regain colour on hover or focus. */
