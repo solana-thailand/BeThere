@@ -1,11 +1,13 @@
-//! Upcoming public events list.
+//! Upcoming public events (.plans/043 L3): the nearest three, a poster, the
+//! event's own deposit rule in one line, and an honest empty state.
 
 use leptos::prelude::*;
 use serde::Deserialize;
 
 use crate::api::ApiResponse;
 use crate::i18n::{t_string, use_i18n};
-use crate::icons::{Icon, IconName};
+
+use super::event_card::{DepositRule, nearest_first};
 
 /// Lightweight event item from the public events API.
 #[derive(Clone, Deserialize)]
@@ -16,8 +18,11 @@ struct PublicEventItem {
     #[serde(default)]
     time_tba: bool,
     deposit_enabled: bool,
+    /// The configured PromptPay amount; absent from older payloads = unknown.
     #[serde(default)]
-    tagline: String,
+    deposit_amount_thb: u64,
+    #[serde(default)]
+    event_format: String,
     #[serde(default)]
     location: String,
     #[serde(default)]
@@ -43,8 +48,11 @@ struct PublicEventsResponse {
     sample_event_slug: Option<String>,
 }
 
-/// Event cards the landing shows before "See all".
-const LANDING_EVENT_CARDS: usize = 2;
+/// Event cards the landing shows before "See all" (ASKS-4 §17: nearest 3).
+const LANDING_EVENT_CARDS: usize = 3;
+
+/// The community Discord, for the empty state (prototype, ASKS-4 §6).
+const DISCORD_URL: &str = "https://discord.gg/PGbUgNmsns";
 
 /// Upcoming Events section — fetches active events and displays them.
 #[component]
@@ -95,161 +103,129 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
     });
 
     view! {
-        {move || {
-            let evts = events.get();
-            let is_loaded = loaded.get();
-            let heading = view! {
-                <div class="landing-section-header-sm">
-                    <h2 class="landing-h2">
-                        <Icon icon=IconName::Party class="icon-sm"/>" "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.title))}
-                    </h2>
-                </div>
-            };
-            if !is_loaded {
-                // Still loading — show heading + spinner
-                view! {
-                    <section id="events" class="landing-section-sm">
-                        {heading}
-                        <div class="landing-events-loading">
-                            <span class="landing-events-loading-spinner"></span>
-                            <p class="landing-events-loading-text">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.loading))}</p>
-                        </div>
-                    </section>
-                }.into_any()
-            } else if evts.is_empty() {
-                // No events — show heading + sandbox demo card
-                view! {
-                    <section id="events" class="landing-section-sm">
-                        {heading}
-                        <div class="landing-sandbox-card">
-                            <div class="landing-sandbox-icon"><Icon icon=IconName::Ticket class="icon-lg" /></div>
-                            <div class="landing-sandbox-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_title))}</div>
-                            <div class="landing-sandbox-desc">
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_desc))}
+        <section id="events" class="lp-events">
+            <div class="lp-wrap">
+                <p class="lp-quote">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.quote))}</p>
+                <h2 class="lp-h2">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.title))}</h2>
+                {move || {
+                    let mut evts = events.get();
+                    if !loaded.get() {
+                        return view! {
+                            <p class="lp-rule" role="status">
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.loading))}
+                            </p>
+                        }.into_any();
+                    }
+                    if evts.is_empty() {
+                        return view! {
+                            <div class="lp-event-list lp-one">
+                                <div class="lp-card lp-event lp-event-empty">
+                                    <h3>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_title))}</h3>
+                                    <p class="lp-rule">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_desc))}</p>
+                                    <div class="lp-row">
+                                        {sample_slug.get().map(|slug| view! {
+                                            <a href=format!("/e/{slug}") class="lp-btn lp-btn-primary">
+                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.sample_event))}
+                                            </a>
+                                        })}
+                                        <a class="lp-btn" href=DISCORD_URL target="_blank" rel="noopener noreferrer">"Discord"</a>
+                                    </div>
+                                </div>
                             </div>
-                            {match sample_slug.get() {
-                                Some(slug) => view! {
-                                    <a href=format!("/e/{slug}") class="btn btn-primary btn-sm landing-sandbox-btn">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.sample_event))}
-                                    </a>
-                                }.into_any(),
-                                None => view! {
-                                    <a href="#how-it-works" class="btn btn-primary btn-sm landing-sandbox-btn">
-                                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.see_how))}
-                                    </a>
-                                }.into_any(),
-                            }}
+                        }.into_any();
+                    }
+                    let total = evts.len();
+                    let mut order: Vec<(i64, usize)> =
+                        evts.iter().enumerate().map(|(i, e)| (e.event_start_ms, i)).collect();
+                    nearest_first(&mut order);
+                    let mut slots: Vec<Option<PublicEventItem>> = evts.drain(..).map(Some).collect();
+                    let shown: Vec<PublicEventItem> = order
+                        .into_iter()
+                        .take(LANDING_EVENT_CARDS)
+                        .filter_map(|(_, i)| slots[i].take())
+                        .collect();
+                    let list_class = match shown.len() {
+                        1 => "lp-event-list lp-one",
+                        _ => "lp-event-list",
+                    };
+                    view! {
+                        <div class=list_class>
+                            {shown.into_iter().map(|evt| event_card(i18n, evt)).collect::<Vec<_>>()}
                         </div>
-                        <div class="landing-sandbox-secondary">
-                            <a href="#waitlist" class="btn btn-outline btn-sm">
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.organize))}
-                            </a>
-                        </div>
-                    </section>
-                }.into_any()
-            } else {
-                view! {
-                    <section id="events" class="landing-section-sm">
-                        {heading}
-                        <div class="landing-events-grid">
-                            // Two cards keep the first screen to one decision
-                            // (.plans/038 P1-1); the rest are one tap away.
-                            {evts.into_iter().take(LANDING_EVENT_CARDS).map(|evt| {
-                                let event_url = format!("/e/{}", evt.slug);
-                                // A closure so the date and "TBA" follow a
-                                // language switch.
-                                let (start_ms, time_tba) = (evt.event_start_ms, evt.time_tba);
-                                let date_str = move || match (start_ms > 0, time_tba) {
-                                    (false, _) => t_string!(i18n, landing.upcoming.date_tba).to_string(),
-                                    (true, true) => format!(
-                                        "{} · {}",
-                                        crate::utils::format_event_day(start_ms),
-                                        t_string!(i18n, landing.upcoming.time_tba)
-                                    ),
-                                    (true, false) => crate::utils::format_event_datetime(start_ms),
-                                };
-                                let deposit_badge = if evt.deposit_enabled {
-                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::Coin class="icon-xs"/>" "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.deposit_required))}</span> }.into_any()
-                                } else {
-                                    view! { <span class="landing-inline-icon"><Icon icon=IconName::TicketFree class="icon-xs"/>" "{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.free_entry))}</span> }.into_any()
-                                };
+                        {(total > LANDING_EVENT_CARDS).then(|| {
+                            let label = move || crate::locale::fill(
+                                t_string!(i18n, landing.upcoming.see_all_n),
+                                &[("count", &total.to_string())],
+                            );
+                            view! { <p class="lp-more"><a class="lp-btn" href="/discover">{label}</a></p> }
+                        })}
+                    }.into_any()
+                }}
+            </div>
+        </section>
+    }
+}
 
-                                // Poster first, badge second — the same order
-                                // `event_hero` and `past_events` already use.
-                                let has_poster = !evt.poster_url.is_empty();
-                                let image_url = match has_poster {
-                                    true => evt.poster_url.clone(),
-                                    false => evt.nft_image_url.clone(),
-                                };
-                                let image_alt = move || match has_poster {
-                                    true => t_string!(i18n, landing.upcoming.poster_alt),
-                                    false => t_string!(i18n, landing.upcoming.badge_alt),
-                                };
-                                let badge_img = if !image_url.is_empty() {
-                                    view! {
-                                        <div class="landing-event-badge-img">
-                                            <img
-                                                src=image_url
-                                                alt=image_alt
-                                            />
-                                        </div>
-                                    }.into_any()
-                                } else {
-                                    view! { <div></div> }.into_any()
-                                };
-
-                                let tagline_html = if !evt.tagline.is_empty() {
-                                    view! {
-                                        <p class="landing-event-tagline">
-                                            {evt.tagline.clone()}
-                                        </p>
-                                    }.into_any()
-                                } else {
-                                    view! { <div></div> }.into_any()
-                                };
-
-                                let location_html = if !evt.location.is_empty() {
-                                    view! {
-                                        <p class="landing-event-location">
-                                            <span class="landing-inline-icon"><Icon icon=IconName::Pin class="icon-xs"/>" "{evt.location.clone()}</span>
-                                        </p>
-                                    }.into_any()
-                                } else {
-                                    view! { <div></div> }.into_any()
-                                };
-
-                                view! {
-                                    <a
-                                        href=event_url
-                                        class="event-card-link"
-                                    >
-                                        <div
-                                            class="card event-card landing-event-card"
-                                        >
-                                            {badge_img}
-                                            {crate::components::postponed_badge(&evt.postponed_note)}
-                                            <h3 class="landing-event-name">
-                                                {evt.name}
-                                            </h3>
-                                            {tagline_html}
-                                            <p class="landing-event-meta">
-                                                <span class="landing-inline-icon"><Icon icon=IconName::Calendar class="icon-xs"/>" "{date_str}</span>
-                                            </p>
-                                            {location_html}
-                                            <p class="landing-event-deposit">
-                                                {deposit_badge}
-                                            </p>
-                                        </div>
-                                    </a>
-                                }
-                            }).collect::<Vec<_>>()}
-                        </div>
-                        <p class="landing-see-all">
-                            <a href="/discover">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.see_all))}</a>
-                        </p>
-                    </section>
-                }.into_any()
-            }
-        }}
+/// One card: poster, when, name, where, chips, and the deposit rule.
+fn event_card(
+    i18n: leptos_i18n::I18nContext<crate::i18n::Locale>,
+    evt: PublicEventItem,
+) -> impl IntoView {
+    let event_url = format!("/e/{}", evt.slug);
+    // A closure so the date and "TBA" follow a language switch.
+    let (start_ms, time_tba) = (evt.event_start_ms, evt.time_tba);
+    let date_str = move || match (start_ms > 0, time_tba) {
+        (false, _) => t_string!(i18n, landing.upcoming.date_tba).to_string(),
+        (true, true) => format!(
+            "{} · {}",
+            crate::utils::format_event_day(start_ms),
+            t_string!(i18n, landing.upcoming.time_tba)
+        ),
+        (true, false) => crate::utils::format_event_datetime(start_ms),
+    };
+    let rule = DepositRule::for_event(
+        evt.deposit_enabled,
+        evt.deposit_amount_thb,
+        &evt.event_format,
+    );
+    let rule_text = move || match rule {
+        Some(DepositRule::BackWhenYouShowUp(n)) => crate::locale::fill(
+            t_string!(i18n, landing.upcoming.rule_back),
+            &[("amount", &n.to_string())],
+        ),
+        Some(DepositRule::OnlineFree) => {
+            t_string!(i18n, landing.upcoming.rule_online_free).to_string()
+        }
+        Some(DepositRule::Free) => t_string!(i18n, landing.upcoming.rule_free).to_string(),
+        None => String::new(),
+    };
+    let online_chip = matches!(evt.event_format.as_str(), "online" | "hybrid").then(|| view! {
+        <span class="lp-chip">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.chip_online))}</span>
+    });
+    // Poster first, badge second — the order `event_hero` and `past_events` use.
+    let has_poster = !evt.poster_url.is_empty();
+    let image_url = match has_poster {
+        true => evt.poster_url.clone(),
+        false => evt.nft_image_url.clone(),
+    };
+    let image_alt = move || match has_poster {
+        true => t_string!(i18n, landing.upcoming.poster_alt),
+        false => t_string!(i18n, landing.upcoming.badge_alt),
+    };
+    let cover = (!image_url.is_empty()).then(|| view! {
+        <img class="lp-cover" src=image_url alt=image_alt loading="lazy" width="1600" height="900" />
+    });
+    let location = (!evt.location.is_empty())
+        .then(|| view! { <span class="lp-meta">{evt.location.clone()}</span> });
+    view! {
+        <a class="lp-card lp-event" href=event_url>
+            {cover}
+            <span class="lp-when">{date_str}</span>
+            {crate::components::postponed_badge(&evt.postponed_note)}
+            <h3>{evt.name}</h3>
+            {location}
+            {online_chip.map(|chip| view! { <div class="lp-row">{chip}</div> })}
+            {(rule.is_some()).then(|| view! { <p class="lp-rule">{rule_text}</p> })}
+        </a>
     }
 }

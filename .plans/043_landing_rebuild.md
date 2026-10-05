@@ -58,7 +58,15 @@ follow-up, not part of 0.5.
   keyword links. The "why" film button waits for the film to be hosted
   (3.8 MB, click-to-load); the anchors `#story #usdc #goal #sponsors` land
   when those slices do.
-- [ ] L3–L10, L12
+- [x] L3 upcoming (`landing/upcoming.rs`, `landing/event_card.rs` + tests):
+  nearest 3 by start time (TBA last), poster cover, the event's own THB
+  amount (`deposit_amount_thb`, added to the public events listing on the D1
+  path) in "฿N, all back when you show up", online chip, a test that the
+  `upcoming` copy never says credit or forfeit. Empty state: the sample
+  event if one is set, else Discord. No seat chips: the listing has no
+  counts. 21 dead `landing-*` rules removed. Checked 390/1440, TH/EN, both
+  themes (found and fixed the app's global `h3` colour winning in light).
+- [ ] L4–L10, L12
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.

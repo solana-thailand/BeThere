@@ -139,98 +139,14 @@
     color: var(--accent);
 }
 
-.landing-see-all {
-    text-align: center;
-    margin-top: 1rem;
-    font-size: 0.9rem;
-}
-
-.landing-events-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1rem;
-}
-
-.landing-events-loading {
-    text-align: center;
-    padding: 2rem 0;
-}
-
-.landing-events-loading-spinner {
-    display: inline-block;
-    width: 1.5rem;
-    height: 1.5rem;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-}
-
-.landing-events-loading-text {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    margin-top: 0.75rem;
-}
-
 /* ── Sandbox Demo Card ───────────────────────────────────────────── */
 
-.landing-sandbox-card {
-    background: var(--bg-secondary);
-    border: 1px dashed var(--border);
-    border-radius: var(--radius);
-    padding: 2rem 1.5rem;
-    max-width: 420px;
-    margin: 1.5rem auto 0;
-    text-align: center;
-}
-
-.landing-sandbox-icon {
-    font-size: 2rem;
-    margin-bottom: 0.5rem;
-}
-
-.landing-sandbox-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #fff;
-    margin-bottom: 0.35rem;
-}
-
-.landing-sandbox-desc {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-bottom: 1rem;
-    line-height: 1.5;
-}
-
-.landing-sandbox-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-}
-
-.landing-sandbox-secondary {
-    text-align: center;
-    margin-top: 1rem;
-    max-width: 420px;
-    margin-left: auto;
-    margin-right: auto;
-}
 .landing-waitlist-signed-in {
     margin-top: 1rem;
     text-align: center;
 }
 .landing-waitlist-signed-in .btn {
     margin-top: 0.5rem;
-}
-
-.landing-event-card {
-    text-align: left;
-    padding: 1.25rem 1.5rem;
-}
-
-.landing-event-badge-img {
-    margin-bottom: 0.5rem;
 }
 
 /* The 80px letterbox was sized for the square NFT badge. Event posters are
@@ -240,51 +156,6 @@
  * 16:9 with `object-position: top` keeps the band every poster in this
  * programme puts its title, instalment number and branding in, which is the
  * part that answers "which event is this?" (.issues/094). */
-.landing-event-badge-img img {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
-    object-position: top;
-    border-radius: 6px 6px 0 0;
-    display: block;
-}
-
-.landing-event-name {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #fff;
-    margin-bottom: 0.35rem;
-}
-
-.landing-event-tagline {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.35rem;
-    font-style: italic;
-}
-
-.landing-event-meta {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.35rem;
-}
-
-.landing-event-location {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    margin-bottom: 0.25rem;
-}
-
-.landing-event-deposit {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-}
-
-.landing-inline-icon {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-}
 
 /* ── Landing Registrations ───────────────────────────────────────── */
 
@@ -779,26 +650,6 @@
     background: var(--bg-secondary);
     font-size: 0.7rem;
     color: var(--text-secondary);
-}
-
-/* Phone: the hero plus two event cards fit one 390x844 screen before the
-   first scroll (.plans/038 P1-1). */
-@media (max-width: 480px) {
-    .landing-section-sm {
-        padding: 0.5rem 1.25rem 2rem;
-    }
-
-    .landing-section-header-sm {
-        margin-bottom: 0.75rem;
-    }
-
-    .landing-events-grid {
-        gap: 0.75rem;
-    }
-
-    .landing-event-card {
-        padding: 1rem 1.25rem;
-    }
 }
 
 /* Inline ticket QR on the landing (.plans/038 P2-a). White quiet zone so a

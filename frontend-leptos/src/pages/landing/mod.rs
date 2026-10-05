@@ -5,6 +5,8 @@
 //! No backend calls — purely static marketing content with SPA navigation.
 
 pub mod auth;
+/// The card's deposit rule and order; public for `tests/landing_event_card.rs`.
+pub mod event_card;
 mod hero;
 /// The site header. Public because `/discover` uses it too — it was inline in
 /// `page.rs`, which is why that page had no chrome at all (`.issues/100`).

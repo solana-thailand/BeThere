@@ -97,20 +97,21 @@
     "copyright": "© 2026 BeThere. All rights reserved."
   },
   "upcoming": {
-    "title": "Upcoming Events",
+    "title": "Upcoming events",
     "loading": "Loading events...",
-    "none_title": "No live events right now",
-    "none_desc": "BeThere is a deposit-backed check-in platform. Try the flow below or host your own event.",
-    "see_how": "See how it works ↓",
-    "organize": "Organize an Event",
+    "none_title": "Nothing open right now",
+    "none_desc": "Join the Discord to hear about the next one first.",
     "date_tba": "Date TBA",
     "time_tba": "Time TBA",
-    "deposit_required": "Deposit required",
-    "free_entry": "Free entry",
     "poster_alt": "Event poster",
     "badge_alt": "Event badge",
-    "see_all": "See all events →",
-    "sample_event": "View a sample event →"
+    "sample_event": "View a sample event →",
+    "quote": "“Free events. Come on in.”",
+    "rule_back": "฿{amount}, all back when you show up",
+    "rule_online_free": "Online, free, no deposit",
+    "rule_free": "Free, no deposit",
+    "chip_online": "online, free",
+    "see_all_n": "See all {count} events (Discover) →"
   },
   "reg": {
     "upcoming": "Upcoming ({{ count }})",
