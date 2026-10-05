@@ -727,8 +727,10 @@ a.lp-event:focus-visible {
     padding-bottom: 40px;
 }
 .lp-tape {
-    background: #6b63f0;
-    color: #121212;
+    /* #f4f0e6 on #5a54cb is 5.18:1; ink on the brand #6b63f0 was 4.16, under
+       AA for 15 px text (axe, CI 37381847919). */
+    background: #5a54cb;
+    color: #f4f0e6;
     transform: rotate(-1.2deg);
     margin: 28px -20px 0;
     border-block: 2px solid #121212;
@@ -754,7 +756,7 @@ a.lp-event:focus-visible {
 .lp-tape-run i {
     width: 8px;
     height: 8px;
-    background: #121212;
+    background: #f4f0e6;
     transform: rotate(45deg);
 }
 @keyframes lp-tape {
