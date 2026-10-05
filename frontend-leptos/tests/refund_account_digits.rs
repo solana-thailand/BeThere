@@ -22,3 +22,24 @@ fn the_note_names_the_event() {
     );
     assert_eq!(refund_note("  "), "คืนค่ามัดจำ");
 }
+
+#[test]
+fn the_note_fits_the_bank_apps_40_char_limit() {
+    use event_checkin_frontend::pages::admin_deposit_bank_info::{
+        MAX_REFUND_NOTE_CHARS, refund_note,
+    };
+    let note = refund_note("Solana Thailand x AI Builder Night Bangkok Edition #6");
+    assert!(note.chars().count() <= MAX_REFUND_NOTE_CHARS, "{note}");
+    assert!(note.starts_with("คืนค่างาน Solana"));
+    assert!(!note.ends_with(' '));
+}
+
+#[test]
+fn a_cut_never_strands_a_thai_mark() {
+    use event_checkin_frontend::pages::admin_deposit_bank_info::fit_chars;
+    // "คืน" is ค + ื + น: a cut after 1 char would split ค from its vowel.
+    assert_eq!(fit_chars("คืน", 1), "");
+    assert_eq!(fit_chars("คืน", 2), "คื");
+    assert_eq!(fit_chars("abc", 2), "ab");
+    assert_eq!(fit_chars("short", 40), "short");
+}
