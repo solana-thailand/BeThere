@@ -58,6 +58,13 @@ pub fn measured_at_label(measured_at: &str) -> String {
     }
 }
 
+/// The "of the people who paid a deposit, N of M came" line and its caveat
+/// are drawn only when someone paid: "0 of 0 came" reads as a failure, not
+/// as a count.
+pub fn payers_line_shown(stats: &PublicStats) -> bool {
+    stats.deposit_payers > 0
+}
+
 /// `34000` → `"34,000"`. Thai uses the same grouping.
 pub fn group_thousands(n: u64) -> String {
     let digits = n.to_string();

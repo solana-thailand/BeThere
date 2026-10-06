@@ -44,7 +44,7 @@ pub fn MarkupText(text: Signal<String>) -> impl IntoView {
 pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) -> impl IntoView {
     let tr = crate::locale::tr;
     view! {
-        <header class="lp-hero">
+        <header class="lp-hero" id="top">
             <div class="lp-wrap lp-hero-grid">
                 <div>
                     <p class="lp-kicker">{tr(|l| crate::i18n::td_string!(l, landing.hero.kicker))}</p>
@@ -79,6 +79,7 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                                 }.into_any(),
                             }
                         }}
+                        <WhyFilm />
                     </div>
                 </div>
                 <div class="lp-loopcard" aria-hidden="true">
@@ -86,6 +87,81 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                 </div>
             </div>
         </header>
+    }
+}
+
+/// The films' revision, in each URL: the files keep their names and are
+/// cached for a day, so a re-render bumps this together with
+/// `CACHE_KEY_VERSION` in worker/src/media.rs (which ignores the query).
+const FILM_REV: &str = "v=4";
+
+/// "Why a deposit · 1 min": the one-minute film (the commitment ladder) in a
+/// dialog, with captions. The file is fetched only on the first click
+/// (3.5 MB, `media/why-{lang}.mp4`), in the language the page is in then.
+#[component]
+fn WhyFilm() -> impl IntoView {
+    let i18n = crate::i18n::use_i18n();
+    let dialog = NodeRef::<leptos::html::Dialog>::new();
+    let video = NodeRef::<leptos::html::Video>::new();
+    let captions = NodeRef::<leptos::html::Track>::new();
+    let open = move |_| {
+        let (Some(dialog), Some(video), Some(captions)) =
+            (dialog.get(), video.get(), captions.get())
+        else {
+            return;
+        };
+        let lang = leptos_i18n::Locale::as_str(i18n.get_locale_untracked());
+        let src = format!("/media/why-{lang}.mp4?{FILM_REV}");
+        if video.get_attribute("src").as_deref() != Some(src.as_str()) {
+            video.set_poster(&format!("/media/why-{lang}.jpg?{FILM_REV}"));
+            captions.set_src(&format!("/media/why-{lang}.vtt?{FILM_REV}"));
+            captions.set_srclang(lang);
+            video.set_src(&src);
+        }
+        if dialog.show_modal().is_ok() {
+            let _ = video.play();
+        }
+    };
+    // A click on the backdrop lands on the dialog itself, not the video.
+    let backdrop = move |ev: leptos::ev::MouseEvent| {
+        if let Some(dialog) = dialog.get()
+            && ev.target().as_ref() == Some(dialog.as_ref())
+        {
+            dialog.close();
+        }
+    };
+    let pause = move |_| {
+        if let Some(video) = video.get() {
+            let _ = video.pause();
+        }
+    };
+    view! {
+        <button class="lp-btn" type="button" on:click=open>
+            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.why))}
+        </button>
+        // Esc closes a modal dialog natively; so do a tap on the backdrop and
+        // the close button, which a phone has no other way to find.
+        <dialog class="lp-film" node_ref=dialog on:click=backdrop on:close=pause>
+            <button
+                class="lp-film-close"
+                type="button"
+                aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.film_close))
+                on:click=move |_| {
+                    if let Some(dialog) = dialog.get() {
+                        dialog.close();
+                    }
+                }
+            >
+                "×"
+            </button>
+            <video node_ref=video controls playsinline preload="none">
+                <track
+                    node_ref=captions
+                    kind="captions"
+                    label=crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.film_captions))
+                />
+            </video>
+        </dialog>
     }
 }
 

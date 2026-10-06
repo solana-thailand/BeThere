@@ -13,7 +13,9 @@ use wasm_bindgen::closure::Closure;
 use crate::i18n::td_string;
 
 use super::hero::MarkupText;
-use super::stats::{count_at, group_thousands, measured_at_label, use_landing_stats};
+use super::stats::{
+    count_at, group_thousands, measured_at_label, payers_line_shown, use_landing_stats,
+};
 
 const COUNT_UP_MS: f64 = 1200.0;
 const FRAME_MS: u64 = 16;
@@ -139,7 +141,7 @@ pub fn SoFar() -> impl IntoView {
         )
     };
     let payers_at = move |t: f64| {
-        let Some(s) = stats.get() else {
+        let Some(s) = stats.get().filter(payers_line_shown) else {
             return String::new();
         };
         crate::locale::fill(
@@ -158,6 +160,8 @@ pub fn SoFar() -> impl IntoView {
     let read_out = move || {
         let strip = |s: String| s.replace("**", "");
         format!("{} {}", strip(done_at(1.0)), strip(payers_at(1.0)))
+            .trim_end()
+            .to_string()
     };
     let livebar = move || {
         stats.get().map(|s| {
@@ -181,6 +185,8 @@ pub fn SoFar() -> impl IntoView {
                     <p class="lp-livebar"><i></i><span>{livebar}</span></p>
                     <p class="lp-sr">{read_out}</p>
                     <p class="lp-done" aria-hidden="true"><MarkupText text=done /></p>
+                })}
+                {move || stats.with(|s| s.as_ref().is_some_and(payers_line_shown)).then(|| view! {
                     <p class="lp-done lp-payers" aria-hidden="true"><MarkupText text=payers /></p>
                     <p class="lp-fineprint lp-center">{crate::locale::tr(|l| td_string!(l, landing.sofar.payers_note))}</p>
                 })}

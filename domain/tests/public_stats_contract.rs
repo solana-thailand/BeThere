@@ -81,6 +81,20 @@ fn rows_fold_into_the_landing_numbers() {
     assert_eq!((s.deposit_payers, s.deposit_payers_came), (54, 50));
 }
 
+#[test]
+fn staff_payers_are_money_handled_not_payers() {
+    let s = fold_stats(
+        &[
+            row("paid", "in_person", 56, 53),
+            row("paid_staff", "in_person", 4, 4),
+            row("paid", "online", 5, 0),
+        ],
+        String::new(),
+    );
+    assert_eq!(s.deposits_handled_count, 65);
+    assert_eq!((s.deposit_payers, s.deposit_payers_came), (56, 53));
+}
+
 use event_checkin_domain::models::public_stats::{MIN_TIMING_SAMPLES, Timing};
 
 #[test]

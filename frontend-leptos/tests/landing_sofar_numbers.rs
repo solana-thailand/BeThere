@@ -40,3 +40,25 @@ fn payers_line_carries_the_caveat() {
         );
     }
 }
+
+#[test]
+fn payers_line_hidden_when_nobody_paid() {
+    use event_checkin_domain::models::public_stats::PublicStats;
+    use event_checkin_frontend::pages::landing::stats::payers_line_shown;
+    let stats = |paid, came| PublicStats {
+        measured_at: "2026-10-06T00:00:00Z".to_string(),
+        events_held: 18,
+        onsite_registrations: 27,
+        online_registrations: 0,
+        door_scans: 21,
+        deposits_handled_count: 0,
+        deposits_handled_thb: 0,
+        deposit_payers: paid,
+        deposit_payers_came: came,
+        slip_check: None,
+        refund_after_end: None,
+    };
+    assert!(!payers_line_shown(&stats(0, 0)), "0 of 0 must not be drawn");
+    assert!(payers_line_shown(&stats(54, 50)));
+    assert!(payers_line_shown(&stats(1, 0)), "0 of 1 is a real count");
+}

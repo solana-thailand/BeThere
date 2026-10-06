@@ -4,10 +4,10 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 
 use super::auth::AuthState;
+use super::header::{LandingHeader, SideIndex};
 use super::hero::Hero;
 use super::how::HowItWorks;
 use super::join::Join;
-use super::nav::SiteHeader;
 use super::registrations::MyRegistrations;
 use super::sofar::SoFar;
 use super::sponsors::Sponsors;
@@ -66,7 +66,8 @@ pub fn Landing() -> impl IntoView {
         <div class="landing-page lp" data-theme=move || theme.get().as_str()>
 
             // ===== Nav Bar =====
-            <SiteHeader auth_state=auth_state user_role=user_role theme=theme />
+            <LandingHeader auth_state=auth_state theme=theme />
+            <SideIndex />
 
             // ===== Hero (build plan 0.5, .plans/043 L2) =====
             <Hero auth_state=auth_state user_role=user_role />

@@ -8,12 +8,23 @@ WITH
   live AS (
     SELECT id, event_end_ms FROM events WHERE status IN ('active', 'completed')
   ),
-  timed AS (
-    SELECT d.uploaded_at, d.verified_at, d.refunded, d.refunded_at, e.event_end_ms
+  -- Live plus archived deposits, each once (.issues/186; same rule as
+  -- `money` in public_stats.sql).
+  money AS (
+    SELECT d.event_id, d.uploaded_at, d.verified_at, d.refunded, d.refunded_at
     FROM thb_deposits d
-    JOIN live e ON e.id = d.event_id
     WHERE d.verified = 1 AND d.amount_thb > 0
       AND (d.deposit_source IS NULL OR d.deposit_source IN ('cash', 'credit'))
+    UNION ALL
+    SELECT r.event_id, r.uploaded_at, r.verified_at, r.refunded, r.refunded_at
+    FROM thb_deposit_archive r
+    WHERE r.verified = 1 AND r.amount_thb > 0
+      AND NOT EXISTS (SELECT 1 FROM thb_deposits d WHERE d.id = r.source_deposit_id)
+  ),
+  timed AS (
+    SELECT m.uploaded_at, m.verified_at, m.refunded, m.refunded_at, e.event_end_ms
+    FROM money m
+    JOIN live e ON e.id = m.event_id
   )
 SELECT
   CASE WHEN julianday(verified_at) IS NOT NULL AND julianday(uploaded_at) IS NOT NULL
