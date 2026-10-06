@@ -54,6 +54,7 @@ web-sys = { version = "0.3", features = [
   "FileList",
   "HtmlDialogElement",
   "HtmlMediaElement",
+  "HtmlTrackElement",
   "HtmlVideoElement",
   "KeyboardEvent",
   "MediaDevices",

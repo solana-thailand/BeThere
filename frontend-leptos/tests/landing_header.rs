@@ -3,7 +3,6 @@
 
 use event_checkin_frontend::locale::shows_lang_bar;
 use event_checkin_frontend::pages::landing::header::{HEADER_SECTIONS, SIDE_SECTIONS};
-use event_checkin_frontend::pages::landing::hero::{PROD_HOST, film_shown};
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -87,25 +86,18 @@ fn hero_promises_no_speed() {
 /// The film button points at files the build ships.
 #[test]
 fn why_film_files_ship() {
-    for name in ["why-en.mp4", "why-th.mp4", "why-en.jpg", "why-th.jpg"] {
+    for name in [
+        "why-en.mp4",
+        "why-th.mp4",
+        "why-en.jpg",
+        "why-th.jpg",
+        "why-en.vtt",
+        "why-th.vtt",
+    ] {
         assert!(
             std::path::Path::new(&format!("{ROOT}/media/{name}")).is_file(),
             "media/{name} missing"
         );
     }
     assert!(read("index.html").contains("rel=\"copy-dir\" href=\"media\""));
-}
-
-/// The film still carries the withdrawn 46/25 → 44/51 comparison: its button
-/// is off on prod and on everywhere else, so staging can check the dialog.
-#[test]
-fn film_button_is_off_on_prod_only() {
-    assert!(!film_shown(PROD_HOST));
-    assert!(film_shown("bethere-staging.solana-thailand.workers.dev"));
-    assert!(film_shown("localhost"));
-    let canonical = read("index.html");
-    assert!(
-        canonical.contains(&format!("https://{PROD_HOST}")),
-        "PROD_HOST no longer matches the canonical URL in index.html"
-    );
 }

@@ -79,7 +79,7 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                                 }.into_any(),
                             }
                         }}
-                        {film_shown(&current_hostname()).then(|| view! { <WhyFilm /> })}
+                        <WhyFilm />
                     </div>
                 </div>
                 <div class="lp-loopcard" aria-hidden="true">
@@ -90,43 +90,27 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
     }
 }
 
-/// The production host. The film button is not shown there (see
-/// [`film_shown`]).
-pub const PROD_HOST: &str = "bethere.solana-thailand.workers.dev";
-
-/// Whether the "why a deposit" button is drawn on `hostname`.
-///
-/// Off on prod until the film is re-rendered: the current cut still carries
-/// the withdrawn "46 registered / 25 came → 44 of 51" comparison (RTM #1 took
-/// deposits by hand, so it is not a no-deposit control; owner, 6 Oct).
-/// Staging and local keep it so the dialog can be checked. When the new
-/// `media/why-{en,th}.mp4` land, delete this gate.
-pub fn film_shown(hostname: &str) -> bool {
-    hostname != PROD_HOST
-}
-
-fn current_hostname() -> String {
-    web_sys::window()
-        .and_then(|w| w.location().hostname().ok())
-        .unwrap_or_default()
-}
-
-/// "Why a deposit · 1 min": the one-minute film in a dialog. The file is
-/// fetched only on the first click (3.8 MB, `media/why-{lang}.mp4`), in the
-/// language the page is in at that moment.
+/// "Why a deposit · 1 min": the one-minute film (the commitment ladder) in a
+/// dialog, with captions. The file is fetched only on the first click
+/// (3.5 MB, `media/why-{lang}.mp4`), in the language the page is in then.
 #[component]
 fn WhyFilm() -> impl IntoView {
     let i18n = crate::i18n::use_i18n();
     let dialog = NodeRef::<leptos::html::Dialog>::new();
     let video = NodeRef::<leptos::html::Video>::new();
+    let captions = NodeRef::<leptos::html::Track>::new();
     let open = move |_| {
-        let (Some(dialog), Some(video)) = (dialog.get(), video.get()) else {
+        let (Some(dialog), Some(video), Some(captions)) =
+            (dialog.get(), video.get(), captions.get())
+        else {
             return;
         };
         let lang = leptos_i18n::Locale::as_str(i18n.get_locale_untracked());
         let src = format!("/media/why-{lang}.mp4");
         if video.get_attribute("src").as_deref() != Some(src.as_str()) {
             video.set_poster(&format!("/media/why-{lang}.jpg"));
+            captions.set_src(&format!("/media/why-{lang}.vtt"));
+            captions.set_srclang(lang);
             video.set_src(&src);
         }
         if dialog.show_modal().is_ok() {
@@ -165,7 +149,13 @@ fn WhyFilm() -> impl IntoView {
             >
                 "×"
             </button>
-            <video node_ref=video controls playsinline preload="none"></video>
+            <video node_ref=video controls playsinline preload="none">
+                <track
+                    node_ref=captions
+                    kind="captions"
+                    label=crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.film_captions))
+                />
+            </video>
         </dialog>
     }
 }

@@ -9,8 +9,7 @@ pub mod auth;
 pub mod event_card;
 /// The landing's header and side index; public for `tests/landing_header.rs`.
 pub mod header;
-/// The hero; public for `tests/landing_header.rs` (the film gate).
-pub mod hero;
+mod hero;
 /// The swimlane; public for `tests/landing_how_routes.rs`.
 pub mod how;
 mod join;

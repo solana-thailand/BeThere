@@ -28,7 +28,8 @@
     "quote": "“Let's go, everyone.”",
     "after_event": "after the event",
     "why": "Why a deposit · 1 min",
-    "film_close": "Close the film"
+    "film_close": "Close the film",
+    "film_captions": "Captions"
   },
   "cta": {
     "dashboard": "Go to Dashboard →",

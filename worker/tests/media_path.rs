@@ -8,6 +8,10 @@ use event_checkin_worker::media::{MEDIA_PREFIX, media_content_type};
 fn films_and_posters_are_served_with_their_type() {
     assert_eq!(media_content_type("/media/why-th.mp4"), Some("video/mp4"));
     assert_eq!(media_content_type("/media/why-en.jpg"), Some("image/jpeg"));
+    assert_eq!(
+        media_content_type("/media/why-th.vtt"),
+        Some("text/vtt; charset=utf-8")
+    );
 }
 
 #[test]

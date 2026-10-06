@@ -22,11 +22,13 @@ pub const MEDIA_PREFIX: &str = "/media/";
 /// change them, so a day is only a bound on a mistake.
 pub const MEDIA_CACHE_CONTROL: &str = "public, max-age=86400";
 
-/// Bumped when what is stored under a key changes shape.
-const CACHE_KEY_VERSION: &str = "v=2";
+/// Bumped when what is stored under a key changes: its shape (v=2, fixed
+/// length) or the files themselves (v=3, the re-rendered films, 6 Oct).
+const CACHE_KEY_VERSION: &str = "v=3";
 
 /// The content type for a servable media path, or `None` for anything else
-/// (a nested path, a dot segment or an unknown extension).
+/// (a nested path, a dot segment or an unknown extension). The films are
+/// `mp4`, their posters `jpg`, their captions `vtt`.
 pub fn media_content_type(path: &str) -> Option<&'static str> {
     let name = path.strip_prefix(MEDIA_PREFIX)?;
     let valid = !name.is_empty()
@@ -40,6 +42,7 @@ pub fn media_content_type(path: &str) -> Option<&'static str> {
     match name.rsplit_once('.')?.1 {
         "mp4" => Some("video/mp4"),
         "jpg" => Some("image/jpeg"),
+        "vtt" => Some("text/vtt; charset=utf-8"),
         _ => None,
     }
 }
