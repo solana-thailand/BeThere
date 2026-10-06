@@ -188,4 +188,16 @@ follow-up, not part of 0.5.
   (attendee 1,311,506 B, staff 1,996,228 B). L8 next (table above); L9
   photos (8, owner-chosen 6 Oct) wait on where the files live: the repo is
   public, so a committed photo cannot be removed from git history.
+- **Release 2 on prod, 2026-10-06 08:12 UTC (owner go, `event-checkin-d6`):**
+  `main` `c2f5927a` (tree = `daaa65c9`), version `39392433`. Backup
+  `bethere-db-20261006-1507-pre-release-daaa65c9.sql` (2,500,796 B, 600).
+  Smoke reads + writes pass; `/robots.txt` allows search (prod), sitemap
+  lists 4 prod URLs only, `llms.txt` says no open events (true: no event ends
+  in the future) and has no empty `/e/` link. Pull 156 merged.
+- **Release 3 built, pull 157 (`fbeea467`), not staged:** L10 globe, L8
+  ladder (typed table, 70 of 73, each row sourced), L9 reel (8 photos in R2
+  `landing-photos/`, list `worker/landing-photos.jsonl`, staging bucket
+  uploaded and read back 16/16; prod bucket at the prod deploy). First load
+  +35,644 B br4 (warn, under fail). Staging keeps pull 158 (`.issues/187`)
+  until that reaches prod, so its parity check can pass; R3 stages after.
 
