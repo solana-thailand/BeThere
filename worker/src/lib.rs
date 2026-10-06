@@ -31,6 +31,8 @@ mod middleware;
 pub mod notifications;
 mod org_store;
 // Public so `worker/tests/precompressed_asset.rs` can drive the pure helpers.
+/// `/media/*` with byte ranges (the landing film); public for `tests/media_path.rs`.
+pub mod media;
 pub mod precompressed;
 mod quiz;
 
@@ -155,6 +157,12 @@ async fn fetch(
     // can be served pre-compressed (brotli 11) instead of Cloudflare's q4.
     if let Some(asset) = precompressed::precompressed_asset(path) {
         return precompressed::serve(req, &env, asset).await;
+    }
+    // The landing film: static assets ignore Range, which iOS Safari needs.
+    if let Some(content_type) = media::media_content_type(path)
+        && req.method() == axum::http::Method::GET
+    {
+        return media::serve(req, &env, content_type).await;
     }
     if is_spa_route(path) {
         return Ok(spa_fallback().await);

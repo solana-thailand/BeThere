@@ -11,6 +11,11 @@
 //! all resolve to [`StaffShellHandoff`], so the linker drops the staff pages
 //! from the attendee wasm. The edge serves the staff shell for these paths via
 //! the `_redirects` 200 rewrites; keep that file in step with [`STAFF_PATHS`].
+//!
+//! The landing (`/`, [`HomeRoute`]) is the mirror case: the edge always serves
+//! it from the attendee shell, so the staff build hands `/` back with a full
+//! page load and the linker drops the landing from the staff wasm, which sits
+//! near its size ceiling (`scripts/verify/frontend_size_budget.sh`).
 
 /// Path patterns served by the staff shell, in `_redirects` placeholder syntax.
 /// `tests/staff_shell_split.rs` pins `_redirects` to this list.
@@ -24,8 +29,8 @@ pub const STAFF_PATHS: [&str; 5] = [
 
 #[cfg(feature = "staff")]
 pub use staff::{
-    ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack,
-    ProtectedScanner,
+    AttendeeShellHandoff as HomeRoute, ProtectedAdmin, ProtectedEventSummary,
+    ProtectedLiveDashboard, ProtectedPrPack, ProtectedScanner,
 };
 
 #[cfg(not(feature = "staff"))]
@@ -35,11 +40,10 @@ pub use attendee::{
     StaffShellHandoff as ProtectedScanner,
 };
 
-/// Records the path the page booted on. Call once, before the router mounts.
-pub fn record_boot_path() {
-    #[cfg(not(feature = "staff"))]
-    attendee::record_boot_path();
-}
+#[cfg(not(feature = "staff"))]
+pub use crate::pages::landing::Landing as HomeRoute;
+
+pub use handoff::record_boot_path;
 
 #[cfg(feature = "staff")]
 mod staff {
@@ -49,6 +53,16 @@ mod staff {
         scanner::Scanner,
     };
     use leptos::prelude::*;
+
+    /// The landing reached inside the staff shell (a "Home" link). A full page
+    /// load of `/` gets the attendee shell from the edge.
+    #[component]
+    pub fn AttendeeShellHandoff() -> impl IntoView {
+        super::handoff::shell_handoff(
+            "Opening BeThere…",
+            "BeThere could not be loaded. Check your connection and try again.",
+        )
+    }
 
     /// Staff scanner. `ProtectedRoute` captures OAuth tokens from the URL,
     /// redirects to `/login` when signed out and provides the user email.
@@ -108,6 +122,20 @@ mod staff {
 #[cfg(not(feature = "staff"))]
 mod attendee {
     use leptos::prelude::*;
+
+    /// A staff path reached inside the attendee shell.
+    #[component]
+    pub fn StaffShellHandoff() -> impl IntoView {
+        super::handoff::shell_handoff(
+            "Opening the staff app…",
+            "The staff app could not be loaded. Check your connection and try again.",
+        )
+    }
+}
+
+/// The hand-off between the two shells, shared by both builds.
+mod handoff {
+    use leptos::prelude::*;
     use leptos_router::hooks::use_location;
     use std::cell::OnceCell;
 
@@ -115,6 +143,7 @@ mod attendee {
         static BOOT_PATH: OnceCell<String> = const { OnceCell::new() };
     }
 
+    /// Records the path the page booted on. Call once, before the router mounts.
     pub fn record_boot_path() {
         let path = web_sys::window()
             .and_then(|w| w.location().pathname().ok())
@@ -124,17 +153,16 @@ mod attendee {
         });
     }
 
-    /// A staff path reached inside the attendee shell.
+    /// A path that belongs to the other shell.
     ///
     /// After a client-side navigation (an `<A>` or `use_navigate`) a full
-    /// page load of the same URL asks the edge again and gets the staff
+    /// page load of the same URL asks the edge again and gets the right
     /// shell. The router renders the route before it updates
     /// `window.location`, so the target comes from the router, not the window.
-    /// If the page *booted* on this path, the edge served the attendee shell
-    /// for it (a missing `_redirects` rule, or the service worker's offline
+    /// If the page *booted* on this path, the edge served this shell for it
+    /// (a missing `_redirects` rule, or the service worker's offline
     /// fallback); navigating again would loop, so say so instead.
-    #[component]
-    pub fn StaffShellHandoff() -> impl IntoView {
+    pub fn shell_handoff(opening: &'static str, failed: &'static str) -> impl IntoView {
         let location = use_location();
         let path = location.pathname.get_untracked();
         let booted_here = BOOT_PATH.with(|p| p.get().is_some_and(|b| *b == path));
@@ -153,9 +181,7 @@ mod attendee {
         view! {
             <div class="center-page">
                 <div class="container layout-col-center">
-                    <p class="subtitle">
-                        {if booted_here { "The staff app could not be loaded. Check your connection and try again." } else { "Opening the staff app…" }}
-                    </p>
+                    <p class="subtitle">{if booted_here { failed } else { opening }}</p>
                 </div>
             </div>
         }

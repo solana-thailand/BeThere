@@ -98,6 +98,10 @@ self.addEventListener("fetch", function (event) {
   // — let the browser handle them via normal HTTP cache).
   if (url.origin !== self.location.origin) return;
 
+  // /media/* — the landing film. Left to the browser: video playback uses
+  // Range requests (206), which the cache strategies below do not store.
+  if (url.pathname.startsWith("/media/")) return;
+
   // /api/* — network-only. API responses are always dynamic (deposit status,
   // attendee lists, auth state, etc.) and must NEVER be cached or re-served
   // from cache. Caching them caused a real-world stale-data bug: a 200 with

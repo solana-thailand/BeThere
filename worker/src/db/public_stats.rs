@@ -1,7 +1,8 @@
 //! The landing page's aggregates (`GET /api/public/stats`): one statement, no
 //! parameters, no personal data. The query groups by the stored
 //! `participation_type`; `fold_stats` classifies each value with the app's own
-//! parser. Definitions live with the type,
+//! parser; a second statement reads the durations behind the timings.
+//! Definitions live with the type,
 //! `event_checkin_domain::models::public_stats`.
 
 use event_checkin_domain::models::public_stats::{PublicStats, StatsRow, fold_stats};
@@ -16,7 +17,7 @@ pub(crate) async fn read_public_stats(
     let rows = crate::db::d1_safe::safe_all_rows(&stmt)
         .await
         .map_err(|e| format!("D1 public stats: {e}"))?;
-    let rows = rows
+    let mut rows = rows
         .iter()
         .map(|row| {
             let text = |key: &str| {
@@ -38,5 +39,33 @@ pub(crate) async fn read_public_stats(
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
+    rows.extend(read_timing_rows(db).await?);
     Ok(fold_stats(&rows, measured_at))
+}
+
+/// The timings statement, as `slip_s` / `refund_s` rows for `fold_stats`. A
+/// second round trip: D1 rejects one compound SELECT with both shapes, and the
+/// edge cache in front of the route means a burst still reads D1 once.
+async fn read_timing_rows(db: &D1Database) -> Result<Vec<StatsRow>, String> {
+    let stmt = db.prepare(include_str!("sql/public_stats_timings.sql"));
+    let rows = crate::db::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| format!("D1 public stats timings: {e}"))?;
+    let duration = |kind: &str, n: u64| StatsRow {
+        kind: kind.to_string(),
+        participation_type: String::new(),
+        n,
+        checked_in: 0,
+    };
+    Ok(rows
+        .iter()
+        .flat_map(|row| {
+            let seconds = |key: &str| row.get(key).and_then(serde_json::Value::as_u64);
+            [
+                seconds("slip_s").map(|n| duration("slip_s", n)),
+                seconds("refund_s").map(|n| duration("refund_s", n)),
+            ]
+        })
+        .flatten()
+        .collect())
 }

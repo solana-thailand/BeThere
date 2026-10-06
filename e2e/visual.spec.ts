@@ -21,11 +21,13 @@ for (const target of PAGES) {
         fullPage: true,
         animations: "disabled",
         caret: "hide",
-        // Content that is correct but not fixed: the clock, camera state and
-        // the build line (commit hash; absent from CI's plain trunk build).
+        // Content that is correct but not fixed: the clock, camera state, the
+        // build line (commit hash; absent from CI's plain trunk build) and the
+        // landing's live stats (measured-at time; figures that count up only
+        // once the strip is seen, so a full-page capture can catch any value).
         // The scanner <video> fills the viewport, so it is hidden by
         // screenshot.css rather than masked (a mask covers the UI above it).
-        mask: [page.locator(".dashboard-last-updated, canvas, .landing-footer-version")],
+        mask: [page.locator(".dashboard-last-updated, canvas, .lp-version, .lp-livebar, .lp-done")],
         stylePath: path.join(__dirname, "screenshot.css"),
         maxDiffPixelRatio: 0.01,
       });

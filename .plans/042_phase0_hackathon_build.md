@@ -104,7 +104,7 @@ then the landing, then the share tags. Each item ships on its own.
   deploy, with each platform's debugger. Not in scope: per-event previews
   (needs the Worker to rewrite the head of `/e/*`), PWA manifest icons
   (still the SVG).
-  **0.6 blocked (2026-10-06, `event-checkin-42`):** the "Done when" preview check needs a prod deploy (owner go).
+  **0.6 on prod (2026-10-06, `event-checkin-42`):** the prod head carries `og:image`/`twitter:image` = `/og-image.png` (200 `image/png`) and the PNG favicons. Left: paste a link into X, Facebook's Sharing Debugger and LINE; each needs a signed-in account, so a person does it.
 - [x] **Phase 1.0 (Thai-safe slugs), early,** on `develop`: the four builders
   are one `event_checkin_domain::slug::Slug`. ASCII names keep the slug they
   had; a name that keeps under 3 ASCII characters after dropping non-ASCII
@@ -116,5 +116,14 @@ then the landing, then the share tags. Each item ships on its own.
 - **Staging, 2026-10-06:** `a43fba5c` (0.1–0.3, 0.6, Thai-safe slugs) is
   version `52d1c9ec`; CI green on that SHA (after three GitHub runner-outage
   re-runs); smoke reads + writes pass; the page was opened in EN and TH.
-  Prod for 0.2, 0.3, 0.6 and the slugs waits for an owner go. 0.5 is on
+- **Prod, 2026-10-06 (owner go, `event-checkin-42`):** release merge
+  `b8bd6010` (tree = `develop` `7dd27d40`), version `e0f11214` at 100 %; the
+  parity gate passed with staging version `b2f8e113` (same tree, write smoke
+  passed), no `--force`. No migrations; D1 backup taken first. Checked: stats
+  match the 0.3 numbers (14 / 141 / 385 / 111 / 68 / ฿34,000 / 50 of 54),
+  the footer shows the 0.2 status line in EN and TH with no "Non-custodial",
+  and the share tags are as above. Prod write smoke not run (no `SMOKE_TOKEN`).
+  `thb_deposits` had no rows on 5–6 Oct (1–4 a day on 1–4 Oct, before the
+  deploy, after RTM #6); re-check later in the day.
+  0.5 is on
   `feature/042-landing` (`.plans/043`), not on develop.

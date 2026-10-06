@@ -70,6 +70,10 @@ fn the_vendored_jsqr_is_routed_as_javascript() {
 /// precompress list must name the same files. A table entry without its glob
 /// is never routed to the Worker (a silent loss of the saving); a glob
 /// without an entry sends that path to the SPA fallback instead of the file.
+/// `/media/*` is routed to the Worker for byte ranges, not compression
+/// (`src/media.rs`); `tests/media_path.rs` pins it.
+const MEDIA_GLOB: &str = "/media/*";
+
 #[test]
 fn table_routes_and_build_list_agree() {
     const WRANGLER: &str = include_str!("../wrangler.toml");
@@ -82,7 +86,7 @@ fn table_routes_and_build_list_agree() {
         .split('"')
         .skip(1)
         .step_by(2)
-        .filter(|g| *g != "/api/*")
+        .filter(|g| *g != "/api/*" && *g != MEDIA_GLOB)
         .collect();
     let expected: Vec<String> = PRECOMPRESSED_ASSETS
         .iter()

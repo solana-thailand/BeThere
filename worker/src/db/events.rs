@@ -957,6 +957,7 @@ struct PublicEventRow {
     event_end_ms: Option<i64>,
     time_tba: Option<i64>,
     deposit_enabled: Option<i64>,
+    deposit_amount_thb: Option<i64>,
     tagline: Option<String>,
     location: Option<String>,
     nft_image_url: Option<String>,
@@ -970,8 +971,9 @@ struct PublicEventRow {
 
 /// The columns both listings select. Kept next to the struct that receives them.
 const PUBLIC_EVENT_COLUMNS: &str = "id, name, slug, status, event_format, event_start_ms, \
-     event_end_ms, time_tba, deposit_enabled, tagline, location, nft_image_url, poster_url, \
-     created_at, in_person_capacity, online_capacity, visibility, postponed_note";
+     event_end_ms, time_tba, deposit_enabled, deposit_amount_thb, tagline, location, \
+     nft_image_url, poster_url, created_at, in_person_capacity, online_capacity, visibility, \
+     postponed_note";
 
 /// The payload both listings emit.
 fn public_event_json(r: &PublicEventRow) -> serde_json::Value {
@@ -1011,6 +1013,9 @@ fn public_event_json(r: &PublicEventRow) -> serde_json::Value {
         "event_end_ms": r.event_end_ms.unwrap_or(0),
         "time_tba": r.time_tba.unwrap_or(0) == 1,
         "deposit_enabled": r.deposit_enabled.unwrap_or(0) != 0,
+        // The configured PromptPay amount, so a card states the event's own
+        // deposit (build plan rule 1), not a literal. 0 = none configured.
+        "deposit_amount_thb": r.deposit_amount_thb.unwrap_or(0).max(0),
         "event_format": event_format.as_str(),
         "tagline": r.tagline.clone().unwrap_or_default(),
         "location": r.location.clone().unwrap_or_default(),

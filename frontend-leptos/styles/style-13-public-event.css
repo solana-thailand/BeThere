@@ -607,101 +607,15 @@
     letter-spacing: 0.06em;
 }
 
-.landing-footer-brand-name {
-    font-weight: 800;
-    font-size: 1.1rem;
-}
-
 /* ── Landing Sections ────────────────────────────────────────────── */
-
-.landing-section {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 3rem 1.5rem 4rem;
-}
-
-.landing-section-sm {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 1rem 1.5rem 3rem;
-}
 
 /* ── Landing Section Headers ─────────────────────────────────────── */
 
-.landing-section-header {
-    text-align: center;
-    margin-bottom: 2.5rem;
-}
-
-.landing-section-header-sm {
-    text-align: center;
-    margin-bottom: 1.5rem;
-}
-
 /* ── Landing Typography ──────────────────────────────────────────── */
-
-.landing-h2 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 0.5rem;
-}
 
 .landing-email-text {
     color: var(--text-secondary);
     font-size: 0.8rem;
-}
-
-/* ── Landing Hero ────────────────────────────────────────────────── */
-
-.landing-hero {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 5rem 1.5rem 3rem;
-    text-align: center;
-}
-
-.landing-hero-h1 {
-    font-size: clamp(1.9rem, 5.2vw, 3rem);
-    /* Refinement: 700 (not 800) + tight tracking reads editorial, not shouty. */
-    font-weight: 700;
-    letter-spacing: -0.025em;
-    line-height: 1.12;
-    margin-bottom: 1.25rem;
-    color: #fff;
-}
-
-.landing-hero-gradient {
-    /* Calmer two-tone indigo instead of a tri-colour rainbow — restrained but
-       still on-brand. */
-    background: linear-gradient(135deg, #ffa184, #ff7b5c);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-/* ── Landing CTAs ─────────────────────────────────────────────────── */
-
-/* One line of value under the headline (.plans/038 P1-1). */
-.landing-hero-value {
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-    line-height: 1.5;
-    max-width: 34rem;
-    margin: 0 auto 1.5rem;
-}
-
-.landing-ctas {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    justify-content: center;
-}
-
-.landing-cta-link {
-    padding: 0.85rem 2rem;
-    font-size: 1rem;
-    text-decoration: none;
 }
 
 /* Event meta rows: labelled When / Where / Format / Capacity (.plans/038 P2-b). */
@@ -787,11 +701,6 @@
 }
 
 /* Build line in the landing footer (.plans/038 P2-f). */
-.landing-footer-version {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
 
 /* Sponsor logo row (F7-b), last on the page, above the footer. Logos sit on
    the paper tone in greyscale and regain colour on hover or focus. */
