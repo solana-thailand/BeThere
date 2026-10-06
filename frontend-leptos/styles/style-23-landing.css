@@ -245,6 +245,7 @@ mark.lp-hl {
 .lp-film {
     /* The app's reset zeroes margins, which took the modal out of centre. */
     margin: auto;
+    overflow: visible;
     padding: 0;
     border: 0;
     background: transparent;
@@ -258,10 +259,11 @@ mark.lp-hl {
     width: 100%;
     display: block;
 }
+/* Above the frame, not on it: the film's own text runs to the corners. */
 .lp-film-close {
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: -52px;
+    right: 0;
     z-index: 1;
     width: 44px;
     height: 44px;
