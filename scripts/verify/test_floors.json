@@ -129,6 +129,7 @@
     "log_pii_guard tests/log_pii_guard.rs": 9,
     "map_url tests/map_url.rs": 4,
     "marketing_consent_guard tests/marketing_consent_guard.rs": 7,
+    "media_path tests/media_path.rs": 3,
     "mint_error tests/mint_error.rs": 4,
     "mint_pending_guard tests/mint_pending_guard.rs": 2,
     "next_step_kind tests/next_step_kind.rs": 4,
