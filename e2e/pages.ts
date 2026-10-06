@@ -18,22 +18,31 @@ export interface AppPage {
   /// Visible once the page's data has landed. Snapshots and axe run after
   /// it, so a slow API cannot shrink what they see.
   ready: string;
-  /// Lazy content below the fold: scrolled into view, waited for (`ready`),
-  /// then the page goes back to the top. Without it a full-page capture may
-  /// or may not have triggered the load, and the page height differs.
-  reveal?: { at: string; ready: string };
+  /// Lazy content below the fold, in page order: each is scrolled into view
+  /// and waited for (`ready`), then the page goes back to the top. Without it
+  /// a full-page capture may or may not have triggered the load, and the page
+  /// height differs.
+  reveal?: { at: string; ready: string }[];
+  /// Emulate prefers-reduced-motion: content that moves on its own (the
+  /// landing's ladder) holds its first state.
+  still?: boolean;
 }
 
 const EVENT_LOADED = `text=${EVENT_NAME}`;
 
 export const PAGES: AppPage[] = [
-  // The goal globe loads its data and code on first sight (.plans/043 L10).
+  // The photo reel (L9) and the goal globe (L10) load on first sight; the
+  // ladder (L8) narrows on its own unless motion is reduced.
   {
     name: "landing",
     path: "/",
     authed: false,
     ready: EVENT_LOADED,
-    reveal: { at: ".lp-goal-grid", ready: "#lp-countries option" },
+    reveal: [
+      { at: ".lp-reel", ready: ".lp-moment" },
+      { at: ".lp-goal-grid", ready: "#lp-countries option" },
+    ],
+    still: true,
   },
   { name: "discover", path: "/discover", authed: false, ready: EVENT_LOADED },
   { name: "event", path: `/e/${EVENT_SLUG}`, authed: false, ready: EVENT_LOADED },
@@ -59,6 +68,7 @@ const FIXED_NOW = new Date("2030-01-01T03:00:00Z");
 /// Open `target` the way a visitor would, with the dev-token session when the
 /// page needs one. Third-party beacons are dropped so they cannot flake a run.
 export async function openPage(page: Page, context: BrowserContext, target: AppPage, baseURL: string) {
+  if (target.still) await page.emulateMedia({ reducedMotion: "reduce" });
   await page.route(/static\.cloudflareinsights\.com/, route => route.abort());
   await page.clock.setFixedTime(FIXED_NOW);
   // The first-visit privacy notice has its own test (privacy-notice.spec.ts);
@@ -72,11 +82,11 @@ export async function openPage(page: Page, context: BrowserContext, target: AppP
   await page.goto(target.path, { waitUntil: "load" });
   await page.evaluate(() => document.fonts.ready);
   await page.locator(target.ready).first().waitFor({ state: "visible" });
-  if (target.reveal) {
-    await page.locator(target.reveal.at).scrollIntoViewIfNeeded();
-    await page.locator(target.reveal.ready).first().waitFor({ state: "attached" });
-    await page.evaluate(() => window.scrollTo(0, 0));
+  for (const step of target.reveal ?? []) {
+    await page.locator(step.at).scrollIntoViewIfNeeded();
+    await page.locator(step.ready).first().waitFor({ state: "attached" });
   }
+  if (target.reveal) await page.evaluate(() => window.scrollTo(0, 0));
   // Sibling requests (badges, counts) that land just after the main one.
   await page.waitForTimeout(750);
 }

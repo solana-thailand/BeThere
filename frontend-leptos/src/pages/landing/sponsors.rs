@@ -264,7 +264,7 @@ pub fn Sponsors() -> impl IntoView {
                         }
                     }).collect::<Vec<_>>()}
                 </div>
-                <div class="lp-card lp-contact">
+                <div class="lp-card lp-contact" id="contact">
                     <h3>{tr(|l| td_string!(l, landing.sponsors.contact_title))}</h3>
                     <div class="lp-who-row">
                         <img class="lp-avatar" src="/ozone-avatar-56.jpg" srcset="/ozone-avatar-112.jpg 2x"

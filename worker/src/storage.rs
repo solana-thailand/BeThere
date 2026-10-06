@@ -208,6 +208,9 @@ pub enum Visibility {
     Public,
     /// Personal or financial documents: never stored by any cache.
     Private,
+    /// Public, but must be removable on request: the landing's event photos.
+    /// Kept for an hour at most, so a photo taken down stops showing soon.
+    Removable,
 }
 
 impl Visibility {
@@ -215,6 +218,7 @@ impl Visibility {
         match self {
             Self::Public => "public, max-age=86400",
             Self::Private => "private, no-store",
+            Self::Removable => "public, max-age=3600",
         }
     }
 }
@@ -343,6 +347,25 @@ pub async fn serve_poster(
     serve_r2_object(&state, &key, Visibility::Public, if_none_match(&headers)).await
 }
 
+/// GET /api/storage/landing-photos/{name}
+///
+/// Serves a landing photo or thumbnail from R2, but only a name on the list
+/// in `landing-photos.jsonl`: deleting a line takes the photo down even
+/// before its object is deleted, and nothing else under the prefix is
+/// reachable (.plans/043 L9).
+#[worker::send]
+pub async fn serve_landing_photo(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !crate::landing_photos::is_listed(&crate::landing_photos::photos(), &name) {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    let key = format!("{}{name}", crate::landing_photos::PREFIX);
+    serve_r2_object(&state, &key, Visibility::Removable, if_none_match(&headers)).await
+}
+
 fn if_none_match(headers: &HeaderMap) -> Option<&str> {
     headers
         .get(header::IF_NONE_MATCH)
@@ -394,7 +417,7 @@ async fn serve_r2_object(
                 let content_type = content_type_from_key(candidate);
                 let cache_control = visibility.cache_control();
                 let etag = match visibility {
-                    Visibility::Public => found.http_etag.as_deref(),
+                    Visibility::Public | Visibility::Removable => found.http_etag.as_deref(),
                     Visibility::Private => None,
                 };
                 // A matching validator means the client already holds these

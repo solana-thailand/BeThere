@@ -17,13 +17,14 @@
     "events": "Events",
     "how": "How",
     "sections": "Sections",
-    "how_header": "How it works"
+    "how_header": "How it works",
+    "story": "Who comes"
   },
   "hero": {
     "kicker": "Knowledge should be free for everyone.",
     "headline_1": "Show up.",
     "headline_2": "Get it all back.",
-    "sub": "{Free|#sponsors} events. Hold your seat with a {deposit|#how}.\n{Show up|#goal}, {get it all back|#how}, plus a {badge on Solana|#usdc}.\nEvery event is also {online|#goal}, free.",
+    "sub": "{Free|#sponsors} events. Hold your seat with a {deposit|#how}.\n{Show up|#story}, {get it all back|#how}, plus a {badge on Solana|#usdc}.\nEvery event is also {online|#goal}, free.",
     "now": "Today: ฿500 by PromptPay\nComing: USDC on Solana, claimed back by you",
     "quote": "“Let's go, everyone.”",
     "after_event": "after the event",
@@ -160,6 +161,30 @@
     "chip_online": "online, free",
     "see_all_n": "See all {count} events (Discover) →"
   },
+  "story": {
+    "title": "This seat goes to\nsomeone who can come.",
+    "stages_aria": "Narrow the room",
+    "stage_registered": "Registered {n}",
+    "stage_confirmed": "Confirmed {n}",
+    "stage_paid": "Paid a deposit {n}",
+    "cap_registered": "No deposit: prepare for all {n} · {came} came",
+    "cap_confirmed": "Followed up to confirm: {n} reachable · {came} came",
+    "cap_paid": "Paid a deposit: {n} · {came} came → you know before the day",
+    "room_source": "RTM #1, one room: the organizer's hand record, before BeThere (confirmed 3 Oct 2026)",
+    "room_aria": "RTM #1: 45 registered, 30 confirmed, 16 paid a deposit; filled chairs are people who came",
+    "all_paid": "Across RTM #1–#5, people who paid a deposit: **{came} of {paid} came**",
+    "per_event": "Per event, and where each number comes from",
+    "col_event": "Event",
+    "col_paid": "Paid",
+    "col_came": "Came",
+    "col_source": "Source",
+    "src_hand": "hand record, before BeThere (confirmed 3 Oct 2026)",
+    "src_archive_owner": "BeThere deposit archive (14) + the organizer's record (1)",
+    "src_statement": "deposit statement of 20 Sep 2026, paired to attendees",
+    "src_system": "BeThere system",
+    "definition": "In-person registrants who paid cash or credit; comp, staff and online payers not counted; came = checked in at the door · measured {at}",
+    "caveat": "Measured, not a controlled trial · people who pay may have meant to come anyway"
+  },
   "reg": {
     "upcoming": "Upcoming ({{ count }})",
     "past": "Past ({{ count }})",
@@ -194,7 +219,9 @@
     "payers": "Of the people who paid a deposit, **{came} of {paid}** came",
     "payers_note": "Deposits recorded by BeThere only; people who pay may have meant to come anyway.",
     "communities": "Communities on BeThere",
-    "your_community": "+ your community"
+    "your_community": "+ your community",
+    "photo_remove": "In a photo and want it removed?",
+    "photo_remove_link": "Tell us"
   },
   "goal": {
     "kicker": "The goal",

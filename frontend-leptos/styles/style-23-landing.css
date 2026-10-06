@@ -1552,3 +1552,184 @@ a.lp-event:focus-visible {
         animation: none;
     }
 }
+
+/* ===== Story: the commitment ladder, one room of chairs (.plans/043 L8) ===== */
+.lp-story {
+    padding: 72px 0;
+    background: var(--lp-paper-2);
+    color: var(--lp-ink);
+    border-top: 2px solid var(--lp-ink);
+    border-bottom: 2px solid var(--lp-ink);
+}
+.lp-story-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.1fr;
+    gap: 48px;
+    align-items: center;
+}
+@media (max-width: 900px) {
+    .lp-story-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.lp-story h2 {
+    margin: 0;
+    font: 800 clamp(36px, 4.4vw, 58px) / 1.05 var(--lp-sans);
+    white-space: pre-line;
+}
+.lp-pct {
+    margin: 22px 0 6px;
+    font: 800 clamp(96px, 13vw, 176px) / 0.9 var(--lp-sans);
+    letter-spacing: -0.05em;
+    font-variant-numeric: tabular-nums;
+}
+.lp-cap2 {
+    min-height: 1.4em;
+    margin: 0 0 18px;
+    font: 600 15px/1.4 var(--lp-sans);
+}
+.lp-stages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.lp-stage {
+    padding: 10px 12px;
+    font: 600 14px/1 var(--lp-sans);
+    background: transparent;
+    color: var(--lp-ink);
+    border: 2px solid var(--lp-ink);
+    cursor: pointer;
+}
+.lp-stage[aria-pressed="true"] {
+    background: var(--lp-ink);
+    color: var(--lp-paper);
+}
+.lp-stage:focus-visible {
+    outline: 3px solid var(--lp-field);
+    outline-offset: 2px;
+}
+.lp-allpaid {
+    margin: 16px 0 0;
+    font: 600 16px/1.5 var(--lp-sans);
+}
+.lp-ladder {
+    margin: 12px 0 0;
+    font-size: 14px;
+}
+.lp-ladder summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+.lp-ladder table {
+    width: 100%;
+    margin: 10px 0 6px;
+    border-collapse: collapse;
+}
+.lp-ladder th,
+.lp-ladder td {
+    padding: 6px 8px 6px 0;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--lp-line);
+    font-variant-numeric: tabular-nums;
+}
+.lp-chairs svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+.lp-seat {
+    fill: var(--lp-ink);
+    stroke: var(--lp-t-warm);
+    stroke-width: 0;
+    transition:
+        fill 600ms var(--lp-ease),
+        stroke-width 600ms var(--lp-ease),
+        opacity 600ms var(--lp-ease);
+}
+.lp-seat-empty {
+    fill: transparent;
+    stroke-width: 2.4;
+}
+.lp-seat-out {
+    opacity: 0.18;
+}
+@media (prefers-reduced-motion: reduce) {
+    .lp-seat {
+        transition: none;
+    }
+}
+
+/* ===== So far: the photo reel (.plans/043 L9) ===== */
+.lp-reel {
+    padding: 28px 0 8px;
+}
+.lp-reel-track {
+    display: flex;
+    gap: 14px;
+    padding: 0 24px 12px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+}
+.lp-moment {
+    flex: none;
+    margin: 0;
+    scroll-snap-align: start;
+}
+.lp-moment-open {
+    display: block;
+    padding: 0;
+    background: none;
+    border: 2px solid #f4f0e6;
+    cursor: zoom-in;
+}
+.lp-moment-open:focus-visible {
+    outline: 3px solid #8f88ff;
+    outline-offset: 3px;
+}
+.lp-moment img {
+    display: block;
+    height: 200px;
+    width: auto;
+}
+.lp-moment figcaption {
+    margin-top: 6px;
+    font: 600 13px/1.3 var(--lp-sans);
+    color: rgba(244, 240, 230, 0.72);
+}
+.lp-reel-remove {
+    margin: 4px 24px 0;
+    font-size: 13px;
+    color: rgba(244, 240, 230, 0.72);
+}
+.lp-reel-remove a {
+    color: #f4f0e6;
+}
+.lp-photo {
+    /* Centred like the film: the app's reset zeroes dialog margins, and the
+       close button sits above the frame. */
+    margin: auto;
+    max-width: min(94vw, 1600px);
+    padding: 0;
+    background: #121212;
+    border: 0;
+    overflow: visible;
+}
+.lp-photo::backdrop {
+    background: rgba(0, 0, 0, 0.82);
+}
+.lp-photo img {
+    display: block;
+    max-width: 100%;
+    max-height: 86vh;
+    width: auto;
+    height: auto;
+}
+.lp-photo-cap {
+    margin: 0;
+    padding: 8px 12px;
+    font: 600 14px/1.3 var(--lp-sans);
+    color: #f4f0e6;
+}

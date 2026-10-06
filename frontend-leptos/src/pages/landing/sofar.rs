@@ -3,7 +3,7 @@
 //! time (build plan rule 1). The numbers count up once when they come into
 //! view; under reduced motion they are simply there. Without stats the lines
 //! are not drawn at all. The goal and its globe (L10) are `goal.rs`, under
-//! the strip; the reels (L9) wait for consent.
+//! the strip; the photo reel (L9) is `photos.rs`, above it.
 
 use leptos::html::Div;
 use leptos::prelude::*;
@@ -14,6 +14,7 @@ use crate::i18n::td_string;
 
 use super::goal::Goal;
 use super::hero::MarkupText;
+use super::photos::PhotoReel;
 use super::stats::{
     count_at, group_thousands, measured_at_label, payers_line_shown, use_landing_stats,
 };
@@ -24,7 +25,7 @@ const FRAME_MS: u64 = 16;
 /// twice the widest screen (32 × ~110 px).
 const TAPE_REPEATS: usize = 32;
 
-fn reduced_motion() -> bool {
+pub(super) fn reduced_motion() -> bool {
     web_sys::window()
         .and_then(|w| {
             w.match_media("(prefers-reduced-motion: reduce)")
@@ -181,6 +182,7 @@ pub fn SoFar() -> impl IntoView {
     view! {
         <section id="goal" class="lp-goal">
             <div class="lp-tape" aria-hidden="true"><div class="lp-tape-run">{tape()}</div></div>
+            <PhotoReel />
             <div class="lp-wrap" node_ref=strip>
                 {move || stats.with(Option::is_some).then(|| view! {
                     <p class="lp-livebar"><i></i><span>{livebar}</span></p>

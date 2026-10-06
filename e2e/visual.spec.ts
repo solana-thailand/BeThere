@@ -26,12 +26,13 @@ for (const target of PAGES) {
         // landing's live stats (measured-at time; figures that count up only
         // once the strip is seen, so a full-page capture can catch any value).
         // The goal bar, its labels and source line move with the live stats
-        // and with each refresh of globe-data.json.
+        // and with each refresh of globe-data.json. The photo reel's images
+        // live in R2, which the e2e worker does not have.
         // The scanner <video> fills the viewport, so it is hidden by
         // screenshot.css rather than masked (a mask covers the UI above it).
         mask: [
           page.locator(
-            ".dashboard-last-updated, canvas, .lp-version, .lp-livebar, .lp-done, .lp-bar span, .lp-goal-text .lp-barlabel, .lp-goal-text .lp-fineprint",
+            ".dashboard-last-updated, canvas, .lp-version, .lp-livebar, .lp-done, .lp-bar span, .lp-goal-text .lp-barlabel, .lp-goal-text .lp-fineprint, .lp-reel-track",
           ),
         ],
         stylePath: path.join(__dirname, "screenshot.css"),
