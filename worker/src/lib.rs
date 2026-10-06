@@ -31,6 +31,8 @@ mod middleware;
 pub mod notifications;
 mod org_store;
 // Public so `worker/tests/precompressed_asset.rs` can drive the pure helpers.
+/// Crawler documents and the 404 rule; public for `tests/crawl_routes.rs`.
+pub mod crawl;
 /// `/media/*` with byte ranges (the landing film); public for `tests/media_path.rs`.
 pub mod media;
 pub mod precompressed;
@@ -71,11 +73,12 @@ static LOG_INITIALIZED: OnceLock<()> = OnceLock::new();
 /// Embedded attendee `index.html`, served by `spa_fallback` for a non-API
 /// path that reaches the Worker.
 ///
-/// Navigations normally never get here: `run_worker_first` in wrangler.toml
-/// is an array, so every path it does not list (`/`, `/claim/*`, `/staff`,
-/// `/admin`, …) is served asset-first — `not_found_handling = SPA` answers
-/// with `index.html`, and `_redirects` maps the staff paths to
-/// `staff-app.html` (.issues/169). This embed is the safety net.
+/// `run_worker_first` in wrangler.toml is an array, so every path it does
+/// not list is tried as a file first: `/` gets `index.html` and `_redirects`
+/// maps the staff paths to `staff-app.html` (.issues/169). A page with no
+/// file (`/discover`, `/e/{slug}`, …) then reaches the Worker
+/// (`not_found_handling = "none"`), which answers with this embed when
+/// `crawl::route_kind` knows the page, and 404 otherwise.
 ///
 /// Rebuild after frontend changes with `frontend-leptos/build.sh`, never a
 /// bare `trunk build` (it skips the staff shell and the gates).
@@ -110,11 +113,16 @@ async fn spa_fallback() -> axum::http::Response<axum::body::Body> {
     middleware::headers::add_security_headers(resp)
 }
 
-/// Returns true if the request path should be served as the SPA fallback
-/// (any non-API HTML navigation route). Static assets (JS/CSS/WASM) are
-/// served by Cloudflare's `[assets]` binding before the worker is invoked.
-fn is_spa_route(path: &str) -> bool {
-    !path.starts_with("/api/")
+/// 404 for a path that is neither a file nor a page (`crawl::route_kind`).
+fn not_found() -> axum::http::Response<axum::body::Body> {
+    let mut resp = (
+        axum::http::StatusCode::NOT_FOUND,
+        axum::response::Html(crawl::NOT_FOUND_HTML),
+    )
+        .into_response();
+    resp.headers_mut()
+        .insert(axum::http::header::CACHE_CONTROL, SPA_NO_STORE.clone());
+    middleware::headers::add_security_headers(resp)
 }
 
 /// Build a minimal 503 JSON response for when the worker cannot initialize
@@ -164,8 +172,12 @@ async fn fetch(
     {
         return media::serve(req, &env, content_type).await;
     }
-    if is_spa_route(path) {
-        return Ok(spa_fallback().await);
+    // Not a static file (`not_found_handling = "none"`): a page, the API or a
+    // crawler document, else 404 rather than the shell with a 200.
+    match crawl::route_kind(path) {
+        crawl::RouteKind::App => return Ok(spa_fallback().await),
+        crawl::RouteKind::NotFound => return Ok(not_found()),
+        crawl::RouteKind::Worker => {}
     }
 
     // API routes require AppState (bindings + config + secrets).

@@ -9,6 +9,7 @@ pub mod checkin;
 pub mod claim;
 pub mod community;
 pub mod contacts;
+pub mod crawl;
 pub mod dashboard;
 pub mod deposit;
 pub mod email_link;
@@ -649,7 +650,27 @@ pub fn routes(state: AppState) -> Router<()> {
             crate::auth::require_auth,
         ));
 
+    // Crawler and agent documents at the root (`crate::crawl`). The two that
+    // list events share the 30 s edge cache with the API.
+    let crawl_routes = Router::new()
+        .route(crate::crawl::ROBOTS_PATH, get(crawl::robots))
+        .route(
+            crate::crawl::SITEMAP_PATH,
+            get(crawl::sitemap).layer(middleware::from_fn_with_state(
+                state.clone(),
+                crate::middleware::edge_cache_layer,
+            )),
+        )
+        .route(
+            crate::crawl::LLMS_PATH,
+            get(crawl::llms).layer(middleware::from_fn_with_state(
+                state.clone(),
+                crate::middleware::edge_cache_layer,
+            )),
+        );
+
     Router::new()
         .nest("/api", public.merge(attendee_authed).merge(protected))
+        .merge(crawl_routes)
         .with_state(state)
 }

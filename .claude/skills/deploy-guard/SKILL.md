@@ -44,8 +44,11 @@ cd worker && npx wrangler d1 export <db> --remote [--env staging] \
 
 Then `chmod 600` the file. Stop if the file is empty or the command errors.
 The backup holds PII: it never enters git, and `git status` must not list it.
-Keep 7 days of backups; move older ones to the Trash (owner rule 2026-09-28,
-plan 029 §4).
+Keep backups in `~/bethere-backups/` (folder 700, files 600). **Never move a
+backup to the Trash or delete it** without asking the owner first (owner rule
+2026-10-06; it replaces the 7-day Trash rule of 2026-09-28, plan 029 §4). A
+trashed 17 Sep dump was the only record linking RTM #3's deposits to their
+attendees. If the folder grows, report its size and ask.
 
 ## 3. Build + size budgets
 

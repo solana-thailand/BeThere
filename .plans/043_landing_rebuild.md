@@ -124,7 +124,17 @@ follow-up, not part of 0.5.
     seen. New Linux baselines, each checked by eye: signed-in ticket and
     privacy notice (identical in runs 37381847919 and 37383427171), landing
     desktop, landing mobile and the expanded ticket (run 37384976523).
-- [ ] L8–L10
+- [ ] L8 ladder: waits on the owner's choice for RTM #2/#3 (system 14/14 and
+  14/13 vs the hand 12/12: import to reach 73/76, or print 77/74 as the
+  sources say). Not built.
+- [ ] L9 photos: waits on consent.
+- [x] L10 on `feature/046-landing-globe` (PR #157, stacked on #156 → #155;
+  `event-checkin-d6`): goal bar (live `events_held` / measured 692+) and the
+  globe, both loaded on first sight from `globe/` (`scripts/globe_data_import.py`
+  imports the owner's `globe-data.js`); sponsor avatar 56/112 px lazy. First
+  load +10,001 B br4 over the reset baseline (`1d12cb03`, 1,311,318 B).
+  Browser-checked at 1366/390, EN and TH; new landing Linux baselines from CI.
+  Stage after Release 2 is on prod.
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.
@@ -146,3 +156,26 @@ follow-up, not part of 0.5.
   `/api/auth/me` 401. First load +88,069 B br4 vs the 29 Sep baseline (warn,
   under the 102,400 fail). Prod waits for the owner's "deploy prod" after
   looking at staging. L8–L10 are not built.
+- **Releases, 2026-10-06 (`event-checkin-d6`):** Release 1 = PR #155
+  (`a92c17f1`, on staging), waits for the owner's "deploy prod". Release 2 =
+  PR #156 (`6580f921`, CI green incl. e2e; the 404 e2e now asserts the
+  worker's real 404). Release 3 = PR #157 (draft; L10 + avatar).
+- **Release 1 re-staged, 2026-10-06 (`event-checkin-d6`):** PR #155 head
+  `0010f115`, staging version `162a45cf`. Films with "RTM #1–#5: 70 of 73"
+  (sha256 en `f8ec15a8…`, th `c86b0d9b…`, served byte-identical from staging,
+  206 on both), film URLs `?v=4` + edge key `v=4`. Live strip payers now
+  exclude the event's staff/organizers (prod read-only: 68/64 → 65/61). Smoke
+  reads + writes pass. Phone screenshots at 50 s, EN/TH:
+  `~/Downloads/bethere-staging-film-70of73/`. Prod waits for the owner's
+  "deploy prod".
+- **L8 table (owner, 6 Oct):** one definition — in-person, cash or credit;
+  comp, staff and online payers out; came = checked in. #1 16/16 hand record;
+  #2 15/15 (14 archive + 1 owner record, plan 010 left it out of D1); #3 12/12
+  (statement paired 1:1, confirmed from the 17 Sep dump: the non-checked-in
+  payer was online); #4 16/14; #5 14/13. Total 70 of 73.
+- **Release 1 on prod, 2026-10-06 07:27 UTC (owner go, `event-checkin-d6`):**
+  `main` `6eb39e9e` (tree = `0010f115`, staging parity passed), version
+  `a518d80a`. Backup `bethere-db-20261006-1422-pre-release-0010f115.sql`
+  (2,497,242 B, 600). Smoke reads + writes pass with the token; films 206 with
+  the owner's sha256. Pull 155 merged into develop (`2dc39d84`). Smoke leaves
+  an orphan fixture deposit: `.issues/187`.
