@@ -18,8 +18,11 @@ test.describe("Landing page", () => {
     }
   });
 
+  // A real 404 from the worker, not the SPA shell answering 200 (release 2,
+  // worker/src/crawl.rs route_kind): crawlers must not index made-up paths.
   test("shows 404 for unknown routes", async ({ page }) => {
-    await page.goto("/this-page-does-not-exist");
-    await expect(page.locator("text=Page Not Found")).toBeVisible();
+    const resp = await page.goto("/this-page-does-not-exist");
+    expect(resp?.status()).toBe(404);
+    await expect(page.locator("h1")).toContainText("Not found");
   });
 });

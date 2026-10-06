@@ -22,6 +22,25 @@ use event_checkin_domain::models::event::{EventVisibility, safe_map_url};
 pub async fn list_public_events(
     State(state): State<AppState>,
 ) -> Result<ApiOk<Value>, crate::error::WorkerError> {
+    let public_events = upcoming_public_events(&state).await?;
+
+    tracing::info!(
+        count = public_events.len(),
+        "public events listed (upcoming only)"
+    );
+
+    // A seeded demo event for "View a sample event" (.plans/038 P2-f); the
+    // field is absent until SAMPLE_EVENT_SLUG is set.
+    let sample = state.config.sample_event_slug.as_str();
+    Ok(ApiOk::new(match sample.is_empty() {
+        true => json!({ "events": public_events }),
+        false => json!({ "events": public_events, "sample_event_slug": sample }),
+    }))
+}
+
+/// Active, public events that have not ended, nearest first: the landing's
+/// list, and the open events in `sitemap.xml` / `llms.txt`.
+pub(crate) async fn upcoming_public_events(state: &AppState) -> Result<Vec<Value>, AppError> {
     let now_ms = chrono::Utc::now().timestamp_millis();
 
     let mut public_events: Vec<Value> = if let Some(d1) = &state.d1 {
@@ -74,7 +93,7 @@ pub async fn list_public_events(
             })
             .collect()
     } else {
-        return Err(AppError::Internal("no data store configured".into()).into());
+        return Err(AppError::Internal("no data store configured".into()));
     };
 
     // Filter to Active events with future end time and Public visibility
@@ -92,18 +111,7 @@ pub async fn list_public_events(
             .unwrap_or(i64::MAX)
     });
 
-    tracing::info!(
-        count = public_events.len(),
-        "public events listed (upcoming only)"
-    );
-
-    // A seeded demo event for "View a sample event" (.plans/038 P2-f); the
-    // field is absent until SAMPLE_EVENT_SLUG is set.
-    let sample = state.config.sample_event_slug.as_str();
-    Ok(ApiOk::new(match sample.is_empty() {
-        true => json!({ "events": public_events }),
-        false => json!({ "events": public_events, "sample_event_slug": sample }),
-    }))
+    Ok(public_events)
 }
 
 /// `GET /api/public/event/{slug}`

@@ -138,7 +138,7 @@ async fn fetch_brotli(
     };
 
     let status = upstream.status();
-    // `not_found_handling = "single-page-application"` answers a missing file
+    // The SPA setting (before `not_found_handling = "none"`) answered a missing file
     // with index.html and a 200, so status alone cannot prove the .br exists.
     let is_html = upstream
         .headers()

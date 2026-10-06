@@ -77,6 +77,17 @@ use crate::staff_routes::{
 /// Staff routes (`/staff`, `/admin`, …) come from `staff_routes`: the real
 /// pages behind `ProtectedRoute` in the staff build, a hand-off to the staff
 /// shell in the attendee build (.issues/169).
+/// Drop the static summary `index.html` carries for fetches without
+/// JavaScript (`#boot-summary`), so it does not sit above the app.
+pub fn remove_boot_summary() {
+    if let Some(el) = web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.get_element_by_id("boot-summary"))
+    {
+        el.remove();
+    }
+}
+
 #[component]
 pub fn App() -> impl IntoView {
     staff_routes::record_boot_path();

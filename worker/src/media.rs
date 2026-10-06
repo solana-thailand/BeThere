@@ -79,8 +79,8 @@ pub async fn serve(
 
     let assets = env.assets("ASSETS")?;
     let upstream = assets.fetch(url.clone(), None).await?;
-    // `not_found_handling = "single-page-application"` answers a missing file
-    // with index.html and a 200.
+    // A missing file: with `not_found_handling = "none"` the binding answers
+    // 404; the HTML check also covers the old SPA setting (index.html, 200).
     let is_html = upstream
         .headers()
         .get(header::CONTENT_TYPE)
