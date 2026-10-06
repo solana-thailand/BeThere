@@ -2,8 +2,8 @@
 //! carried, every figure from `GET /api/public/stats` with its measured-at
 //! time (build plan rule 1). The numbers count up once when they come into
 //! view; under reduced motion they are simply there. Without stats the lines
-//! are not drawn at all. The reels (L9) and the goal globe (L10) wait for
-//! their inputs; the community row is a text wordmark (rule 5).
+//! are not drawn at all. The goal and its globe (L10) are `goal.rs`, under
+//! the strip; the reels (L9) wait for consent.
 
 use leptos::html::Div;
 use leptos::prelude::*;
@@ -12,6 +12,7 @@ use wasm_bindgen::closure::Closure;
 
 use crate::i18n::td_string;
 
+use super::goal::Goal;
 use super::hero::MarkupText;
 use super::stats::{
     count_at, group_thousands, measured_at_label, payers_line_shown, use_landing_stats,
@@ -34,7 +35,7 @@ fn reduced_motion() -> bool {
 }
 
 /// Sets `seen` the first time `target` scrolls into view, then stops watching.
-fn watch_first_sight(target: NodeRef<Div>, seen: RwSignal<bool>) {
+pub(super) fn watch_first_sight(target: NodeRef<Div>, seen: RwSignal<bool>) {
     let observer = StoredValue::new_local(None::<web_sys::IntersectionObserver>);
     Effect::new(move |_| {
         let Some(el) = target.get() else {
@@ -190,15 +191,9 @@ pub fn SoFar() -> impl IntoView {
                     <p class="lp-done lp-payers" aria-hidden="true"><MarkupText text=payers /></p>
                     <p class="lp-fineprint lp-center">{crate::locale::tr(|l| td_string!(l, landing.sofar.payers_note))}</p>
                 })}
-                <div class="lp-communities">
-                    <p class="lp-kicker">{crate::locale::tr(|l| td_string!(l, landing.sofar.communities))}</p>
-                    <div class="lp-slots">
-                        <span class="lp-slot">"Solana Developer Thailand"</span>
-                        <a class="lp-slot lp-slot-open" href="#join">{crate::locale::tr(|l| td_string!(l, landing.sofar.your_community))}</a>
-                    </div>
-                </div>
             </div>
             <div class="lp-tape lp-t2" aria-hidden="true"><div class="lp-tape-run">{tape()}</div></div>
+            <Goal />
         </section>
     }
 }

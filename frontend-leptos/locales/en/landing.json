@@ -196,6 +196,18 @@
     "communities": "Communities on BeThere",
     "your_community": "+ your community"
   },
+  "goal": {
+    "kicker": "The goal",
+    "title": "Every Solana event\non BeThere",
+    "all_label": "Solana events in the last 12 months",
+    "next": "Next: every other event where booked seats sit empty · in the queue",
+    "hint": "Drag to turn · tap a dot to see that country's events",
+    "globe_aria": "Solana events around the world; drag to turn, tap a dot to see a country",
+    "search_aria": "Country",
+    "placeholder": "Type a country… (e.g. Thailand)",
+    "bar_aria": "BeThere events out of all Solana events in the last 12 months",
+    "source": "Solana Foundation + Superteam TH calendars on Luma · measured {at}"
+  },
   "sponsors": {
     "kicker": "For sponsors",
     "title": "Where your logo goes",

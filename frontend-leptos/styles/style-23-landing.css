@@ -1143,6 +1143,22 @@ a.lp-event:focus-visible {
 .lp-who strong {
     color: var(--lp-ink);
 }
+.lp-who-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 10px 0 12px;
+}
+.lp-who-row .lp-who {
+    margin: 0;
+}
+.lp-avatar {
+    flex: none;
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border: 2px solid var(--lp-ink);
+}
 .lp-tiers {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -1401,4 +1417,138 @@ a.lp-event:focus-visible {
 }
 .lp-version {
     font-variant-numeric: tabular-nums;
+}
+
+/* ===== Goal: the globe beside the bar (.plans/043 L10) ===== */
+.lp-goal-grid {
+    display: grid;
+    grid-template-columns: 0.95fr 1.05fr;
+    gap: 40px;
+    align-items: start;
+    margin-top: 48px;
+}
+/* The goal text stays beside the globe when the country panel makes the
+   globe column tall. */
+@media (min-width: 901px) {
+    .lp-goal-text {
+        position: sticky;
+        top: 96px;
+        padding-top: 24px;
+    }
+}
+@media (max-width: 900px) {
+    .lp-goal-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.lp-goal-text h2 {
+    white-space: pre-line;
+}
+.lp-goal-text .lp-communities {
+    text-align: left;
+}
+.lp-goal-text .lp-slots {
+    justify-content: flex-start;
+}
+.lp-globe-col {
+    justify-self: center;
+    width: 100%;
+    max-width: 460px;
+}
+.lp-globe {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    cursor: grab;
+    /* Vertical swipes still scroll the page; horizontal drags turn the globe. */
+    touch-action: pan-y;
+}
+.lp-globe.lp-dragging {
+    cursor: grabbing;
+}
+.lp-globe-hint {
+    margin: 8px 0;
+    text-align: center;
+    font-size: 13px;
+    color: rgba(244, 240, 230, 0.66);
+}
+.lp-globe-search {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 10px;
+    font: 600 14px/1 var(--lp-sans);
+    background: #1c1c1c;
+    color: #f4f0e6;
+    border: 1.5px solid rgba(244, 240, 230, 0.3);
+}
+.lp-globe-search:focus-visible {
+    outline: 3px solid #8f88ff;
+    outline-offset: 2px;
+}
+.lp-globe-panel {
+    margin-top: 12px;
+    padding: 14px 16px;
+    border: 1.5px solid rgba(244, 240, 230, 0.3);
+}
+.lp-globe-panel h3 {
+    margin: 0;
+    font-size: 20px;
+}
+.lp-globe-meta {
+    margin: 2px 0 10px;
+    font-size: 13px;
+    color: rgba(244, 240, 230, 0.66);
+}
+.lp-globe-panel ul {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.lp-globe-panel li {
+    display: grid;
+    gap: 2px;
+    font-size: 14px;
+}
+.lp-globe-panel li small {
+    font-size: 12px;
+    color: rgba(244, 240, 230, 0.66);
+}
+.lp-bar {
+    height: 10px;
+    margin-top: 26px;
+    background: rgba(244, 240, 230, 0.12);
+}
+.lp-bar span {
+    display: block;
+    height: 100%;
+    background: #8f88ff;
+    transform-origin: left;
+    animation: lp-bar-grow 1.2s var(--lp-ease) both;
+}
+.lp-bar-next {
+    background: transparent;
+    border: 1.5px dashed rgba(244, 240, 230, 0.35);
+}
+.lp-bar-next span {
+    display: none;
+}
+.lp-barlabel {
+    margin: 10px 0 0;
+    color: rgba(244, 240, 230, 0.72);
+}
+.lp-barlabel strong {
+    font-size: 22px;
+    color: #f4f0e6;
+}
+@keyframes lp-bar-grow {
+    from {
+        transform: scaleX(0);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lp-bar span {
+        animation: none;
+    }
 }

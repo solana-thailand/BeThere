@@ -18,12 +18,23 @@ export interface AppPage {
   /// Visible once the page's data has landed. Snapshots and axe run after
   /// it, so a slow API cannot shrink what they see.
   ready: string;
+  /// Lazy content below the fold: scrolled into view, waited for (`ready`),
+  /// then the page goes back to the top. Without it a full-page capture may
+  /// or may not have triggered the load, and the page height differs.
+  reveal?: { at: string; ready: string };
 }
 
 const EVENT_LOADED = `text=${EVENT_NAME}`;
 
 export const PAGES: AppPage[] = [
-  { name: "landing", path: "/", authed: false, ready: EVENT_LOADED },
+  // The goal globe loads its data and code on first sight (.plans/043 L10).
+  {
+    name: "landing",
+    path: "/",
+    authed: false,
+    ready: EVENT_LOADED,
+    reveal: { at: ".lp-goal-grid", ready: "#lp-countries option" },
+  },
   { name: "discover", path: "/discover", authed: false, ready: EVENT_LOADED },
   { name: "event", path: `/e/${EVENT_SLUG}`, authed: false, ready: EVENT_LOADED },
   { name: "privacy", path: "/privacy", authed: false, ready: ".pe-section-title" },
@@ -61,6 +72,11 @@ export async function openPage(page: Page, context: BrowserContext, target: AppP
   await page.goto(target.path, { waitUntil: "load" });
   await page.evaluate(() => document.fonts.ready);
   await page.locator(target.ready).first().waitFor({ state: "visible" });
+  if (target.reveal) {
+    await page.locator(target.reveal.at).scrollIntoViewIfNeeded();
+    await page.locator(target.reveal.ready).first().waitFor({ state: "attached" });
+    await page.evaluate(() => window.scrollTo(0, 0));
+  }
   // Sibling requests (badges, counts) that land just after the main one.
   await page.waitForTimeout(750);
 }

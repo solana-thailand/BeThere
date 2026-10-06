@@ -266,7 +266,11 @@ pub fn Sponsors() -> impl IntoView {
                 </div>
                 <div class="lp-card lp-contact">
                     <h3>{tr(|l| td_string!(l, landing.sponsors.contact_title))}</h3>
-                    <p class="lp-who"><strong>"Ozone"</strong>" · "{tr(|l| td_string!(l, landing.sponsors.contact_role))}</p>
+                    <div class="lp-who-row">
+                        <img class="lp-avatar" src="/ozone-avatar-56.jpg" srcset="/ozone-avatar-112.jpg 2x"
+                            alt="Ozone" width="56" height="56" loading="lazy" decoding="async" />
+                        <p class="lp-who"><strong>"Ozone"</strong>" · "{tr(|l| td_string!(l, landing.sponsors.contact_role))}</p>
+                    </div>
                     <div class="lp-row">
                         <a class="lp-btn lp-btn-primary" href=vcard_href() download="ozone-bethere.vcf">
                             {tr(|l| td_string!(l, landing.sponsors.save_contact))}

@@ -196,6 +196,18 @@
     "communities": "ชุมชนที่ใช้ BeThere",
     "your_community": "+ ชุมชนของคุณ"
   },
+  "goal": {
+    "kicker": "เป้าหมาย",
+    "title": "ทุกงาน Solana บนโลก\nมาที่ BeThere",
+    "all_label": "งาน Solana ในรอบ 12 เดือน",
+    "next": "ต่อไป: งานทั่วไปทุกแบบ ที่คนจองแล้วไม่มา · รอคิวอยู่",
+    "hint": "ลากเพื่อหมุน · แตะจุดเพื่อดูงานในประเทศนั้น",
+    "globe_aria": "งาน Solana ทั่วโลก ลากเพื่อหมุน แตะจุดเพื่อดูงานในประเทศนั้น",
+    "search_aria": "ประเทศ",
+    "placeholder": "พิมพ์ชื่อประเทศ… (เช่น Thailand)",
+    "bar_aria": "งานบน BeThere จากงาน Solana ทั้งหมดในรอบ 12 เดือน",
+    "source": "ปฏิทิน Solana Foundation + Superteam TH บน Luma · วัด {at}"
+  },
   "sponsors": {
     "kicker": "สำหรับผู้สนับสนุน",
     "title": "โลโก้ของคุณจะอยู่ตรงไหน",
