@@ -173,3 +173,9 @@ follow-up, not part of 0.5.
   #2 15/15 (14 archive + 1 owner record, plan 010 left it out of D1); #3 12/12
   (statement paired 1:1, confirmed from the 17 Sep dump: the non-checked-in
   payer was online); #4 16/14; #5 14/13. Total 70 of 73.
+- **Release 1 on prod, 2026-10-06 07:27 UTC (owner go, `event-checkin-d6`):**
+  `main` `6eb39e9e` (tree = `0010f115`, staging parity passed), version
+  `a518d80a`. Backup `bethere-db-20261006-1422-pre-release-0010f115.sql`
+  (2,497,242 B, 600). Smoke reads + writes pass with the token; films 206 with
+  the owner's sha256. Pull 155 merged into develop (`2dc39d84`). Smoke leaves
+  an orphan fixture deposit: `.issues/187`.

@@ -91,7 +91,7 @@ then the landing, then the share tags. Each item ships on its own.
     only, and RTM #6 was postponed by the flood (several payers moved
     online). Owner call: import that history, or show only what the system
     holds.
-- [ ] 0.4 · [ ] 0.5
+- [ ] 0.4 · [x] 0.5 landing release 1 on prod 2026-10-06 07:27 UTC (`6eb39e9e`, version `a518d80a`, tree = `0010f115`); L8–L10 follow in release 3
   **0.4 blocked (2026-10-06, `event-checkin-42`):** needs the owner's sandbox organizer + faucet keys and a Turnstile site key, and ships only via a staging push.
   **0.5 blocked (2026-10-06, `event-checkin-42`):** built on `feature/042-landing` (peer `event-checkin-0d`, `.plans/043`); L8–L10 wait for owner content, L12 for the CI baselines, prod for an owner go after the take.
 - [~] **0.6** built on `develop`: `og:image` / `twitter:image` were the 400×400

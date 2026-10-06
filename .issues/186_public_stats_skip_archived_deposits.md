@@ -1,7 +1,10 @@
 # 186 · Landing "paid a deposit / came" skips archived deposits
 
-Status: open. Found 2026-10-06 (session `event-checkin-42`) while planning
-L8 (`.plans/043`); not fixed in the landing staging release.
+Status: deployed 2026-10-06 07:27 UTC (prod `main` `6eb39e9e`, tree =
+`0010f115`, version `a518d80a`; owner go in session `event-checkin-d6`). Fixed
+in landing release 1 (pull 155). Prod read after deploy: payers 65, came 61
+(staff payers excluded by the same release), 82 deposits, ฿41,000. Found
+2026-10-06 (session `event-checkin-42`) while planning L8 (`.plans/043`).
 
 ## What is wrong
 
