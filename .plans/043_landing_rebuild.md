@@ -160,3 +160,16 @@ follow-up, not part of 0.5.
   (`a92c17f1`, on staging), waits for the owner's "deploy prod". Release 2 =
   PR #156 (`6580f921`, CI green incl. e2e; the 404 e2e now asserts the
   worker's real 404). Release 3 = PR #157 (draft; L10 + avatar).
+- **Release 1 re-staged, 2026-10-06 (`event-checkin-d6`):** PR #155 head
+  `0010f115`, staging version `162a45cf`. Films with "RTM #1–#5: 70 of 73"
+  (sha256 en `f8ec15a8…`, th `c86b0d9b…`, served byte-identical from staging,
+  206 on both), film URLs `?v=4` + edge key `v=4`. Live strip payers now
+  exclude the event's staff/organizers (prod read-only: 68/64 → 65/61). Smoke
+  reads + writes pass. Phone screenshots at 50 s, EN/TH:
+  `~/Downloads/bethere-staging-film-70of73/`. Prod waits for the owner's
+  "deploy prod".
+- **L8 table (owner, 6 Oct):** one definition — in-person, cash or credit;
+  comp, staff and online payers out; came = checked in. #1 16/16 hand record;
+  #2 15/15 (14 archive + 1 owner record, plan 010 left it out of D1); #3 12/12
+  (statement paired 1:1, confirmed from the 17 Sep dump: the non-checked-in
+  payer was online); #4 16/14; #5 14/13. Total 70 of 73.
