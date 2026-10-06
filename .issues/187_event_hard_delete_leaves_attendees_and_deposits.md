@@ -1,7 +1,8 @@
 # 187 · Hard-deleting an event leaves its attendees and deposits behind
 
-Status: in progress. Fix on `feature/187-event-delete-rows` (option 1 below,
-owner's call 2026-10-06), not yet on staging or prod. Found 2026-10-06
+Status: in progress. Fix on `feature/187-event-delete-rows` (pull 158,
+option 1 below, owner's call 2026-10-06), on staging since 2026-10-06 08:36
+UTC (`346686f7`, version `366e0b08`); prod waits for the owner's go. Found 2026-10-06
 (session `event-checkin-d6`) after the release 1 prod deploy, checking
 `thb_deposits` write volume.
 
@@ -78,4 +79,21 @@ purge) and `worker/tests/event_purge_statements.rs` (the split).
 
 The 1 attendee and 5 answers not from smoke events belong to some other
 deleted event; the owner limited the cleanup to smoke fixture rows.
+
+## Verified on staging (2026-10-06)
+
+All orphans on staging before the fix deploy: 54 deposits, 67 attendees;
+`thb_deposit_archive` smoke rows: 0. After a write smoke on the fixed build:
+54 / 67 unchanged, archive smoke rows 1. Before the fix each smoke added one
+of each.
+
+## Cleanup counts (read-only, rows tied to deleted `smoke-*` events)
+
+| env | attendees | thb_deposits | deposit_statuses | smoke events | fixture ฿ |
+|---|---|---|---|---|---|
+| prod | 2 | 2 | 2 | 2 | 1,000 |
+| staging | 46 | 46 | 46 | 46 | 23,000 |
+
+Every other purged table has none. Removal waits for the fix on prod, a
+backup and the owner's go on these counts.
 
