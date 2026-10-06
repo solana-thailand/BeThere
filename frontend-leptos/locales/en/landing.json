@@ -27,7 +27,8 @@
     "now": "Today: ฿500 by PromptPay\nComing: USDC on Solana, claimed back by you",
     "quote": "“Let's go, everyone.”",
     "after_event": "after the event",
-    "why": "Why a deposit · 1 min"
+    "why": "Why a deposit · 1 min",
+    "film_close": "Close the film"
   },
   "cta": {
     "dashboard": "Go to Dashboard →",
@@ -67,7 +68,7 @@
     "ai_4": "the same rule as Solana",
     "one_scan": "one scan",
     "seconds": "seconds",
-    "after_end": "right after the event",
+    "after_end": "after the event",
     "median": "median {d}",
     "median_after": "median {d} after the event",
     "measured": "Timings measured by the system ({parts}), {at}",

@@ -43,7 +43,7 @@
     "i18n_catalog tests/i18n_catalog.rs": 6,
     "inline_text_colour_tokens tests/inline_text_colour_tokens.rs": 3,
     "landing_event_card tests/landing_event_card.rs": 5,
-    "landing_header tests/landing_header.rs": 5,
+    "landing_header tests/landing_header.rs": 6,
     "landing_how_routes tests/landing_how_routes.rs": 3,
     "landing_sofar_numbers tests/landing_sofar_numbers.rs": 4,
     "landing_sponsors tests/landing_sponsors.rs": 3,

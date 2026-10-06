@@ -3,6 +3,7 @@
 
 use event_checkin_frontend::locale::shows_lang_bar;
 use event_checkin_frontend::pages::landing::header::{HEADER_SECTIONS, SIDE_SECTIONS};
+use event_checkin_frontend::pages::landing::hero::{PROD_HOST, film_shown};
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -62,14 +63,24 @@ fn share_descriptions_claim_nothing_automated() {
     }
 }
 
-/// Nobody has measured how fast a USDC claim is, so the hero does not say.
+/// Nobody has measured how fast a USDC claim is (and there is no claim tool
+/// yet), so neither the hero nor the swimlane says.
 #[test]
 fn hero_promises_no_speed() {
     for (lang, word) in [("en", "instantly"), ("th", "ทันที")] {
         let catalog: serde_json::Value =
             serde_json::from_str(&read(&format!("locales/{lang}/landing.json"))).expect("json");
-        let now = catalog["hero"]["now"].as_str().unwrap_or_default();
-        assert!(!now.contains(word), "{lang} hero.now says {word:?}");
+        for (section, key) in [("hero", "now"), ("how", "after_end")] {
+            let text = catalog[section][key].as_str().unwrap_or_default();
+            assert!(!text.is_empty(), "{lang} {section}.{key} missing");
+            assert!(!text.contains(word), "{lang} {section}.{key} says {word:?}");
+        }
+        let right_after = ["right after", "ทันทีหลัง"];
+        let after_end = catalog["how"]["after_end"].as_str().unwrap_or_default();
+        assert!(
+            !right_after.iter().any(|w| after_end.contains(w)),
+            "{lang} how.after_end promises speed: {after_end:?}"
+        );
     }
 }
 
@@ -83,4 +94,18 @@ fn why_film_files_ship() {
         );
     }
     assert!(read("index.html").contains("rel=\"copy-dir\" href=\"media\""));
+}
+
+/// The film still carries the withdrawn 46/25 → 44/51 comparison: its button
+/// is off on prod and on everywhere else, so staging can check the dialog.
+#[test]
+fn film_button_is_off_on_prod_only() {
+    assert!(!film_shown(PROD_HOST));
+    assert!(film_shown("bethere-staging.solana-thailand.workers.dev"));
+    assert!(film_shown("localhost"));
+    let canonical = read("index.html");
+    assert!(
+        canonical.contains(&format!("https://{PROD_HOST}")),
+        "PROD_HOST no longer matches the canonical URL in index.html"
+    );
 }

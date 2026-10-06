@@ -79,7 +79,7 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                                 }.into_any(),
                             }
                         }}
-                        <WhyFilm />
+                        {film_shown(&current_hostname()).then(|| view! { <WhyFilm /> })}
                     </div>
                 </div>
                 <div class="lp-loopcard" aria-hidden="true">
@@ -88,6 +88,27 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
             </div>
         </header>
     }
+}
+
+/// The production host. The film button is not shown there (see
+/// [`film_shown`]).
+pub const PROD_HOST: &str = "bethere.solana-thailand.workers.dev";
+
+/// Whether the "why a deposit" button is drawn on `hostname`.
+///
+/// Off on prod until the film is re-rendered: the current cut still carries
+/// the withdrawn "46 registered / 25 came → 44 of 51" comparison (RTM #1 took
+/// deposits by hand, so it is not a no-deposit control; owner, 6 Oct).
+/// Staging and local keep it so the dialog can be checked. When the new
+/// `media/why-{en,th}.mp4` land, delete this gate.
+pub fn film_shown(hostname: &str) -> bool {
+    hostname != PROD_HOST
+}
+
+fn current_hostname() -> String {
+    web_sys::window()
+        .and_then(|w| w.location().hostname().ok())
+        .unwrap_or_default()
 }
 
 /// "Why a deposit · 1 min": the one-minute film in a dialog. The file is
@@ -129,7 +150,21 @@ fn WhyFilm() -> impl IntoView {
         <button class="lp-btn" type="button" on:click=open>
             {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.why))}
         </button>
+        // Esc closes a modal dialog natively; so do a tap on the backdrop and
+        // the close button, which a phone has no other way to find.
         <dialog class="lp-film" node_ref=dialog on:click=backdrop on:close=pause>
+            <button
+                class="lp-film-close"
+                type="button"
+                aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.film_close))
+                on:click=move |_| {
+                    if let Some(dialog) = dialog.get() {
+                        dialog.close();
+                    }
+                }
+            >
+                "×"
+            </button>
             <video node_ref=video controls playsinline preload="none"></video>
         </dialog>
     }
