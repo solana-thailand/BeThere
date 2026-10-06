@@ -132,6 +132,13 @@ pub struct OpenEvent {
     pub location: String,
 }
 
+/// Events that have a page to link to. The four slug builders keep ASCII
+/// only, so an all-Thai event name has an empty slug until build plan item
+/// 1.0 lands, and `/e/` with nothing after it is not a page.
+fn linkable(events: &[OpenEvent]) -> impl Iterator<Item = &OpenEvent> {
+    events.iter().filter(|e| !e.slug.trim().is_empty())
+}
+
 /// `sitemap.xml`: the public pages and every open event page.
 pub fn sitemap_xml(origin: &str, events: &[OpenEvent]) -> String {
     let mut out = String::from(
@@ -141,9 +148,8 @@ pub fn sitemap_xml(origin: &str, events: &[OpenEvent]) -> String {
     let pages = PUBLIC_PAGES
         .iter()
         .map(|(path, _)| format!("{origin}{path}"));
-    let event_pages = events
-        .iter()
-        .map(|e| format!("{origin}/e/{}", urlencoding::encode(&e.slug)));
+    let event_pages =
+        linkable(events).map(|e| format!("{origin}/e/{}", urlencoding::encode(&e.slug)));
     for url in pages.chain(event_pages) {
         out.push_str(&format!("  <url><loc>{}</loc></url>\n", xml_escape(&url)));
     }
@@ -173,12 +179,13 @@ pub fn llms_txt(origin: &str, events: &[OpenEvent]) -> String {
          ## Open events\n\
          \n",
     );
-    match events.is_empty() {
+    let listed: Vec<&OpenEvent> = linkable(events).collect();
+    match listed.is_empty() {
         true => out.push_str(&format!(
             "No open events right now. Check [Discover events]({origin}/discover).\n"
         )),
         false => {
-            for e in events {
+            for e in listed {
                 let place = match e.location.trim() {
                     "" => String::new(),
                     place => format!(", {place}"),

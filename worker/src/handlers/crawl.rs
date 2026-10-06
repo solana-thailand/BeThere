@@ -55,7 +55,6 @@ async fn open_events(state: &AppState) -> Vec<OpenEvent> {
     };
     events
         .iter()
-        .filter(|e| !field(e, "slug").is_empty())
         .map(|e| OpenEvent {
             name: field(e, "name"),
             slug: field(e, "slug"),

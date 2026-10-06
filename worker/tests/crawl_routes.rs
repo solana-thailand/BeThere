@@ -135,3 +135,32 @@ fn llms_txt_states_today_s_rule_and_no_promises() {
     )));
     assert!(llms_txt(CANONICAL_ORIGIN, &[]).contains("No open events right now."));
 }
+
+/// An all-Thai name has an empty slug today (build plan 1.0): no `/e/` link
+/// with nothing after it, in either document.
+#[test]
+fn events_without_a_slug_are_not_linked() {
+    let blank = |slug: &str| OpenEvent {
+        name: "งานทดสอบ".to_string(),
+        slug: slug.to_string(),
+        starts: "2026-11-01 18:00 (UTC+7)".to_string(),
+        location: String::new(),
+    };
+    let events = vec![blank(""), blank("  "), sample()[0].clone()];
+    let xml = sitemap_xml(CANONICAL_ORIGIN, &events);
+    let txt = llms_txt(CANONICAL_ORIGIN, &events);
+    for doc in [&xml, &txt] {
+        assert!(!doc.contains("/e/<"), "{doc}");
+        assert!(!doc.contains("/e/)"), "{doc}");
+        assert!(!doc.contains("/e/%20"), "{doc}");
+        assert!(doc.contains("/e/rtm-7"));
+    }
+    assert!(!txt.contains("งานทดสอบ"));
+    assert!(llms_txt(CANONICAL_ORIGIN, &[blank("")]).contains("No open events right now."));
+    assert_eq!(
+        sitemap_xml(CANONICAL_ORIGIN, &[blank("")])
+            .matches("/e/")
+            .count(),
+        0
+    );
+}
