@@ -90,6 +90,11 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
     }
 }
 
+/// The films' revision, in each URL: the files keep their names and are
+/// cached for a day, so a re-render bumps this together with
+/// `CACHE_KEY_VERSION` in worker/src/media.rs (which ignores the query).
+const FILM_REV: &str = "v=4";
+
 /// "Why a deposit · 1 min": the one-minute film (the commitment ladder) in a
 /// dialog, with captions. The file is fetched only on the first click
 /// (3.5 MB, `media/why-{lang}.mp4`), in the language the page is in then.
@@ -106,10 +111,10 @@ fn WhyFilm() -> impl IntoView {
             return;
         };
         let lang = leptos_i18n::Locale::as_str(i18n.get_locale_untracked());
-        let src = format!("/media/why-{lang}.mp4");
+        let src = format!("/media/why-{lang}.mp4?{FILM_REV}");
         if video.get_attribute("src").as_deref() != Some(src.as_str()) {
-            video.set_poster(&format!("/media/why-{lang}.jpg"));
-            captions.set_src(&format!("/media/why-{lang}.vtt"));
+            video.set_poster(&format!("/media/why-{lang}.jpg?{FILM_REV}"));
+            captions.set_src(&format!("/media/why-{lang}.vtt?{FILM_REV}"));
             captions.set_srclang(lang);
             video.set_src(&src);
         }

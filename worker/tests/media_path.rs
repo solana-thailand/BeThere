@@ -43,3 +43,22 @@ fn the_route_is_worker_first() {
         "run_worker_first does not route {MEDIA_PREFIX}* to the Worker"
     );
 }
+
+/// The page asks for `?v=N` (hero.rs `FILM_REV`) and the worker keys its
+/// cache on `v=N` (media.rs `CACHE_KEY_VERSION`): a re-render bumps both, or
+/// browsers keep the old film for a day while the edge serves the new one.
+#[test]
+fn film_revision_matches_the_cache_key() {
+    let root = env!("CARGO_MANIFEST_DIR");
+    let read = |rel: &str| std::fs::read_to_string(format!("{root}/{rel}")).unwrap();
+    let quoted = |src: &str, decl: &str| {
+        let rest = &src[src.find(decl).unwrap_or_else(|| panic!("{decl}")) + decl.len()..];
+        rest.split('"').nth(1).unwrap().to_string()
+    };
+    let worker = quoted(&read("src/media.rs"), "const CACHE_KEY_VERSION");
+    let page = quoted(
+        &read("../frontend-leptos/src/pages/landing/hero.rs"),
+        "const FILM_REV",
+    );
+    assert_eq!(page, worker);
+}
