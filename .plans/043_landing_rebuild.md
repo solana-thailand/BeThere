@@ -124,7 +124,17 @@ follow-up, not part of 0.5.
     seen. New Linux baselines, each checked by eye: signed-in ticket and
     privacy notice (identical in runs 37381847919 and 37383427171), landing
     desktop, landing mobile and the expanded ticket (run 37384976523).
-- [ ] L8–L10
+- [ ] L8 ladder: waits on the owner's choice for RTM #2/#3 (system 14/14 and
+  14/13 vs the hand 12/12: import to reach 73/76, or print 77/74 as the
+  sources say). Not built.
+- [ ] L9 photos: waits on consent.
+- [x] L10 on `feature/046-landing-globe` (PR #157, stacked on #156 → #155;
+  `event-checkin-d6`): goal bar (live `events_held` / measured 692+) and the
+  globe, both loaded on first sight from `globe/` (`scripts/globe_data_import.py`
+  imports the owner's `globe-data.js`); sponsor avatar 56/112 px lazy. First
+  load +10,001 B br4 over the reset baseline (`1d12cb03`, 1,311,318 B).
+  Browser-checked at 1366/390, EN and TH; new landing Linux baselines from CI.
+  Stage after Release 2 is on prod.
 - [x] L11 on the branch: `/faq` `deposit_a` no longer renders "never
   forfeited" or the credit exit; neutral "tell the organizer before the
   cut-off; the organizer sets the rule". Checked in the browser, EN and TH.
@@ -146,3 +156,7 @@ follow-up, not part of 0.5.
   `/api/auth/me` 401. First load +88,069 B br4 vs the 29 Sep baseline (warn,
   under the 102,400 fail). Prod waits for the owner's "deploy prod" after
   looking at staging. L8–L10 are not built.
+- **Releases, 2026-10-06 (`event-checkin-d6`):** Release 1 = PR #155
+  (`a92c17f1`, on staging), waits for the owner's "deploy prod". Release 2 =
+  PR #156 (`6580f921`, CI green incl. e2e; the 404 e2e now asserts the
+  worker's real 404). Release 3 = PR #157 (draft; L10 + avatar).
