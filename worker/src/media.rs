@@ -22,6 +22,9 @@ pub const MEDIA_PREFIX: &str = "/media/";
 /// change them, so a day is only a bound on a mistake.
 pub const MEDIA_CACHE_CONTROL: &str = "public, max-age=86400";
 
+/// Bumped when what is stored under a key changes shape.
+const CACHE_KEY_VERSION: &str = "v=2";
+
 /// The content type for a servable media path, or `None` for anything else
 /// (a nested path, a dot segment or an unknown extension).
 pub fn media_content_type(path: &str) -> Option<&'static str> {
@@ -48,7 +51,17 @@ pub async fn serve(
     env: &Env,
     content_type: &'static str,
 ) -> worker::Result<Response<Body>> {
-    let url = req.uri().to_string();
+    // The query string is dropped: it cannot change the file.
+    let uri = req.uri();
+    let url = format!(
+        "{}://{}{}",
+        uri.scheme_str().unwrap_or("https"),
+        uri.authority().map_or("", |a| a.as_str()),
+        uri.path()
+    );
+    // The edge-cache key; the version retires entries stored by an older
+    // serving path (the first one stored the stream with no length).
+    let key = format!("{url}?{CACHE_KEY_VERSION}");
     let range = req
         .headers()
         .get(header::RANGE)
@@ -56,7 +69,7 @@ pub async fn serve(
         .map(str::to_owned);
     let cache = worker::Cache::default();
 
-    if let Some(hit) = cache_lookup(&cache, &url, range.as_deref()).await {
+    if let Some(hit) = cache_lookup(&cache, &key, range.as_deref()).await {
         return finish(hit, content_type);
     }
 
@@ -76,26 +89,46 @@ pub async fn serve(
             .expect("static response"));
     }
 
-    let mut upstream = upstream;
-    upstream.headers_mut().insert(
-        header::CACHE_CONTROL,
-        HeaderValue::from_static(MEDIA_CACHE_CONTROL),
-    );
-    let stored = match worker::Response::try_from(upstream) {
-        Ok(resp) => cache.put(url.as_str(), resp).await,
+    let stored = match fixed_length(upstream, content_type).await {
+        Ok(resp) => cache.put(key.as_str(), resp).await,
         Err(e) => Err(e),
     };
     if let Err(e) = &stored {
         tracing::warn!(error = %e, "media: cache put failed, serving the whole file");
     }
     if stored.is_ok()
-        && let Some(hit) = cache_lookup(&cache, &url, range.as_deref()).await
+        && let Some(hit) = cache_lookup(&cache, &key, range.as_deref()).await
     {
         return finish(hit, content_type);
     }
     // No cache here: the whole file, which every browser but iOS Safari plays.
     let whole = assets.fetch(url, None).await?.map(Body::new);
     finish_http(whole, content_type)
+}
+
+/// A copy of the asset with a fixed length. The asset arrives as a stream
+/// with no `Content-Length`, and the Cache API cuts a range only from an
+/// entry that has one. The bytes stay in a JS `ArrayBuffer`; they are not
+/// copied into WASM memory.
+async fn fixed_length(
+    upstream: Response<worker::Body>,
+    content_type: &'static str,
+) -> worker::Result<worker::Response> {
+    let streamed: web_sys::Response = worker::Response::try_from(upstream)?.into();
+    let bytes = wasm_bindgen_futures::JsFuture::from(streamed.array_buffer()?).await?;
+    let length = js_sys::ArrayBuffer::from(bytes.clone()).byte_length();
+    let headers = web_sys::Headers::new()?;
+    headers.set("content-type", content_type)?;
+    headers.set("content-length", &length.to_string())?;
+    headers.set("cache-control", MEDIA_CACHE_CONTROL)?;
+    let init = web_sys::ResponseInit::new();
+    init.set_status(200);
+    init.set_headers(&headers);
+    let fixed = web_sys::Response::new_with_opt_buffer_source_and_init(
+        Some(&js_sys::Object::from(bytes)),
+        &init,
+    )?;
+    Ok(worker::Response::from(fixed))
 }
 
 /// The cached film for `url`, cut to `range` when one was asked for.
