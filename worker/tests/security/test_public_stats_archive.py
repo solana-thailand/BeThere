@@ -110,6 +110,37 @@ class PublicStatsArchiveTests(unittest.TestCase):
         self.purge(NEW)
         self.assertEqual(self.figures(), before)
 
+    def test_staff_and_organizers_are_not_payers(self):
+        """Owner rule, 6 Oct: the landing's payers exclude the event's own
+        staff and organizers (their money is still handled). The match is on
+        whole list entries: an address that merely contains a staff address
+        is an ordinary payer."""
+        self.db.execute(
+            "UPDATE events SET staff_emails = ?, organizer_emails = ? WHERE id = ?",
+            (f" {NEW}-p0@example.com ,x@example.com", f"{NEW}-p1@EXAMPLE.com", NEW),
+        )
+        self.attendee(NEW, f"b{NEW}-p0", came=False)
+        self.deposit(NEW, f"b{NEW}-p0", 500)
+        paid, thb, _ = self.figures()
+        self.assertEqual(paid, [("in_person", 5, 2)])
+        staff = [
+            (r["pt"], r["n"], r["came"])
+            for r in self.db.execute(STATS_SQL)
+            if r["kind"] == "paid_staff"
+        ]
+        self.assertEqual(staff, [("in_person", 2, 2)])
+        self.assertEqual(thb, [3500])
+
+    def test_staff_payer_stays_out_after_the_purge(self):
+        self.db.execute(
+            "UPDATE events SET staff_emails = ? WHERE id = ?", (f"{OLD}-p0@example.com", OLD)
+        )
+        before = self.figures()
+        self.archive(OLD)
+        self.purge(OLD)
+        self.assertEqual(self.figures(), before)
+        self.assertEqual(before[0], [("in_person", 5, 3)])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -14,8 +14,10 @@
 //!   credit carried from an earlier event; legacy rows with no source count as
 //!   cash); staff comps and ฿0 rows excluded.
 //! - `deposit_payers` / `deposit_payers_came`: of those deposits, the ones whose
-//!   attendee is still on the on-site track, and how many of them were checked
-//!   in. Only events whose deposits BeThere recorded: deposits taken by hand
+//!   attendee is still on the on-site track and is not on the event's own
+//!   staff or organizer list (their deposits still count as handled), and how
+//!   many of them were checked in. Comp, staff and online payers are out: the
+//!   landing ladder's definition (owner, 6 Oct). Only events whose deposits BeThere recorded: deposits taken by hand
 //!   before the system are not in it.
 //! - `slip_check`: minutes from a slip's upload to its verification, over the
 //!   same deposits.
@@ -134,6 +136,10 @@ pub fn fold_stats(rows: &[StatsRow], measured_at: String) -> PublicStats {
                     s.deposit_payers_came =
                         s.deposit_payers_came.saturating_add(small(r.checked_in));
                 }
+            }
+            // Money handled, but not a payer (see `deposit_payers`).
+            ("paid_staff", _) => {
+                s.deposits_handled_count = s.deposits_handled_count.saturating_add(small(r.n));
             }
             ("thb", _) => s.deposits_handled_thb = r.n,
             ("slip_s", _) => slip_s.push(r.n),

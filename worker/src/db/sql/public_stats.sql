@@ -5,8 +5,12 @@
 -- ParticipationType::parse (domain/src/models/public_stats.rs), never by a
 -- SQL predicate, so the two cannot drift (same rule as track_counts.rs).
 WITH
+  -- `crew`: the event's staff and organizer lists as one ',a,b,' string, the
+  -- same delimiter-safe match as event_ids_for_staff.sql.
   live AS (
-    SELECT id, event_end_ms FROM events WHERE status IN ('active', 'completed')
+    SELECT id, event_end_ms,
+           ',' || REPLACE(LOWER(COALESCE(staff_emails, '') || ',' || COALESCE(organizer_emails, '')), ' ', '') || ',' AS crew
+    FROM events WHERE status IN ('active', 'completed')
   ),
   regs AS (
     SELECT a.participation_type AS pt,
@@ -30,9 +34,13 @@ WITH
     WHERE r.verified = 1 AND r.amount_thb > 0
       AND NOT EXISTS (SELECT 1 FROM thb_deposits d WHERE d.id = r.source_deposit_id)
   ),
+  -- `staff`: the payer is on the event's own staff or organizer list. Their
+  -- money still counts as handled; they are not counted as payers (owner
+  -- rule, 6 Oct: the same definition as the landing ladder).
   paid AS (
     SELECT m.thb, a.participation_type AS pt,
-           (a.checked_in_at IS NOT NULL AND a.checked_in_at <> '') AS cin
+           (a.checked_in_at IS NOT NULL AND a.checked_in_at <> '') AS cin,
+           (a.email IS NOT NULL AND INSTR(e.crew, ',' || REPLACE(LOWER(a.email), ' ', '') || ',') > 0) AS staff
     FROM money m
     JOIN live e ON e.id = m.event_id
     LEFT JOIN attendees a ON a.id = m.attendee_id AND a.event_id = m.event_id
@@ -42,6 +50,7 @@ SELECT 'held' AS kind, '' AS pt, COUNT(*) AS n, 0 AS came FROM live
 UNION ALL
 SELECT 'reg', COALESCE(pt, ''), COUNT(*), COALESCE(SUM(cin), 0) FROM regs GROUP BY pt
 UNION ALL
-SELECT 'paid', COALESCE(pt, '(no attendee)'), COUNT(*), COALESCE(SUM(cin), 0) FROM paid GROUP BY pt
+SELECT CASE WHEN staff THEN 'paid_staff' ELSE 'paid' END, COALESCE(pt, '(no attendee)'), COUNT(*), COALESCE(SUM(cin), 0)
+  FROM paid GROUP BY staff, pt
 UNION ALL
 SELECT 'thb', '', COALESCE(SUM(thb), 0), 0 FROM paid
