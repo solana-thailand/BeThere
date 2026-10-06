@@ -1443,6 +1443,9 @@ a.lp-event:focus-visible {
 }
 .lp-goal-text h2 {
     white-space: pre-line;
+    /* Pinned, not inherited: the app's global h2 colour follows the app
+       theme, the goal field is always dark. */
+    color: #f4f0e6;
 }
 .lp-goal-text .lp-communities {
     text-align: left;
@@ -1574,6 +1577,9 @@ a.lp-event:focus-visible {
 }
 .lp-story h2 {
     margin: 0;
+    /* The app's global h2 colour would win over the inherited ink (axe:
+       contrast on paper-2). */
+    color: var(--lp-ink);
     font: 800 clamp(36px, 4.4vw, 58px) / 1.05 var(--lp-sans);
     white-space: pre-line;
 }
