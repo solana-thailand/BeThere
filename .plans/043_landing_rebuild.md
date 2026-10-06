@@ -179,3 +179,13 @@ follow-up, not part of 0.5.
   (2,497,242 B, 600). Smoke reads + writes pass with the token; films 206 with
   the owner's sha256. Pull 155 merged into develop (`2dc39d84`). Smoke leaves
   an orphan fixture deposit: `.issues/187`.
+- **Release 2 on staging, 2026-10-06 (`event-checkin-d6`):** pull 156 rebased
+  on develop (head `daaa65c9`, CI 13/13), staging version `ff4f308d`. Smoke
+  reads + writes pass; `/robots.txt` = `Disallow: /` on staging; sitemap and
+  llms.txt 200; `/nope` 404 page; `/`, `/faq`, `/discover` render with
+  `#boot-summary` removed. Waits for the owner's check, then prod.
+- **Release 3:** rebased on release 2; size baseline re-measured on `daaa65c9`
+  (attendee 1,311,506 B, staff 1,996,228 B). L8 next (table above); L9
+  photos (8, owner-chosen 6 Oct) wait on where the files live: the repo is
+  public, so a committed photo cannot be removed from git history.
+
