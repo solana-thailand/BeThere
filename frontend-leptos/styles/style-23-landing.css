@@ -243,6 +243,8 @@ mark.lp-hl {
 
 /* the "why a deposit" film */
 .lp-film {
+    /* The app's reset zeroes margins, which took the modal out of centre. */
+    margin: auto;
     padding: 0;
     border: 0;
     background: transparent;
