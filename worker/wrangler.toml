@@ -26,10 +26,13 @@ compatibility_flags = ["nodejs_compat"]
 "unenv/node/internal/process/process" = "./node_modules/.pnpm/unenv@2.0.0-rc.24/node_modules/unenv/dist/runtime/node/internal/process/process.mjs"
 
 # Static assets — serve the Leptos WASM frontend
-# SPA mode: non-API routes fall back to index.html
+# "none": a path with no file goes to the Worker, which serves the SPA shell
+# for a page of the app and 404 for anything else (src/crawl.rs). The SPA
+# setting answered every unknown path 200 with index.html (robots.txt,
+# llms.txt and typos included).
 [assets]
 directory = "../frontend-leptos/dist"
-not_found_handling = "single-page-application"
+not_found_handling = "none"
 # The Worker serves the frontend wasm and jsQR itself so it can send the
 # brotli-11 sibling build.sh writes (`<file>.br`) instead of Cloudflare's
 # on-the-fly ~q4: 380 KB less per first load, 20 KB less per jsQR load.
