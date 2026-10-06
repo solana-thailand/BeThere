@@ -135,3 +135,14 @@ follow-up, not part of 0.5.
   `utils/deposit_copy.rs`, from the 2026-09-28 policy round). Build-plan rule
   3 (6 Oct) says never write it; the newer rule wins, but the page is
   demo-facing until 8 Oct. When it goes, delete `NEVER_FORFEITED*` too.
+- **Staging, 2026-10-06 (owner OK'd staging, and prod if staging looks right; `event-checkin-42`):**
+  `develop` fast-forwarded to `d6367104` (CI all green), staging version
+  `fe615b53`; smoke reads + writes pass. `/api/public/stats` carries
+  `slip_check` / `refund_after_end` (null on staging, fewer than 5 timed
+  deposits) and `/api/public/events` carries `deposit_amount_thb`. Opened `/`
+  with the service worker bypassed at 390 and 1280, EN light, TH dark, EN
+  dark, TH light: the sections render, there is no horizontal scroll, there is no
+  "never forfeited" / "non-custodial", and the only error is the signed-out
+  `/api/auth/me` 401. First load +88,069 B br4 vs the 29 Sep baseline (warn,
+  under the 102,400 fail). Prod waits for the owner's "deploy prod" after
+  looking at staging. L8–L10 are not built.
