@@ -9,16 +9,25 @@
     "developer_profile": "Developer Profile",
     "menu_open": "Open menu",
     "menu_close": "Close menu",
-    "theme": "Light or dark"
+    "theme": "Light or dark",
+    "so_far_goal": "So far · Goal",
+    "sponsors": "Sponsors",
+    "join": "Join",
+    "top": "Top",
+    "events": "Events",
+    "how": "How",
+    "sections": "Sections",
+    "how_header": "How it works"
   },
   "hero": {
     "kicker": "Knowledge should be free for everyone.",
     "headline_1": "Show up.",
     "headline_2": "Get it all back.",
     "sub": "{Free|#sponsors} events. Hold your seat with a {deposit|#how}.\n{Show up|#goal}, {get it all back|#how}, plus a {badge on Solana|#usdc}.\nEvery event is also {online|#goal}, free.",
-    "now": "Today: ฿500 by PromptPay\nComing: USDC on Solana, claimed back by you, instantly",
+    "now": "Today: ฿500 by PromptPay\nComing: USDC on Solana, claimed back by you",
     "quote": "“Let's go, everyone.”",
-    "after_event": "after the event"
+    "after_event": "after the event",
+    "why": "Why a deposit · 1 min"
   },
   "cta": {
     "dashboard": "Go to Dashboard →",

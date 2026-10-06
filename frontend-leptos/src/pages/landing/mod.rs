@@ -7,6 +7,8 @@
 pub mod auth;
 /// The card's deposit rule and order; public for `tests/landing_event_card.rs`.
 pub mod event_card;
+/// The landing's header and side index; public for `tests/landing_header.rs`.
+pub mod header;
 mod hero;
 /// The swimlane; public for `tests/landing_how_routes.rs`.
 pub mod how;

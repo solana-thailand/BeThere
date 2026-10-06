@@ -84,12 +84,18 @@ pub fn is_attendee_path(path: &str) -> bool {
             && ATTENDEE_EVENT_SUFFIXES.iter().any(|s| path.ends_with(s)))
 }
 
+/// Whether the language bar above the page is drawn: on attendee pages,
+/// except the landing, whose header carries the switch inline.
+pub fn shows_lang_bar(path: &str) -> bool {
+    path != "/" && is_attendee_path(path)
+}
+
 /// The switch, on attendee pages only.
 #[component]
 pub fn AttendeeLanguageSwitch() -> impl IntoView {
     let location = leptos_router::hooks::use_location();
     view! {
-        <Show when=move || is_attendee_path(&location.pathname.get()) fallback=|| ()>
+        <Show when=move || shows_lang_bar(&location.pathname.get()) fallback=|| ()>
             <div class="lang-bar">
                 <LanguageSwitch />
             </div>
