@@ -24,6 +24,7 @@ pub mod nft_mint_jobs;
 pub mod onchain_events;
 pub mod organizations;
 pub mod person;
+pub mod public_stats;
 pub mod quiz;
 pub mod readiness;
 pub mod slip_proposals;

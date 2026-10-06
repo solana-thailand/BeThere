@@ -34,15 +34,19 @@
         />
         <meta property="og:site_name" content="BeThere" />
         <meta property="og:locale" content="en_US" />
+        <meta property="og:locale:alternate" content="th_TH" />
+        <!-- 1200×630 PNG: X, Facebook and LINE do not render SVG previews.
+             Source and re-render: share/og-card.html, share/render_og.mjs. -->
         <meta
             property="og:image"
-            content="https://bethere.solana-thailand.workers.dev/api/badge.svg"
+            content="https://bethere.solana-thailand.workers.dev/og-image.png"
         />
-        <meta property="og:image:width" content="400" />
-        <meta property="og:image:height" content="400" />
+        <meta property="og:image:type" content="image/png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
         <meta
             property="og:image:alt"
-            content="BeThere - Deposit-backed event check-in on Solana"
+            content="BeThere: แค่มาให้ถึง ก็ได้คืนเต็ม ๆ · Show up. Get it all back."
         />
 
         <!-- Twitter Card -->
@@ -55,7 +59,11 @@
         <meta name="twitter:creator" content="@ozoneRatchapon" />
         <meta
             name="twitter:image"
-            content="https://bethere.solana-thailand.workers.dev/api/badge.svg"
+            content="https://bethere.solana-thailand.workers.dev/og-image.png"
+        />
+        <meta
+            name="twitter:image:alt"
+            content="BeThere: แค่มาให้ถึง ก็ได้คืนเต็ม ๆ · Show up. Get it all back."
         />
 
         <!-- Theme -->
@@ -78,7 +86,11 @@
             content="black-translucent"
         />
         <meta name="apple-mobile-web-app-title" content="BeThere" />
-        <link rel="apple-touch-icon" href="/api/badge.svg" />
+        <link rel="apple-touch-icon" href="/bethere-180.png" />
+        <link rel="icon" href="/bethere-64.png" sizes="64x64" type="image/png" />
+        <link data-trunk rel="copy-file" href="share/bethere-64.png" />
+        <link data-trunk rel="copy-file" href="share/bethere-180.png" />
+        <link data-trunk rel="copy-file" href="share/og-image.png" />
 
         <!-- PWA — Service worker boot. Trunk copy-file puts sw.js in dist/. -->
         <link data-trunk rel="copy-file" href="sw.js" />

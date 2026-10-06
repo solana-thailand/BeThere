@@ -3,7 +3,7 @@
     "bethere_mcp src/lib.rs": 0,
     "bethere_mcp src/main.rs": 0,
     "doc-tests bethere_mcp": 0,
-    "protocol tests/protocol.rs": 11
+    "protocol tests/protocol.rs": 12
   },
   "domain-alloc-count": {
     "alloc_count tests/alloc_count.rs": 11,
@@ -138,6 +138,7 @@
     "precompressed_asset tests/precompressed_asset.rs": 4,
     "public_cache_policy tests/public_cache_policy.rs": 5,
     "public_health_no_counts tests/public_health_no_counts.rs": 2,
+    "public_stats_contract tests/public_stats_contract.rs": 3,
     "quiz_readiness_guard tests/quiz_readiness_guard.rs": 2,
     "r2_cache_policy tests/r2_cache_policy.rs": 4,
     "recent_check_ins tests/recent_check_ins.rs": 5,
@@ -169,6 +170,7 @@
     "sponsors tests/sponsors.rs": 8,
     "sql_interpolation_guard tests/sql_interpolation_guard.rs": 2,
     "sync_deposit_status_guard tests/sync_deposit_status_guard.rs": 2,
+    "thai_safe_slug tests/thai_safe_slug.rs": 8,
     "thb_settlement_ownership_guard tests/thb_settlement_ownership_guard.rs": 6,
     "ticket_name_guards tests/ticket_name_guards.rs": 6,
     "ticket_note tests/ticket_note.rs": 6,

@@ -196,8 +196,10 @@ pub fn Landing() -> impl IntoView {
                             {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.rust_solana))}
                         </div>
                         <div class="landing-footer-trust">
-                            <span class="landing-footer-trust-icon"><Icon icon=IconName::Lock class="icon-xs"/></span>
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.non_custodial))}
+                            // A status line, not a promise: real deposits are THB the
+                            // organizer holds; the escrow runs on devnet only.
+                            <span class="landing-footer-trust-icon"><Icon icon=IconName::Info class="icon-xs"/></span>
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.deposit_status))}
                         </div>
                         <a
                             href="https://github.com/solana-thailand"

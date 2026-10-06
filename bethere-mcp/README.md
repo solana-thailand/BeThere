@@ -20,6 +20,7 @@ escrow program, not this server, decides whether the deposit is valid.
 | `ticket_status` | `GET /api/public/ticket/{id}?event_id=` + `GET /api/deposit/status/{id}?event_id=` |
 | `deposit_tx` | `POST /api/deposit/usdc` + `GET /api/deposit/usdc/tx` (unsigned preview) |
 | `pay_deposit` | `deposit_tx`, sign locally, send to devnet, `POST /api/deposit/usdc/webhook`, poll `/api/deposit/usdc/confirm` |
+| `claim_refund` | `GET /api/deposit/status/{id}?event_id=`, then `POST /api/escrow/refund` (refund + close), sign locally, send to devnet |
 
 There are no new worker endpoints: each one is already called by the web app.
 
@@ -30,6 +31,10 @@ There are no new worker endpoints: each one is already called by the web app.
   operator sets it; the agent cannot raise it.
 - `pay_deposit` is idempotent. A verified deposit returns "already verified".
   A sent but unverified deposit is only polled, never paid a second time.
+- `claim_refund` claims only a verified USDC deposit that this agent's wallet
+  paid, only inside the escrow's refund window (after the event ends; a
+  no-show only until the refund deadline), and reports a second claim as
+  "already claimed": the refund closes the deposit account.
 - `register` refuses to run unless `consent_given` is true.
 - IDs interpolated into URL paths are restricted to `[A-Za-z0-9._-]`.
 
@@ -113,3 +118,19 @@ claude -p "<task>" --mcp-config mcp.json --strict-mcp-config \
 - `pay_deposit` → tx `jwmzATe6bnBx2N5HpQjhgioGE2gANNcKffx7EgRk1zqGBtX4e49JA6kVjyDhVoqeqKnmmb7RqE6Ra6avG3MpHtT`.
   `getSignatureStatuses` shows it `finalized` with `err: null`, and
   `ticket_status` shows `deposit_status: verified`.
+
+## Verified full loop with `claim_refund` (2026-10-06, staging, devnet)
+
+`examples/agent_refund_loop.rs` after `demo_fixture` with `BETHERE_DEMO_END_MIN=8`:
+the agent books and pays through the tools, the organizer scans (off-chain
+check-in, then `mark_checked_in` signed by the organizer), the event ends, the
+agent calls `claim_refund`.
+
+- Event `agent-demo-meetup-1791226316`; agent wallet `54GKocGxYkGbcbAnLAq43toZj9oYyNSmgaqZmarxX3Yi`.
+- Deposit: [`4FypX24cH24X…`](https://explorer.solana.com/tx/4FypX24cH24X6qW6sXmgx3BNQVzjz6QqnDPWJPQ9CurjcYeZ9s74YKrNagHomWyqJCxgpkWNQyoR8GUiAaoaFcnr?cluster=devnet)
+- `mark_checked_in`: [`3zmwz7ki7L1a…`](https://explorer.solana.com/tx/3zmwz7ki7L1aT8mFzTasEirRP7JEsChFktBYVTXuhuYB7wG8XFMSLMmDVpFTtXfBfrm27QTj1rhK29NW4i6Vthpp?cluster=devnet)
+- Refund: [`2xdP8JSuf6Cr…`](https://explorer.solana.com/tx/2xdP8JSuf6CrKoxEUxMr4EtPFxfmknvpPXPk19STJYVdZbuCxxkYTb6T58ab2JE19XVaNJnJ5ADbHk8aaBfwMtf1?cluster=devnet)
+- All three `finalized` with `err: null` (`getSignatureStatuses`); the agent's
+  devnet USDC balance was back at 38 afterwards.
+- A second `claim_refund` answered "already claimed" and sent nothing.
+

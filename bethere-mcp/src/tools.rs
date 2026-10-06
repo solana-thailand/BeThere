@@ -5,7 +5,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use domain::models::deposit::DepositStatusResponse;
+use domain::models::deposit::{DepositMethod, DepositStatusResponse};
 use flow_harness::client::{DepositSignatureRequest, DepositUsdcRequest};
 use reqwest::Method;
 use serde_json::{json, Value};
@@ -29,10 +29,11 @@ pub enum ToolName {
     TicketStatus,
     DepositTx,
     PayDeposit,
+    ClaimRefund,
 }
 
 impl ToolName {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::FindEvents,
         Self::EventDetails,
         Self::AgentWallet,
@@ -40,6 +41,7 @@ impl ToolName {
         Self::TicketStatus,
         Self::DepositTx,
         Self::PayDeposit,
+        Self::ClaimRefund,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -51,6 +53,7 @@ impl ToolName {
             Self::TicketStatus => "ticket_status",
             Self::DepositTx => "deposit_tx",
             Self::PayDeposit => "pay_deposit",
+            Self::ClaimRefund => "claim_refund",
         }
     }
 
@@ -67,6 +70,7 @@ impl ToolName {
             Self::TicketStatus => "Ticket and deposit state for an attendee of an event: registration, check-in, and whether the USDC deposit is verified on chain.",
             Self::DepositTx => "Build the unsigned devnet escrow deposit transaction for this attendee, as the wallet would see it. Read-only preview: nothing is signed or sent.",
             Self::PayDeposit => "Pay the event's USDC deposit into the Solana escrow from the agent wallet: builds the transaction, signs it locally, sends it to devnet, and waits until BeThere verifies it on chain. Idempotent: a verified or in-flight deposit is never paid twice. Refuses amounts above the operator's cap.",
+            Self::ClaimRefund => "Claim a USDC deposit back from the Solana escrow into the agent wallet that paid it: builds the escrow refund transaction, signs it locally, sends it to devnet and returns the signature. Only after the event has ended (a no-show only until the refund deadline), only for a verified USDC deposit paid by this agent's wallet.",
         }
     }
 
@@ -105,7 +109,9 @@ impl ToolName {
                 "required": ["slug", "name", "email", "consent_given"],
                 "additionalProperties": false
             }),
-            Self::TicketStatus | Self::DepositTx | Self::PayDeposit => attendee_ref,
+            Self::TicketStatus | Self::DepositTx | Self::PayDeposit | Self::ClaimRefund => {
+                attendee_ref
+            }
         }
     }
 
@@ -151,6 +157,7 @@ impl Tools {
                 self.deposit_tx(&event_id, &attendee_id).await
             }
             ToolName::PayDeposit => self.pay_deposit(args).await,
+            ToolName::ClaimRefund => self.claim_refund(args).await,
         }
     }
 
@@ -352,6 +359,80 @@ impl Tools {
             .await
     }
 
+    async fn claim_refund(&self, args: &Value) -> Result<Value, ToolError> {
+        let (event_id, attendee_id) = attendee_ref(args)?;
+        let wallet = self.wallet()?;
+        let agent_address = wallet.pubkey().to_string();
+        let status: DepositStatusResponse = BeThereApi::decode(
+            self.api
+                .get(
+                    &format!("/api/deposit/status/{attendee_id}"),
+                    &[("event_id", event_id.as_str())],
+                )
+                .await?,
+        )?;
+        let deposit = status
+            .status
+            .as_ref()
+            .ok_or_else(|| refuse_refund("no deposit on record for this attendee"))?;
+        match (deposit.verified, &deposit.method) {
+            (false, _) => return Err(refuse_refund("the deposit is not verified on chain")),
+            (_, DepositMethod::Usdc) => {}
+            _ => {
+                return Err(refuse_refund(
+                    "this is not a USDC escrow deposit; the organizer returns THB deposits",
+                ))
+            }
+        }
+        // The Worker also refuses another wallet; say so before building anything.
+        match deposit.wallet_address.as_deref().map(str::trim) {
+            Some(paid_by) if paid_by == agent_address => {}
+            _ => {
+                return Err(refuse_refund(
+                    "this deposit was paid by another wallet; only that wallet can claim it",
+                ))
+            }
+        }
+        refund_window(
+            status.event_end_ms,
+            status.refund_deadline_ms,
+            status.checked_in,
+            now_ms(),
+        )
+        .map_err(refuse_refund)?;
+
+        let tx = self
+            .api
+            .post(
+                "/api/escrow/refund",
+                &json!({
+                    "event_id": event_id,
+                    "attendee_id": attendee_id,
+                    "wallet_address": agent_address,
+                }),
+            )
+            .await?;
+        let tx_b64 = tx["transaction"]
+            .as_str()
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                ToolError::Upstream("worker returned no refund transaction".to_string())
+            })?;
+        let signature =
+            flow_harness::chain::submit_signed_by(self.config.rpc_url.as_str(), wallet, tx_b64)
+                .await
+                .map_err(|e| already_claimed_or(ToolError::from(e)))?
+                .to_string();
+        Ok(json!({
+            "refunded": true,
+            "amount_usdc": status.deposit_amount_usdc as f64 / USDC_UNITS,
+            "to_wallet": agent_address,
+            "tx_signature": signature,
+            "explorer_url": format!("https://explorer.solana.com/tx/{signature}?cluster=devnet"),
+            "ticket_url": self.ticket_url(&event_id, &attendee_id),
+        }))
+    }
+
     async fn await_verified(
         &self,
         event_id: &str,
@@ -413,6 +494,51 @@ impl Tools {
 
 fn refuse(reason: &str) -> ToolError {
     ToolError::InvalidArgs(format!("not paying: {reason}"))
+}
+
+/// A refund closes the deposit account, so a second claim fails simulation
+/// with the token program's "owner is not allowed" on the closed account.
+/// Say what that means instead of passing the raw program error on.
+fn already_claimed_or(err: ToolError) -> ToolError {
+    let text = err.to_string();
+    match text.contains("Provided owner is not allowed") {
+        true => refuse_refund(&format!(
+            "the deposit account is already closed on chain, so this deposit was most likely claimed already ({text})"
+        )),
+        false => err,
+    }
+}
+
+fn refuse_refund(reason: &str) -> ToolError {
+    ToolError::InvalidArgs(format!("not claiming: {reason}"))
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
+}
+
+/// The escrow program's refund window, checked before anything is built: it
+/// opens when the event ends; a checked-in attendee may claim any time after,
+/// a no-show only until the refund deadline. Same rule as the deposit page's
+/// `refund_window_open_at` (frontend), one clock read.
+pub fn refund_window(
+    event_end_ms: i64,
+    refund_deadline_ms: i64,
+    checked_in: bool,
+    now_ms: i64,
+) -> Result<(), &'static str> {
+    match (event_end_ms, checked_in) {
+        (end, _) if end <= 0 => Err("the event has no end time"),
+        (end, _) if now_ms < end => {
+            Err("the event has not ended yet; the escrow opens refunds at its end")
+        }
+        (_, true) => Ok(()),
+        _ if refund_deadline_ms > 0 && now_ms < refund_deadline_ms => Ok(()),
+        _ => Err("the refund deadline for a no-show has passed"),
+    }
 }
 
 fn to_json<T: serde::Serialize>(value: &T) -> Result<Value, ToolError> {

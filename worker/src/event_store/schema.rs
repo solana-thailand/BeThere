@@ -1,5 +1,7 @@
 //! KV key helpers, schema constants, and slug utilities.
 
+use event_checkin_domain::slug::Slug;
+
 // ---------------------------------------------------------------------------
 // Key helpers
 // ---------------------------------------------------------------------------
@@ -66,21 +68,12 @@ pub fn form_config_key(event_id: &str) -> String {
 // Slug helpers
 // ---------------------------------------------------------------------------
 
-/// Convert a string to a URL-friendly slug.
+/// Convert an event name or slug to a URL-friendly slug.
 ///
-/// Lowercases, replaces non-alphanumeric runs with hyphens,
-/// strips leading/trailing hyphens.
+/// The ASCII kebab form; a name with too little ASCII (all Thai, say) gets
+/// `event-{hash}` instead of an empty id (`event_checkin_domain::slug`).
 pub fn slugify(input: &str) -> String {
-    input
-        .trim()
-        .to_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
+    Slug::from_text(input).or_prefixed("event")
 }
 
 /// Resolve slug collisions by appending an incrementing suffix.

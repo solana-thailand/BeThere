@@ -154,3 +154,38 @@ async fn register_requires_consent_before_any_request() {
         .expect_err("must refuse");
     assert!(err.to_string().contains("consent_given"), "{err}");
 }
+
+#[test]
+fn claim_refund_respects_the_escrow_window() {
+    use bethere_mcp::tools::refund_window;
+    const END: i64 = 1_800_000_000_000;
+    const DEADLINE: i64 = END + 48 * 3_600_000;
+    assert!(
+        refund_window(END, DEADLINE, true, END - 1).is_err(),
+        "before the end"
+    );
+    assert!(
+        refund_window(END, DEADLINE, true, END).is_ok(),
+        "checked in, at the end"
+    );
+    assert!(
+        refund_window(END, DEADLINE, true, DEADLINE + 1).is_ok(),
+        "checked in, any time after"
+    );
+    assert!(
+        refund_window(END, DEADLINE, false, END + 1).is_ok(),
+        "no-show, before the deadline"
+    );
+    assert!(
+        refund_window(END, DEADLINE, false, DEADLINE).is_err(),
+        "no-show, at the deadline"
+    );
+    assert!(
+        refund_window(END, 0, false, END + 1).is_err(),
+        "no deadline fails closed"
+    );
+    assert!(
+        refund_window(0, DEADLINE, true, END).is_err(),
+        "no end time"
+    );
+}

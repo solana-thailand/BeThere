@@ -9,4 +9,5 @@ pub mod event;
 pub mod event_summary;
 pub mod next_step;
 pub mod org;
+pub mod public_stats;
 pub mod rundown;

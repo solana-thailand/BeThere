@@ -81,13 +81,10 @@ pub struct EventForm {
 
 // ===== Helpers =====
 
-/// Auto-generate a URL-safe slug from a name.
+/// Auto-generate a URL-safe slug from a name: the Worker's rule, so the
+/// preview is the id the event gets (an all-Thai name → `event-{hash}`).
 pub(super) fn generate_slug(name: &str) -> String {
-    name.to_lowercase()
-        .replace(' ', "-")
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
-        .collect()
+    event_checkin_domain::slug::Slug::from_text(name).or_prefixed("event")
 }
 
 /// Parse an ISO date string or epoch ms string to epoch milliseconds.

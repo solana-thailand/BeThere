@@ -1,6 +1,6 @@
 # 167: A sheet column with no header borrows the standard-layout slot, and on a Luma sheet that slot is claim_token
 
-**Status:** deployed to prod `438c392d` with Part B (2026-09-30, `deploy/production/20260930T013304Z`, version `e2d7ce81`, session `event-checkin-b5`; merge `58fc5186`; staging ran the same tree first and its write smoke, which reads the roster through the new policy, passed). Part A went out in `f02143d4` (2026-09-29). The two-events-one-sheet staging run is still not done; it is optional because the only events created after the cutoff are RTM #6 (57 D1 attendees) and a ComfyUI draft (0).
+**Status:** deployed to prod `438c392d` with Part B (2026-09-30, `deploy/production/20260930T013304Z`, version `e2d7ce81`, session `event-checkin-b5`; merge `58fc5186`; staging ran the same tree first and its write smoke, which reads the roster through the new policy, passed). Part A went out in `f02143d4` (2026-09-29). The two-events-one-sheet staging run passed on 2026-10-02 (`event-checkin-4f`, `.plans/037`): no cross-event dedup, each roster lists only its own attendee.
 
 ## What happens
 

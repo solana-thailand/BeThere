@@ -1,0 +1,49 @@
+<!doctype html>
+<!--
+  The 1200×630 share card (og:image / twitter:image), plan 042 item 0.6.
+  Source of share/og-image.png; re-render with `node share/render_og.mjs`.
+  One bilingual card: crawlers do not run the SPA, so the head cannot switch
+  the image by language. Copy follows the build-plan rules: no
+  "never forfeited", no credit exit, no numbers (they would go stale).
+-->
+<html lang="th">
+<meta charset="utf-8" />
+<style>
+    @font-face { font-family: Inter; src: url("FONTS_DIR/InterVariable.ttf"); font-weight: 100 900; }
+    @font-face { font-family: Anuphan; src: url("FONTS_DIR/Anuphan-Variable.ttf"); font-weight: 100 700; }
+    :root { --paper: #f4f0e6; --ink: #121212; --ink-2: #4a4740; --field: #6b63f0; }
+    html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; }
+    body {
+        background: var(--paper); color: var(--ink);
+        font-family: Inter, Anuphan, system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        display: grid; grid-template-columns: 1fr 220px; gap: 56px;
+        box-sizing: border-box; padding: 72px 80px 64px;
+    }
+    .copy { display: flex; flex-direction: column; }
+    .logo { font: 800 40px/1 Inter, sans-serif; letter-spacing: -.04em; }
+    .logo::after { content: ""; display: inline-block; width: 11px; height: 11px; background: var(--field); margin-left: 4px; }
+    h1 { font: 700 76px/1.12 Anuphan, Inter, sans-serif; letter-spacing: -.01em; margin: 44px 0 0; }
+    .en { font: 700 46px/1.15 Inter, sans-serif; letter-spacing: -.03em; margin: 14px 0 0; }
+    .sub { font: 500 25px/1.45 Anuphan, Inter, sans-serif; color: var(--ink-2); margin: auto 0 0; }
+    .sub span { display: block; font-family: Inter, sans-serif; }
+    .art { display: flex; flex-direction: column; justify-content: flex-start; padding-top: 8px; align-items: center; gap: 28px; }
+    .art img { width: 180px; height: 180px; border-radius: 28px; box-shadow: 0 24px 60px rgba(18, 18, 18, .25); }
+    .bar { width: 180px; height: 10px; background: var(--field); border-radius: 5px; }
+</style>
+<body>
+    <div class="copy">
+        <div class="logo">BeThere</div>
+        <h1>แค่มาให้ถึง<br />ก็ได้คืนเต็ม ๆ</h1>
+        <p class="en">Show up. Get it all back.</p>
+        <p class="sub">
+            งานฟรี จองที่ด้วยมัดจำ มาถึงประตูแล้วได้คืนเต็ม
+            <span>Free events. Hold your seat with a deposit, show up, get it back.</span>
+        </p>
+    </div>
+    <div class="art">
+        <img src="bethere-180.png" alt="" />
+        <div class="bar"></div>
+    </div>
+</body>
+</html>
