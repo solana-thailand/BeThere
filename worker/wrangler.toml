@@ -34,7 +34,8 @@ not_found_handling = "single-page-application"
 # brotli-11 sibling build.sh writes (`<file>.br`) instead of Cloudflare's
 # on-the-fly ~q4: 380 KB less per first load, 20 KB less per jsQR load.
 # Everything else is still served asset-first. Each glob here needs an entry
-# in precompressed::PRECOMPRESSED_ASSETS, and vice versa.
+# in precompressed::PRECOMPRESSED_ASSETS, and vice versa, except "/api/*" and
+# "/media/*" (byte ranges for the landing film, src/media.rs).
 # See worker/src/precompressed.rs and .issues/135 §6.3.
 #
 # "/api/*" MUST stay in this list. Once run_worker_first is an array, every
@@ -42,7 +43,7 @@ not_found_handling = "single-page-application"
 # then answers /api/* with index.html (200, text/html) — the whole API goes
 # dark while the site still "loads". Seen on staging 2026-09-23.
 binding = "ASSETS"
-run_worker_first = ["/api/*", "/event-checkin-frontend-*_bg.wasm", "/jsqr-*.js"]
+run_worker_first = ["/api/*", "/event-checkin-frontend-*_bg.wasm", "/jsqr-*.js", "/media/*"]
 
 # Build configuration for workers-rs (Rust → WASM)
 # Manual build instead of worker-build to reduce memory usage.
