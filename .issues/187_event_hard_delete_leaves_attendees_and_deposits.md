@@ -97,3 +97,16 @@ of each.
 Every other purged table has none. Removal waits for the fix on prod, a
 backup and the owner's go on these counts.
 
+
+## Prod cleanup done 2026-10-08 00:32 Bangkok (`.plans/044` item 3)
+
+Owner's go, scoped to the two smoke events `smoke-1791271668` and
+`smoke-1791274365`. Before: attendees 2, thb_deposits 2 (฿1,000), archive 0.
+Deleted in one batch (2 + 2); after: 0 / 0 / 0. Their 2 `deposit_statuses`
+rows stay (owner's call), backed up with the rest in
+`~/bethere-backups/smoke-rows-20261008-0032.json`.
+
+Left alone on purpose: one in-person attendee row from 4 Jun whose event
+`solana-x-ai-builders-2` no longer exists. It is a real registration, and the
+reason a hand count reads 142 on-site while `/api/public/stats` reads 141.
+
