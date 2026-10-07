@@ -29,7 +29,7 @@
 }
 
 /* ---------- Responsive ---------- */
-@media (max-width: 720px) {
+@media (max-width: 480px) {
 
     .dashboard-header {
         flex-direction: column;

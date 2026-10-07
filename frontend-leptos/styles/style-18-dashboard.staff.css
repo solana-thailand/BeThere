@@ -395,7 +395,7 @@
     font-family: monospace;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 480px) {
     .dashboard-live-page {
         padding: 1rem 0.75rem 3rem;
     }

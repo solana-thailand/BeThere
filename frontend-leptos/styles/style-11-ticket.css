@@ -665,7 +665,7 @@ a.ticket-series-card:hover {
     background: transparent;
     border-style: dashed;
 }
-@media (max-width: 380px) {
+@media (max-width: 359px) {
     .ticket-series-neighbors {
         grid-template-columns: 1fr;
     }
