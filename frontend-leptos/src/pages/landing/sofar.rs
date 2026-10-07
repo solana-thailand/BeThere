@@ -18,6 +18,7 @@ use super::photos::PhotoReel;
 use super::stats::{
     count_at, group_thousands, measured_at_label, payers_line_shown, use_landing_stats,
 };
+use super::story::ladder_total;
 
 const COUNT_UP_MS: f64 = 1200.0;
 const FRAME_MS: u64 = 16;
@@ -157,6 +158,13 @@ pub fn SoFar() -> impl IntoView {
             ],
         )
     };
+    let payers_total = move || {
+        let (paid, came) = ladder_total();
+        crate::locale::fill(
+            td_string!(i18n.get_locale(), landing.sofar.payers_total),
+            &[("came", &came.to_string()), ("paid", &paid.to_string())],
+        )
+    };
     let done = Signal::derive(move || done_at(progress.get()));
     let payers = Signal::derive(move || payers_at(progress.get()));
     let read_out = move || {
@@ -192,6 +200,9 @@ pub fn SoFar() -> impl IntoView {
                 {move || stats.with(|s| s.as_ref().is_some_and(payers_line_shown)).then(|| view! {
                     <p class="lp-done lp-payers" aria-hidden="true"><MarkupText text=payers /></p>
                     <p class="lp-fineprint lp-center">{crate::locale::tr(|l| td_string!(l, landing.sofar.payers_note))}</p>
+                    // The ladder's total (RTM #1–#6, hand records included), under
+                    // the system-only figure above: both true, both labelled.
+                    <p class="lp-fineprint lp-center">{payers_total}</p>
                 })}
             </div>
             <div class="lp-tape lp-t2" aria-hidden="true"><div class="lp-tape-run">{tape()}</div></div>

@@ -172,7 +172,7 @@
     "cap_paid": "Paid a deposit: {n} · {came} came → you know before the day",
     "room_source": "RTM #1, one room: the organizer's hand record, before BeThere (confirmed 3 Oct 2026)",
     "room_aria": "RTM #1: 45 registered, 30 confirmed, 16 paid a deposit; filled chairs are people who came",
-    "all_paid": "Across RTM #1–#5, people who paid a deposit: **{came} of {paid} came**",
+    "all_paid": "Across RTM #1–#6, people who paid a deposit: **{came} of {paid} came**",
     "per_event": "Per event, and where each number comes from",
     "col_event": "Event",
     "col_paid": "Paid",
@@ -182,7 +182,7 @@
     "src_archive_owner": "BeThere deposit archive (14) + the organizer's record (1)",
     "src_statement": "deposit statement of 20 Sep 2026, paired to attendees",
     "src_system": "BeThere system",
-    "definition": "In-person registrants who paid cash or credit; comp, staff and online payers not counted; came = checked in at the door · measured {at}",
+    "definition": "In-person registrants who paid cash or credit; comp, staff and online payers not counted; came = checked in at the door · each row: its source and the date it was measured",
     "caveat": "Measured, not a controlled trial · people who pay may have meant to come anyway"
   },
   "reg": {
@@ -221,7 +221,8 @@
     "communities": "Communities on BeThere",
     "your_community": "+ your community",
     "photo_remove": "In a photo and want it removed?",
-    "photo_remove_link": "Tell us"
+    "photo_remove_link": "Tell us",
+    "payers_total": "{came} of {paid} including RTM #1 (paid by hand) and RTM #3 (rows recovered from a backup)"
   },
   "goal": {
     "kicker": "The goal",

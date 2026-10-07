@@ -1,6 +1,6 @@
 //! The commitment ladder (.plans/043 L8): one room of chairs, RTM #1's 45
 //! in-person registrants, narrowed in three steps (registered → confirmed →
-//! paid a deposit) while the share who came climbs; then RTM #1–#5 per event.
+//! paid a deposit) while the share who came climbs; then RTM #1–#6 per event.
 //!
 //! These are historical records, not live figures, and several were never in
 //! D1 (RTM #1 predates BeThere; RTM #3's deposits were purged before the
@@ -20,9 +20,6 @@ use crate::locale::tr;
 
 use super::hero::MarkupText;
 use super::sofar::{reduced_motion, watch_first_sight};
-
-/// When the table below was checked against its sources.
-pub const MEASURED_AT: &str = "2026-10-06";
 
 /// Where a row's numbers come from.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,39 +52,54 @@ pub struct LadderRow {
     pub paid: u32,
     pub came: u32,
     pub source: LadderSource,
+    /// `YYYY-MM-DD`: when this row was last checked against its source.
+    pub measured_at: &'static str,
 }
 
-/// RTM #1–#5 under the owner's definition (`.plans/043`, 6 Oct 2026).
-pub const LADDER: [LadderRow; 5] = [
+/// RTM #1–#6 under the owner's definition (`.plans/043`, 6 Oct 2026; RTM #6
+/// added 8 Oct, `.plans/044` item 4).
+pub const LADDER: [LadderRow; 6] = [
     LadderRow {
         event: "RTM #1",
         paid: 16,
         came: 16,
         source: LadderSource::HandRecord,
+        measured_at: "2026-10-06",
     },
     LadderRow {
         event: "RTM #2",
         paid: 15,
         came: 15,
         source: LadderSource::ArchiveAndOwnerRecord,
+        measured_at: "2026-10-06",
     },
     LadderRow {
         event: "RTM #3",
         paid: 12,
         came: 12,
         source: LadderSource::Statement,
+        measured_at: "2026-10-06",
     },
     LadderRow {
         event: "RTM #4",
         paid: 16,
         came: 14,
         source: LadderSource::System,
+        measured_at: "2026-10-06",
     },
     LadderRow {
         event: "RTM #5",
         paid: 14,
         came: 13,
         source: LadderSource::System,
+        measured_at: "2026-10-06",
+    },
+    LadderRow {
+        event: "RTM #6",
+        paid: 21,
+        came: 20,
+        source: LadderSource::System,
+        measured_at: "2026-10-08",
     },
 ];
 
@@ -280,12 +292,7 @@ pub fn Story() -> impl IntoView {
             &[("came", &came.to_string()), ("paid", &paid.to_string())],
         )
     });
-    let definition = move || {
-        crate::locale::fill(
-            td_string!(i18n.get_locale(), landing.story.definition),
-            &[("at", MEASURED_AT)],
-        )
-    };
+    let definition = move || td_string!(i18n.get_locale(), landing.story.definition);
 
     let stage_buttons = Stage::ALL
         .into_iter()
@@ -324,7 +331,7 @@ pub fn Story() -> impl IntoView {
                     <th scope="row">{r.event}</th>
                     <td>{r.paid}</td>
                     <td>{r.came}</td>
-                    <td>{move || r.source.label(i18n.get_locale())}</td>
+                    <td>{move || format!("{} · {}", r.source.label(i18n.get_locale()), r.measured_at)}</td>
                 </tr>
             }
         })

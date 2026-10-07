@@ -11,7 +11,7 @@
 //!
 //! Owner's rules (6 Oct 2026): only low-risk room shots and group photos that
 //! were already posted; captions are the event label only; all metadata is
-//! stripped before upload (`scripts/landing_photos_upload.sh` checks each
+//! stripped before upload (`scripts/landing_photos_upload.py` checks each
 //! object's sha256 against this list).
 
 pub use event_checkin_domain::models::landing_photo::{LandingPhoto, PhotoKind};

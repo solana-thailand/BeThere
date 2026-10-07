@@ -24,8 +24,8 @@ pub const MEDIA_CACHE_CONTROL: &str = "public, max-age=86400";
 
 /// Bumped when what is stored under a key changes: its shape (v=2, fixed
 /// length) or the files themselves (v=3, the re-rendered films, 6 Oct; v=4,
-/// the "70 of 73" source line, 6 Oct).
-const CACHE_KEY_VERSION: &str = "v=4";
+/// the "70 of 73" source line, 6 Oct; v=5, RTM #1–#6 "90 of 94", 8 Oct).
+const CACHE_KEY_VERSION: &str = "v=5";
 
 /// The content type for a servable media path, or `None` for anything else
 /// (a nested path, a dot segment or an unknown extension). The films are

@@ -2,7 +2,7 @@
 //! definition, the total summed from it, and the room's stages.
 
 use event_checkin_frontend::pages::landing::story::{
-    LADDER, LadderSource, MEASURED_AT, ROOM, Stage, ladder_total, percent,
+    LADDER, LadderSource, ROOM, Stage, ladder_total, percent,
 };
 
 #[test]
@@ -16,14 +16,23 @@ fn table_is_the_owners_and_never_shows_came_over_paid() {
             ("RTM #3", 12, 12),
             ("RTM #4", 16, 14),
             ("RTM #5", 14, 13),
+            ("RTM #6", 21, 20),
         ]
     );
     for r in LADDER {
         assert!(r.came <= r.paid, "{}", r.event);
     }
-    assert_eq!(ladder_total(), (73, 70));
-    assert_eq!(percent(70, 73), 96);
-    assert_eq!(MEASURED_AT, "2026-10-06");
+    assert_eq!(ladder_total(), (94, 90));
+    assert_eq!(percent(90, 94), 96);
+    for r in LADDER {
+        let d: Vec<&str> = r.measured_at.split('-').collect();
+        assert!(
+            d.len() == 3 && d[0] == "2026",
+            "{}: {}",
+            r.event,
+            r.measured_at
+        );
+    }
 }
 
 #[test]
@@ -35,6 +44,7 @@ fn every_row_names_where_it_comes_from() {
             LadderSource::HandRecord,
             LadderSource::ArchiveAndOwnerRecord,
             LadderSource::Statement,
+            LadderSource::System,
             LadderSource::System,
             LadderSource::System,
         ]
