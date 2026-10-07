@@ -124,10 +124,16 @@ follow-up, not part of 0.5.
     seen. New Linux baselines, each checked by eye: signed-in ticket and
     privacy notice (identical in runs 37381847919 and 37383427171), landing
     desktop, landing mobile and the expanded ticket (run 37384976523).
-- [ ] L8 ladder: waits on the owner's choice for RTM #2/#3 (system 14/14 and
+- [x] L8 ladder: waits on the owner's choice for RTM #2/#3 (system 14/14 and
   14/13 vs the hand 12/12: import to reach 73/76, or print 77/74 as the
-  sources say). Not built.
-- [ ] L9 photos: waits on consent.
+  sources say). Built in release 3 (pull 157, `f8da802c`): typed table, RTM
+  #1–#6 "90 of 94", each row sourced; staged as version `9d601dbb`
+  (2026-10-08, `event-checkin-19` re-reading plan 044 4.1–4.7).
+  **Prod waits on (2026-10-08):** the owner's go (plan 044 4.8).
+- [x] L9 photos: waits on consent. Built in release 3: 8 owner-chosen photos
+  in R2 `landing-photos/` (list `worker/landing-photos.jsonl`), staging bucket
+  read back 16/16; never committed to the public repo.
+  **Prod waits on (2026-10-08):** the owner's go; the prod-bucket upload runs at that deploy (plan 044 4.8).
 - [x] L10 on `feature/046-landing-globe` (PR #157, stacked on #156 → #155;
   `event-checkin-d6`): goal bar (live `events_held` / measured 692+) and the
   globe, both loaded on first sight from `globe/` (`scripts/globe_data_import.py`

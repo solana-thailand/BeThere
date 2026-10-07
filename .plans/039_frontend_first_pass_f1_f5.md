@@ -72,6 +72,7 @@ the Linux baselines were re-taken.
   order: the migration, then the backfill, then the `Nº` row on the ticket;
   verify at 390×844 EN + TH. Nothing here can start earlier: the brief
   forbids deriving the number from IDs, so there is no interim version.
+  **Still waiting (2026-10-08, `event-checkin-19`):** the owner's approval of `.issues/178`; the take half of the trigger is met (filmed 8 Oct, plan 044 1.5).
 - Verified at 390×844 EN + TH; a11y allowlist still empty. CI after push:
   only the 2 re-taken ticket baselines failed, as designed.
 
@@ -103,6 +104,7 @@ the Linux baselines were re-taken.
   on prod 2026-10-01: `/discover` and `/e/x` both serve the static head with
   `og:image` = `/api/badge.svg` (`image/svg+xml`), so 183's finding still
   holds.
+  **Still waiting (2026-10-08, `event-checkin-19`):** the owner's pick in `.issues/183` for per-event cards; the static 1200×630 `/og-image.png` card is live on prod (re-probed `/e/x`: `og:image` and `twitter:image` = `/og-image.png`, `image/png`).
 
 ## Remaining
 

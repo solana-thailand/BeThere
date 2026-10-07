@@ -94,6 +94,7 @@ then the landing, then the share tags. Each item ships on its own.
 - [ ] 0.4 · [x] 0.5 landing release 1 on prod 2026-10-06 07:27 UTC (`6eb39e9e`, version `a518d80a`, tree = `0010f115`); L8–L10 follow in release 3
   **0.4 blocked (2026-10-06, `event-checkin-42`):** needs the owner's sandbox organizer + faucet keys and a Turnstile site key, and ships only via a staging push.
   **0.5 blocked (2026-10-06, `event-checkin-42`):** built on `feature/042-landing` (peer `event-checkin-0d`, `.plans/043`); L8–L10 wait for owner content, L12 for the CI baselines, prod for an owner go after the take.
+  **Still waiting (2026-10-08, `event-checkin-19`):** 0.4 on the owner's sandbox organizer + faucet keys and a Turnstile site key.
 - [~] **0.6** built on `develop`: `og:image` / `twitter:image` were the 400×400
   `/api/badge.svg`, which X, Facebook and LINE do not render; now
   `/og-image.png`, 1200×630, one bilingual card (crawlers do not run the SPA,

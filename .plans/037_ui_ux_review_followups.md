@@ -196,6 +196,7 @@ Owner decisions raised by phase 3:
   back, and with which numbers?"
   **Reopen trigger (2026-10-01, `event-checkin-45`):** the legal review returns section
   numbers; then change EN and TH together.
+  **Still waiting (2026-10-08, `event-checkin-19`):** the owner's legal review of the section numbers.
 - [x] **Kept (2026-09-29):** it renders only in `usdc_payment.rs`, the escrow
   path where an unclaimed deposit is really lost.
   Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
