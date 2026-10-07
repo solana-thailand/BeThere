@@ -118,8 +118,14 @@ fn WhyFilm() -> impl IntoView {
             captions.set_srclang(lang);
             video.set_src(&src);
         }
-        if dialog.show_modal().is_ok() {
-            let _ = video.play();
+        // play() rejects (AbortError) when the dialog closes before playback
+        // starts; await it so the rejection is handled, not logged as uncaught.
+        if dialog.show_modal().is_ok()
+            && let Ok(promise) = video.play()
+        {
+            wasm_bindgen_futures::spawn_local(async move {
+                let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+            });
         }
     };
     // A click on the backdrop lands on the dialog itself, not the video.
