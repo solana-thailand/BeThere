@@ -62,7 +62,7 @@ the step, and by 10 Oct 18:00 at the latest whether it landed.
 ## 2. Pull 158 to prod (`.issues/187`)
 
 Steps:
-- [ ] 2.1 Merge pull 158 into `develop` (merge commit, "pull 158").
+- [x] 2.1 (`eb6c27ba`, 8 Oct; CI 13/13) Merge pull 158 into `develop` (merge commit, "pull 158").
 - [ ] 2.2 Stage `develop`'s head (staging parity compares trees: the branch has
   a docs commit after the staged `346686f7`). Staging smoke reads + writes.
 - [ ] 2.3 Prod backup; release merge `develop` → `main`, tree = staged tree;
@@ -96,24 +96,24 @@ Runs after item 2, so the deployed fix is what later smoke runs use.
 ## 4. Release 3 with the new card and films
 
 Steps:
-- [ ] 4.1 Rebase pull 157 on `develop` (after item 2).
-- [ ] 4.2 Ladder: add the RTM #6 row (21 paid, 20 came, source "BeThere
+- [x] 4.1 (on `eb6c27ba`) Rebase pull 157 on `develop` (after item 2).
+- [x] 4.2 (`8e2c817f`; re-derived 8 Oct: in-person cash 15/14 + credit 6/6 = 21/20; 2 staff comps and 11 online out; each row shows its source and measured date) Ladder: add the RTM #6 row (21 paid, 20 came, source "BeThere
   system"), re-derived read-only with the ladder's definition before it goes
   in; headline "RTM #1–#6: 90 of 94"; tests pin 94/90 and came ≤ paid.
-- [ ] 4.3 Share card: `share/og-image.png` ← `bethere-card-og-en.png`
+- [x] 4.3 (`8e2c817f`; og-image sha256 `940c40fd…` served by staging; PNG only, owner 8 Oct; `staff-shell.html` is generated from `index.html`) Share card: `share/og-image.png` ← `bethere-card-og-en.png`
   (sha256 checked); `og:title` "BeThere — Show up. Get it all back.";
   `og:description` "90 of 94 who paid a deposit came (RTM #1–#6, staff not
   counted). Free events, a refundable deposit, all back after the event." in
   `index.html` meta, OG, Twitter and JSON-LD; the share-copy test updated.
-- [ ] 4.4 Films: `why-{en,th}.mp4` and `.vtt` (sha256 checked), posters re-cut
+- [x] 4.4 (`8e2c817f`; staging serves why-en `1414c21d…` and why-th `0625a7ba…`, 206 each) Films: `why-{en,th}.mp4` and `.vtt` (sha256 checked), posters re-cut
   at 1.5 s, `FILM_REV` and the `/media` cache key → `v=5` (pinned together by a
   test). `.srt` files are not served by the site (captions are WebVTT).
-- [ ] 4.5 Live counter fine print, EN: "90 of 94 including RTM #1 (paid by
+- [x] 4.5 (filled from the ladder table; checked locally with prod's stats 65/61: renders in EN and TH; staging has no payers so the block is hidden there) Live counter fine print, EN: "90 of 94 including RTM #1 (paid by
   hand) and RTM #3 (rows recovered from a backup)". TH draft for the owner:
   "รวม RTM #1 (จ่ายด้วยมือ) และ RTM #3 (กู้แถวจากไฟล์สำรอง) เป็น 90 จาก 94".
-- [ ] 4.6 CI green incl. e2e (landing baselines regenerated from CI, checked by
+- [x] 4.6 (pull 157 `f8da802c` CI 14/14; landing baselines from run with RTM #1–#6 copy; first load +35,948 B br4 vs the 6 Oct baseline, warn not fail) CI green incl. e2e (landing baselines regenerated from CI, checked by
   eye); size budget reported.
-- [ ] 4.7 Stage; phone + desktop screenshots EN/TH (ladder, film at ~50 s,
+- [x] 4.7 (staging `f8da802c` version `9d601dbb`, smoke reads + writes pass; photos 8 listed, unlisted 404, `max-age=3600`; screenshots `~/Downloads/bethere-staging-r3-20261008/`; waiting for the owner's look) Stage; phone + desktop screenshots EN/TH (ladder, film at ~50 s,
   reel, globe, share card via the OG tags); wait for the owner's look.
 - [ ] 4.8 On the owner's go: prod backup, release merge, deploy, smoke; upload
   the 8 photos to the prod bucket with `scripts/landing_photos_upload.py`
@@ -126,13 +126,13 @@ fail); the new assets are not first load. Estimate: 1 day to staging.
 ## 5. Past events: two fixes
 
 Steps:
-- [ ] 5.1 Find the app's path that sets `status = completed` (the admin event
+- [x] 5.1 (`PUT /api/events/{id} {"status":"completed"}`, the admin update; staging fixture: API and D1 both `completed`, `/e/<slug>` shows "Event Completed · This event has ended" and no form; fixture deleted after) Find the app's path that sets `status = completed` (the admin event
   update) and prove it on staging with a fixture event: KV and D1 both say
   completed, `/e/<slug>` shows the ended view.
 - [ ] 5.2 Prod: same call for RTM #6 with the new token (no D1 write); check
   `/e/solana-x-ai-builders-the-road-to-mainnet-6-bangkok` shows the ended view
   and `/api/public/events/past` behaviour.
-- [ ] 5.3 Report recaps ready to publish (recording present AND summary row
+- [x] 5.3 (8 Oct: ready = RTM #1 and Solana in Latent Space Part 2; 12 more have a recording but no summary row, incl. RTM #6; `islanddao-v4-demo` has neither) Report recaps ready to publish (recording present AND summary row
   present; read-only today: 13 have a recording, 2 have a summary). No flags
   flipped.
 
