@@ -42,6 +42,12 @@ BASE_URL="${BASE_URL:-http://localhost:8787}"
 EVENT_ID="${EVENT_ID:-escrow-e2e-$(date +%s)}"
 DEPOSIT_AMOUNT_USDC="${DEPOSIT_AMOUNT_USDC:-1000000}"  # 1 USDC (6 decimals)
 DEPOSIT_AMOUNT_THB="${DEPOSIT_AMOUNT_THB:-100}"         # 100 THB
+# Seconds from event creation to the on-chain event_end. mark_checked_in must
+# land before it and refund after it, so a recorded run wants a few minutes.
+EVENT_END_SECS="${EVENT_END_SECS:-120}"
+# 1 = stop after Step 10 (on-chain deposit -> refund verified); skip the THB,
+# deactivate, claim and close steps.
+STOP_AFTER_STEP10="${STOP_AFTER_STEP10:-0}"
 ORGANIZER_WALLET="${ORGANIZER_WALLET:-}"
 ATTENDEE_WALLET="${ATTENDEE_WALLET:-}"
 # Captured before the default lands, so the Helius upgrade below cannot
@@ -225,7 +231,7 @@ else
             \"link\": \"https://example.com/e2e-test\",
             \"sheet_id\": \"e2e-test-dummy\",
             \"event_start_ms\": $(($(date +%s) - 7200))000,
-            \"event_end_ms\": $(($(date +%s) + 120))000,
+            \"event_end_ms\": $(($(date +%s) + EVENT_END_SECS))000,
             \"status\": \"active\",
             \"deposit_enabled\": true,
             \"deposit_amount_usdc\": $DEPOSIT_AMOUNT_USDC,
@@ -731,7 +737,7 @@ info "Checking if on-chain event_end has passed..."
 ONCHAIN_EVENT_END_TS=$((ORIGINAL_EVENT_END_MS / 1000))
 info "On-chain event_end (unix seconds): $ONCHAIN_EVENT_END_TS"
 WAIT_SECONDS=0
-MAX_WAIT=180  # Maximum 3 minutes to wait
+MAX_WAIT=$((EVENT_END_SECS + 180))  # event_end plus 3 minutes
 while [ $WAIT_SECONDS -lt $MAX_WAIT ]; do
     NOW_TS=$(date +%s)
     if [ "$NOW_TS" -ge "$ONCHAIN_EVENT_END_TS" ]; then
@@ -868,6 +874,15 @@ info "Attendee USDC (final): $ATT_USDC_FINAL"
 
 ATT_SOL_FINAL=$(solana balance "$ATTENDEE_WALLET" --url devnet 2>&1 | awk '{print $1}' || echo "?")
 info "Attendee SOL (final): $ATT_SOL_FINAL"
+
+if [ "$STOP_AFTER_STEP10" = "1" ]; then
+    echo ""
+    echo -e "${BOLD}━━━ Test Summary (Steps 1-10) ━━━${NC}"
+    echo -e "  ${GREEN}✅ Pass: $PASS${NC}"
+    echo -e "  ${RED}❌ Fail: $FAIL${NC}"
+    echo -e "  ${YELLOW}⏭️  Skip: $SKIP${NC}"
+    exit $FAIL
+fi
 
 # ============================================================================
 # Step 11: THB Deposit Flow Test
