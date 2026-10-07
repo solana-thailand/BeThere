@@ -142,6 +142,8 @@ freeze, post-event registration rules): read them in 5.1 first. Estimate: 2 h.
 
 ## 6. Release 4 and Super GOAT: plan only, nothing built before 13 Oct
 
+In depth: `.plans/045_release4_and_super_goat.md` (files, proof and go per line; 8 Oct).
+
 Basis: `bethere-ux/site/` (index, events, course, organizers, sponsors, try,
 record; shared `site.js`/`site.css`, ~2,000 lines) and
 `reports/phase-2/SUPER-GOAT-SPEC.md`. Estimates are working days for one agent,
