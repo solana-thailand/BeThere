@@ -1,6 +1,6 @@
 # 044 · Agent message of 7 Oct 2026: plan
 
-Status: plan, waiting for the owner's "go". Written 2026-10-08 by session
+Status: in progress (owner's go 8 Oct: item 3 rows only, deposit_statuses kept; PNG-only share image). Items 2.2–2.4 and 5.2 wait for a fresh smoke token. Written 2026-10-08 by session
 `event-checkin-90`. Source: the owner's message "Message to the event-checkin
 agent, 7 Oct 2026 (final)". Items in the owner's order; item 1 is the top
 priority. Each step gets ticked here with its proof (commit, command output,
@@ -30,23 +30,23 @@ Standing rules for every item:
 ## 1. One fresh devnet deposit, end to end (by 10 Oct 18:00 Bangkok)
 
 Steps:
-- [ ] 1.1 Fresh attendee keypair (devnet). Fund it: devnet SOL from the
+- [x] 1.1 (`84GzG1…pGmt`, 0.05 SOL + 2 USDC; funding sigs in the run doc) Fresh attendee keypair (devnet). Fund it: devnet SOL from the
   organizer wallet; 1 devnet USDC sent from the harness wallet (the fresh
   wallet itself has never been used). Record balances with the commands.
-- [ ] 1.2 Run `scripts/e2e/test_escrow_devnet.sh` steps 1–10 against staging
+- [x] 1.2 (8 Oct 00:31–00:41 Bangkok, event `devnet-run-20261008-0031`, 25 pass / 0 fail; script gained `EVENT_END_SECS` and `STOP_AFTER_STEP10`) Run `scripts/e2e/test_escrow_devnet.sh` steps 1–10 against staging
   (DEV_MODE, the path that ran green on 23 and 28 Sep), fresh `EVENT_ID`
   (`devnet-run-20261008-…`), `event_end` = creation + 10 min,
   `refund_deadline` > `event_end`: `create_event` → `deposit` →
   `mark_checked_in` (before `event_end`) → wait past `event_end` → `refund`
   (it closes the deposit PDA in the same tx).
-- [ ] 1.3 For each step, `solana confirm -v <sig> --url devnet` and the
+- [x] 1.3 (all 6 txs finalized, `meta.err = null`, Explorer Success; attendee 2→1→2 USDC, vault 0→1→0) For each step, `solana confirm -v <sig> --url devnet` and the
   Explorer link (`?cluster=devnet`) opened in a browser: status Success, slot,
   block time. Attendee and vault USDC balances before deposit, after deposit,
   after refund (`spl-token balance` / `solana account`), command beside each.
-- [ ] 1.4 `docs/devnet-run-2026-10-<dd>.md` on branch `feature/devnet-run-<dd>`
+- [x] 1.4 (`cf9aa09f` on `feature/devnet-run-08`, not merged) `docs/devnet-run-2026-10-<dd>.md` on branch `feature/devnet-run-<dd>`
   (no merge to main): step, signer, signature, link, slot, time; `event_end`
   and `refund_deadline` in unix and Bangkok time.
-- [ ] 1.5 Screen recording of the live run (terminal + Explorer) with
+- [x] 1.5 (`~/Movies/bethere-devnet-e2e-2026-10-08.mov`, 1920×1080, 10:30; recorded as a fixed screen rectangle, Stage Manager off for the take and restored) Screen recording of the live run (terminal + Explorer) with
   `screencapture -v`, scaled to 1080p with ffmpeg →
   `~/Movies/bethere-devnet-e2e-<date>.mov`. The script's output goes through a
   filter that removes home-directory and keypair paths; nothing else on screen.
@@ -77,15 +77,15 @@ Estimate: 2 h.
 ## 3. Delete the leftover smoke-test rows in prod
 
 Steps:
-- [ ] 3.1 Read-only count `WHERE event_id IN ('smoke-1791271668',
+- [x] 3.1 (8 Oct 00:32: attendees 2, thb_deposits 2 / ฿1,000, archive 0, deposit_statuses 2, events rows 0, all `walkin`: matches) Read-only count `WHERE event_id IN ('smoke-1791271668',
   'smoke-1791274365')` in `attendees`, `thb_deposits`, `thb_deposit_archive`
   (and `deposit_statuses`, to report). Expected 2 / 2 (฿1,000) / 0. If any
   differs: stop and report.
-- [ ] 3.2 Prod backup (name, size, sha256).
-- [ ] 3.3 One D1 batch: `DELETE … WHERE event_id IN (those two)` on
+- [x] 3.2 (`bethere-db-20261008-0032-pre-smoke-row-delete.sql`, 2,507,511 B, sha256 `4cdf6ff2…dcce2cb0`; rows `smoke-rows-20261008-0032.json`, 4,955 B, sha256 `7e6a0ca6…511814c4`, incl. the 2 deposit_statuses rows; both 600) Prod backup (name, size, sha256).
+- [x] 3.3 (owner: deposit_statuses stay. Batch changes 2 + 2; after: 0 / 0 / 0, deposit_statuses 2 kept) One D1 batch: `DELETE … WHERE event_id IN (those two)` on
   `thb_deposits` and `attendees` (plus `deposit_statuses` only if the owner
   says so). Count again: 0 / 0 / 0. Post both counts.
-- [ ] 3.4 Note in `.issues/187`: the 4 Jun in-person attendee of the deleted
+- [x] 3.4 Note in `.issues/187`: the 4 Jun in-person attendee of the deleted
   `solana-x-ai-builders-2` stays (real registration; why a hand query reads
   142 on-site and `/api/public/stats` 141).
 
