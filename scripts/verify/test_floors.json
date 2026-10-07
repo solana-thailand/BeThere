@@ -114,6 +114,7 @@
     "event_create_errors tests/event_create_errors.rs": 4,
     "event_enum_column_fallbacks tests/event_enum_column_fallbacks.rs": 13,
     "event_lifecycle_response tests/event_lifecycle_response.rs": 1,
+    "event_purge_statements tests/event_purge_statements.rs": 2,
     "event_slug_ownership tests/event_slug_ownership.rs": 5,
     "event_slug_uniqueness_guard tests/event_slug_uniqueness_guard.rs": 3,
     "golden_vectors tests/golden_vectors.rs": 9,

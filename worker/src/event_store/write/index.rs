@@ -144,6 +144,19 @@ pub async fn sync_event_to_d1(d1: Option<&worker::D1Database>, config: &EventCon
 pub async fn sync_delete_event_from_d1(d1: Option<&worker::D1Database>, event_id: &str) {
     let Some(db) = d1 else { return };
 
+    // The event's own rows first (.issues/187): attendees, deposits (amounts
+    // archived), answers. If that fails, keep the events row too, so nothing
+    // is left pointing at an event that no longer exists.
+    match crate::db::event_purge::purge_event_rows(db, event_id).await {
+        Ok(archived) => {
+            tracing::info!(event_id = %event_id, deposits_archived = archived, "D1 event rows purged");
+        }
+        Err(e) => {
+            tracing::error!(event_id = %event_id, error = %e, "D1 event rows not purged; events row kept");
+            return;
+        }
+    }
+
     if let Err(e) = crate::db::events::delete_event(db, event_id).await {
         tracing::warn!(event_id = %event_id, error = %e, "D1 event delete failed");
     }
