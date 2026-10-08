@@ -3,6 +3,7 @@
 mod attendance_answer;
 mod columns;
 mod core;
+mod display_code;
 mod duplicates;
 mod recent;
 mod roster_page;
@@ -20,6 +21,10 @@ mod tests;
 pub use attendance_answer::AttendanceAnswer;
 pub use columns::{ColumnKey, ColumnMapping, PII_COLUMNS};
 pub use core::{Attendee, CheckInError};
+pub use display_code::{
+    DISPLAY_CODE_ALPHABET, DISPLAY_CODE_LEN, DISPLAY_CODE_RANDOM_BYTES, DisplayCode,
+    DisplayCodeError,
+};
 pub use duplicates::{DuplicateMatch, DuplicateReason, possible_duplicates};
 pub use recent::{RECENT_CHECK_INS_PER_TYPE, recent_check_ins};
 pub use roster_page::{ROSTER_PAGE_MAX, RosterPage, roster_page};
