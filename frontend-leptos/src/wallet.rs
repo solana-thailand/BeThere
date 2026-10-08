@@ -13,7 +13,7 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     /// Register Mobile Wallet Adapter.
     ///
-    /// Loads `@solana-mobile/wallet-standard-mobile` from esm.sh and calls
+    /// Loads the self-hosted `@solana-mobile/wallet-standard-mobile` bundle and calls
     /// `registerMwa()`. No-op on non-Android platforms (iOS unsupported by MWA,
     /// desktop has no wallet app to intent to). Safe to call multiple times.
     #[wasm_bindgen(js_name = "registerMwa")]
@@ -54,7 +54,7 @@ pub fn is_mobile_device() -> bool {
 pub fn init_mobile_wallet_adapter() {
     let promise = js_register_mwa();
     // Spawn without awaiting — registration runs in the background and
-    // completes whenever the esm.sh fetch finishes. Wallet detection polls
+    // completes whenever the MWA bundle fetch finishes. Wallet detection polls
     // `window.navigator.wallets` so MWA wallets appear automatically once
     // registration lands, even if the user opens the wallet picker first.
     wasm_bindgen_futures::spawn_local(async move {

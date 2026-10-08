@@ -44,6 +44,7 @@
     "generative_poster tests/generative_poster.rs": 5,
     "i18n_catalog tests/i18n_catalog.rs": 6,
     "inline_text_colour_tokens tests/inline_text_colour_tokens.rs": 3,
+    "js_remote_script_origins tests/js_remote_script_origins.rs": 4,
     "landing_event_card tests/landing_event_card.rs": 5,
     "landing_goal tests/landing_goal.rs": 3,
     "landing_header tests/landing_header.rs": 5,
@@ -203,6 +204,7 @@
     "unmapped_column_aliasing tests/unmapped_column_aliasing.rs": 5,
     "usdc_deposit_check tests/usdc_deposit_check.rs": 7,
     "vendored_jsqr_integrity tests/vendored_jsqr_integrity.rs": 2,
+    "vendored_mwa_integrity tests/vendored_mwa_integrity.rs": 2,
     "virtual_checkin_gate tests/virtual_checkin_gate.rs": 5,
     "virtual_checkin_guard tests/virtual_checkin_guard.rs": 5
   }
