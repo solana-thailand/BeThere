@@ -4,6 +4,7 @@ pub mod announcement;
 pub mod calendar_links;
 pub mod community_links;
 pub mod credit_chip;
+pub mod credit_refund_card;
 pub mod event_context;
 pub mod hero;
 pub mod in_person_view;

@@ -607,6 +607,8 @@ pub async fn get_credit_used(event_id: Option<&str>) -> Result<CreditUsedRespons
 
 // ===== Phase 3 — Credit Refund Request (exit path) =====
 
+pub use event_checkin_domain::models::credit_payout::{PaidAmounts, RefundAccount};
+
 /// Response for POST /api/deposit/request-credit-refund — attendee requests
 /// return of their held rolling credit (Issue #061 §D3). The flag is the queue
 /// signal only; the organizer processes the actual payout via existing refund
@@ -620,14 +622,13 @@ pub struct RequestCreditRefundResponse {
 }
 
 /// POST /api/deposit/request-credit-refund — attendee sets the flag on their
-/// own contact. No request body — the email comes from the JWT
-/// (VULN-012 pattern). Idempotent: re-calls re-stamp the timestamp.
-///
-/// `api_post_json` is generic + unwraps the `ApiResponse` envelope internally,
-/// so a one-liner returns the inner `RequestCreditRefundResponse` directly
-/// (matches the `create_campaign` / `put_admin_quiz` convention).
-pub async fn request_credit_refund() -> Result<RequestCreditRefundResponse, ApiError> {
-    let body = serde_json::json!({});
+/// own contact and says where to send the money (`.issues/190`). The email
+/// comes from the JWT (VULN-012 pattern), never the body. Idempotent: a
+/// re-call re-stamps the timestamp and replaces the account.
+pub async fn request_credit_refund(
+    account: &RefundAccount,
+) -> Result<RequestCreditRefundResponse, ApiError> {
+    let body = serde_json::json!({ "account": account });
     api_post_json("/deposit/request-credit-refund", &body).await
 }
 
@@ -672,6 +673,13 @@ pub struct CreditRefundRequest {
     pub locked_until: String,
     #[serde(default)]
     pub requested_at: String,
+    /// Whole hours the request has been open (the 7-day clock, D3).
+    #[serde(default)]
+    pub age_hours: i64,
+    /// Where the attendee asked to be paid; `None` for a request made before
+    /// the account was collected (ask the attendee).
+    #[serde(default)]
+    pub account: Option<RefundAccount>,
 }
 
 /// Response for GET /api/deposit/credit-refund-requests — admin lists contacts
@@ -693,6 +701,12 @@ pub async fn get_credit_refund_requests() -> Result<CreditRefundRequestsResponse
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ClearCreditRefundRequest {
     pub email: String,
+    /// What the organizer transferred. The worker writes the payout only if
+    /// this still equals the payable balance; otherwise 409, nothing written.
+    pub paid: PaidAmounts,
+    /// The transfer slip as a `data:image/...` URL, if attached.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub proof: Option<String>,
 }
 
 /// Response for POST /api/deposit/clear-credit-refund-request (admin).

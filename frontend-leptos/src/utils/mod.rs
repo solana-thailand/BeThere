@@ -1,6 +1,7 @@
 //! Shared utility functions extracted from scanner and admin pages.
 
 pub mod copy_markup;
+pub mod credit_payout;
 pub mod deposit_copy;
 pub mod money;
 pub mod poll_policy;
