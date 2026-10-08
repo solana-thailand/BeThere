@@ -88,15 +88,15 @@ impl DisplayCode {
 
     /// Parse what a person typed or read aloud.
     ///
-    /// Trims, drops an optional leading `Nº` / `№` (the ticket prints one),
+    /// Trims, drops an optional leading `Nº` / `nº` / `№` (the ticket prints one),
     /// drops spaces and dashes anywhere, and uppercases ASCII. Nothing else is
     /// mapped: an `O`, `0`, `I`, `1` or `L` is rejected rather than guessed,
     /// because guessing would turn one mistyped code into someone else's.
     pub fn parse(input: &str) -> Result<Self, DisplayCodeError> {
         let trimmed = input.trim();
-        let body = trimmed
-            .strip_prefix("Nº")
-            .or_else(|| trimmed.strip_prefix("№"))
+        let body = ["Nº", "nº", "№"]
+            .iter()
+            .find_map(|prefix| trimmed.strip_prefix(prefix))
             .unwrap_or(trimmed);
         let mut out = [0u8; DISPLAY_CODE_LEN];
         let mut len = 0usize;

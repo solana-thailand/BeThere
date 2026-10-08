@@ -75,6 +75,7 @@ fn typed_input_is_normalised() {
         " 7KQ-2XM ",
         "7KQ 2XM",
         "Nº 7KQ2XM",
+        "nº 7kq-2xm",
         "№7kq-2xm",
         "7-K-Q-2-X-M",
     ] {
