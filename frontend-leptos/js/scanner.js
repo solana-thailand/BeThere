@@ -45,18 +45,6 @@ async function _loadQrLibraries() {
 }
 
 /**
- * Preload QR libraries so they are ready when the scanner starts.
- *
- * Call this when the Scanner page mounts (before calling startCamera)
- * to avoid a delay between camera start and QR library availability.
- *
- * @returns {Promise<void>}
- */
-export function preloadQrLibraries() {
-  return _loadQrLibraries();
-}
-
-/**
  * Start the camera and QR scanning loop.
  *
  * Requests camera access (rear-facing preferred), waits for #scanner-video
