@@ -35,10 +35,12 @@ which shipped before the 6 Oct freeze.
 
 ## Open (updated)
 
-- [ ] **Uncapped threshold (10) is my call, not the owner's.** Change
+- [x] **Uncapped threshold (10) is my call, not the owner's.** Change
   `MIN_PUBLIC_UNCAPPED_COUNT` if the owner wants small numbers shown.
   **Blocked (2026-10-06, `event-checkin-42`):** owner preference, and any change moves the `/e/{slug}` attendance row (event flow, 6–8 Oct freeze); 10 stays until the owner says otherwise.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's preference; the freeze half has lapsed.
+  **Checked (2026-10-08, `event-checkin-fe`):** `MIN_PUBLIC_UNCAPPED_COUNT` is 10 on every branch. **Owner must:** say "keep 10" (then this closes) or name the new number.
+  **Closed (2026-10-08, `event-checkin-8a`, owner go "do what was recommended"):** keep 10. The reason in `attendance.rs` still holds: an uncapped "3 registered" reads as an empty room, and a capped track always shows its count against the cap. No code change; reopen if an organizer asks for smaller counts.
 
 ## Deploys
 

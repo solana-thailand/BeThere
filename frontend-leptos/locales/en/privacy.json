@@ -26,7 +26,7 @@
     "emails": "Emails about future events, only if you tick the optional box for them"
   },
   "basis_title": "4. Legal Basis",
-  "basis_body": "We collect personal data based on your explicit consent (Thailand PDPA Section 19) and for contract performance (event registration and service delivery).",
+  "basis_body": "We collect personal data based on your explicit consent (Thailand PDPA Section 19) and for contract performance (event registration and service delivery; Section 24(3)).",
   "chain_title": "5. Blockchain Data",
   "chain_intro": "When you connect a Solana wallet for deposit, refund, or NFT claim, your wallet address and transaction signatures are recorded on the Solana blockchain. This data is:",
   "chain": {
@@ -34,7 +34,7 @@
     "immutable": "Immutable and cannot be deleted",
     "not_controlled": "Not controlled by BeThere"
   },
-  "chain_note": "This is a technical characteristic of blockchain technology and is disclosed under PDPA Section 37 (technical impossibility exemption).",
+  "chain_note": "This is a technical characteristic of blockchain technology, so we cannot erase or change this data after it is recorded.",
   "photo_title": "6. Photo & Media Consent",
   "photo_body": "Some events may photograph or record attendees. The registration form asks for this in its own checkbox, separate from the privacy consent. It is optional unless the event marks it as required. If you do not want to appear in photos, tell the event staff at check-in.",
   "sharing_title": "7. Data Sharing",
@@ -76,7 +76,7 @@
     "unsubscribe": "Unsubscribe from Marketing",
     "unsubscribed": "Marketing preference updated. {{ count }} record(s) updated.",
     "deletion_title": "Request Data Deletion",
-    "deletion_body": "Request erasure of your personal data (PDPA Section 29). Data for upcoming or active events cannot be deleted until the event concludes (PDPA Section 38 — contract performance exemption).",
+    "deletion_body": "Request erasure of your personal data (PDPA Section 33). For an upcoming or active event, we keep your data until the event ends, because we still need it to run the event you registered for (contract performance, PDPA Section 24(3)).",
     "request_deletion": "Request Data Deletion",
     "completed_title": "Deletion Completed",
     "completed_body": "Personal data cleared from {{ count }} event(s).",

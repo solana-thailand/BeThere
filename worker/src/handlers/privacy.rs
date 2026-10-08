@@ -299,8 +299,8 @@ pub async fn delete_request(
         "kv_keys_deleted": summary.kv_keys_deleted,
         "r2_objects_deleted": summary.r2_objects_deleted,
         "failures": summary.failures,
-        "on_chain_note": "On-chain data (wallet addresses, transaction signatures) is immutable and cannot be deleted. This is disclosed in our privacy policy as a technical limitation per PDPA Section 37.",
-        "time_gate_note": "Data deletion is only available after event conclusion per PDPA Section 38 (contract performance exemption). Blocked events retain data until their end date.",
+        "on_chain_note": "On-chain data (wallet addresses, transaction signatures) is immutable and cannot be deleted. This is disclosed in our privacy policy as a technical limitation of blockchain technology.",
+        "time_gate_note": "Data for an upcoming or active event is kept until the event ends, because it is still needed to run the event (contract performance, PDPA Section 24(3)). Blocked events retain data until their end date.",
     })))
 }
 

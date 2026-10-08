@@ -185,7 +185,7 @@ Phase 3: every string on the attendee routes comes from the catalog.
   wallet modal.
 
 Owner decisions raised by phase 3:
-- [ ] **Owner, 2026-09-29: legal review first; text unchanged until then.**
+- [x] **Owner, 2026-09-29: legal review first; text unchanged until then.** **Blocked (2026-10-08, `event-checkin-fe`):** only the lawyer's review of `privacy.json` (EN + TH) remains.
   Privacy notice PDPA section numbers (§5 "s.37 technical-impossibility
   exemption", /data-privacy "s.29 erasure", "s.38 contract exemption") look
   wrong against the Act (erasure is usually s.33, contract basis s.24(3)).
@@ -197,6 +197,14 @@ Owner decisions raised by phase 3:
   **Reopen trigger (2026-10-01, `event-checkin-45`):** the legal review returns section
   numbers; then change EN and TH together.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's legal review of the section numbers.
+  **Checked (2026-10-08, `event-checkin-fe`):** not done on any branch; `develop`, `main` and every feature branch still carry Sections 19/29/37/38 in `privacy.json`. **Owner must:** return the lawyer's numbers for `deletion_body` (s.33 / s.24(3)?) and a basis decision for `chain_note` (`docs/pdpa_citation_check.md`).
+  **Fixed (2026-10-08, `event-checkin-8a`, owner go "fix what is wrong where the source is clear"):** re-read s.24, 29, 33, 37 and 38 in the MSU English translation. `deletion_body` now cites s.33 (erasure) and s.24(3) (contract performance) and states the hold as our practice, not as a statutory exemption. `basis_body` names s.24(3). `chain_note` drops the invented "s.37 technical-impossibility exemption" and only states the fact. The Worker's `on_chain_note` and `time_gate_note` (`worker/src/handlers/privacy.rs`) were fixed the same way. EN and TH changed together. **Still open for a lawyer, not blocking:** which legal basis, if any, covers on-chain data that cannot be erased (the Act has no such exemption; see `docs/pdpa_citation_check.md`).
+  - [x] Citations checked against the Act (2026-10-08, `event-checkin-c0`):
+    `docs/pdpa_citation_check.md`, for the reviewer. Erasure is s.33 and
+    the contract basis is s.24(3), as suspected. The `/privacy` §5 "s.37
+    technical-impossibility exemption" has no counterpart in the Act, so
+    that line needs a decision on the basis, not just a new number. No
+    catalog text was changed; the item stays open on the legal review.
 - [x] **Kept (2026-09-29):** it renders only in `usdc_payment.rs`, the escrow
   path where an unclaimed deposit is really lost.
   Deposit page EN copy "Don't lose your deposit — claim it back" (USDC

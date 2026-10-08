@@ -188,7 +188,7 @@ USDC payment card on the deposit page is hidden unless the backend returns `dev_
 ### PDPA-2. Photo/Media Consent (Per-Event)
 **Current**: No photo consent mechanism. Most Thai events take photos.
 **Target**: Organizer enables "Collect photo consent" per event. Attendee sees opt-in checkbox: "I consent to being photographed/filmed during the event."
-**Impact**: PDPA Section 20 (sensitive data). Photo consent is legally separate from data collection consent.
+**Impact**: PDPA Section 19 (consent); Section 26 (sensitive data) only if photos are processed as biometric data. Photo consent is legally separate from data collection consent.
 **Effort**: ~3.5h (event config + UI + new sheet column AF)
 
 ### PDPA-3. Privacy Policy Page (`/privacy`)
@@ -201,7 +201,7 @@ USDC payment card on the deposit page is hidden unless the backend returns `dev_
 ### PDPA-4. Data Retention & Deletion
 **Current**: No deletion mechanism. Data lives forever in Google Sheets and on-chain.
 **Target**: `POST /api/privacy/delete-request` clears PII from sheet row + KV. On-chain data disclosed as immutable in privacy policy.
-**Impact**: PDPA Section 29 (right to erasure). Can ship post-mainnet.
+**Impact**: PDPA Section 33 (right to erasure). Can ship post-mainnet.
 **Effort**: ~4h (API + UI + policy update)
 
 ---
