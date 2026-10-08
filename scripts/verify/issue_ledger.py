@@ -182,8 +182,15 @@ def vocab_flags(path: Path, block: str) -> list[Flag]:
 def classify(block: str) -> Claim:
     # A leading open-work verdict is the claim; later prose ("W5 stays as
     # built") describes context, not a fix.
-    if verdict_word(block) in ("open", "in progress", "parked"):
-        return Claim.OPEN
+    match verdict_word(block):
+        case "open" | "in progress" | "parked":
+            return Claim.OPEN
+        # "deployed ... Earlier: not merged, not deployed" keeps its history
+        # after the verdict; the leading word is the claim.
+        case "deployed":
+            return Claim.DEPLOYED
+        case _:
+            pass
     low = " ".join(block.lower().split())
     match low:
         case "":
@@ -218,14 +225,16 @@ def judge(path: Path, prod: str | None, links: dict[str, list[str]], merged: set
         verdict.flags.append(Flag.UNVERIFIABLE)
     if any(not is_ancestor(c, "HEAD") for c in verdict.commits):
         verdict.flags.append(Flag.NOT_ON_HEAD)
+    shipped = bool(prod and evidence) and all(is_ancestor(c, prod) for c in evidence)
+    # A deployed claim whose every commit is in prod has nothing left on a
+    # branch: a stacked branch merged under another name is history too.
     for branch in BRANCH_RE.findall(block):
-        if branch in merged:
+        if branch in merged or (verdict.claim is Claim.DEPLOYED and shipped):
             continue
         if git("rev-parse", "--verify", "-q", f"refs/heads/{branch}").returncode != 0:
             verdict.flags.append(Flag.BRANCH_GONE)
             break
     if prod and evidence:
-        shipped = all(is_ancestor(c, prod) for c in evidence)
         match verdict.claim:
             case Claim.FIXED_UNDEPLOYED if shipped:
                 verdict.flags.append(Flag.STALE_UNDEPLOYED)
@@ -289,6 +298,7 @@ def self_test() -> int:
         ("completion word inside another word", "## Status: incomplete, undone", Claim.OTHER),
         ("open verdict beats a later fix word", "**Status:** open (2026-09-28). W5 stays as built.", Claim.OPEN),
         ("parked verdict beats a later fix word", "**Status:** parked. Merged code stays. Reopen trigger: RTM#7.", Claim.OPEN),
+        ("deployed verdict beats its own history", "**Status:** deployed (2026-10-09). Earlier: in progress, not merged, not deployed.", Claim.DEPLOYED),
     ]
     block_failures = 0
     for label, text, want in blocks:
