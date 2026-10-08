@@ -11,6 +11,7 @@ mod component;
 mod ctx;
 mod deposit;
 mod nft;
+mod og_card;
 mod people;
 mod poster;
 mod save;

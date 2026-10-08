@@ -4,6 +4,7 @@ pub mod copy_markup;
 pub mod credit_payout;
 pub mod deposit_copy;
 pub mod money;
+pub mod og_card;
 pub mod poll_policy;
 pub mod poster;
 pub mod promptpay;

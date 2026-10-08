@@ -36,6 +36,9 @@ pub mod crawl;
 /// `/media/*` with byte ranges (the landing film); public for `tests/media_path.rs`.
 pub mod landing_photos;
 pub mod media;
+/// Per-event `og:*` / `twitter:*` tags for `/e/{slug}`; public for `tests/og_splice.rs`.
+pub mod og_meta;
+mod og_page;
 pub mod precompressed;
 mod quiz;
 
@@ -107,7 +110,13 @@ static SPA_PRAGMA: std::sync::LazyLock<axum::http::HeaderValue> =
 /// with `Cache-Control: no-store` and the standard security headers.
 #[worker::send]
 async fn spa_fallback() -> axum::http::Response<axum::body::Body> {
-    let mut resp = axum::response::Html(INDEX_HTML).into_response();
+    spa_shell(INDEX_HTML)
+}
+
+/// The SPA shell with `body` (the stock page, or `/e/{slug}` with the event's
+/// social tags): the same headers either way.
+fn spa_shell(body: impl Into<axum::body::Body>) -> axum::http::Response<axum::body::Body> {
+    let mut resp = axum::response::Html(body.into()).into_response();
     let headers = resp.headers_mut();
     headers.insert(axum::http::header::CACHE_CONTROL, SPA_NO_STORE.clone());
     headers.insert(axum::http::header::PRAGMA, SPA_PRAGMA.clone());
@@ -175,7 +184,17 @@ async fn fetch(
     }
     // Not a static file (`not_found_handling = "none"`): a page, the API or a
     // crawler document, else 404 rather than the shell with a 200.
-    match crawl::route_kind(path) {
+    let route = crawl::route_kind(path);
+    // An event page carries that event's social tags (`.issues/183`); any
+    // miss serves the stock shell below.
+    if route == crawl::RouteKind::App
+        && req.method() == axum::http::Method::GET
+        && let Some(slug) = og_meta::page_slug(path)
+        && let Some(body) = og_page::render(&env, &slug, INDEX_HTML).await
+    {
+        return Ok(spa_shell(body));
+    }
+    match route {
         crawl::RouteKind::App => return Ok(spa_fallback().await),
         crawl::RouteKind::NotFound => return Ok(not_found()),
         crawl::RouteKind::Worker => {}

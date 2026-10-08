@@ -10,6 +10,7 @@
 //! | `refunds/` | Refund transfer receipts | `refunds/{event_id}/{attendee_id}.jpg` |
 //! | `badges/` | Event badge SVG files | `badges/{event_id}.svg` |
 //! | `posters/` | Event marketing posters | `posters/{event_id}.{ext}` |
+//! | `og/` | Browser-made 1200×630 share cards | `og/{event_id}.png` |
 //! | `metadata/` | NFT metadata JSON | `metadata/{event_id}.json` |
 //! | `exports/` | Walk-in CSV exports | `exports/{event_id}/{timestamp}.csv` |
 //! | `credit-payouts/` | Held-credit payout transfer slips | `credit-payouts/{org}/{owner}/{request}.jpg` |
@@ -41,6 +42,9 @@ pub const PREFIX_BADGES: &str = "badges/";
 
 /// R2 key prefix for event marketing poster images.
 pub const PREFIX_POSTERS: &str = "posters/";
+
+/// R2 key prefix for the per-event share cards (`.issues/183`).
+pub const PREFIX_OG: &str = "og/";
 
 /// R2 key prefix for NFT metadata JSON files.
 pub const PREFIX_METADATA: &str = "metadata/";
@@ -101,6 +105,12 @@ pub fn badge_key(event_id: &str) -> String {
 /// Extension is derived from the uploaded content-type (png/jpg/webp/svg).
 pub fn poster_key(event_id: &str, ext: &str) -> String {
     format!("{PREFIX_POSTERS}{event_id}.{ext}")
+}
+
+/// Build the R2 key of an event's share card. Keyed by event id, never by
+/// slug: a slug can change and be reused.
+pub fn og_card_key(event_id: &str) -> String {
+    format!("{PREFIX_OG}{event_id}.png")
 }
 
 /// Build an R2 key for an NFT metadata JSON file.
@@ -246,6 +256,9 @@ pub enum Visibility {
     /// Public, but must be removable on request: the landing's event photos.
     /// Kept for an hour at most, so a photo taken down stops showing soon.
     Removable,
+    /// Public and redrawn whenever the organizer saves the event: the share
+    /// cards. An hour, so an edit reaches a fresh crawl the same day.
+    Regenerated,
 }
 
 impl Visibility {
@@ -253,7 +266,7 @@ impl Visibility {
         match self {
             Self::Public => "public, max-age=86400",
             Self::Private => "private, no-store",
-            Self::Removable => "public, max-age=3600",
+            Self::Removable | Self::Regenerated => "public, max-age=3600",
         }
     }
 }
@@ -395,6 +408,28 @@ pub async fn serve_poster(
     serve_r2_object(&state, &key, Visibility::Public, if_none_match(&headers)).await
 }
 
+/// GET /api/storage/og/{event_id}
+///
+/// Serves an event's browser-made share card (`og/{event_id}.png`,
+/// `.issues/183`). The exact key is tried first, so a hit costs one R2 get.
+#[worker::send]
+pub async fn serve_og_card(
+    State(state): State<AppState>,
+    Path(event_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !crate::og_meta::is_safe_id(&event_id) {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    serve_r2_object(
+        &state,
+        &og_card_key(&event_id),
+        Visibility::Regenerated,
+        if_none_match(&headers),
+    )
+    .await
+}
+
 /// GET /api/storage/landing-photos/{name}
 ///
 /// Serves a landing photo or thumbnail from R2, but only a name on the list
@@ -465,7 +500,9 @@ async fn serve_r2_object(
                 let content_type = content_type_from_key(candidate);
                 let cache_control = visibility.cache_control();
                 let etag = match visibility {
-                    Visibility::Public | Visibility::Removable => found.http_etag.as_deref(),
+                    Visibility::Public | Visibility::Removable | Visibility::Regenerated => {
+                        found.http_etag.as_deref()
+                    }
                     Visibility::Private => None,
                 };
                 // A matching validator means the client already holds these
