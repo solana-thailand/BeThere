@@ -88,7 +88,10 @@ order:
 3. Brevo or Resend: free tiers need a domain we control. Revisit when there
    is one.
 Keep the one-click unsubscribe and the `List-Unsubscribe` header on every
-path. Waiting on: which Gmail account sends.
+path. Sender (owner, 2026-10-08): **bethere.sol@gmail.com** via option 1.
+Setup: `docs/gmail_sender_setup.md` (owner steps 1–6, then the consent
+helper `scripts/gmail_refresh_token.py`). Waiting on: the owner running
+those steps; the build itself starts with Release 4 (not before 13 Oct).
 
 ## Super GOAT (after Release 4, in the spec's order)
 

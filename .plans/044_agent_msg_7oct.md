@@ -67,7 +67,7 @@ Steps:
   a docs commit after the staged `346686f7`). Staging smoke reads + writes.
 - [x] 2.3 (backup `bethere-db-20261008-0759-pre-release3-prod.sql`, 2.5 MB, 600; `main` `ff22c405` tree == `abb2b9de`; prod `6a84e7ce` 01:12 UTC, parity passed, no `--force`; smoke with the owner's token passes; rollback `39392433`) Prod backup; release merge `develop` → `main`, tree = staged tree;
   `worker/deploy.sh`; smoke with the new token; `wrangler deployments list`.
-- [ ] 2.4 (issue 187 → deployed. Baseline before deploy: `thb_deposits` 10-03 4, 10-04 1; attendees 10-03 6, 10-04 1; nothing since. Re-check owed a few hours after deploy) Write volume on `thb_deposits`; issue 187 → "deployed".
+- [ ] 2.4 (issue 187 → deployed. Baseline before deploy: `thb_deposits` 10-03 4, 10-04 1; attendees 10-03 6, 10-04 1; nothing since. Re-check owed a few hours after deploy. Tried 06:12 UTC: blocked, the wrangler login was redone after 01:15 without the `d1` scope (Cloudflare 7403); waits on `npx wrangler login`) Write volume on `thb_deposits`; issue 187 → "deployed".
 
 Proof: parity line "HEAD … has the same tree as staging's …"; smoke "Writes
 work"; a prod orphan count unchanged by the smoke (the fix's own check).
