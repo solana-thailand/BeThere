@@ -99,6 +99,14 @@ account. Search Console ownership tag shipped to prod (pull 163, `main`
 then "I have fixed the issues". Until then the app may stay in Testing
 (test user bethere.sol, 7-day refresh tokens): fine for staging, not for
 real sends.
+Setup done 2026-10-08: branding verified and published, app In production
+(data-access verification for `gmail.send` deliberately skipped: one
+consenting account, under the 100-user cap). Desktop client in Cloud project
+`serene-anagram-511006-j9` (`bethere-mail`); consent as bethere.sol; the
+refresh token exchanged for a 1 h access token with scope `gmail.send` only
+(no mail sent). Files `~/.bethere-gmail-client.json` and
+`~/.bethere-gmail-refresh-token` (600) wait for R4.12 to load them as
+staging secrets.
 
 ## Super GOAT (after Release 4, in the spec's order)
 
