@@ -7,6 +7,7 @@
 //! Split into focused submodules (Issue #052) — each owns a route handler and
 //! its private helpers:
 //! - [`list`] — `list_attendees`
+//! - [`by_code`] — `get_attendee_by_display_code` (staff, `.issues/178`)
 //! - [`read`] — `get_attendee`, `get_public_ticket`
 //! - [`delete`] — `delete_attendee`
 //! - [`participation`] — `update_participation_type`
@@ -15,6 +16,7 @@
 
 mod admin;
 mod attendance_answer;
+mod by_code;
 mod delete;
 mod list;
 mod participation;
@@ -22,6 +24,7 @@ mod read;
 
 pub use admin::*;
 pub use attendance_answer::*;
+pub use by_code::*;
 pub use delete::*;
 pub use list::*;
 pub use participation::*;

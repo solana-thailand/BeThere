@@ -147,7 +147,10 @@ pub async fn get_public_ticket(
     // into one concurrent step. The plan's original "3 sequential reads" claim
     // was overstated: event→attendee is a dependency chain (attendee needs
     // event.sheet_id), so only these two post-attendee reads are parallelizable.
-    let (usdc_status_res, thb_deposit_res) = futures_util::join!(
+    //
+    // The booking code (.issues/178) joins the same step: one indexed D1 read,
+    // plus a one-time assignment for a row that has no code yet.
+    let (usdc_status_res, thb_deposit_res, display_code) = futures_util::join!(
         crate::event_store::get_deposit_status_with_fallback(
             kv,
             state.d1.as_deref(),
@@ -160,6 +163,7 @@ pub async fn get_public_ticket(
             &event.id,
             &attendee.api_id,
         ),
+        ticket_display_code(state.d1.as_deref(), &event.id, &attendee.api_id),
     );
     let deposit_status = usdc_status_res.ok().flatten();
     let thb_deposit = thb_deposit_res.ok().flatten();
@@ -374,8 +378,31 @@ pub async fn get_public_ticket(
         // concerns in-person and online attendees alike. Empty = not postponed.
         "postponed_note": event.postponed_note,
         "calendar_subscribe_url": event.calendar_subscribe_url,
+        // Short booking code for the door (.issues/178). "" = none yet (no D1,
+        // or the assignment failed and will be retried on the next read); a
+        // string, not `null`, because `#[serde(default)]` does not cover null.
+        "display_code": display_code,
     });
     Ok(ApiOk::new(data))
+}
+
+/// The attendee's booking code for the ticket, assigning one if missing.
+/// Never fails the ticket: any D1 error degrades to "" and is logged.
+async fn ticket_display_code(
+    d1: Option<&worker::D1Database>,
+    event_id: &str,
+    attendee_id: &str,
+) -> String {
+    let Some(db) = d1 else {
+        return String::new();
+    };
+    match crate::db::attendees::ensure_display_code(db, event_id, attendee_id).await {
+        Ok(code) => code.unwrap_or_default(),
+        Err(e) => {
+            tracing::warn!(error = %e, "ticket display code unavailable");
+            String::new()
+        }
+    }
 }
 
 /// Mask an email address for privacy: "john@example.com" → "j***@example.com".

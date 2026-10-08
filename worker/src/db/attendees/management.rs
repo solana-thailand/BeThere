@@ -193,15 +193,14 @@ pub(crate) async fn upsert_attendee_full(
         D1Type::Text(opt.unwrap_or(""))
     }
 
-    let stmt = db.prepare(
-        "INSERT INTO attendees ( \
+    const UPSERT_FULL_SQL: &str = "INSERT INTO attendees ( \
          id, event_id, email, name, approval_status, participation_type, \
          contact_channel, contact_handle, \
          checked_in_at, checked_in_by, claim_token, claimed_at, qr_url, \
          deposit_status, deposit_tx_hash, \
          refund_tx_hash, refund_link, \
          bank_name, bank_account_number, bank_account_name, \
-         sheet_row_index, ticket_name, synced_at, created_at, updated_at \
+         sheet_row_index, ticket_name, display_code, synced_at, created_at, updated_at \
          ) VALUES ( \
          ?1, ?2, ?3, ?4, ?5, ?6, \
          ?7, ?8, \
@@ -209,7 +208,7 @@ pub(crate) async fn upsert_attendee_full(
          ?14, NULLIF(?15, ''), \
          NULLIF(?16, ''), NULLIF(?17, ''), \
          NULLIF(?18, ''), NULLIF(?19, ''), NULLIF(?20, ''), \
-         ?21, NULLIF(?22, ''), datetime('now'), datetime('now'), datetime('now') \
+         ?21, NULLIF(?22, ''), ?23, datetime('now'), datetime('now'), datetime('now') \
          ) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, \
@@ -236,45 +235,68 @@ pub(crate) async fn upsert_attendee_full(
          bank_account_name = COALESCE(excluded.bank_account_name, attendees.bank_account_name), \
          sheet_row_index = CASE WHEN excluded.sheet_row_index = 0 THEN attendees.sheet_row_index ELSE excluded.sheet_row_index END, \
          ticket_name = COALESCE(excluded.ticket_name, attendees.ticket_name), \
+         display_code = COALESCE(attendees.display_code, excluded.display_code), \
          synced_at = datetime('now'), \
-         updated_at = datetime('now')",
-    );
+         updated_at = datetime('now')";
 
     // sheet_row_index is 1-based (sheet row 2+), so 0 is a safe "unset" sentinel.
     // The ON CONFLICT clause treats 0 as "preserve existing", matching the
     // empty-string idiom above.
-    let sheet_row_bind = D1Type::Integer(sheet_row_index.unwrap_or(0));
+    let sheet_row = sheet_row_index.unwrap_or(0);
 
-    stmt.bind_refs(&[
-        D1Type::Text(id),                 // ?1
-        D1Type::Text(event_id),           // ?2
-        D1Type::Text(email),              // ?3
-        D1Type::Text(name),               // ?4
-        D1Type::Text(approval_status),    // ?5
-        D1Type::Text(participation_type), // ?6
-        D1Type::Text(contact_channel),    // ?7
-        D1Type::Text(contact_handle),     // ?8
-        opt_text(checked_in_at),          // ?9
-        opt_text(checked_in_by),          // ?10
-        opt_text(claim_token),            // ?11
-        opt_text(claimed_at),             // ?12
-        opt_text(qr_url),                 // ?13
-        D1Type::Text(deposit_status),     // ?14
-        opt_text(deposit_tx_hash),        // ?15
-        opt_text(refund_tx_hash),         // ?16
-        opt_text(refund_link),            // ?17
-        opt_text(bank_name),              // ?18
-        opt_text(bank_account_number),    // ?19
-        opt_text(bank_account_name),      // ?20
-        sheet_row_bind,                   // ?21
-        D1Type::Text(ticket_name),        // ?22
-    ])
-    .map_err(|e| format!("D1 upsert_attendee_full bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 upsert_attendee_full run: {e:?}"))?;
-
-    Ok(())
+    // A new row gets its booking code (.issues/178) in the same statement; an
+    // existing row keeps the one it has (`COALESCE` on conflict). A collision
+    // on the per-event unique index is retried with a fresh code.
+    for attempt in 1..=super::DISPLAY_CODE_MAX_ATTEMPTS {
+        let code = super::draw_display_code()?;
+        let result = db
+            .prepare(UPSERT_FULL_SQL)
+            .bind_refs(&[
+                D1Type::Text(id),                 // ?1
+                D1Type::Text(event_id),           // ?2
+                D1Type::Text(email),              // ?3
+                D1Type::Text(name),               // ?4
+                D1Type::Text(approval_status),    // ?5
+                D1Type::Text(participation_type), // ?6
+                D1Type::Text(contact_channel),    // ?7
+                D1Type::Text(contact_handle),     // ?8
+                opt_text(checked_in_at),          // ?9
+                opt_text(checked_in_by),          // ?10
+                opt_text(claim_token),            // ?11
+                opt_text(claimed_at),             // ?12
+                opt_text(qr_url),                 // ?13
+                D1Type::Text(deposit_status),     // ?14
+                opt_text(deposit_tx_hash),        // ?15
+                opt_text(refund_tx_hash),         // ?16
+                opt_text(refund_link),            // ?17
+                opt_text(bank_name),              // ?18
+                opt_text(bank_account_number),    // ?19
+                opt_text(bank_account_name),      // ?20
+                D1Type::Integer(sheet_row),       // ?21
+                D1Type::Text(ticket_name),        // ?22
+                D1Type::Text(code.as_str()),      // ?23
+            ])
+            .map_err(|e| format!("D1 upsert_attendee_full bind: {e:?}"))?
+            .run()
+            .await;
+        match result {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                let message = format!("{e:?}");
+                if !super::is_display_code_collision(&message) {
+                    return Err(format!("D1 upsert_attendee_full run: {message}"));
+                }
+                tracing::info!(
+                    attempt,
+                    "display code collision on sheet sync, drawing again"
+                );
+            }
+        }
+    }
+    Err(format!(
+        "D1 upsert_attendee_full: {} display code collisions in a row",
+        super::DISPLAY_CODE_MAX_ATTEMPTS
+    ))
 }
 
 /// Set marketing consent for all attendee rows matching an email.
