@@ -69,3 +69,10 @@ VALUES ('e2e-org', 'E2E Community', '2029-12-01T00:00:00Z', '2029-12-01T00:00:00
 UPDATE events SET organization_id = 'e2e-org',
   sponsors_json = '[{"name":"Example Labs","logo_url":"","link":"https://example.com"},{"name":"Sample Co","logo_url":"","link":""}]'
   WHERE id = 'e2e-event';
+
+-- Fixed booking codes (.issues/178, migration 0058) so the ticket snapshots
+-- do not drift: a row without one is given a random code on its first read.
+UPDATE attendees SET display_code = 'E2EAAA' WHERE id = 'e2e-att-01' AND event_id = 'e2e-event';
+UPDATE attendees SET display_code = 'E2EBBB' WHERE id = 'e2e-att-02' AND event_id = 'e2e-event';
+UPDATE attendees SET display_code = 'E2ECCC' WHERE id = 'e2e-att-03' AND event_id = 'e2e-event';
+UPDATE attendees SET display_code = 'E2EDDD' WHERE id = 'e2e-att-04' AND event_id = 'e2e-free';

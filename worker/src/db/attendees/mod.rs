@@ -9,6 +9,7 @@
 
 mod counts;
 mod deposit;
+mod display_code;
 mod management;
 mod reads;
 mod walkin;
@@ -19,6 +20,7 @@ mod writes;
 pub(crate) use counts::*;
 #[allow(unused_imports)]
 pub(crate) use deposit::*;
+pub(crate) use display_code::*;
 pub(crate) use management::*;
 pub(crate) use reads::*;
 pub(crate) use walkin::*;

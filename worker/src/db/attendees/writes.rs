@@ -104,6 +104,10 @@ pub(crate) async fn upsert_attendee(
         .await
         .map_err(|e| format!("D1 registration batch: {e:?}"))?;
 
+    // The booking code (.issues/178) is set after the row exists, so a code
+    // collision can never fail the registration itself.
+    super::assign_display_code_best_effort(db, event_id, id).await;
+
     Ok(())
 }
 
@@ -187,10 +191,14 @@ pub(crate) async fn upsert_post_event_attendee(
         .results::<AttendeeIdRow>()
         .map_err(|e| format!("D1 upsert_post_event_attendee deserialize: {e:?}"))?;
 
-    rows.into_iter()
+    let attendee_id = rows
+        .into_iter()
         .next()
         .map(|row| row.id)
-        .ok_or_else(|| "D1 upsert_post_event_attendee: no row returned".to_string())
+        .ok_or_else(|| "D1 upsert_post_event_attendee: no row returned".to_string())?;
+    // Booking code (.issues/178); a no-op for a repeat that already has one.
+    super::assign_display_code_best_effort(db, event_id, &attendee_id).await;
+    Ok(attendee_id)
 }
 
 /// Write check-in data to D1 (dual-write alongside Sheets).

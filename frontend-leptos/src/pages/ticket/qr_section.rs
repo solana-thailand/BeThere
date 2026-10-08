@@ -69,6 +69,7 @@ pub fn QrSection(
 ) -> impl IntoView {
     let qr_image = view_data.qr_image.clone();
     let has_qr = view_data.has_qr;
+    let display_code = view_data.display_code.clone();
     let name = view_data.name.clone();
     let is_checked_in = view_data.is_checked_in;
     let deposit_method = view_data.deposit_info.as_ref().map(|d| d.method);
@@ -101,6 +102,7 @@ pub fn QrSection(
                                     class="ticket-qr-img"
                                 />
                             </div>
+                            <TicketCode code=display_code.clone() />
                             <div class="ticket-qr-actions">
                                 <button
                                     class="btn btn-outline btn-sm"
@@ -131,6 +133,7 @@ pub fn QrSection(
                                 class="ticket-qr-img"
                             />
                         </div>
+                        <TicketCode code=display_code.clone() />
                         <div class="ticket-qr-actions">
                             <button
                                 class="btn btn-outline btn-sm"
@@ -197,6 +200,31 @@ pub fn QrSection(
         }
         .into_any()
     }
+}
+
+/// The booking code under the QR, as `Nº XXXXXX` (.issues/178, plan 039).
+///
+/// For reading aloud at the door when the QR will not scan; staff type it into
+/// the scanner's manual box. Renders nothing for an empty code (no D1, or not
+/// assigned yet). Public so the landing's inline ticket can reuse it.
+#[component]
+pub fn TicketCode(
+    /// The 6-character code, without the `Nº` prefix. Empty = render nothing.
+    code: String,
+) -> impl IntoView {
+    (!code.is_empty()).then(|| {
+        view! {
+            <p class="ticket-code">
+                <span class="ticket-code-label">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.code.label))}
+                </span>
+                <span class="ticket-code-value" translate="no">{format!("Nº {code}")}</span>
+                <span class="ticket-code-hint">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.code.hint))}
+                </span>
+            </p>
+        }
+    })
 }
 
 /// Fullscreen QR overlay — delegates to the shared `ImageLightbox` so the

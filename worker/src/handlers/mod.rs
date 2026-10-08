@@ -358,6 +358,12 @@ pub fn routes(state: AppState) -> Router<()> {
     // Protected routes — require staff auth
     let protected = Router::new()
         .route("/attendees", get(attendee::list_attendees))
+        // Scanner "Enter code" (.issues/178): staff-only, event-scoped, returns
+        // just the attendee id for the existing lookup + check-in flow.
+        .route(
+            "/attendees/by-code/{code}",
+            get(attendee::get_attendee_by_display_code),
+        )
         .route(
             "/attendee/{id}",
             get(attendee::get_attendee).delete(attendee::delete_attendee),

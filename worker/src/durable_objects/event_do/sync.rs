@@ -180,9 +180,22 @@ impl EventDurableObject {
                 ]);
             match result {
                 Ok(stmt) => {
+                    let event_id = row.event_id.clone();
+                    let attendee_id = row.id.clone();
                     let fut = async move {
-                        if let Err(e) = stmt.run().await {
-                            tracing::warn!("DO→D1 sync attendee failed: {e:?}");
+                        match stmt.run().await {
+                            // The DO's own SQLite has no booking code; D1 is
+                            // where it lives (.issues/178). No-op when the
+                            // row already has one.
+                            Ok(_) => {
+                                crate::db::attendees::assign_display_code_best_effort(
+                                    &d1,
+                                    &event_id,
+                                    &attendee_id,
+                                )
+                                .await
+                            }
+                            Err(e) => tracing::warn!("DO→D1 sync attendee failed: {e:?}"),
                         }
                     };
                     wasm_bindgen_futures::spawn_local(fut);

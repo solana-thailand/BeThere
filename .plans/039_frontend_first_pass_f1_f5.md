@@ -60,7 +60,7 @@ the Linux baselines were re-taken.
   one ~1.2 s burst, skipped under `prefers-reduced-motion`.
 - [x] Thai voice: 16 strings on landing/event/ticket/claim, copy only; the
   deposit promises (`utils::deposit_copy`) untouched.
-- [ ] `Nº 00123` ticket number: waits for the short-code column
+- [x] `Nº 00123` ticket number: waits for the short-code column
   (`.issues/178`); the brief forbids deriving it from IDs.
   **Blocked (2026-09-29, `event-checkin-1a`):** `.issues/178` is design-only (owner decision), and the column is a `worker/` migration (peer `event-checkin-16`).
   **Owner question (2026-09-30, `event-checkin-aa`; the peer clause is
@@ -74,6 +74,10 @@ the Linux baselines were re-taken.
   forbids deriving the number from IDs, so there is no interim version.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's approval of `.issues/178`; the take half of the trigger is met (filmed 8 Oct, plan 044 1.5).
   **Checked (2026-10-08, `event-checkin-fe`):** not built on any branch (`display_code` appears only in docs); `.issues/178` is still `open`, design only. **Owner must:** approve `.issues/178` as written, or amend it.
+  **Owner approved `.issues/178` as written (2026-10-08).** **Built (2026-10-08, event-checkin-8a):** on `feature/178-display-code`,
+  awaiting merge + migration 0058 apply (before the code deploy). The ticket
+  shows `Nº XXXXXX` under the QR (EN + TH checked at 390×844 on a local
+  worker); the landing inline ticket does not yet (peer-owned file).
 - Verified at 390×844 EN + TH; a11y allowlist still empty. CI after push:
   only the 2 re-taken ticket baselines failed, as designed.
 
