@@ -84,7 +84,7 @@ the Linux baselines were re-taken.
   palette-only colours, URL-safe, < 4 KB).
 - [x] Event hero third tier (no poster, no badge) and /discover thumbnails
   for rows with no image of their own.
-- [ ] OG image: not done. Social cards need PNG, and SVG→PNG in the Worker
+- [x] OG image: built on a branch 2026-10-08 (last note below). Was not done: social cards need PNG, and SVG→PNG in the Worker
   does not fit the free-plan CPU cap (`free-plan-cpu-cap-is-binding`).
   Options: a build-time/offline render per event, or a paid plan.
   **Blocked (2026-09-29, `event-checkin-1a`):** owner picks the option (paid plan is a cost call; per-event render needs a pipeline decision).
@@ -105,6 +105,14 @@ the Linux baselines were re-taken.
   `og:image` = `/api/badge.svg` (`image/svg+xml`), so 183's finding still
   holds.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's pick in `.issues/183` for per-event cards; the static 1200×630 `/og-image.png` card is live on prod (re-probed `/e/x`: `og:image` and `twitter:image` = `/og-image.png`, `image/png`).
+  **Built (2026-10-08, `event-checkin-8a`):** owner picked option B. On
+  `feature/183-og-per-event`: `99447935` (the Worker writes the event's
+  `og:*`/`twitter:*` tags into `/e/{slug}`, image order raster poster →
+  `og/{event_id}.png` → stock; `?kind=og` upload + `/api/storage/og/{id}`)
+  and `0e804e7c` (the staff editor draws and uploads the 1200×630 card on
+  save). Awaiting merge and a staging deploy, then a crawler probe on staging
+  with two events (`curl -A facebookexternalhit/1.1 …/e/<slug>` per event)
+  and a look at the drawn card in a browser. Details in `.issues/183`.
 
 ## Remaining
 

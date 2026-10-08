@@ -1,8 +1,55 @@
 # 183: OG image: per-event social cards, tradeoff before code
 
-**Status:** open (2026-10-01). Design only, no code. Filed by session
-`event-checkin-53`. The build waits until after the take (8 Oct), per the
-handoff's order (item 3). Tracked in `.plans/039` F4 "OG image".
+**Status:** in progress (2026-10-08, `event-checkin-8a`). Owner picked
+option B on 2026-10-08. Built on `feature/183-og-per-event` (`99447935`
+Worker splice + card storage, `0e804e7c` editor draws the card); not merged,
+not deployed, not probed with a crawler. Filed 2026-10-01 by
+`event-checkin-53`. Tracked in `.plans/039` F4 "OG image".
+
+## Built on `feature/183-og-per-event` (2026-10-08, `event-checkin-8a`)
+
+**Correction to the premise below.** "`/e/{slug}` never reaches the Worker"
+was true on 2026-10-01 and stopped being true on 2026-10-06:
+`worker/wrangler.toml` now has `not_found_handling = "none"`, so a path that
+is not a file falls through to the Worker, which answers with the embedded
+shell when `crawl::route_kind` says it is a page (`/e/:slug` is in
+`crawl::APP_ROUTES`). `run_worker_first` was therefore **not** touched, and
+no marker block was added to `index.html`: the splice finds the tags by
+content (`property="og:title"`, …) and falls back to the stock page if any
+is missing or doubled. Also since plan 042 0.6 the stock image is
+`/og-image.png` 1200×630, not `badge.svg`, so the last fallback in the image
+order is that file, not `/api/badge.png`.
+
+What exists on the branch:
+
+- Worker (`worker/src/og_meta.rs` pure, `worker/src/og_page.rs` I/O, hooked
+  in `lib.rs` before the stock shell): for `GET /e/{slug}` of an event that
+  is not draft/archived/private, read KV-first through
+  `resolve_event_by_slug` (the `/api/public/event/{slug}` path) and replace
+  `og:title`, `og:description`, `og:url`, `og:image` (+ type, width, height,
+  alt) and the `twitter:` twins, HTML-escaped. Same headers as the stock
+  shell. Unknown slug or any read error → stock page.
+- Image order: raster poster (stored PNG/JPEG, or an https URL ending in
+  .png/.jpg/.jpeg; SVG/WebP skipped; width/height tags dropped because the
+  size is unknown) → `og/{event_id}.png` → stock. At most three R2 HEADs in
+  parallel per view.
+- `POST /api/events/{id}/poster?kind=og`: organizer role for that event,
+  `image/png`, PNG signature + IHDR exactly 1200×630, 2 MB cap, key
+  `og/{resolved event id}.png`, `poster_url` untouched (so no
+  `expected_updated_at` race with the editor). `GET /api/storage/og/{id}`
+  serves it `image/png`, `public, max-age=3600`.
+- Staff editor: after a successful create/update, draws the card on a canvas
+  (title wrapped to 3 lines with Thai-safe breaks, date + venue, uploaded or
+  generative poster art) and uploads it. Failure is logged, never blocks the
+  save. Canvas `web-sys` features are behind the `staff` feature.
+- Tests: `worker/tests/og_splice.rs` (14), `domain/tests/og_card.rs` (8),
+  `frontend-leptos/tests/og_card_layout.rs` (11).
+
+Not verified yet: the canvas render (only a browser shows it; Thai glyphs
+depend on the Anuphan subset loading), the crawler probe on staging with two
+events, the platform debuggers, and the per-view cost (`.benchmarks/007`
+method). Events never opened in the editor since the merge have no card and
+show the stock image until saved once.
 
 ## What a crawler sees today (probed on prod, 2026-10-01)
 
