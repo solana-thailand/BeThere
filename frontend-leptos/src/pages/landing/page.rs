@@ -12,6 +12,7 @@ use super::registrations::MyRegistrations;
 use super::sofar::SoFar;
 use super::sponsors::Sponsors;
 use super::stats::provide_landing_stats;
+use super::story::Story;
 use super::theme::initial_theme;
 use super::upcoming::UpcomingEvents;
 
@@ -77,6 +78,9 @@ pub fn Landing() -> impl IntoView {
 
             // ===== Upcoming Events (two cards + see all) =====
             <UpcomingEvents />
+
+            // ===== The commitment ladder: one room of chairs (.plans/043 L8) =====
+            <Story />
 
             // ===== How it works: the swimlane (.plans/043 L4) =====
             <HowItWorks />

@@ -60,14 +60,31 @@ fn every_route_names_its_visibility() {
             "{public} must be Public"
         );
     }
-    let code: String = source
+    // Event photos must be removable on request (.plans/043 L9).
+    assert!(
+        route("serve_landing_photo").contains("Visibility::Removable"),
+        "serve_landing_photo must be Removable"
+    );
+    // Every directive lives in `Visibility::cache_control`; one anywhere
+    // else bypasses the policy.
+    let policy_start = source.find("pub fn cache_control(").expect("cache_control");
+    let policy_end = source[policy_start..].find("\n    }\n").expect("fn end") + policy_start;
+    let outside: String = [&source[..policy_start], &source[policy_end..]]
+        .concat()
         .lines()
         .filter(|l| !l.trim_start().starts_with("//"))
         .collect::<Vec<_>>()
         .join("\n");
     assert_eq!(
-        code.matches("public, max-age").count(),
-        1,
+        outside.matches("max-age").count() + outside.matches("no-store").count(),
+        0,
         "a cache directive outside `Visibility::cache_control` bypasses the policy"
     );
+}
+
+#[test]
+fn removable_photos_are_public_but_short_lived() {
+    let value = Visibility::Removable.cache_control();
+    assert!(value.starts_with("public"), "{value}");
+    assert!(value.contains("max-age=3600"), "{value}");
 }

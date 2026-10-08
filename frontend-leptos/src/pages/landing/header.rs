@@ -46,9 +46,8 @@ pub const HEADER_SECTIONS: [Section; 4] = [
     },
 ];
 
-/// The side index, in page order. The design's "who comes" story section is
-/// not built yet (L8), so it has no dot.
-pub const SIDE_SECTIONS: [Section; 6] = [
+/// The side index, in page order.
+pub const SIDE_SECTIONS: [Section; 7] = [
     Section {
         id: "top",
         label: |l| td_string!(l, landing.nav.top),
@@ -56,6 +55,10 @@ pub const SIDE_SECTIONS: [Section; 6] = [
     Section {
         id: "events",
         label: |l| td_string!(l, landing.nav.events),
+    },
+    Section {
+        id: "story",
+        label: |l| td_string!(l, landing.nav.story),
     },
     Section {
         id: "how",

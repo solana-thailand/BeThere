@@ -62,6 +62,11 @@ pub fn routes(state: AppState) -> Router<()> {
                 crate::middleware::edge_cache_layer,
             )),
         )
+        // The landing's photo list (.plans/043 L9): a committed file.
+        .route(
+            "/public/landing-photos",
+            get(public_stats::get_landing_photos),
+        )
         // Past events feed (Plan 008 — Phase 2): completed events with a
         // published recap. Same 60s cache — recaps are author-published and
         // rarely change once live.
@@ -204,6 +209,11 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/storage/posters/{event_id}",
             get(crate::storage::serve_poster),
+        )
+        // Landing photos (public — only names on landing-photos.jsonl)
+        .route(
+            "/storage/landing-photos/{name}",
+            get(crate::storage::serve_landing_photo),
         )
         // Wallet NFT verification (public — no auth needed to read on-chain data)
         .route("/wallet/leaderboard", get(wallet::get_leaderboard))

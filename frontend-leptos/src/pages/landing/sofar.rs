@@ -2,8 +2,8 @@
 //! carried, every figure from `GET /api/public/stats` with its measured-at
 //! time (build plan rule 1). The numbers count up once when they come into
 //! view; under reduced motion they are simply there. Without stats the lines
-//! are not drawn at all. The reels (L9) and the goal globe (L10) wait for
-//! their inputs; the community row is a text wordmark (rule 5).
+//! are not drawn at all. The goal and its globe (L10) are `goal.rs`, under
+//! the strip; the photo reel (L9) is `photos.rs`, above it.
 
 use leptos::html::Div;
 use leptos::prelude::*;
@@ -12,10 +12,13 @@ use wasm_bindgen::closure::Closure;
 
 use crate::i18n::td_string;
 
+use super::goal::Goal;
 use super::hero::MarkupText;
+use super::photos::PhotoReel;
 use super::stats::{
     count_at, group_thousands, measured_at_label, payers_line_shown, use_landing_stats,
 };
+use super::story::ladder_total;
 
 const COUNT_UP_MS: f64 = 1200.0;
 const FRAME_MS: u64 = 16;
@@ -23,7 +26,7 @@ const FRAME_MS: u64 = 16;
 /// twice the widest screen (32 × ~110 px).
 const TAPE_REPEATS: usize = 32;
 
-fn reduced_motion() -> bool {
+pub(super) fn reduced_motion() -> bool {
     web_sys::window()
         .and_then(|w| {
             w.match_media("(prefers-reduced-motion: reduce)")
@@ -34,7 +37,7 @@ fn reduced_motion() -> bool {
 }
 
 /// Sets `seen` the first time `target` scrolls into view, then stops watching.
-fn watch_first_sight(target: NodeRef<Div>, seen: RwSignal<bool>) {
+pub(super) fn watch_first_sight(target: NodeRef<Div>, seen: RwSignal<bool>) {
     let observer = StoredValue::new_local(None::<web_sys::IntersectionObserver>);
     Effect::new(move |_| {
         let Some(el) = target.get() else {
@@ -155,6 +158,13 @@ pub fn SoFar() -> impl IntoView {
             ],
         )
     };
+    let payers_total = move || {
+        let (paid, came) = ladder_total();
+        crate::locale::fill(
+            td_string!(i18n.get_locale(), landing.sofar.payers_total),
+            &[("came", &came.to_string()), ("paid", &paid.to_string())],
+        )
+    };
     let done = Signal::derive(move || done_at(progress.get()));
     let payers = Signal::derive(move || payers_at(progress.get()));
     let read_out = move || {
@@ -180,6 +190,7 @@ pub fn SoFar() -> impl IntoView {
     view! {
         <section id="goal" class="lp-goal">
             <div class="lp-tape" aria-hidden="true"><div class="lp-tape-run">{tape()}</div></div>
+            <PhotoReel />
             <div class="lp-wrap" node_ref=strip>
                 {move || stats.with(Option::is_some).then(|| view! {
                     <p class="lp-livebar"><i></i><span>{livebar}</span></p>
@@ -189,16 +200,13 @@ pub fn SoFar() -> impl IntoView {
                 {move || stats.with(|s| s.as_ref().is_some_and(payers_line_shown)).then(|| view! {
                     <p class="lp-done lp-payers" aria-hidden="true"><MarkupText text=payers /></p>
                     <p class="lp-fineprint lp-center">{crate::locale::tr(|l| td_string!(l, landing.sofar.payers_note))}</p>
+                    // The ladder's total (RTM #1–#6, hand records included), under
+                    // the system-only figure above: both true, both labelled.
+                    <p class="lp-fineprint lp-center">{payers_total}</p>
                 })}
-                <div class="lp-communities">
-                    <p class="lp-kicker">{crate::locale::tr(|l| td_string!(l, landing.sofar.communities))}</p>
-                    <div class="lp-slots">
-                        <span class="lp-slot">"Solana Developer Thailand"</span>
-                        <a class="lp-slot lp-slot-open" href="#join">{crate::locale::tr(|l| td_string!(l, landing.sofar.your_community))}</a>
-                    </div>
-                </div>
             </div>
             <div class="lp-tape lp-t2" aria-hidden="true"><div class="lp-tape-run">{tape()}</div></div>
+            <Goal />
         </section>
     }
 }

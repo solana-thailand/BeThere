@@ -1143,6 +1143,22 @@ a.lp-event:focus-visible {
 .lp-who strong {
     color: var(--lp-ink);
 }
+.lp-who-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 10px 0 12px;
+}
+.lp-who-row .lp-who {
+    margin: 0;
+}
+.lp-avatar {
+    flex: none;
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border: 2px solid var(--lp-ink);
+}
 .lp-tiers {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -1401,4 +1417,325 @@ a.lp-event:focus-visible {
 }
 .lp-version {
     font-variant-numeric: tabular-nums;
+}
+
+/* ===== Goal: the globe beside the bar (.plans/043 L10) ===== */
+.lp-goal-grid {
+    display: grid;
+    grid-template-columns: 0.95fr 1.05fr;
+    gap: 40px;
+    align-items: start;
+    margin-top: 48px;
+}
+/* The goal text stays beside the globe when the country panel makes the
+   globe column tall. */
+@media (min-width: 901px) {
+    .lp-goal-text {
+        position: sticky;
+        top: 96px;
+        padding-top: 24px;
+    }
+}
+@media (max-width: 900px) {
+    .lp-goal-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.lp-goal-text h2 {
+    white-space: pre-line;
+    /* Pinned, not inherited: the app's global h2 colour follows the app
+       theme, the goal field is always dark. */
+    color: #f4f0e6;
+}
+.lp-goal-text .lp-communities {
+    text-align: left;
+}
+.lp-goal-text .lp-slots {
+    justify-content: flex-start;
+}
+.lp-globe-col {
+    justify-self: center;
+    width: 100%;
+    max-width: 460px;
+}
+.lp-globe {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    cursor: grab;
+    /* Vertical swipes still scroll the page; horizontal drags turn the globe. */
+    touch-action: pan-y;
+}
+.lp-globe.lp-dragging {
+    cursor: grabbing;
+}
+.lp-globe-hint {
+    margin: 8px 0;
+    text-align: center;
+    font-size: 13px;
+    color: rgba(244, 240, 230, 0.66);
+}
+.lp-globe-search {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 10px;
+    font: 600 14px/1 var(--lp-sans);
+    background: #1c1c1c;
+    color: #f4f0e6;
+    border: 1.5px solid rgba(244, 240, 230, 0.3);
+}
+.lp-globe-search:focus-visible {
+    outline: 3px solid #8f88ff;
+    outline-offset: 2px;
+}
+.lp-globe-panel {
+    margin-top: 12px;
+    padding: 14px 16px;
+    border: 1.5px solid rgba(244, 240, 230, 0.3);
+}
+.lp-globe-panel h3 {
+    margin: 0;
+    font-size: 20px;
+}
+.lp-globe-meta {
+    margin: 2px 0 10px;
+    font-size: 13px;
+    color: rgba(244, 240, 230, 0.66);
+}
+.lp-globe-panel ul {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+.lp-globe-panel li {
+    display: grid;
+    gap: 2px;
+    font-size: 14px;
+}
+.lp-globe-panel li small {
+    font-size: 12px;
+    color: rgba(244, 240, 230, 0.66);
+}
+.lp-bar {
+    height: 10px;
+    margin-top: 26px;
+    background: rgba(244, 240, 230, 0.12);
+}
+.lp-bar span {
+    display: block;
+    height: 100%;
+    background: #8f88ff;
+    transform-origin: left;
+    animation: lp-bar-grow 1.2s var(--lp-ease) both;
+}
+.lp-bar-next {
+    background: transparent;
+    border: 1.5px dashed rgba(244, 240, 230, 0.35);
+}
+.lp-bar-next span {
+    display: none;
+}
+.lp-barlabel {
+    margin: 10px 0 0;
+    color: rgba(244, 240, 230, 0.72);
+}
+.lp-barlabel strong {
+    font-size: 22px;
+    color: #f4f0e6;
+}
+@keyframes lp-bar-grow {
+    from {
+        transform: scaleX(0);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .lp-bar span {
+        animation: none;
+    }
+}
+
+/* ===== Story: the commitment ladder, one room of chairs (.plans/043 L8) ===== */
+.lp-story {
+    padding: 72px 0;
+    background: var(--lp-paper-2);
+    color: var(--lp-ink);
+    border-top: 2px solid var(--lp-ink);
+    border-bottom: 2px solid var(--lp-ink);
+}
+.lp-story-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.1fr;
+    gap: 48px;
+    align-items: center;
+}
+@media (max-width: 900px) {
+    .lp-story-grid {
+        grid-template-columns: 1fr;
+    }
+}
+.lp-story h2 {
+    margin: 0;
+    /* The app's global h2 colour would win over the inherited ink (axe:
+       contrast on paper-2). */
+    color: var(--lp-ink);
+    font: 800 clamp(36px, 4.4vw, 58px) / 1.05 var(--lp-sans);
+    white-space: pre-line;
+}
+.lp-pct {
+    margin: 22px 0 6px;
+    font: 800 clamp(96px, 13vw, 176px) / 0.9 var(--lp-sans);
+    letter-spacing: -0.05em;
+    font-variant-numeric: tabular-nums;
+}
+.lp-cap2 {
+    min-height: 1.4em;
+    margin: 0 0 18px;
+    font: 600 15px/1.4 var(--lp-sans);
+}
+.lp-stages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.lp-stage {
+    padding: 10px 12px;
+    font: 600 14px/1 var(--lp-sans);
+    background: transparent;
+    color: var(--lp-ink);
+    border: 2px solid var(--lp-ink);
+    cursor: pointer;
+}
+.lp-stage[aria-pressed="true"] {
+    background: var(--lp-ink);
+    color: var(--lp-paper);
+}
+.lp-stage:focus-visible {
+    outline: 3px solid var(--lp-field);
+    outline-offset: 2px;
+}
+.lp-allpaid {
+    margin: 16px 0 0;
+    font: 600 16px/1.5 var(--lp-sans);
+}
+.lp-ladder {
+    margin: 12px 0 0;
+    font-size: 14px;
+}
+.lp-ladder summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+.lp-ladder table {
+    width: 100%;
+    margin: 10px 0 6px;
+    border-collapse: collapse;
+}
+.lp-ladder th,
+.lp-ladder td {
+    padding: 6px 8px 6px 0;
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--lp-line);
+    font-variant-numeric: tabular-nums;
+}
+.lp-chairs svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+.lp-seat {
+    fill: var(--lp-ink);
+    stroke: var(--lp-t-warm);
+    stroke-width: 0;
+    transition:
+        fill 600ms var(--lp-ease),
+        stroke-width 600ms var(--lp-ease),
+        opacity 600ms var(--lp-ease);
+}
+.lp-seat-empty {
+    fill: transparent;
+    stroke-width: 2.4;
+}
+.lp-seat-out {
+    opacity: 0.18;
+}
+@media (prefers-reduced-motion: reduce) {
+    .lp-seat {
+        transition: none;
+    }
+}
+
+/* ===== So far: the photo reel (.plans/043 L9) ===== */
+.lp-reel {
+    padding: 28px 0 8px;
+}
+.lp-reel-track {
+    display: flex;
+    gap: 14px;
+    padding: 0 24px 12px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+}
+.lp-moment {
+    flex: none;
+    margin: 0;
+    scroll-snap-align: start;
+}
+.lp-moment-open {
+    display: block;
+    padding: 0;
+    background: none;
+    border: 2px solid #f4f0e6;
+    cursor: zoom-in;
+}
+.lp-moment-open:focus-visible {
+    outline: 3px solid #8f88ff;
+    outline-offset: 3px;
+}
+.lp-moment img {
+    display: block;
+    height: 200px;
+    width: auto;
+}
+.lp-moment figcaption {
+    margin-top: 6px;
+    font: 600 13px/1.3 var(--lp-sans);
+    color: rgba(244, 240, 230, 0.72);
+}
+.lp-reel-remove {
+    margin: 4px 24px 0;
+    font-size: 13px;
+    color: rgba(244, 240, 230, 0.72);
+}
+.lp-reel-remove a {
+    color: #f4f0e6;
+}
+.lp-photo {
+    /* Centred like the film: the app's reset zeroes dialog margins, and the
+       close button sits above the frame. */
+    margin: auto;
+    max-width: min(94vw, 1600px);
+    padding: 0;
+    background: #121212;
+    border: 0;
+    overflow: visible;
+}
+.lp-photo::backdrop {
+    background: rgba(0, 0, 0, 0.82);
+}
+.lp-photo img {
+    display: block;
+    max-width: 100%;
+    max-height: 86vh;
+    width: auto;
+    height: auto;
+}
+.lp-photo-cap {
+    margin: 0;
+    padding: 8px 12px;
+    font: 600 14px/1.3 var(--lp-sans);
+    color: #f4f0e6;
 }

@@ -124,10 +124,16 @@ follow-up, not part of 0.5.
     seen. New Linux baselines, each checked by eye: signed-in ticket and
     privacy notice (identical in runs 37381847919 and 37383427171), landing
     desktop, landing mobile and the expanded ticket (run 37384976523).
-- [ ] L8 ladder: waits on the owner's choice for RTM #2/#3 (system 14/14 and
+- [x] L8 ladder: waits on the owner's choice for RTM #2/#3 (system 14/14 and
   14/13 vs the hand 12/12: import to reach 73/76, or print 77/74 as the
-  sources say). Not built.
-- [ ] L9 photos: waits on consent.
+  sources say). Built in release 3 (pull 157, `f8da802c`): typed table, RTM
+  #1–#6 "90 of 94", each row sourced; staged as version `9d601dbb`
+  (2026-10-08, `event-checkin-19` re-reading plan 044 4.1–4.7).
+  **Prod waits on (2026-10-08):** the owner's go (plan 044 4.8).
+- [x] L9 photos: waits on consent. Built in release 3: 8 owner-chosen photos
+  in R2 `landing-photos/` (list `worker/landing-photos.jsonl`), staging bucket
+  read back 16/16; never committed to the public repo.
+  **Prod waits on (2026-10-08):** the owner's go; the prod-bucket upload runs at that deploy (plan 044 4.8).
 - [x] L10 on `feature/046-landing-globe` (PR #157, stacked on #156 → #155;
   `event-checkin-d6`): goal bar (live `events_held` / measured 692+) and the
   globe, both loaded on first sight from `globe/` (`scripts/globe_data_import.py`
@@ -179,3 +185,25 @@ follow-up, not part of 0.5.
   (2,497,242 B, 600). Smoke reads + writes pass with the token; films 206 with
   the owner's sha256. Pull 155 merged into develop (`2dc39d84`). Smoke leaves
   an orphan fixture deposit: `.issues/187`.
+- **Release 2 on staging, 2026-10-06 (`event-checkin-d6`):** pull 156 rebased
+  on develop (head `daaa65c9`, CI 13/13), staging version `ff4f308d`. Smoke
+  reads + writes pass; `/robots.txt` = `Disallow: /` on staging; sitemap and
+  llms.txt 200; `/nope` 404 page; `/`, `/faq`, `/discover` render with
+  `#boot-summary` removed. Waits for the owner's check, then prod.
+- **Release 3:** rebased on release 2; size baseline re-measured on `daaa65c9`
+  (attendee 1,311,506 B, staff 1,996,228 B). L8 next (table above); L9
+  photos (8, owner-chosen 6 Oct) wait on where the files live: the repo is
+  public, so a committed photo cannot be removed from git history.
+- **Release 2 on prod, 2026-10-06 08:12 UTC (owner go, `event-checkin-d6`):**
+  `main` `c2f5927a` (tree = `daaa65c9`), version `39392433`. Backup
+  `bethere-db-20261006-1507-pre-release-daaa65c9.sql` (2,500,796 B, 600).
+  Smoke reads + writes pass; `/robots.txt` allows search (prod), sitemap
+  lists 4 prod URLs only, `llms.txt` says no open events (true: no event ends
+  in the future) and has no empty `/e/` link. Pull 156 merged.
+- **Release 3 built, pull 157 (`fbeea467`), not staged:** L10 globe, L8
+  ladder (typed table, 70 of 73, each row sourced), L9 reel (8 photos in R2
+  `landing-photos/`, list `worker/landing-photos.jsonl`, staging bucket
+  uploaded and read back 16/16; prod bucket at the prod deploy). First load
+  +35,644 B br4 (warn, under fail). Staging keeps pull 158 (`.issues/187`)
+  until that reaches prod, so its parity check can pass; R3 stages after.
+
