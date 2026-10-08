@@ -210,6 +210,8 @@ pub fn routes(state: AppState) -> Router<()> {
             "/storage/posters/{event_id}",
             get(crate::storage::serve_poster),
         )
+        // R2 share-card serving (public — og:image of /e/{slug}, .issues/183)
+        .route("/storage/og/{event_id}", get(crate::storage::serve_og_card))
         // Landing photos (public — only names on landing-photos.jsonl)
         .route(
             "/storage/landing-photos/{name}",

@@ -10,10 +10,18 @@
 //! (e.g. `image/png`). This avoids fragile multipart parsing in WASM and lets
 //! the frontend upload with a single `fetch(url, { method: 'POST', body: blob })`.
 //! A 5 MB cap is enforced before the R2 put to protect worker memory.
+//!
+//! `POST /api/events/{id}/poster?kind=og` stores the event's share card
+//! instead (`.issues/183` option B): a 1200×630 PNG the organizer's browser
+//! draws on save, kept at `og/{event_id}.png` and named in the `og:image` of
+//! `/e/{slug}`. It is checked on its bytes (PNG signature + IHDR size, 2 MB
+//! cap) and leaves `poster_url` and the event record alone, so it can never
+//! race the editor's `expected_updated_at`.
 
 use axum::Extension;
 use axum::body::{Bytes, to_bytes};
-use axum::extract::{Path, Request, State};
+use axum::extract::{Path, Query, Request, State};
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::error::ApiOk;
@@ -28,6 +36,23 @@ use event_checkin_domain::models::event::UpdateEventRequest;
 /// bodies are held in memory before the R2 put.
 const MAX_POSTER_BYTES: usize = 5 * 1024 * 1024;
 
+/// What a `POST /api/events/{id}/poster` stores.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UploadKind {
+    /// The marketing poster (`posters/{id}.{ext}`, sets `poster_url`).
+    #[default]
+    Poster,
+    /// The browser-made share card (`og/{id}.png`).
+    Og,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct UploadQuery {
+    #[serde(default)]
+    kind: UploadKind,
+}
+
 /// POST /api/events/{id}/poster — upload a marketing poster to R2.
 ///
 /// Organizer-gated. Body is raw image bytes; `Content-Type` selects the
@@ -41,6 +66,7 @@ pub async fn upload_poster(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(event_id): Path<String>,
+    Query(query): Query<UploadQuery>,
     req: Request,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     let kv = state.events_kv.as_ref();
@@ -64,6 +90,10 @@ pub async fn upload_poster(
     // ── 3. Parse body bytes + detect extension from Content-Type ────────────
     let headers = req.headers().clone();
     let bytes = collect_body_bytes(req).await?;
+
+    if query.kind == UploadKind::Og {
+        return store_og_card(&state, &claims, &event.id, &headers, bytes).await;
+    }
 
     if bytes.len() > MAX_POSTER_BYTES {
         return Err(AppError::Validation(format!(
@@ -211,6 +241,53 @@ pub async fn delete_poster(
         "poster_url": updated.poster_url,
         "updated_at": updated.updated_at,
         "warnings": d1_sync.warnings(),
+    })))
+}
+
+/// Store the share card for `event_id` (the resolved event's own id, never
+/// the path segment or a slug). The caller has checked the role.
+async fn store_og_card(
+    state: &AppState,
+    claims: &Claims,
+    event_id: &str,
+    headers: &axum::http::HeaderMap,
+    bytes: Bytes,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    let content_type = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if ext_from_content_type(content_type) != Some("png") {
+        return Err(AppError::Validation(format!(
+            "share card content-type must be image/png (got '{content_type}')"
+        ))
+        .into());
+    }
+    event_checkin_domain::og_card::check_og_png(&bytes)
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+    if !crate::og_meta::is_safe_id(event_id) {
+        return Err(AppError::Validation("event id is not usable as a storage key".into()).into());
+    }
+    let Some(bucket) = state.r2.as_ref() else {
+        return Err(AppError::Internal("R2 storage not configured".into()).into());
+    };
+    let key = storage::og_card_key(event_id);
+    let size = bytes.len();
+    storage::put_bytes(bucket, &key, bytes.into(), "image/png")
+        .await
+        .map_err(|e| AppError::Internal(format!("R2 share card put failed: {e:?}")))?;
+
+    tracing::info!(
+        event_id = %event_id,
+        key = %key,
+        size,
+        staff_fingerprint = %state.log_fingerprint(&claims.email),
+        "share card uploaded"
+    );
+
+    Ok(ApiOk::new(json!({
+        "id": event_id,
+        "og_image_url": format!("{}{event_id}", crate::og_meta::OG_CARD_PREFIX),
     })))
 }
 
