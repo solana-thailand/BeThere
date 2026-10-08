@@ -1,6 +1,6 @@
 # 044 · Agent message of 7 Oct 2026: plan
 
-Status: in progress (owner's go 8 Oct: item 3 rows only, deposit_statuses kept; PNG-only share image). Items 2, 4 and 5.2 done 2026-10-08 (owner "go prod A", session `event-checkin-f0`); 2.4's write-volume re-check is owed a few hours after deploy. Written 2026-10-08 by session
+Status: in progress (owner's go 8 Oct: item 3 rows only, deposit_statuses kept; PNG-only share image). Items 2, 4 and 5.2 done 2026-10-08 (owner "go prod A", session `event-checkin-f0`); All of items 2–5 are closed; item 6 (Release 4) is plan 045. Written 2026-10-08 by session
 `event-checkin-90`. Source: the owner's message "Message to the event-checkin
 agent, 7 Oct 2026 (final)". Items in the owner's order; item 1 is the top
 priority. Each step gets ticked here with its proof (commit, command output,
@@ -67,7 +67,7 @@ Steps:
   a docs commit after the staged `346686f7`). Staging smoke reads + writes.
 - [x] 2.3 (backup `bethere-db-20261008-0759-pre-release3-prod.sql`, 2.5 MB, 600; `main` `ff22c405` tree == `abb2b9de`; prod `6a84e7ce` 01:12 UTC, parity passed, no `--force`; smoke with the owner's token passes; rollback `39392433`) Prod backup; release merge `develop` → `main`, tree = staged tree;
   `worker/deploy.sh`; smoke with the new token; `wrangler deployments list`.
-- [ ] 2.4 (issue 187 → deployed. Baseline before deploy: `thb_deposits` 10-03 4, 10-04 1; attendees 10-03 6, 10-04 1; nothing since. Re-check owed a few hours after deploy. Tried 06:12 UTC: blocked, the wrangler login was redone after 01:15 without the `d1` scope (Cloudflare 7403); waits on `npx wrangler login`) Write volume on `thb_deposits`; issue 187 → "deployed".
+- [x] 2.4 (issue 187 → deployed. Baseline before deploy: `thb_deposits` 10-03 4, 10-04 1; attendees 10-03 6, 10-04 1. Re-check 06:27 UTC, 5 h after deploy, after the owner's `wrangler login` restored the `d1` scope: 0 and 0 since deploy, as expected, because no event is open (RTM #6 completed; the other two are drafts). The prod write smoke proved register + slip upload on `6a84e7ce`) Write volume on `thb_deposits`; issue 187 → "deployed".
 
 Proof: parity line "HEAD … has the same tree as staging's …"; smoke "Writes
 work"; a prod orphan count unchanged by the smoke (the fix's own check).
@@ -129,7 +129,7 @@ Steps:
 - [x] 5.1 (`PUT /api/events/{id} {"status":"completed"}`, the admin update; staging fixture: API and D1 both `completed`, `/e/<slug>` shows "Event Completed · This event has ended" and no form; fixture deleted after) Find the app's path that sets `status = completed` (the admin event
   update) and prove it on staging with a fixture event: KV and D1 both say
   completed, `/e/<slug>` shows the ended view.
-- [ ] 5.2 (PUT 200 on id `…-mainnet-5-bangkok-copy` (slug ≠ id), admin read-back `completed`, name and start unchanged. Still owed: D1 read-back, the `/e/` ended view and `/api/public/events/past`; the agent's permission check blocked the D1 read) Prod: same call for RTM #6 with the new token (no D1 write); check
+- [x] 5.2 (PUT 200 on id `…-mainnet-5-bangkok-copy` (slug ≠ id); admin API and D1 both `completed`; `/e/solana-x-ai-builders-the-road-to-mainnet-6-bangkok` shows the ended view with no form (390px headless, no page errors); `/api/public/events/past` is still empty because no event has `recap_published = 1` (plan 028, see 5.3)) Prod: same call for RTM #6 with the new token (no D1 write); check
   `/e/solana-x-ai-builders-the-road-to-mainnet-6-bangkok` shows the ended view
   and `/api/public/events/past` behaviour.
 - [x] 5.3 (8 Oct: ready = RTM #1 and Solana in Latent Space Part 2; 12 more have a recording but no summary row, incl. RTM #6; `islanddao-v4-demo` has neither) Report recaps ready to publish (recording present AND summary row
