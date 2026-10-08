@@ -129,9 +129,21 @@ fn try_refund_is_one_guarded_statement() {
     assert!(positive.contains("positive_buckets_of!(\"?1\")"));
 
     let body = fn_body(&ledger, "pub async fn try_refund(");
+    // .issues/163: the person's release is enough, because TRY_REFUND_SQL reads
+    // only `?1`'s buckets. It must run before the write.
+    let release = body
+        .find("release_person_ended_applies(db, &email_lc).await?")
+        .expect("the payout must see ended events' credit returned, like every balance read");
     assert!(
-        body.contains("release_ended_applies(db).await?"),
-        "the payout must see ended events' credit returned, like every balance read"
+        release
+            < body
+                .find("TRY_REFUND_SQL")
+                .expect("try_refund runs TRY_REFUND_SQL"),
+        "the release must run before the payout write"
+    );
+    assert!(
+        body.contains("D1Type::Text(&email_lc)"),
+        "try_refund must bind the same email it released"
     );
     assert!(
         body.contains("0 => RefundOutcome::Mismatch")

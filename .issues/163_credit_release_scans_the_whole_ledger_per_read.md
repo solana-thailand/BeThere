@@ -1,6 +1,6 @@
 # 163: Every balance read releases ended credit across the whole ledger
 
-**Status:** in progress (2026-09-30, session `event-checkin-dd`): option 1 is built on the unmerged branch `feature/163-scoped-credit-release`. It waits for a merge after RTM #6 (4 Oct) plus a staging credit-registration rehearsal, the same gate plan 028 set for W5. No migration is needed. Found 2026-09-28 by session `event-checkin-fa` during the `/simplify` altitude review of `feature/028-w5-credit-release`.
+**Status:** in progress (2026-10-09, session `event-checkin-9c`): option 1 is rebased onto `develop` and has a PR. The PR also covers `try_refund`, which was added later. RTM #6 (4 Oct) has passed; the merge still waits on a staging credit-registration rehearsal, the same gate plan 028 set for W5. Built 2026-09-30 by session `event-checkin-dd`. No migration is needed. Found 2026-09-28 by session `event-checkin-fa` during the `/simplify` altitude review of `feature/028-w5-credit-release`.
 
 ## What happens
 
@@ -79,3 +79,21 @@ same after `ANALYZE` at 29,000 rows.
 - **Not done:** option 3, the second release right after a batch that
   already released (`hold_admin.rs`, signup). At 107 steps it is not worth
   another read path.
+
+## 2026-10-09: rebase onto develop (session `event-checkin-9c`)
+
+- The branch was rebased 201 commits forward with no conflicts.
+- `try_refund` (the payout write from `.issues/190`) arrived after this
+  branch was cut and still ran the global release. `TRY_REFUND_SQL` reads
+  only `positive_buckets_of!("?1")`, so it now calls
+  `release_person_ended_applies` too.
+- This keeps the payout consistent with the check before it: both the
+  organizer's `payable_of` check (`positive_balances`) and the write release
+  the same person.
+- `credit_payout_guards` now requires the person release before
+  `TRY_REFUND_SQL`, bound to the same `email_lc`. The reader guard in
+  `credit_release_and_staff_comp.rs` accepts `TRY_REFUND_SQL` as a
+  person-scoped read; that constant's `?1` scope is pinned by
+  `try_refund_is_one_guarded_statement`.
+- The payout queue (`contacts::credit_refund_requests`) is whole-queue and
+  keeps the global release.

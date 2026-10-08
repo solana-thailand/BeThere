@@ -326,8 +326,10 @@ pub async fn try_refund(
     paid: event_checkin_domain::models::credit_payout::PaidAmounts,
     note: &str,
 ) -> Result<RefundOutcome, String> {
-    release_ended_applies(db).await?;
+    // TRY_REFUND_SQL reads only this person's buckets (`?1`), so releasing
+    // this person is enough (.issues/163).
     let email_lc = email.to_lowercase();
+    release_person_ended_applies(db, &email_lc).await?;
     let result = db
         .prepare(TRY_REFUND_SQL)
         .bind_refs(&[

@@ -77,7 +77,10 @@ fn every_balance_read_releases_ended_applies_first() {
         if person.is_some() {
             assert!(
                 body.contains("person_emails_of!(\"?1\")")
-                    || body.contains("unreturned_apply_of!(\"?1\")"),
+                    || body.contains("unreturned_apply_of!(\"?1\")")
+                    // Reads `positive_buckets_of!("?1")`, pinned by
+                    // credit_payout_guards::try_refund_is_one_guarded_statement.
+                    || body.contains("TRY_REFUND_SQL"),
                 "{name} releases one person but does not read that person"
             );
             assert!(
