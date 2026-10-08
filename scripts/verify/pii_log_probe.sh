@@ -21,7 +21,7 @@
 #                                              # -> http://127.0.0.1:9/token so
 #                                              # no Sheets call can succeed
 #   mv ~/.pnp.cjs ~/.pnp.cjs.bak               # wrangler esbuild vs Yarn PnP
-#   cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release
+#   cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release --target-dir ../target
 #   wasm-bindgen --target bundler --no-typescript --remove-name-section \
 #     ../target/wasm32-unknown-unknown/release/event_checkin_worker.wasm \
 #     --out-dir build/worker
