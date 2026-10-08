@@ -699,6 +699,21 @@ class CreditPayoutTests(CreditFixture):
         [row] = self.holders()
         self.assertEqual(row["credit_thb"], 800)
 
+    def test_the_name_is_the_account_emails_then_the_lowest_linked(self):
+        # The account sits on WORK, and GMAIL sorts lower, so "lowest linked"
+        # alone would pick GMAIL's name.
+        self.held_deposit(WORK)
+        self.contact(GMAIL)
+        self.link(GMAIL, WORK)
+        name = lambda e, n: self.db.execute(
+            "UPDATE contacts SET name = ? WHERE email = ?", (n, e)
+        )
+        name(WORK, "")
+        name(GMAIL, "Gmail Name")
+        self.assertEqual([r["name"] for r in self.holders()], ["Gmail Name"])
+        name(WORK, "Work Name")
+        self.assertEqual([r["name"] for r in self.holders()], ["Work Name"])
+
     def test_an_organizer_payout_pays_once(self):
         self.held_deposit(GMAIL)
         self.assertEqual(self.refund(GMAIL, 500, requested_at="organizer-1"), ("recorded", 1))

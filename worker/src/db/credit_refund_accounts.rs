@@ -304,13 +304,19 @@ pub(crate) const OPEN_REQUEST_FOR_PERSON_SQL: &str = concat!(
 /// request queue (`contacts::credit_refund_requests`), so both deserialize
 /// into [`CreditRefundRequest`] and the amounts are the ones the guarded
 /// reversal removes.
+///
+/// The name prefers the account's own email, then the lowest linked one, as
+/// two scalar reads. An outer column in a subquery's `ORDER BY` here fails
+/// with "no such column" on SQLite 3.45 (CI's runner), so outer columns stay
+/// in `WHERE`.
 pub(crate) const DEPOSIT_ACCOUNT_HOLDERS_SQL: &str = concat!(
     "SELECT * FROM (SELECT \
        a.email AS email, \
-       COALESCE((SELECT c.name FROM contacts c WHERE LOWER(c.email) IN ",
+       COALESCE((SELECT c.name FROM contacts c WHERE LOWER(c.email) = a.email \
+                   AND COALESCE(c.name, '') <> '' LIMIT 1), \
+                (SELECT c.name FROM contacts c WHERE LOWER(c.email) IN ",
     crate::db::person::person_emails_of!("a.email"),
-    " AND COALESCE(c.name, '') <> '' \
-         ORDER BY LOWER(c.email) = a.email DESC, LOWER(c.email) LIMIT 1), '') AS name, \
+    " AND COALESCE(c.name, '') <> '' ORDER BY LOWER(c.email) LIMIT 1), '') AS name, \
        COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
                  WHERE l.currency = 'thb' AND l.email IN ",
     crate::db::person::person_emails_of!("a.email"),
