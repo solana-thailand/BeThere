@@ -608,7 +608,7 @@ pub async fn get_credit_used(event_id: Option<&str>) -> Result<CreditUsedRespons
 // ===== Phase 3 — Credit Refund Request (exit path) =====
 
 pub use event_checkin_domain::models::credit_payout::{
-    AccountSource, PaidAmounts, RefundAccount, SavedAccountPreview,
+    AccountSource, CreditPayoutReceipt, PaidAmounts, RefundAccount, SavedAccountPreview,
 };
 
 /// Response for POST /api/deposit/request-credit-refund — attendee requests
@@ -654,6 +654,10 @@ pub struct CreditRefundRequestStatus {
     /// file — the card then asks for an account.
     #[serde(default)]
     pub saved_account: Option<SavedAccountPreview>,
+    /// The last payout while it settled everything held (`.issues/192`); the
+    /// card shows it instead of the request button.
+    #[serde(default)]
+    pub paid_back: Option<CreditPayoutReceipt>,
 }
 
 /// GET /api/deposit/credit-refund-request — the attendee's own flag state, or

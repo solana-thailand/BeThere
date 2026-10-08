@@ -53,7 +53,7 @@ use event_checkin_domain::models::error::AppError;
 use serde::{Deserialize, Serialize};
 
 use event_checkin_domain::models::credit_payout::{
-    PaidAmounts, RefundAccount, SavedAccountPreview,
+    CreditPayoutReceipt, PaidAmounts, RefundAccount, SavedAccountPreview,
 };
 
 use crate::error::{ApiOk, WorkerError};
@@ -263,6 +263,11 @@ pub struct CreditRefundRequestStatus {
     /// number: this endpoint is the attendee's, and a session is not proof of
     /// owning the bank account. `None` when nothing is on file.
     pub saved_account: Option<SavedAccountPreview>,
+    /// The last payout, while it settled everything the person held
+    /// (`.issues/192`). The card shows it in place of the request button: an
+    /// organizer payout leaves no request behind, so without it the attendee
+    /// was offered a refund of money already sent.
+    pub paid_back: Option<CreditPayoutReceipt>,
 }
 
 /// Returns whether the authenticated attendee has an open "credit refund
@@ -278,7 +283,7 @@ pub async fn credit_refund_request_status_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<CreditRefundRequestStatus>, WorkerError> {
-    let (requested, saved_account) = match state.d1.as_deref() {
+    let (requested, saved_account, paid_back) = match state.d1.as_deref() {
         Some(db) => {
             let requested =
                 crate::db::contacts::get_credit_refund_requested(db, &claims.email).await;
@@ -294,18 +299,34 @@ pub async fn credit_refund_request_status_handler(
                     );
                     None
                 });
-            (requested, saved)
+            // An open request is not settled, so skip the read. A failed read
+            // shows the request button, which is the card as it was.
+            let paid_back = match requested {
+                true => None,
+                false => crate::db::credit_payout_receipt::settled_payout(db, &claims.email)
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::warn!(
+                            attendee_fingerprint = %state.log_fingerprint(&claims.email),
+                            error = %e,
+                            "credit payout receipt read failed — showing the request"
+                        );
+                        None
+                    }),
+            };
+            (requested, saved, paid_back)
         }
         // No D1 → cannot read the flag. Degrade to `false` so the attendee
         // sees the CTA rather than a broken "already requested" state. The
         // write path is idempotent so a false-negative just means they can
         // re-trigger (which re-stamps the timestamp — no harm).
-        None => (false, None),
+        None => (false, None, None),
     };
 
     Ok(ApiOk::new(CreditRefundRequestStatus {
         requested,
         saved_account,
+        paid_back,
     }))
 }
 

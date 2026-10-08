@@ -51,6 +51,24 @@ means the organizer already knows where to send the money.
       Unrequested` (badge "Not requested", no request age, and the button
       stays disabled until a slip is attached). It loads its own data, so
       `admin_deposit.rs` (999 lines) gains only the mount.
-- [ ] Attendee ticket card: show the last payout, masked.
+- [x] Attendee ticket card: "Credit Paid Back — the organizer sent you
+      500 THB on 9 Oct 2026" (branch `feature/192-payout-receipt`, stacked
+      on this one, session `event-checkin-d0`, 2026-10-09). The problem it
+      fixes: the in-person view mounts the card on `held_as_credit`, so
+      after an organizer payout the attendee was offered a refund of money
+      already sent. `GET /api/deposit/credit-refund-request` gains
+      `paid_back` (`db::credit_payout_receipt::SETTLED_PAYOUT_SQL`, read
+      from the ledger, no migration). It is set only while the latest payout
+      settled everything: no positive row after it, nothing locked. One
+      payout is the person's `refund` rows after their last other row, not a
+      `created_at` match, which is only to the second.
+      `test_credit_payout_receipt.py` has 7 cases; three mutants (the lower
+      bound, the newer-credit check, the lock check) each turn it red. It
+      parses on SQLite 3.45.1. Staff shell +1.5 KB br4 (97.27%).
+      **Not masked account:** the payout deletes the account row, so there
+      is nothing to mask. Keeping a masked copy (bank + last four) in an
+      append-only ledger is new retention; owner's call, not built.
 - [ ] Fix the cramped payout form and the Buddhist-era date on English pages.
-- [ ] Staging: run the payout end to end with a held deposit.
+- [ ] Staging: run the payout end to end with a held deposit, and open the
+      ticket page afterwards: the card must read "Credit Paid Back" (not yet
+      seen in a browser).

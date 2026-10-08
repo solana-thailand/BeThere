@@ -244,6 +244,21 @@ pub struct SavedAccountPreview {
     pub captured_at: String,
 }
 
+/// The attendee's last credit payout, shown on their ticket card once it has
+/// settled everything they held (`.issues/192`). Amounts are the ledger's units,
+/// the same ones the balance endpoint reports. There is no account: the payout
+/// deletes it, and keeping a masked copy would be new retention.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreditPayoutReceipt {
+    #[serde(default)]
+    pub thb: i64,
+    #[serde(default)]
+    pub usdc: i64,
+    /// When the reversal was written, ISO 8601 UTC (`2026-10-09T08:00:00Z`).
+    #[serde(default)]
+    pub paid_at: String,
+}
+
 /// The last four digits of `raw`, ignoring separators; empty when there are
 /// four or fewer, so the preview never carries a whole number.
 pub fn last4_digits(raw: &str) -> String {

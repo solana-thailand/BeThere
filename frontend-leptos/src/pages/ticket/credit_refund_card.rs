@@ -8,15 +8,20 @@
 //! same rule the THB deposit refund account and the worker use
 //! (`utils::credit_payout`). The organizer sees the account in the payout
 //! queue, transfers the money, and records it.
+//!
+//! Once a payout has settled everything held, the card says so ("Credit Paid
+//! Back", `.issues/192`) instead of offering a refund of money already sent:
+//! an organizer payout leaves no request behind to show.
 
 use event_checkin_domain::models::credit_payout::{
-    RefundAccountError, RefundMethod, SavedAccountPreview,
+    CreditPayoutReceipt, RefundAccountError, RefundMethod, SavedAccountPreview,
 };
 use leptos::prelude::*;
 
 use crate::api;
 use crate::icons::{Icon, IconName};
 use crate::pages::deposit::types::THAI_BANKS;
+use crate::pages::ticket::credit_chip::credit_balance_label;
 use crate::utils::credit_payout::{account_from_form, saved_account_label, saved_account_sentence};
 
 /// State machine for the "Request Return of Held Credit" flow. `Loading`
@@ -34,6 +39,8 @@ enum RequestCreditRefundState {
     Requesting,
     /// Server reports an open request from a prior call (page reload).
     AlreadyRequested,
+    /// The last payout settled everything held; nothing left to request.
+    PaidBack(CreditPayoutReceipt),
     /// Success — this call set the flag.
     Requested { message: String },
     /// Error.
@@ -56,6 +63,20 @@ fn saved_account_text(preview: SavedAccountPreview) -> impl Fn() -> String {
             crate::i18n::td_string!(locale, ticket.action.return_saved_from_attendee),
             &label,
             &crate::utils::format_iso_day(&preview.captured_at),
+        )
+    }
+}
+
+/// "The organizer sent you 500 THB on 9 Oct 2026." Follows a language switch.
+fn paid_back_text(receipt: CreditPayoutReceipt) -> impl Fn() -> String {
+    let i18n = crate::i18n::use_i18n();
+    let amount = credit_balance_label(receipt.thb.max(0) as u64, receipt.usdc.max(0) as u64)
+        .unwrap_or_default();
+    move || {
+        let date = crate::utils::format_iso_day(&receipt.paid_at);
+        crate::locale::fill(
+            crate::i18n::td_string!(i18n.get_locale(), ticket.action.return_paid_desc),
+            &[("amount", amount.as_str()), ("date", date.as_str())],
         )
     }
 }
@@ -100,11 +121,12 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
     Effect::new(move |_| {
         leptos::task::spawn_local(async move {
             let status = api::get_credit_refund_request_status().await;
-            let requested = status.as_ref().is_some_and(|status| status.requested);
-            set_saved.set(status.and_then(|status| status.saved_account));
-            set_state.set(match requested {
-                true => RequestCreditRefundState::AlreadyRequested,
-                false => RequestCreditRefundState::Ready,
+            let status = status.unwrap_or_default();
+            set_saved.set(status.saved_account);
+            set_state.set(match (status.requested, status.paid_back) {
+                (true, _) => RequestCreditRefundState::AlreadyRequested,
+                (false, Some(receipt)) => RequestCreditRefundState::PaidBack(receipt),
+                (false, None) => RequestCreditRefundState::Ready,
             });
         });
     });
@@ -330,6 +352,13 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
                         <div class="ticket-action-desc">
                             {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_requested_desc))}
                         </div>
+                    }.into_any(),
+
+                    RequestCreditRefundState::PaidBack(receipt) => view! {
+                        <div class="ticket-action-title ticket-action-title-success">
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_paid_title))}
+                        </div>
+                        <div class="ticket-action-desc">{paid_back_text(receipt)}</div>
                     }.into_any(),
 
                     RequestCreditRefundState::Requested { message } => view! {
