@@ -1,8 +1,12 @@
 # 187 · Hard-deleting an event leaves its attendees and deposits behind
 
-Status: in progress. Fix on `feature/187-event-delete-rows` (pull 158,
-option 1 below, owner's call 2026-10-06), on staging since 2026-10-06 08:36
-UTC (`346686f7`, version `366e0b08`); prod waits for the owner's go. Found 2026-10-06
+Status: deployed. Prod 2026-10-08 01:12 UTC: tag `deploy/production/20261008T011207Z` (release merge of
+`develop` `abb2b9de`), version `6a84e7ce`, staging parity passed without
+`--force`. Prod write smoke passed with the owner's token; afterwards no smoke
+rows remain and the orphan count is unchanged (deposits 0, attendees 1 = the
+4 Jun attendee noted below), plus 1 `thb_deposit_archive` smoke row, as the
+fix intends. Rollback target `39392433`. Fix was pull 158, option 1 below
+(owner's call 2026-10-06). Found 2026-10-06
 (session `event-checkin-d6`) after the release 1 prod deploy, checking
 `thb_deposits` write volume.
 

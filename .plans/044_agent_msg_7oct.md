@@ -1,6 +1,6 @@
 # 044 · Agent message of 7 Oct 2026: plan
 
-Status: in progress (owner's go 8 Oct: item 3 rows only, deposit_statuses kept; PNG-only share image). Items 2.2–2.4 and 5.2 wait for a fresh smoke token. Written 2026-10-08 by session
+Status: in progress (owner's go 8 Oct: item 3 rows only, deposit_statuses kept; PNG-only share image). Items 2, 4 and 5.2 done 2026-10-08 (owner "go prod A", session `event-checkin-f0`); 2.4's write-volume re-check is owed a few hours after deploy. Written 2026-10-08 by session
 `event-checkin-90`. Source: the owner's message "Message to the event-checkin
 agent, 7 Oct 2026 (final)". Items in the owner's order; item 1 is the top
 priority. Each step gets ticked here with its proof (commit, command output,
@@ -63,11 +63,11 @@ the step, and by 10 Oct 18:00 at the latest whether it landed.
 
 Steps:
 - [x] 2.1 (`eb6c27ba`, 8 Oct; CI 13/13) Merge pull 158 into `develop` (merge commit, "pull 158").
-- [ ] 2.2 Stage `develop`'s head (staging parity compares trees: the branch has
+- [x] 2.2 (`abb2b9de` = develop with pull 157 + 160 merged, staging version `b07df06f`, smoke reads + writes pass) Stage `develop`'s head (staging parity compares trees: the branch has
   a docs commit after the staged `346686f7`). Staging smoke reads + writes.
-- [ ] 2.3 Prod backup; release merge `develop` → `main`, tree = staged tree;
+- [x] 2.3 (backup `bethere-db-20261008-0759-pre-release3-prod.sql`, 2.5 MB, 600; `main` `ff22c405` tree == `abb2b9de`; prod `6a84e7ce` 01:12 UTC, parity passed, no `--force`; smoke with the owner's token passes; rollback `39392433`) Prod backup; release merge `develop` → `main`, tree = staged tree;
   `worker/deploy.sh`; smoke with the new token; `wrangler deployments list`.
-- [ ] 2.4 Write volume on `thb_deposits`; issue 187 → "deployed".
+- [ ] 2.4 (issue 187 → deployed. Baseline before deploy: `thb_deposits` 10-03 4, 10-04 1; attendees 10-03 6, 10-04 1; nothing since. Re-check owed a few hours after deploy) Write volume on `thb_deposits`; issue 187 → "deployed".
 
 Proof: parity line "HEAD … has the same tree as staging's …"; smoke "Writes
 work"; a prod orphan count unchanged by the smoke (the fix's own check).
@@ -115,7 +115,7 @@ Steps:
   eye); size budget reported.
 - [x] 4.7 (staging `f8da802c` version `9d601dbb`, smoke reads + writes pass; photos 8 listed, unlisted 404, `max-age=3600`; screenshots `~/Downloads/bethere-staging-r3-20261008/`; waiting for the owner's look) Stage; phone + desktop screenshots EN/TH (ladder, film at ~50 s,
   reel, globe, share card via the OG tags); wait for the owner's look.
-- [ ] 4.8 On the owner's go: prod backup, release merge, deploy, smoke; upload
+- [x] 4.8 (shipped with item 2 in one release, owner "go prod A"; 16/16 objects in `bethere-assets` read back with their sha256; prod serves listed photos 200 `image/jpeg` `max-age=3600`, unlisted 404; landing opened headless at 390 and 1440: "90 of 94", globe, reel, no overflow; screenshots `~/Downloads/bethere-prod-r3-20261008/`) On the owner's go: prod backup, release merge, deploy, smoke; upload
   the 8 photos to the prod bucket with `scripts/landing_photos_upload.py`
   (read back, 16/16 hashes).
 
@@ -129,7 +129,7 @@ Steps:
 - [x] 5.1 (`PUT /api/events/{id} {"status":"completed"}`, the admin update; staging fixture: API and D1 both `completed`, `/e/<slug>` shows "Event Completed · This event has ended" and no form; fixture deleted after) Find the app's path that sets `status = completed` (the admin event
   update) and prove it on staging with a fixture event: KV and D1 both say
   completed, `/e/<slug>` shows the ended view.
-- [ ] 5.2 Prod: same call for RTM #6 with the new token (no D1 write); check
+- [ ] 5.2 (PUT 200 on id `…-mainnet-5-bangkok-copy` (slug ≠ id), admin read-back `completed`, name and start unchanged. Still owed: D1 read-back, the `/e/` ended view and `/api/public/events/past`; the agent's permission check blocked the D1 read) Prod: same call for RTM #6 with the new token (no D1 write); check
   `/e/solana-x-ai-builders-the-road-to-mainnet-6-bangkok` shows the ended view
   and `/api/public/events/past` behaviour.
 - [x] 5.3 (8 Oct: ready = RTM #1 and Solana in Latent Space Part 2; 12 more have a recording but no summary row, incl. RTM #6; `islanddao-v4-demo` has neither) Report recaps ready to publish (recording present AND summary row
