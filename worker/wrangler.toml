@@ -55,18 +55,25 @@ run_worker_first = ["/api/*", "/event-checkin-frontend-*_bg.wasm", "/jsqr-*.js",
 # here with no recorded reason: a cold build took 74 s at 1 job vs 36 s at the
 # default, and peak RSS was 2.8 GB vs 2.4 GB (2026-09-29, M5 Pro).
 #
+# cargo and wasm-bindgen must agree on the target dir. A global
+# ~/.cargo/config.toml `target-dir` (or CARGO_TARGET_DIR) sends cargo elsewhere
+# while wasm-bindgen read a fixed ../target, so a checkout whose target/ was a
+# real directory bundled an OLD wasm with no error (staging 2026-10-09). Both
+# now use TD: CARGO_TARGET_DIR when set, else ../target, passed explicitly.
+#
 # The shim.mjs is rewritten after wasm-bindgen runs to create a proper
 # ES Module entry point. Workers imports WASM as a WebAssembly.Module,
 # so we must instantiate it manually before calling __wbg_set_wasm.
 [build]
 command = """
+  TD="${CARGO_TARGET_DIR:-../target}" && \
   mkdir -p build/worker && \
-  cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release && \
+  cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release --target-dir "$TD" && \
   wasm-bindgen \
     --target bundler \
     --no-typescript \
     --remove-name-section \
-    ../target/wasm32-unknown-unknown/release/event_checkin_worker.wasm \
+    "$TD/wasm32-unknown-unknown/release/event_checkin_worker.wasm" \
     --out-dir build/worker && \
   cat > build/worker/shim.mjs << 'SHIM'
 import * as imports from "./event_checkin_worker_bg.js";
