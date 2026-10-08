@@ -92,8 +92,14 @@ then the landing, then the share tags. Each item ships on its own.
     online). Owner call: import that history, or show only what the system
     holds.
 - [ ] 0.4 · [x] 0.5 landing release 1 on prod 2026-10-06 07:27 UTC (`6eb39e9e`, version `a518d80a`, tree = `0010f115`); L8–L10 follow in release 3
-  **0.4 blocked (2026-10-06, `event-checkin-42`):** needs the owner's sandbox organizer + faucet keys and a Turnstile site key, and ships only via a staging push.
-  **0.5 blocked (2026-10-06, `event-checkin-42`):** built on `feature/042-landing` (peer `event-checkin-0d`, `.plans/043`); L8–L10 wait for owner content, L12 for the CI baselines, prod for an owner go after the take.
+  **0.4 blocked (2026-10-06, `event-checkin-42`; re-checked 2026-10-09, `event-checkin-b3`):** no sandbox code exists on any branch (`git grep /sandbox`, no `*sandbox*` branch). Before it can be built and shown, it needs these owner actions:
+  1. **Sandbox organizer key:** say who holds it. Either the owner generates a devnet keypair and sets it as a staging secret (`wrangler secret put … --env staging`), or the owner allows the Worker to generate one. It signs `mark_checked_in` for sandbox events, so it must not be the real organizer key.
+  2. **Faucet wallet:** a devnet wallet funded with devnet USDC (the escrow mint), plus a per-visitor amount and a daily cap. Circle's devnet USDC faucet needs a person, so an agent cannot fund it.
+  3. **Turnstile (optional):** a site key and secret for the staging host. Without them the build uses rate limits only and says so on the page (see Guards).
+  4. **Staging deploy:** merge the sandbox branch into `develop` (staging is deployed from `develop`; merging is the owner's call).
+
+  Until 1 and 2 are done, the must-path ("claims back on devnet") cannot run end to end.
+  **0.5 re-checked on prod (2026-10-09, `event-checkin-b3`):** the version at 100 % is `4d0203f0` (tree `main` `71720705`, which contains `feature/042-landing` up to `d6367104`). Headless Chrome on `/` at 1440×900, EN and TH, dark and light: all nine sections render (`top` … `join`), the stats strip reads "measured 9 Oct 2026" / "วัด 9 ต.ค. 2569", no "Non-custodial" or "never forfeited", no horizontal overflow. L8–L10 still wait for owner content (`.plans/043`).
   **Still waiting (2026-10-08, `event-checkin-19`):** 0.4 on the owner's sandbox organizer + faucet keys and a Turnstile site key.
   **Checked (2026-10-08, `event-checkin-fe`):** no sandbox work on any branch. The Turnstile key is optional (the plan allows rate limits only). **Owner must:** decide who holds the sandbox organizer and faucet keys and how much devnet USDC to fund them with. Also blocked by overlap: a `/sandbox` route edits `frontend-leptos/src/lib.rs` and `pages/mod.rs`, which `event-checkin-f0` has open for R4.0 in `/tmp/ec-f0-r4`, so it starts after R4.0 lands.
 - [~] **0.6** built on `develop`: `og:image` / `twitter:image` were the 400×400
