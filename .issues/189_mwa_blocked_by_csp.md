@@ -1,6 +1,6 @@
 # 189 · The CSP blocks the Mobile Wallet Adapter, so Android wallets never register
 
-**Status:** in progress. Fixed on `fix/mwa-self-host` (branch from `develop`
+**Status:** deployed (2026-10-09, `event-checkin-8a`): prod version `4d0203f0` at main `71720705` (tree = develop `9d37fb8f`), migrations 0058 + 0059 applied to prod and staging; staging `b5ca12fd`. Earlier: in progress. Fixed on `fix/mwa-self-host` (branch from `develop`
 `4d9cf386`), not merged, not deployed. Verified locally with headless Chrome
 and an Android UA; not yet verified on a real Android phone with a wallet app.
 

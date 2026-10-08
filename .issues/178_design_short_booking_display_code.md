@@ -1,6 +1,6 @@
 # 178: Design: a short booking display code on tickets
 
-**Status:** in progress — built on `feature/178-display-code` (2026-10-08, session `event-checkin-8a`), not merged, migration not applied anywhere remote. Owner approved the design as written on 2026-10-08. Filed 2026-09-29 by session `event-checkin-ba` (design only). P2-a shipped the inline ticket as QR-only on purpose.
+**Status:** deployed (2026-10-09, `event-checkin-8a`): prod version `4d0203f0` at main `71720705` (tree = develop `9d37fb8f`), migrations 0058 + 0059 applied to prod and staging; staging `b5ca12fd`. Earlier: in progress — built on `feature/178-display-code` (2026-10-08, session `event-checkin-8a`), not merged, migration not applied anywhere remote. Owner approved the design as written on 2026-10-08. Filed 2026-09-29 by session `event-checkin-ba` (design only). P2-a shipped the inline ticket as QR-only on purpose.
 
 ## Why not derive it
 
