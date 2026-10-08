@@ -322,59 +322,67 @@ fn CreditRefundRow(
                     </div>
                 }.into_any(),
                 false => view! {
-                    <div class="admin-dep-confirm-row">
-                        <label class="form-label">"THB you transferred"</label>
-                        <input
-                            type="text"
-                            inputmode="numeric"
-                            class="form-input dep-input"
-                            placeholder=credit_thb.to_string()
-                            prop:value=move || paid_thb.get()
-                            on:input=move |ev| set_paid_thb.set(event_target_value(&ev))
-                        />
-                        {(credit_usdc > 0).then(|| view! {
-                            <label class="form-label">"USDC you transferred"</label>
+                    <div class="admin-dep-payout-form">
+                        <label class="admin-dep-payout-field">
+                            <span class="form-label">"THB you transferred"</span>
                             <input
                                 type="text"
                                 inputmode="numeric"
                                 class="form-input dep-input"
-                                placeholder=credit_usdc.to_string()
-                                prop:value=move || paid_usdc.get()
-                                on:input=move |ev| set_paid_usdc.set(event_target_value(&ev))
+                                placeholder=credit_thb.to_string()
+                                prop:value=move || paid_thb.get()
+                                on:input=move |ev| set_paid_thb.set(event_target_value(&ev))
                             />
-                        })}
-                        <label class="form-label">
-                            {match kind {
-                                PayoutRowKind::Requested => "Transfer slip (optional — JPEG, PNG, WebP, max 3MB)",
-                                PayoutRowKind::Unrequested => "Transfer slip (required — JPEG, PNG, WebP, max 3MB)",
-                            }}
                         </label>
-                        <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            class="file-input-styled"
-                            on:change=on_proof
-                        />
-                        {move || proof.get().is_some().then(|| view! {
-                            <span class="badge badge-success">"Slip attached"</span>
+                        {(credit_usdc > 0).then(|| view! {
+                            <label class="admin-dep-payout-field">
+                                <span class="form-label">"USDC you transferred"</span>
+                                <input
+                                    type="text"
+                                    inputmode="numeric"
+                                    class="form-input dep-input"
+                                    placeholder=credit_usdc.to_string()
+                                    prop:value=move || paid_usdc.get()
+                                    on:input=move |ev| set_paid_usdc.set(event_target_value(&ev))
+                                />
+                            </label>
                         })}
-                        <button
-                            class="btn btn-success btn-xs admin-dep-clear-btn"
-                            disabled=move || {
-                                pending.get()
-                                    || (paid_thb.get().trim().is_empty() && paid_usdc.get().trim().is_empty())
-                                    || (kind == PayoutRowKind::Unrequested && proof.get().is_none())
-                            }
-                            on:click=record_payout
-                        >
-                            {move || match pending.get() {
-                                true => view! { <span>"Recording..."</span> }.into_any(),
-                                false => view! {
-                                    <Icon icon=IconName::Check class="icon-sm"/>
-                                    " Record payout"
-                                }.into_any(),
-                            }}
-                        </button>
+                        <label class="admin-dep-payout-field">
+                            <span class="form-label">
+                                {match kind {
+                                    PayoutRowKind::Requested => "Transfer slip (optional — JPEG, PNG, WebP, max 3MB)",
+                                    PayoutRowKind::Unrequested => "Transfer slip (required — JPEG, PNG, WebP, max 3MB)",
+                                }}
+                            </span>
+                            <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                class="file-input-styled"
+                                on:change=on_proof
+                            />
+                        </label>
+                        <div class="admin-dep-payout-actions">
+                            {move || proof.get().is_some().then(|| view! {
+                                <span class="badge badge-success">"Slip attached"</span>
+                            })}
+                            <button
+                                class="btn btn-success btn-sm"
+                                disabled=move || {
+                                    pending.get()
+                                        || (paid_thb.get().trim().is_empty() && paid_usdc.get().trim().is_empty())
+                                        || (kind == PayoutRowKind::Unrequested && proof.get().is_none())
+                                }
+                                on:click=record_payout
+                            >
+                                {move || match pending.get() {
+                                    true => view! { <span>"Recording..."</span> }.into_any(),
+                                    false => view! {
+                                        <Icon icon=IconName::Check class="icon-sm"/>
+                                        " Record payout"
+                                    }.into_any(),
+                                }}
+                            </button>
+                        </div>
                     </div>
                 }.into_any(),
             }}
