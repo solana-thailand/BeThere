@@ -69,13 +69,69 @@ which refuses held deposits by design.
   amounts, `requested_at`, slip path. A failed audit aborts before the flag
   clears (the retry is a ledger no-op and re-audits).
 - **Account retention.** Deleted with the flag clear (same batch), by the
-  nightly cleanup (`credit_refund_accounts::purge`: older than 90 days or
-  request no longer open; runs before the event-index read that can abort the
-  pass), and by PDPA erasure (`clear_contact_pii`). Never logged.
+  nightly cleanup once the person has no open request and no held credit
+  (below; runs before the event-index read that can abort the pass), and by
+  PDPA erasure (`clear_contact_pii`). Never logged.
 - **7-day report.** `scripts/verify/refund_window_report.py` lists open credit
   requests and exits 1 on one open more than 7 days (backlog before
   2026-09-28 excepted); contacts appear as a BLAKE2b reference, never an email.
 - **Docs.** `docs/deposit-refund-flows.md` §4.2 describes the real flow.
+
+### The account from the deposit (owner request 2026-10-08)
+
+"The person already gave an account with their deposit — use that instead of
+asking again." The THB slip upload stores a refund account on `thb_deposits`
+(`bank_name`, `bank_account`, `account_name`, `validate_bank_refund_fields`).
+`thb_deposits` rows are purged 90 days after the event, credit lives longer,
+and `attendees.bank_*` (Sheets sync, provenance unclear) is not read. So:
+
+- **Snapshot at hold time.** The one writer of `held_as_credit = 1`
+  (`db::thb_deposits::try_settle_hold_credit`, reached from the attendee
+  `/hold` and the admin hold) now takes the credit holder's email — the same
+  email the ledger credits — and, only after its CAS won, runs
+  `credit_refund_accounts::SNAPSHOT_FROM_DEPOSIT_SQL`: copy that deposit's
+  account (matched on event id AND attendee id), `source='deposit'`,
+  `source_deposit_ref='{event_id}:{attendee_id}'`, `captured_at` = the slip
+  upload time. Best-effort: no usable account or a failed copy never fails the
+  hold. It replaces an older `deposit` row and never an `attendee` row.
+- **Mapping** (snapshot and backfill alike): all three fields non-blank after
+  trim, else nothing. The deposit form's bank name is free text, so a bank
+  name of "PromptPay"/"พร้อมเพย์" with a valid PromptPay ID becomes method
+  `promptpay` (digits only); with an invalid ID, nothing (the attendee is asked).
+- **One tap.** `GET /api/deposit/credit-refund-request` adds `saved_account`, a
+  masked `SavedAccountPreview` (method, bank name, last four digits — none if
+  the number has four or fewer — holder's first word and initial, `source`,
+  `captured_at`). The full number never reaches the attendee API. The card
+  says "We'll send it to KBank •••• 7890 · Somchai J. — the account from your
+  deposit on 30 Aug 2026" with "Request refund to this account"
+  (`{use_saved: true}`) and "Use a different account" (the form). The
+  one-tap flag `UPDATE` sets only if the person has an account on file
+  (`SET_FLAG_WITH_SAVED_ACCOUNT_SQL`); none → 400 and the form.
+- **A different account** is stored `source='attendee'`;
+  `replaced_deposit_account=1` when it differs from a deposit account of the
+  person (sticky across re-requests). The queue shows "From deposit on
+  <date>", "Entered by attendee", or the warning "Changed from the deposit
+  account — confirm with the attendee before paying".
+- **Which row speaks for a person** with linked emails:
+  `chosen_account_email_of!` — attendee rows first, then latest — shared by
+  the preview and the queue.
+- **Retention** is no longer by age: `PURGE_SQL` deletes a row only when the
+  person has no open request, no positive ledger bucket
+  (`positive_buckets_of!`) and no unreturned apply (`unreturned_apply_of!`),
+  i.e. payable + locked credit is 0. Delete-at-payout and PDPA erasure stay.
+  `docs/pdpa_ropa.md` §6 records the rule; the `/privacy` notice (bank details
+  for refunds kept until the person asks for deletion) already covers it and
+  is unchanged.
+- **Backfill in 0059** (edited in place — unmerged, never applied): for each
+  email with held credit (the purge's own test, so the purge never deletes a
+  fresh row), the account of the most recent held deposit (`held_as_credit=1`,
+  latest `held_as_credit_at`) with a usable account; email from `attendees`
+  joined on `id` AND `event_id`; `ON CONFLICT (email) DO NOTHING`; no compound
+  SELECT beyond the two-term person set every credit query already uses.
+
+Delete-at-payout is unchanged, so after a payout that leaves credit locked to
+an event, the account is gone and the next request asks again (or a later hold
+copies one). `.issues/124` owns that policy.
 
 ### Schema choice
 
@@ -101,32 +157,56 @@ by-product of defects 1–2.
   negative; double clear is a no-op; people, orgs and currencies isolated;
   wildcard emails; account saved only with an open request, replaced on
   re-request, schema CHECKs, queue columns, deleted at payout (incl. linked
-  sibling), by the purge (old + closed only) and by erasure.
+  sibling) and by erasure; the purge keeps a row while credit is payable,
+  locked or requested (whole person) and deletes it at 0; the hold snapshot
+  (event-scoped, held + unrefunded only, incomplete fields skipped, PromptPay
+  mapping, newer deposit replaces older, never the attendee's row); the
+  replaced flag; one-tap needs an account; the backfill (latest held deposit,
+  id AND event join, people without credit skipped, idempotent) and its
+  equivalence with the snapshot on 11 deposit shapes.
 - `worker/tests/credit_payout_guards.rs`: one writer of `refund` rows; the
   guard terms of `TRY_REFUND_SQL`; clear order (amount → compare → guarded
   write → 409 → audit → clear); both endpoints org-scoped; account deleted with
   the request / in cleanup before the index read / on erasure; no tracing call
-  names account fields; the slip key carries no email.
+  names account fields (now also `thb_deposits.rs`, both hold handlers); the
+  slip key carries no email; one writer of `held_as_credit = 1`, which copies
+  the account after its flip, non-fatally, to the email the ledger credits on
+  both hold paths; the snapshot's event scope and attendee precedence; the
+  attendee status carries `SavedAccountPreview`, never `RefundAccount`; the
+  purge is by balance, not age.
 - `worker/tests/credit_ledger_guards.rs` updated (person scope now includes
   `try_refund` and `positive_buckets_of!`; the queue resolves the person four
   times).
-- `domain/tests/credit_payout.rs`, `frontend-leptos/tests/credit_payout_form.rs`.
+- `domain/tests/credit_payout.rs` (incl. the masked preview: the serialized
+  JSON lacks the full number and the surname),
+  `frontend-leptos/tests/credit_payout_form.rs` (card sentence, label, queue
+  badge).
 - `refund_window_report.py --self-test` (6 checks, incl. a clean control).
 
 ## Deploy order (owner-gated)
 
-1. Apply `0059_credit_refund_payout.sql` to staging, then prod, **before** the
+1. Before applying: run the backfill's `SELECT` read-only on remote D1 —
+   its window function and two-term `UNION` person set have not run on remote
+   yet (memory: d1-compound-select-cap).
+2. Apply `0059_credit_refund_payout.sql` to staging, then prod, **before** the
    code deploy (`deploy.sh` does not apply migrations). The old code never
-   touches the new table, so applying early is safe.
-2. Read the schema back: `PRAGMA table_info(credit_refund_accounts);` and
-   `SELECT sql FROM sqlite_master WHERE name = 'credit_refund_accounts';`.
-3. Deploy the worker and the frontend together: the new clear needs `paid`, so
+   touches the new table, so applying early is safe. The migration also runs
+   the backfill; holds made between the migration and the code deploy get no
+   snapshot (the old code does not write one), so keep that window short or
+   re-run the backfill `INSERT` from the file after the deploy (idempotent,
+   `DO NOTHING`).
+3. Read the schema back: `PRAGMA table_info(credit_refund_accounts);` and
+   `SELECT sql FROM sqlite_master WHERE name = 'credit_refund_accounts';`, and
+   count the backfill: `SELECT source, COUNT(*) FROM credit_refund_accounts
+   GROUP BY source;` (expect only `deposit`).
+4. Deploy the worker and the frontend together: the new clear needs `paid`, so
    an old admin page gets a 400 ("confirm the amount you transferred…"), and an
    old ticket page posting `{}` gets a 400 asking for an account.
-4. After the deploy, check write volume on every table this touches:
+5. After the deploy, check write volume on every table this touches:
    `credit_refund_accounts`, `contacts` (`credit_refund_requested_at`),
    `credit_ledger` (`reason = 'refund'`), `audit_log` (`action =
-   'credit_refund_paid_out'`) — a request and a payout on staging first.
+   'credit_refund_paid_out'`) — a request and a payout on staging first. After
+   the first hold on staging, check a `deposit` row appeared.
 
 ## Not verified
 
