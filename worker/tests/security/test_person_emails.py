@@ -30,6 +30,7 @@ MACRO_SOURCES = {
     "person_emails_of": "db/person.rs",
     "unreturned_apply_of": "db/credit_ledger.rs",
     "positive_buckets_of": "db/credit_ledger.rs",
+    "chosen_account_email_of": "db/credit_refund_accounts.rs",
 }
 
 # `name!("literal")` or `name!($param)`, with any path prefix (`crate::db::x::`,

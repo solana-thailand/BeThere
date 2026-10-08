@@ -492,7 +492,7 @@ fn refund_request_d1_write_fails_closed() {
     );
     assert!(
         body.contains(
-            "crate::db::contacts::set_credit_refund_requested(db, &claims.email, &account)"
+            "crate::db::contacts::set_credit_refund_requested(db, &claims.email, new_account)"
         ) && body.contains(".map_err(AppError::Internal)?"),
         "the D1 flag write must propagate its error to the caller"
     );
@@ -544,7 +544,7 @@ fn refund_request_sheets_mirror_is_non_fatal() {
     // and best-effort. The inverse (what shipped) 500s on a stale mirror while
     // letting the real record vanish.
     let d1_at = body
-        .find("set_credit_refund_requested(db, &claims.email, &account)")
+        .find("set_credit_refund_requested(db, &claims.email, new_account)")
         .expect("D1 write must exist");
     let sheets_at = body
         .find("crate::sheets::contacts::set_credit_refund_requested")

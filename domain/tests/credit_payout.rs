@@ -4,8 +4,9 @@
 use std::collections::BTreeSet;
 
 use event_checkin_domain::models::credit_payout::{
-    PaidAmounts, PayoutScope, RefundAccount, RefundAccountError, RefundMethod, is_overdue,
-    normalize_promptpay_id, payout_mismatch_message, validate_bank_refund_fields,
+    AccountSource, PaidAmounts, PayoutScope, RefundAccount, RefundAccountError, RefundMethod,
+    is_overdue, last4_digits, mask_account_name, normalize_promptpay_id, payout_mismatch_message,
+    validate_bank_refund_fields,
 };
 
 fn bank(name: &str, account: &str, holder: &str) -> RefundAccount {
@@ -211,4 +212,67 @@ fn overdue_is_past_seven_days() {
     assert!(!is_overdue(0));
     assert!(!is_overdue(7 * 24));
     assert!(is_overdue(7 * 24 + 1));
+}
+
+// -- the attendee's masked preview -------------------------------------------
+
+#[test]
+fn the_bank_preview_never_carries_the_full_number() {
+    let account = bank("KBank", "123-4-56789-0", "Somchai Jaidee");
+    let preview = account.preview(AccountSource::Deposit, "2026-10-01T09:00:00Z");
+    assert_eq!(preview.method, RefundMethod::Bank);
+    assert_eq!(preview.bank_name.as_deref(), Some("KBank"));
+    assert_eq!(preview.last4, "7890");
+    assert_eq!(preview.holder.as_deref(), Some("Somchai J."));
+    assert_eq!(preview.source, AccountSource::Deposit);
+    let json = serde_json::to_string(&preview).expect("serialize");
+    for secret in ["123-4-56789-0", "1234567890", "Jaidee", "56789"] {
+        assert!(!json.contains(secret), "{secret} leaked: {json}");
+    }
+    assert!(json.contains("\"source\":\"deposit\""), "{json}");
+    assert!(json.contains("\"method\":\"bank\""), "{json}");
+}
+
+#[test]
+fn the_promptpay_preview_shows_four_digits_only() {
+    let account = RefundAccount::PromptPay {
+        promptpay_id: "0812345678".into(),
+    };
+    let preview = account.preview(AccountSource::Attendee, "t");
+    assert_eq!(preview.method, RefundMethod::PromptPay);
+    assert_eq!(preview.bank_name, None);
+    assert_eq!(preview.holder, None);
+    assert_eq!(preview.last4, "5678");
+    let json = serde_json::to_string(&preview).expect("serialize");
+    assert!(
+        !json.contains("0812345678") && !json.contains("081234"),
+        "{json}"
+    );
+    assert!(json.contains("\"method\":\"promptpay\""), "{json}");
+}
+
+#[test]
+fn a_short_number_is_not_shown_at_all() {
+    assert_eq!(last4_digits("1234"), "");
+    assert_eq!(last4_digits("12-3"), "");
+    assert_eq!(last4_digits("1 2345"), "2345");
+}
+
+#[test]
+fn the_holder_is_first_word_and_initial() {
+    assert_eq!(
+        mask_account_name("  Somchai   Jaidee  ").as_deref(),
+        Some("Somchai J.")
+    );
+    assert_eq!(mask_account_name("Somchai").as_deref(), Some("Somchai"));
+    assert_eq!(mask_account_name("สมชาย ใจดี").as_deref(), Some("สมชาย ใ."));
+    assert_eq!(mask_account_name("   "), None);
+}
+
+#[test]
+fn account_sources_round_trip_and_refuse_unknowns() {
+    for source in [AccountSource::Deposit, AccountSource::Attendee] {
+        assert_eq!(AccountSource::parse(source.as_str()), Some(source));
+    }
+    assert_eq!(AccountSource::parse("sheet"), None);
 }

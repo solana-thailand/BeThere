@@ -284,6 +284,17 @@ pub struct CreditLiability {
 // Credit refund-from-credit request flag (Issue #061 Phase 3 — exit path)
 // ---------------------------------------------------------------------------
 
+/// Set the request flag for `?1` only when the person already has a payout
+/// account on file (`.issues/190`: the account from their deposit, or one
+/// they entered before) — the one-tap "request refund to this account".
+pub(crate) const SET_FLAG_WITH_SAVED_ACCOUNT_SQL: &str = concat!(
+    "UPDATE contacts \
+     SET credit_refund_requested = 1, credit_refund_requested_at = datetime('now') \
+     WHERE email = ?1 AND EXISTS (SELECT 1 FROM credit_refund_accounts WHERE email IN ",
+    crate::db::person::person_emails_of!("?1"),
+    ")"
+);
+
 /// Set the `credit_refund_requested` flag on a contact (and stamp `now`), and
 /// store where the attendee wants the money sent (`.issues/190`).
 ///
@@ -307,21 +318,32 @@ pub struct CreditLiability {
 pub(crate) async fn set_credit_refund_requested(
     db: &D1Database,
     email: &str,
-    account: &event_checkin_domain::models::credit_payout::RefundAccount,
+    account: Option<&event_checkin_domain::models::credit_payout::RefundAccount>,
 ) -> Result<bool, String> {
     let email_lower = email.to_lowercase();
-    let flag = db
-        .prepare(
-            "UPDATE contacts \
-             SET credit_refund_requested = 1, \
-             credit_refund_requested_at = datetime('now') \
-             WHERE email = ?1",
-        )
-        .bind_refs(&[D1Type::Text(&email_lower)])
-        .map_err(|e| format!("D1 set_credit_refund_requested bind: {e:?}"))?;
-    let save = super::credit_refund_accounts::save_statement(db, &email_lower, account)?;
+    let statements = match account {
+        Some(account) => vec![
+            db.prepare(
+                "UPDATE contacts \
+                 SET credit_refund_requested = 1, \
+                 credit_refund_requested_at = datetime('now') \
+                 WHERE email = ?1",
+            )
+            .bind_refs(&[D1Type::Text(&email_lower)])
+            .map_err(|e| format!("D1 set_credit_refund_requested bind: {e:?}"))?,
+            super::credit_refund_accounts::save_statement(db, &email_lower, account)?,
+        ],
+        // "Pay me to the account you already have" — the flag sets only if the
+        // person has one, in the same statement, so the queue never shows a
+        // one-tap request without its account.
+        None => vec![
+            db.prepare(SET_FLAG_WITH_SAVED_ACCOUNT_SQL)
+                .bind_refs(&[D1Type::Text(&email_lower)])
+                .map_err(|e| format!("D1 set_credit_refund_requested bind: {e:?}"))?,
+        ],
+    };
     let results = db
-        .batch(vec![flag, save])
+        .batch(statements)
         .await
         .map_err(|e| format!("D1 set_credit_refund_requested run: {e:?}"))?;
 
@@ -404,6 +426,18 @@ pub struct CreditRefundRequest {
     /// request made before migration 0059, or a stored row that does not parse.
     #[serde(default, skip_deserializing)]
     pub account: Option<event_checkin_domain::models::credit_payout::RefundAccount>,
+    /// Where `account` came from: the attendee's deposit, or typed by them on
+    /// the request card. `None` with no account.
+    #[serde(default, skip_deserializing)]
+    pub account_source: Option<event_checkin_domain::models::credit_payout::AccountSource>,
+    /// When the account was given (deposit upload time, or the attendee's
+    /// entry). Empty with no account.
+    #[serde(default)]
+    pub account_captured_at: Option<String>,
+    /// The attendee replaced the account from their deposit with a different
+    /// one: the organizer should confirm with them before paying.
+    #[serde(default, deserialize_with = "int_flag")]
+    pub account_replaced_deposit: bool,
     /// Every organization the person's ledger rows belong to — the payout
     /// scope check needs all of them covered. Not sent to the client.
     #[serde(default, skip_serializing)]
@@ -420,6 +454,14 @@ pub struct CreditRefundRequest {
     pub bank_account: Option<String>,
     #[serde(default, skip_serializing)]
     pub account_name: Option<String>,
+    #[serde(default, skip_serializing)]
+    pub account_source_raw: Option<String>,
+}
+
+/// SQLite returns the flag as an integer.
+fn int_flag<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    let value: Option<i64> = serde::Deserialize::deserialize(deserializer)?;
+    Ok(value.unwrap_or(0) != 0)
 }
 
 impl CreditRefundRequest {
@@ -432,6 +474,11 @@ impl CreditRefundRequest {
 
     /// Fold the stored account columns into [`Self::account`].
     fn with_account(mut self) -> Self {
+        self.account_source = self
+            .account_source_raw
+            .take()
+            .as_deref()
+            .and_then(event_checkin_domain::models::credit_payout::AccountSource::parse);
         self.account = self.account_method.as_deref().and_then(|method| {
             event_checkin_domain::models::credit_payout::RefundAccount::from_columns(
                 method,
@@ -441,6 +488,12 @@ impl CreditRefundRequest {
                 self.account_name.take(),
             )
         });
+        // Provenance describes an account; without one it says nothing.
+        if self.account.is_none() {
+            self.account_source = None;
+            self.account_captured_at = None;
+            self.account_replaced_deposit = false;
+        }
         self
     }
 }
@@ -512,9 +565,13 @@ pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest>
         ") AS org_ids, \
            a.method AS account_method, a.promptpay_id AS promptpay_id, \
            a.bank_name AS bank_name, a.bank_account AS bank_account, \
-           a.account_name AS account_name \
+           a.account_name AS account_name, \
+           a.source AS account_source_raw, a.captured_at AS account_captured_at, \
+           COALESCE(a.replaced_deposit_account, 0) AS account_replaced_deposit \
          FROM contacts c \
-         LEFT JOIN credit_refund_accounts a ON a.email = LOWER(c.email) \
+         LEFT JOIN credit_refund_accounts a ON a.email = ",
+        crate::db::credit_refund_accounts::chosen_account_email_of!("LOWER(c.email)"),
+        " \
          WHERE c.credit_refund_requested = 1 \
            AND NOT EXISTS (SELECT 1 FROM contacts c2 \
              WHERE c2.credit_refund_requested = 1 \

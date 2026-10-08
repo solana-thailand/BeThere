@@ -10,8 +10,12 @@
 //! 2. The clear needs the organizer's confirmed amount and compares it inside
 //!    the write (defect 1), audits who paid, and only then clears.
 //! 3. Both payout endpoints are org-scoped and refuse per-event scanners.
-//! 4. The payout account dies with the request: at payout, in the purge, on
-//!    PDPA erasure — and never reaches the log stream.
+//! 4. The payout account dies at payout, on PDPA erasure, and in the purge
+//!    once no request is open and no credit is held — and never reaches the
+//!    log stream.
+//! 5. The account the attendee gave with their deposit is copied by the one
+//!    writer of `held_as_credit = 1`, after its flip and without failing the
+//!    hold; the attendee API returns it masked, never in full.
 
 use std::fs;
 use std::path::Path;
@@ -268,6 +272,9 @@ fn account_details_never_reach_the_log() {
         "src/handlers/deposit/thb/handlers/credit_payout.rs",
         "src/db/credit_refund_accounts.rs",
         "src/db/contacts.rs",
+        "src/db/thb_deposits.rs",
+        "src/handlers/deposit/thb/handlers/hold_credit.rs",
+        "src/handlers/deposit/thb/handlers/hold_admin.rs",
     ] {
         let code = strip_comments(&src(file));
         for (at, _) in code.match_indices("tracing::") {
@@ -307,4 +314,145 @@ fn the_slip_key_carries_no_email() {
     );
     let org = credit_payout_key("Org A/../x", "p@x.example", "1");
     assert!(org.starts_with("credit-payouts/org_a____x/"), "{org}");
+}
+
+// ---------------------------------------------------------------------------
+// 5. The account from the deposit
+// ---------------------------------------------------------------------------
+
+#[test]
+fn every_hold_snapshots_the_deposit_account() {
+    // Every writer of `held_as_credit = 1` in the worker.
+    let mut writers = Vec::new();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    visit_rs(&root, &mut |path, text| {
+        let code = strip_comments(text);
+        if code.contains("held_as_credit = 1,") || code.contains("SET held_as_credit = 1") {
+            writers.push(path.display().to_string());
+        }
+    });
+    assert_eq!(
+        writers.len(),
+        1,
+        "one writer flips held_as_credit: {writers:?}"
+    );
+    assert!(writers[0].ends_with("db/thb_deposits.rs"), "{writers:?}");
+
+    let deposits = strip_comments(&src("src/db/thb_deposits.rs"));
+    let cas = fn_body(&deposits, "pub async fn try_settle_hold_credit(");
+    let flip = cas.find("SET held_as_credit = 1").expect("the flip");
+    let lost = cas
+        .find("return Ok(false)")
+        .expect("a lost CAS returns early");
+    let copy = cas
+        .find("credit_refund_accounts::snapshot_from_deposit(")
+        .expect("the CAS must copy the deposit's refund account");
+    assert!(
+        flip < lost && lost < copy,
+        "the account is copied only after THIS call won the flip"
+    );
+    assert!(
+        !cas[copy..].contains(".await?") && cas[copy..].contains("Err(e) => tracing::warn!"),
+        "a failed copy must not fail the hold"
+    );
+
+    // Both hold paths name the credit holder, the same email the ledger credits.
+    for (file, email) in [
+        (
+            "src/handlers/deposit/thb/handlers/hold_credit.rs",
+            "&claims.email",
+        ),
+        (
+            "src/handlers/deposit/thb/handlers/hold_admin.rs",
+            "&attendee_email",
+        ),
+    ] {
+        let code: String = strip_comments(&src(file))
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let call = &code[code
+            .find("try_settle_hold_credit(")
+            .expect("hold calls the CAS")..];
+        let call = &call[..call.find(".await").expect("awaited")];
+        assert!(
+            call.ends_with(&format!("&now,{email},)")),
+            "{file}: the snapshot must go to {email}: {call}"
+        );
+        assert!(
+            code.contains(&format!("credit_ledger::record(db,{email},")),
+            "{file}: the ledger and the snapshot must credit the same email"
+        );
+    }
+}
+
+#[test]
+fn the_snapshot_is_event_scoped_and_yields_to_the_attendee() {
+    let accounts = strip_comments(&src("src/db/credit_refund_accounts.rs"));
+    let at = accounts
+        .find("pub(crate) const SNAPSHOT_FROM_DEPOSIT_SQL")
+        .expect("snapshot SQL");
+    let sql = &accounts[at..at + accounts[at..].find("\";").expect("const ends")];
+    for needle in [
+        "d.event_id = ?2 AND d.attendee_id = ?3",
+        "d.held_as_credit = 1 AND d.refunded = 0",
+        "WHERE credit_refund_accounts.source = 'deposit'",
+    ] {
+        assert!(
+            sql.contains(needle),
+            "SNAPSHOT_FROM_DEPOSIT_SQL lost `{needle}`"
+        );
+    }
+    let migration = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations/0059_credit_refund_payout.sql"),
+    )
+    .expect("0059");
+    assert!(
+        migration.contains("JOIN attendees a ON a.id = x.attendee_id AND a.event_id = x.event_id"),
+        "the backfill must match the attendee on id AND event (ids are global)"
+    );
+    assert!(
+        migration.contains("ON CONFLICT (email) DO NOTHING"),
+        "the backfill must be idempotent and never replace an existing account"
+    );
+}
+
+#[test]
+fn the_attendee_gets_a_masked_preview_only() {
+    let code = strip_comments(&src(HANDLER));
+    let at = code
+        .find("pub struct CreditRefundRequestStatus {")
+        .expect("status struct");
+    let fields = &code[at..at + code[at..].find("\n}").expect("struct ends")];
+    assert!(
+        fields.contains("pub saved_account: Option<SavedAccountPreview>,")
+            && !fields.contains("RefundAccount"),
+        "the attendee's status carries the masked preview, never a RefundAccount"
+    );
+    let handler = fn_body(&code, "pub async fn credit_refund_request_status_handler");
+    assert!(handler.contains("credit_refund_accounts::preview_for_person("));
+    assert!(
+        !handler.contains("chosen_for_person("),
+        "the attendee handler must not read the full account"
+    );
+}
+
+#[test]
+fn the_purge_is_by_balance_not_by_age() {
+    let accounts = strip_comments(&src("src/db/credit_refund_accounts.rs"));
+    let at = accounts
+        .find("pub(crate) const PURGE_SQL")
+        .expect("purge SQL");
+    let sql = &accounts[at..at + accounts[at..].find(");\n").expect("const ends")];
+    for needle in [
+        "c.credit_refund_requested = 1",
+        "positive_buckets_of!(\"credit_refund_accounts.email\")",
+        "unreturned_apply_of!(\"credit_refund_accounts.email\")",
+    ] {
+        assert!(sql.contains(needle), "PURGE_SQL lost `{needle}`");
+    }
+    assert!(
+        !sql.contains("datetime('now'") && !accounts.contains("RETENTION_DAYS"),
+        "an account must not expire by age while its credit is still held"
+    );
 }

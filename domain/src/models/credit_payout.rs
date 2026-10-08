@@ -42,9 +42,11 @@ pub enum RefundAccount {
 }
 
 /// The stored discriminant of a [`RefundAccount`] (`credit_refund_accounts.method`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RefundMethod {
+    #[serde(rename = "promptpay")]
     PromptPay,
+    #[serde(rename = "bank")]
     Bank,
 }
 
@@ -184,6 +186,107 @@ impl RefundAccount {
                 bank_account: bank_account?,
                 account_name: account_name?,
             }),
+        }
+    }
+}
+
+/// Where a stored payout account came from (`credit_refund_accounts.source`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AccountSource {
+    /// The refund account the attendee typed with their THB deposit, copied
+    /// when the deposit was held as credit.
+    Deposit,
+    /// An account the attendee entered on the credit refund card. A later hold
+    /// never overwrites it.
+    Attendee,
+}
+
+impl AccountSource {
+    /// The value the D1 `CHECK (source IN ('deposit','attendee'))` accepts.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Deposit => "deposit",
+            Self::Attendee => "attendee",
+        }
+    }
+
+    /// Parse a stored value; an unknown value is `None`, never a default.
+    pub fn parse(stored: &str) -> Option<Self> {
+        match stored {
+            "deposit" => Some(Self::Deposit),
+            "attendee" => Some(Self::Attendee),
+            _ => None,
+        }
+    }
+}
+
+/// What the attendee API may say about a saved payout account: enough to
+/// recognise it, never enough to use it. The full account number and the
+/// full PromptPay ID stay staff-only (`.issues/190`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SavedAccountPreview {
+    pub method: RefundMethod,
+    /// The bank as typed (`None` for PromptPay) — a bank name is not secret.
+    #[serde(default)]
+    pub bank_name: Option<String>,
+    /// The last four digits of the number, or empty when the number has four
+    /// digits or fewer (showing them would show all of it).
+    #[serde(default)]
+    pub last4: String,
+    /// The holder's first word and the initial of the second (`Somchai J.`).
+    #[serde(default)]
+    pub holder: Option<String>,
+    pub source: AccountSource,
+    /// When the account was given: the deposit's upload time, or when the
+    /// attendee entered it.
+    #[serde(default)]
+    pub captured_at: String,
+}
+
+/// The last four digits of `raw`, ignoring separators; empty when there are
+/// four or fewer, so the preview never carries a whole number.
+pub fn last4_digits(raw: &str) -> String {
+    let digits: Vec<char> = raw.chars().filter(char::is_ascii_digit).collect();
+    match digits.len() {
+        n if n > 4 => digits[n - 4..].iter().collect(),
+        _ => String::new(),
+    }
+}
+
+/// The holder's first word plus the initial of the second: `Somchai J.`.
+/// One word stays as it is; blank is `None`.
+pub fn mask_account_name(raw: &str) -> Option<String> {
+    let mut words = raw.split_whitespace();
+    let first = words.next()?;
+    match words.next().and_then(|w| w.chars().next()) {
+        Some(initial) => Some(format!("{first} {initial}.")),
+        None => Some(first.to_string()),
+    }
+}
+
+impl RefundAccount {
+    /// The masked preview of this account for the attendee API.
+    pub fn preview(&self, source: AccountSource, captured_at: &str) -> SavedAccountPreview {
+        let (bank_name, last4, holder) = match self {
+            Self::PromptPay { promptpay_id } => (None, last4_digits(promptpay_id), None),
+            Self::Bank {
+                bank_name,
+                bank_account,
+                account_name,
+            } => (
+                Some(bank_name.clone()),
+                last4_digits(bank_account),
+                mask_account_name(account_name),
+            ),
+        };
+        SavedAccountPreview {
+            method: self.method(),
+            bank_name,
+            last4,
+            holder,
+            source,
+            captured_at: captured_at.to_string(),
         }
     }
 }

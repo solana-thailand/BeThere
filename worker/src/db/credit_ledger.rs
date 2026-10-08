@@ -41,6 +41,7 @@ macro_rules! positive_buckets_of {
         )
     };
 }
+pub(crate) use positive_buckets_of;
 
 /// Audit reason label for a hold entry (deposit converted to rolling credit).
 /// `apply` (spend) is written inline by [`try_spend`]; `backfill` is used by the

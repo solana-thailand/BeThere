@@ -7,10 +7,15 @@ Runs the worker's real SQL — extracted from the Rust sources with the
   payable balance still equals what the organizer confirmed, so a stale amount
   writes nothing, a spend and a clear can race in either order without the
   balance going negative, and a second clear is a no-op;
-- the payout account is stored only while a request is open, read by the
-  queue, and deleted at payout, by the nightly purge and by PDPA erasure.
+- the payout account typed on the card is stored only while a request is
+  open; the one already given with the deposit is copied at hold time (and
+  backfilled by 0059) from the event-scoped deposit, never over the
+  attendee's own choice; the queue and the masked preview pick the same row;
+  it is deleted at payout, by PDPA erasure, and by the nightly purge once the
+  person has no open request and no held (payable or locked) credit.
 """
 
+import re
 import sqlite3
 import unittest
 
@@ -19,6 +24,7 @@ from test_person_emails import (
     OTHER,
     WORK,
     CreditFixture,
+    WORKER,
     concat_after,
     plain_after,
 )
@@ -29,11 +35,31 @@ POSITIVE_SQL = concat_after("db/credit_ledger.rs", "pub async fn positive_balanc
 TRY_SPEND_SQL = concat_after("db/credit_ledger.rs", "pub async fn try_spend(")
 NEGATIVE_SQL = plain_after("db/credit_ledger.rs", "let negative_balances = count_query(")
 SET_FLAG_SQL = plain_after("db/contacts.rs", "pub(crate) async fn set_credit_refund_requested(")
-SAVE_SQL = plain_after("db/credit_refund_accounts.rs", "pub(crate) const SAVE_SQL")
+SAVE_SQL = concat_after("db/credit_refund_accounts.rs", "pub(crate) const SAVE_SQL")
+SNAPSHOT_SQL = plain_after(
+    "db/credit_refund_accounts.rs", "pub(crate) const SNAPSHOT_FROM_DEPOSIT_SQL"
+)
+CHOSEN_SQL = concat_after(
+    "db/credit_refund_accounts.rs", "pub(crate) const CHOSEN_FOR_PERSON_SQL"
+)
+SET_FLAG_SAVED_SQL = concat_after(
+    "db/contacts.rs", "pub(crate) const SET_FLAG_WITH_SAVED_ACCOUNT_SQL"
+)
 DELETE_FOR_PERSON_SQL = concat_after(
     "db/credit_refund_accounts.rs", "pub(crate) const DELETE_FOR_PERSON_SQL"
 )
-PURGE_SQL = plain_after("db/credit_refund_accounts.rs", "pub(crate) const PURGE_SQL")
+PURGE_SQL = concat_after("db/credit_refund_accounts.rs", "pub(crate) const PURGE_SQL")
+
+
+def backfill_sql():
+    """The 0059 backfill statement, as the migration runs it."""
+    text = (WORKER / "migrations/0059_credit_refund_payout.sql").read_text()
+    code = "\n".join(re.sub(r"--.*$", "", line) for line in text.splitlines())
+    start = code.index("INSERT INTO credit_refund_accounts")
+    return code[start : code.index(";", start) + 1]
+
+
+BACKFILL_SQL = backfill_sql()
 CLEAR_FLAG_SQL = concat_after(
     "db/contacts.rs", "pub(crate) async fn clear_credit_refund_requested(",
     opener=".prepare(concat!(",
@@ -46,6 +72,8 @@ REQUESTED_AT = "2026-10-01 09:00:00"
 NOTE = "held-credit payout processed by organizer"
 BANK = ("bank", None, "KBank", "123-4-56789-0", "Somchai")
 PROMPTPAY = ("promptpay", "0812345678", None, None, None)
+DEPOSIT_BANK = ("Kasikornbank (KBANK)", "123-4-56789-0", "Somchai Jaidee")
+STORED_DEPOSIT_BANK = ("bank", None, *DEPOSIT_BANK)
 
 
 class CreditPayoutTests(CreditFixture):
@@ -105,6 +133,55 @@ class CreditPayoutTests(CreditFixture):
                 "account_name FROM credit_refund_accounts ORDER BY email"
             )
         ]
+
+    def purge(self):
+        return self.db.execute(PURGE_SQL).rowcount
+
+    def attendee(self, attendee_id, event_id, email):
+        self.db.execute(
+            "INSERT INTO attendees (id, event_id, email, name) VALUES (?, ?, ?, 'P')",
+            (attendee_id, event_id, email),
+        )
+
+    def deposit(
+        self,
+        event_id,
+        attendee_id,
+        email=None,
+        bank=DEPOSIT_BANK,
+        held_at="2026-09-01T10:00:00+00:00",
+        uploaded_at="2026-08-30T09:00:00+00:00",
+        held=1,
+        refunded=0,
+    ):
+        """A verified THB deposit with the refund account the slip form takes,
+        and (with `email`) its attendee row."""
+        if email is not None:
+            self.attendee(attendee_id, event_id, email)
+        bank_name, bank_account, account_name = bank
+        self.db.execute(
+            """INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, verified,
+                   uploaded_at, refunded, held_as_credit, held_as_credit_at,
+                   bank_name, bank_account, account_name)
+               VALUES (?, ?, 500, 1, ?, ?, ?, ?, ?, ?, ?)""",
+            (attendee_id, event_id, uploaded_at, refunded, held, held_at,
+             bank_name, bank_account, account_name),
+        )
+
+    def snapshot(self, email, event_id, attendee_id):
+        """Mirror `credit_refund_accounts::snapshot_from_deposit`."""
+        return self.db.execute(SNAPSHOT_SQL, (email, event_id, attendee_id)).rowcount
+
+    def backfill(self):
+        return self.db.execute(BACKFILL_SQL).rowcount
+
+    def row(self, email):
+        return self.db.execute(
+            "SELECT * FROM credit_refund_accounts WHERE email = ?", (email,)
+        ).fetchone()
+
+    def chosen(self, email):
+        return self.db.execute(CHOSEN_SQL, (email,)).fetchone()
 
     def clear(self, email):
         with self.db:
@@ -291,29 +368,275 @@ class CreditPayoutTests(CreditFixture):
         self.clear(GMAIL)
         self.assertEqual(self.accounts(), [])
 
-    def test_the_purge_deletes_old_and_closed_rows_only(self):
+    def test_the_purge_keeps_an_account_while_credit_is_held(self):
         for email in (GMAIL, WORK, OTHER):
             self.contact(email)
             self.request(email)
-        # OTHER's request was cleared but its delete did not land.
+            self.db.execute(
+                "UPDATE contacts SET credit_refund_requested = 0 WHERE email = ?", (email,)
+            )
+        self.hold(GMAIL, 500, "e1:a")  # payable
+        self.hold(WORK, 500, "e1:b")
+        self.assertEqual(self.spend(WORK, 500, "e2"), 1)  # all of it locked to e2
+        self.assertEqual(self.purge(), 1)
+        self.assertEqual([a[0] for a in self.accounts()], [GMAIL, WORK])
+
+    def test_the_purge_deletes_at_zero_with_no_open_request(self):
+        self.contact(GMAIL)
+        self.request(GMAIL)
+        self.hold(GMAIL, 500, "e1:a")
+        self.assertEqual(self.purge(), 0, "open request and credit")
         self.db.execute(
-            "UPDATE contacts SET credit_refund_requested = 0 WHERE email = ?", (OTHER,)
+            "UPDATE contacts SET credit_refund_requested = 0 WHERE email = ?", (GMAIL,)
         )
-        # WORK's request is open but older than the retention.
+        self.assertEqual(self.purge(), 0, "credit still held")
+        self.assertEqual(self.spend(GMAIL, 500, "e2"), 1)
+        self.assertEqual(self.purge(), 0, "credit locked to an event")
         self.db.execute(
-            "UPDATE credit_refund_accounts SET updated_at = datetime('now', '-91 days') "
-            "WHERE email = ?",
-            (WORK,),
+            """INSERT INTO credit_ledger (email, organization_id, currency, delta, reason,
+                   event_id, deposit_id) VALUES (?, '', 'thb', 0, 'return', 'e2', 'r')""",
+            (GMAIL,),
         )
-        deleted = self.db.execute(PURGE_SQL, ("-90 days",)).rowcount
-        self.assertEqual(deleted, 2)
-        self.assertEqual([a[0] for a in self.accounts()], [GMAIL])
+        self.assertEqual(self.purge(), 1, "spent: balance 0, nothing locked")
+        self.assertEqual(self.accounts(), [])
+
+    def test_an_open_request_keeps_the_account_at_zero_balance(self):
+        self.contact(GMAIL)
+        self.request(GMAIL)
+        self.assertEqual(self.purge(), 0)
+        self.assertEqual(len(self.accounts()), 1)
+
+    def test_the_purge_reads_the_whole_person(self):
+        # The account sits on one email, the credit and the request on another.
+        self.contact(WORK)
+        self.deposit("e1", "a1", GMAIL)
+        self.snapshot(GMAIL, "e1", "a1")
+        self.link(GMAIL, WORK)
+        self.hold(WORK, 500, "e1:x")
+        self.assertEqual(self.purge(), 0)
+        self.hold(WORK, -500, "e1:y")
+        self.db.execute(SET_FLAG_SQL, (WORK,))
+        self.assertEqual(self.purge(), 0, "the sibling's open request keeps it")
 
     def test_pdpa_erasure_deletes_the_account(self):
         self.contact(GMAIL)
         self.request(GMAIL)
         self.db.execute(PII_ACCOUNT_SQL, (GMAIL.upper(),))
         self.assertEqual(self.accounts(), [])
+
+
+    # -- 6. the account from the deposit -----------------------------------
+
+    def test_the_hold_copies_the_deposit_account(self):
+        self.deposit("e1", "a1", GMAIL)
+        self.assertEqual(self.snapshot(GMAIL, "e1", "a1"), 1)
+        self.assertEqual(self.accounts(), [(GMAIL, *STORED_DEPOSIT_BANK)])
+        row = self.row(GMAIL)
+        self.assertEqual(row["source"], "deposit")
+        self.assertEqual(row["source_deposit_ref"], "e1:a1")
+        self.assertEqual(row["captured_at"], "2026-08-30T09:00:00+00:00")
+        self.assertEqual(row["replaced_deposit_account"], 0)
+
+    def test_the_hold_reads_the_deposit_of_that_event_only(self):
+        # Same attendee id, another event: not this deposit (ids are global,
+        # the deposit is scoped by event).
+        self.deposit("e2", "a1", bank=("SCB", "999-9-99999-9", "Other Person"))
+        self.assertEqual(self.snapshot(GMAIL, "e1", "a1"), 0)
+        self.deposit("e1", "a1")
+        self.snapshot(GMAIL, "e1", "a1")
+        self.assertEqual(self.accounts(), [(GMAIL, *STORED_DEPOSIT_BANK)])
+
+    def test_only_a_held_unrefunded_deposit_is_copied(self):
+        self.deposit("e1", "a1", held=0)
+        self.deposit("e2", "a2", held=1, refunded=1)
+        self.assertEqual(self.snapshot(GMAIL, "e1", "a1"), 0)
+        self.assertEqual(self.snapshot(GMAIL, "e2", "a2"), 0)
+        self.assertEqual(self.accounts(), [])
+
+    def test_incomplete_deposit_accounts_are_skipped(self):
+        for n, bank in enumerate(
+            [("", "123", "S"), ("KBank", "   ", "S"), ("KBank", "123", ""), (None, None, None)]
+        ):
+            self.deposit("e1", f"a{n}", bank=bank)
+            self.assertEqual(self.snapshot(GMAIL, "e1", f"a{n}"), 0, bank)
+        self.assertEqual(self.accounts(), [])
+
+    def test_a_promptpay_number_in_the_bank_fields_becomes_promptpay(self):
+        self.deposit("e1", "a1", bank=(" Prompt Pay ", "081-234-5678", "Somchai"))
+        self.snapshot(GMAIL, "e1", "a1")
+        self.assertEqual(self.accounts(), [(GMAIL, *PROMPTPAY)])
+        self.deposit("e2", "a2", bank=("พร้อมเพย์", "1 2345 67890 12 3", "S"))
+        self.snapshot(WORK, "e2", "a2")
+        self.assertEqual(self.row(WORK)["promptpay_id"], "1234567890123")
+        # Not a valid PromptPay ID: no account rather than a wrong one.
+        self.deposit("e3", "a3", bank=("PromptPay", "12345", "S"))
+        self.assertEqual(self.snapshot(OTHER, "e3", "a3"), 0)
+
+    def test_a_newer_deposit_replaces_an_older_deposit_account(self):
+        self.deposit("e1", "a1")
+        self.snapshot(GMAIL, "e1", "a1")
+        self.deposit("e2", "a2", bank=("SCB", "222-2-22222-2", "Somchai J"),
+                     uploaded_at="2026-09-20T09:00:00+00:00")
+        self.assertEqual(self.snapshot(GMAIL, "e2", "a2"), 1)
+        row = self.row(GMAIL)
+        self.assertEqual((row["bank_name"], row["source_deposit_ref"]), ("SCB", "e2:a2"))
+        self.assertEqual(row["captured_at"], "2026-09-20T09:00:00+00:00")
+
+    def test_a_later_hold_never_overwrites_the_attendees_choice(self):
+        self.contact(GMAIL)
+        self.request(GMAIL, PROMPTPAY)
+        self.deposit("e1", "a1")
+        self.assertEqual(self.snapshot(GMAIL, "e1", "a1"), 0)
+        self.assertEqual(self.accounts(), [(GMAIL, *PROMPTPAY)])
+        self.assertEqual(self.row(GMAIL)["source"], "attendee")
+
+    def test_a_different_account_marks_the_deposit_account_replaced(self):
+        self.contact(GMAIL)
+        self.deposit("e1", "a1")
+        self.snapshot(GMAIL, "e1", "a1")
+        self.request(GMAIL, PROMPTPAY)
+        row = self.row(GMAIL)
+        self.assertEqual(
+            (row["source"], row["replaced_deposit_account"], row["source_deposit_ref"]),
+            ("attendee", 1, None),
+        )
+        # It stays flagged through a later re-request.
+        self.request(GMAIL, BANK)
+        self.assertEqual(self.row(GMAIL)["replaced_deposit_account"], 1)
+
+    def test_the_same_account_retyped_is_not_a_replacement(self):
+        self.contact(GMAIL)
+        self.deposit("e1", "a1")
+        self.snapshot(GMAIL, "e1", "a1")
+        self.request(GMAIL, STORED_DEPOSIT_BANK)
+        row = self.row(GMAIL)
+        self.assertEqual((row["source"], row["replaced_deposit_account"]), ("attendee", 0))
+
+    def test_an_attendee_account_with_no_deposit_is_not_a_replacement(self):
+        self.contact(GMAIL)
+        self.request(GMAIL, BANK)
+        self.assertEqual(self.row(GMAIL)["replaced_deposit_account"], 0)
+
+    def test_a_replacement_on_a_linked_email_is_flagged(self):
+        self.contact(WORK)
+        self.deposit("e1", "a1")
+        self.snapshot(GMAIL, "e1", "a1")
+        self.link(GMAIL, WORK)
+        self.request(WORK, PROMPTPAY)
+        self.assertEqual(self.row(WORK)["replaced_deposit_account"], 1)
+        # Both read the attendee's choice.
+        self.assertEqual(self.chosen(GMAIL)["source"], "attendee")
+        self.assertEqual(self.chosen(WORK)["promptpay_id"], "0812345678")
+
+    def test_one_tap_needs_an_account_on_file(self):
+        self.contact(GMAIL)
+        self.assertEqual(self.db.execute(SET_FLAG_SAVED_SQL, (GMAIL,)).rowcount, 0)
+        self.deposit("e1", "a1")
+        self.snapshot(GMAIL, "e1", "a1")
+        self.assertEqual(self.db.execute(SET_FLAG_SAVED_SQL, (GMAIL,)).rowcount, 1)
+        row = self.db.execute(QUEUE_SQL).fetchone()
+        self.assertEqual(row["account_method"], "bank")
+        self.assertEqual(row["bank_account"], "123-4-56789-0", "staff see the full number")
+        self.assertEqual(row["account_source_raw"], "deposit")
+        self.assertEqual(row["account_captured_at"], "2026-08-30T09:00:00+00:00")
+        self.assertEqual(row["account_replaced_deposit"], 0)
+
+    def test_the_queue_shows_a_replacement(self):
+        self.contact(GMAIL)
+        self.deposit("e1", "a1")
+        self.snapshot(GMAIL, "e1", "a1")
+        self.request(GMAIL, PROMPTPAY)
+        row = self.db.execute(QUEUE_SQL).fetchone()
+        self.assertEqual(row["account_source_raw"], "attendee")
+        self.assertEqual(row["account_replaced_deposit"], 1)
+        self.assertEqual(row["promptpay_id"], "0812345678")
+
+    def test_the_payout_deletes_the_deposit_account_too(self):
+        self.contact(WORK)
+        self.deposit("e1", "a1")
+        self.snapshot(GMAIL, "e1", "a1")
+        self.link(GMAIL, WORK)
+        self.db.execute(SET_FLAG_SAVED_SQL, (WORK,))
+        self.clear(WORK)
+        self.assertEqual(self.accounts(), [])
+
+    # -- 7. the 0059 backfill ----------------------------------------------
+
+    def test_the_backfill_takes_the_latest_held_deposit(self):
+        self.deposit("e1", "a1", GMAIL, held_at="2026-09-01T10:00:00+00:00")
+        self.deposit("e2", "a2", GMAIL, bank=("SCB", "222-2-22222-2", "Somchai J"),
+                     held_at="2026-09-20T10:00:00+00:00")
+        # The latest held deposit with an incomplete account does not count.
+        self.deposit("e3", "a3", GMAIL, bank=("KTB", "", ""),
+                     held_at="2026-09-30T10:00:00+00:00")
+        self.hold(GMAIL, 1500, "e1:a1")
+        self.assertEqual(self.backfill(), 1)
+        row = self.row(GMAIL)
+        self.assertEqual((row["bank_name"], row["source"], row["source_deposit_ref"]),
+                         ("SCB", "deposit", "e2:a2"))
+
+    def test_the_backfill_matches_the_attendee_on_id_and_event(self):
+        # a1 is GMAIL's id in e1. A deposit for a1 in e2 is someone else's
+        # (no attendee row there): it must not land on GMAIL.
+        self.attendee("a1", "e1", GMAIL)
+        self.deposit("e2", "a1", bank=("SCB", "999-9-99999-9", "Other Person"),
+                     held_at="2026-09-30T10:00:00+00:00")
+        self.deposit("e2", "b1", WORK, held_at="2026-09-02T10:00:00+00:00")
+        self.hold(GMAIL, 500, "x")
+        self.hold(WORK, 500, "y")
+        self.assertEqual(self.backfill(), 1)
+        self.assertEqual([a[0] for a in self.accounts()], [WORK])
+        self.assertEqual(self.row(WORK)["source_deposit_ref"], "e2:b1")
+
+    def test_the_backfill_skips_people_without_credit(self):
+        self.deposit("e1", "a1", GMAIL)
+        self.deposit("e1", "a2", WORK)
+        self.deposit("e1", "a3", OTHER)
+        self.hold(GMAIL, 500, "e1:a1")
+        self.hold(WORK, 500, "e1:a2")
+        self.assertEqual(self.spend(WORK, 500, "e2"), 1)  # locked, still theirs
+        self.hold(OTHER, 500, "e1:a3")
+        self.hold(OTHER, -500, "refund:o")  # paid out
+        self.assertEqual(self.backfill(), 2)
+        self.assertEqual([a[0] for a in self.accounts()], [GMAIL, WORK])
+        self.assertEqual(self.purge(), 0, "the purge keeps what the backfill wrote")
+
+    def test_the_backfill_is_idempotent_and_keeps_the_attendees_choice(self):
+        self.contact(GMAIL)
+        self.request(GMAIL, PROMPTPAY)
+        self.deposit("e1", "a1", GMAIL)
+        self.deposit("e1", "a2", WORK.upper())
+        self.hold(GMAIL, 500, "e1:a1")
+        self.hold(WORK, 500, "e1:a2")
+        self.assertEqual(self.backfill(), 1)
+        self.assertEqual(self.backfill(), 0)
+        self.assertEqual(self.accounts(), [(GMAIL, *PROMPTPAY), (WORK, *STORED_DEPOSIT_BANK)])
+
+    def test_the_backfill_and_the_hold_map_deposits_alike(self):
+        cases = [
+            DEPOSIT_BANK,
+            ("  KBank ", " 123 ", " Somchai "),
+            ("PromptPay", "081-234-5678", "S"),
+            ("prompt pay", "0812345678901", "S"),  # 13 digits
+            ("พร้อมเพย์", "1234567890123", "S"),
+            ("PromptPay", "1812345678", "S"),  # 10 digits not from 0
+            ("PromptPay", "08x2345678", "S"),
+            ("PromptPay", "", "S"),
+            ("", "123", "S"),
+            ("KBank", "123", "   "),
+            (None, None, None),
+        ]
+        for n, bank in enumerate(cases):
+            email = f"p{n}@x.example"
+            self.deposit(f"e{n}", f"a{n}", email, bank=bank)
+            self.hold(email, 500, f"e{n}:a{n}")
+        self.backfill()
+        from_backfill = self.accounts()
+        self.db.execute("DELETE FROM credit_refund_accounts")
+        for n, _ in enumerate(cases):
+            self.snapshot(f"p{n}@x.example", f"e{n}", f"a{n}")
+        self.assertEqual(self.accounts(), from_backfill)
+        self.assertEqual(len(from_backfill), 5, from_backfill)
 
 
 class PiiErasureSqlIsTheSourceSql(unittest.TestCase):

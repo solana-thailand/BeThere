@@ -11,9 +11,13 @@
 //!
 //! ## The flow
 //!
-//! 1. The attendee asks for their held credit back and gives a PromptPay ID or
-//!    a bank account (same rules as the THB deposit refund account). The flag
-//!    and the account are written in one D1 batch.
+//! 1. The attendee asks for their held credit back. If they already gave a
+//!    refund account with their THB deposit (copied when the deposit was held
+//!    as credit) or on an earlier request, the card shows it masked and one tap
+//!    requests the refund to it (`use_saved`). Otherwise — or if they choose
+//!    "use a different account" — they give a PromptPay ID or a bank account
+//!    (same rules as the THB deposit refund account). The flag and the account
+//!    are written in one D1 batch.
 //! 2. The organizer sees the request — amount, account, age against the 7-day
 //!    promise — in the payout queue (organizers only, scoped to the
 //!    organizations they run), transfers the money out-of-band, and clears the
@@ -49,7 +53,7 @@ use event_checkin_domain::models::error::AppError;
 use serde::{Deserialize, Serialize};
 
 use event_checkin_domain::models::credit_payout::{
-    PaidAmounts, RefundAccount, payout_mismatch_message,
+    PaidAmounts, RefundAccount, SavedAccountPreview, payout_mismatch_message,
 };
 
 use crate::db::credit_ledger::RefundOutcome;
@@ -69,16 +73,42 @@ pub struct RequestCreditRefundResponse {
     pub message: String,
 }
 
-/// Body of the attendee's request: where to send the money.
+/// Body of the attendee's request: where to send the money — a new
+/// `account`, or `use_saved: true` for the account already on file (from their
+/// deposit, or an earlier request). A new account wins if both are sent.
 ///
-/// `account` is optional in the type only so that a client built before
+/// Both are optional in the type only so that a client built before
 /// `.issues/190` (which posted `{}`) gets a validation message rather than a
 /// bare JSON rejection.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct RequestCreditRefundBody {
     #[serde(default)]
     pub account: Option<RefundAccount>,
+    #[serde(default)]
+    pub use_saved: bool,
 }
+
+/// What the attendee asked to be paid to.
+enum PayoutTarget {
+    New(RefundAccount),
+    Saved,
+}
+
+/// Turn the body into a target, validating a new account.
+fn payout_target(body: RequestCreditRefundBody) -> Result<PayoutTarget, AppError> {
+    match (body.account, body.use_saved) {
+        (Some(account), _) => account
+            .normalized()
+            .map(PayoutTarget::New)
+            .map_err(|e| AppError::Validation(e.to_string())),
+        (None, true) => Ok(PayoutTarget::Saved),
+        (None, false) => Err(AppError::Validation(NO_ACCOUNT_MESSAGE.to_string())),
+    }
+}
+
+/// No account in the request and none on file.
+const NO_ACCOUNT_MESSAGE: &str =
+    "add a PromptPay ID or a bank account so the organizer can pay you";
 
 /// Attendee requests return of their held rolling credit. Sets the
 /// `credit_refund_requested` flag on their own contact row and stores the
@@ -104,19 +134,14 @@ pub async fn request_credit_refund_handler(
     let redactor = state.log_redactor();
     let attendee_fingerprint = redactor.fingerprint(&claims.email);
 
-    let account = body
-        .account
-        .ok_or_else(|| {
-            AppError::Validation(
-                "add a PromptPay ID or a bank account so the organizer can pay you".to_string(),
-            )
-        })?
-        .normalized()
-        .map_err(|e| AppError::Validation(e.to_string()))?;
+    let target = payout_target(body)?;
 
     tracing::info!(
         attendee_fingerprint = %attendee_fingerprint,
-        method = account.method().as_str(),
+        method = match &target {
+            PayoutTarget::New(new) => new.method().as_str(),
+            PayoutTarget::Saved => "saved",
+        },
         "credit refund requested (attendee) — setting flag"
     );
 
@@ -138,7 +163,21 @@ pub async fn request_credit_refund_handler(
         AppError::Internal("D1 not configured — credit refund request cannot be queued".to_string())
     })?;
 
-    let flagged = crate::db::contacts::set_credit_refund_requested(db, &claims.email, &account)
+    let new_account = match &target {
+        PayoutTarget::New(new) => Some(new),
+        PayoutTarget::Saved => {
+            // Nothing on file (never had one, or it was paid out / purged):
+            // the attendee is asked for an account, as before `.issues/190`.
+            let saved = crate::db::credit_refund_accounts::chosen_for_person(db, &claims.email)
+                .await
+                .map_err(AppError::Internal)?;
+            if saved.is_none() {
+                return Err(AppError::Validation(NO_ACCOUNT_MESSAGE.to_string()).into());
+            }
+            None
+        }
+    };
+    let flagged = crate::db::contacts::set_credit_refund_requested(db, &claims.email, new_account)
         .await
         .map_err(AppError::Internal)?;
 
@@ -220,6 +259,11 @@ pub async fn request_credit_refund_handler(
 pub struct CreditRefundRequestStatus {
     /// Whether the attendee has an open "credit refund requested" flag.
     pub requested: bool,
+    /// The payout account on file, **masked** (bank, last four digits, holder's
+    /// first name and initial, where it came from and when). Never the full
+    /// number: this endpoint is the attendee's, and a session is not proof of
+    /// owning the bank account. `None` when nothing is on file.
+    pub saved_account: Option<SavedAccountPreview>,
 }
 
 /// Returns whether the authenticated attendee has an open "credit refund
@@ -235,16 +279,35 @@ pub async fn credit_refund_request_status_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<CreditRefundRequestStatus>, WorkerError> {
-    let requested = match state.d1.as_deref() {
-        Some(db) => crate::db::contacts::get_credit_refund_requested(db, &claims.email).await,
+    let (requested, saved_account) = match state.d1.as_deref() {
+        Some(db) => {
+            let requested =
+                crate::db::contacts::get_credit_refund_requested(db, &claims.email).await;
+            // A failed read shows the form instead of the one-tap card: the
+            // attendee types an account, which loses nothing.
+            let saved = crate::db::credit_refund_accounts::preview_for_person(db, &claims.email)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!(
+                        attendee_fingerprint = %state.log_fingerprint(&claims.email),
+                        error = %e,
+                        "saved payout account read failed — showing the form"
+                    );
+                    None
+                });
+            (requested, saved)
+        }
         // No D1 → cannot read the flag. Degrade to `false` so the attendee
         // sees the CTA rather than a broken "already requested" state. The
         // write path is idempotent so a false-negative just means they can
         // re-trigger (which re-stamps the timestamp — no harm).
-        None => false,
+        None => (false, None),
     };
 
-    Ok(ApiOk::new(CreditRefundRequestStatus { requested }))
+    Ok(ApiOk::new(CreditRefundRequestStatus {
+        requested,
+        saved_account,
+    }))
 }
 
 // ---------------------------------------------------------------------------
