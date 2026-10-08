@@ -74,6 +74,22 @@ commented out for that reason; the site runs on `workers.dev`). Until a domain
 is set up, R4.3 ships the subscribe as "we'll tell you" only after R4.12, or
 without the subscribe at all.
 
+**Owner, 2026-10-08: try the free path first.** Cloudflare Email Sending to
+arbitrary recipients needs Workers Paid ($5/month) and a sender domain on
+Cloudflare DNS, and there is no custom domain today. Free candidates, in
+order:
+1. Gmail API from a dedicated project Gmail account (one-time OAuth consent,
+   refresh token as a worker secret, HTTPS from the worker; consumer Gmail
+   allows about 500 recipients a day). Sent by Gmail itself, so it passes
+   SPF/DKIM/DMARC. Needs the OAuth app published, because refresh tokens issued
+   while it is in "Testing" expire after 7 days.
+2. Apps Script `MailApp` bound to the waitlist Sheet, called by the worker
+   (about 100 recipients a day on a consumer account). Least code, lowest cap.
+3. Brevo or Resend: free tiers need a domain we control. Revisit when there
+   is one.
+Keep the one-click unsubscribe and the `List-Unsubscribe` header on every
+path. Waiting on: which Gmail account sends.
+
 ## Super GOAT (after Release 4, in the spec's order)
 
 | line | what | est. |
