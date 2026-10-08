@@ -62,3 +62,11 @@ The candidate wording applies only once the reviewer confirms the numbers;
 until then the plan keeps the text unchanged. The two `deletion_body`
 numbers would become s.33 and s.24(3). `chain_note` needs a decision on the
 basis, not a number, so no wording is proposed for it here.
+
+## Applied (2026-10-08, `event-checkin-8a`)
+
+On the owner's go to fix what the source makes clear, the catalogs and the
+Worker's deletion notes were changed: s.29 → s.33, the s.38 "exemption" →
+s.24(3) as the basis for keeping data until the event ends, and the s.37
+"technical impossibility" claim removed. The `chain_note` basis question
+above is still open for the reviewer; the text now cites nothing for it.
