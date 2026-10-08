@@ -208,6 +208,12 @@
              of the first load. -->
         <link data-trunk rel="copy-file" href="vendor/jsqr-1.4.0.js" />
         <link data-trunk rel="copy-file" href="vendor/jsqr-1.4.0.LICENSE.txt" />
+        <!-- Mobile Wallet Adapter, self-hosted (.issues/189): an esbuild bundle of
+             @solana-mobile/wallet-standard-mobile@0.5.3, imported lazily by
+             js/mobile_wallet.js on Android only. The CSP blocks the esm.sh copy
+             it used to load. Licences and the rebuild recipe are in the .LICENSE.txt. -->
+        <link data-trunk rel="copy-file" href="vendor/mwa-wallet-standard-mobile-0.5.3.js" />
+        <link data-trunk rel="copy-file" href="vendor/mwa-wallet-standard-mobile-0.5.3.LICENSE.txt" />
     </head>
     <body>
         <!-- What a fetch without JavaScript gets (crawlers, agents, a slow

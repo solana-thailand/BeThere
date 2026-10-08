@@ -9,7 +9,7 @@
  * Why a separate module (not inline in index.html):
  *  - Follows the project convention from handover 007 (no inline scripts, all
  *    JS lives in `/js/*.js` and is wired via `#[wasm_bindgen(module = "...")]`).
- *  - Keeps the runtime Android guard + esm.sh dynamic import logic testable.
+ *  - Keeps the runtime Android guard + lazy dynamic import logic testable.
  *
  * Detection integration:
  *  - After `registerMwa()` runs, MWA wallets appear in `window.navigator.wallets`
@@ -41,8 +41,9 @@ var __mwaRegistered = false;
 /**
  * Register Mobile Wallet Adapter.
  *
- * Loads `@solana-mobile/wallet-standard-mobile` from esm.sh (pinned in
- * `MWA_LIB_URL`), then calls `registerMwa()` with BeThere's app identity.
+ * Loads the self-hosted `@solana-mobile/wallet-standard-mobile` bundle
+ * (`MWA_LIB_URL`, same origin), then calls `registerMwa()` with BeThere's app
+ * identity.
  *
  * No-op on non-Android platforms and on repeated calls.
  *
@@ -62,14 +63,18 @@ export async function registerMwa() {
     return true;
   }
 
-  // Pin to a specific version for prod. Bump deliberately; verify Local Network
-  // Access mitigation (>= v0.5.0) is still present after any upgrade.
+  // Pinned to 0.5.3 (latest as of 2026-06-20), the first stable line with the
+  // Local Network Access mitigation Android 14+ needs.
   // Ref: https://docs.solanamobile.com/recipes/mobile-wallet-adapter/local-network-access
-  // Pinned to 0.5.3 (latest as of 2026-06-20). This is the first stable line that
-  // includes the Local Network Access mitigation required for Android 14+.
-  // Bump deliberately; verify the LNA mitigation is preserved after any upgrade.
-  var MWA_LIB_URL =
-    "https://esm.sh/@solana-mobile/wallet-standard-mobile@0.5.3";
+  //
+  // Self-hosted, same origin (.issues/189): `vendor/mwa-wallet-standard-mobile-0.5.3.js`
+  // is an esbuild bundle of the package and its dependencies, copied into
+  // dist/ by index.html. It used to come from esm.sh, which the CSP
+  // `script-src` does not allow, so the import failed on every Android phone.
+  // To bump: rebuild with the recipe in the vendor .LICENSE.txt, rename the
+  // file, update this URL and the copy-file lines, and check the LNA
+  // mitigation is still in the bundle. Never point this at a CDN.
+  var MWA_LIB_URL = "/mwa-wallet-standard-mobile-0.5.3.js";
 
   try {
     console.log("[mobile_wallet] Loading MWA library from", MWA_LIB_URL);
