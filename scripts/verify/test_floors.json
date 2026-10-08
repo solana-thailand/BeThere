@@ -67,7 +67,7 @@
     "scanner_single_detail_fetch tests/scanner_single_detail_fetch.rs": 2,
     "serde_contract tests/serde_contract.rs": 55,
     "ssot_mirror_audit tests/ssot_mirror_audit.rs": 9,
-    "staff_shell_split tests/staff_shell_split.rs": 4,
+    "staff_shell_split tests/staff_shell_split.rs": 5,
     "sw_storage_passthrough tests/sw_storage_passthrough.rs": 2,
     "ticket_display_code tests/ticket_display_code.rs": 5,
     "ticket_resources tests/ticket_resources.rs": 2,

@@ -12,11 +12,14 @@
 //! from the attendee wasm. The edge serves the staff shell for these paths via
 //! the `_redirects` 200 rewrites; keep that file in step with [`STAFF_PATHS`].
 //!
-//! The landing (`/`, [`HomeRoute`]) is the mirror case: the edge always serves
-//! it from the attendee shell, so the staff build hands `/` back with a full
-//! page load and the linker drops the landing from the staff wasm, which sits
-//! near its size ceiling (`scripts/verify/frontend_size_budget.sh`). The devnet
-//! sandbox (`/sandbox`, [`SandboxRoute`]) is handed back the same way.
+//! The attendee pages are the mirror case: the edge always serves them from
+//! the attendee shell, so the staff shell only reaches one by a client-side
+//! navigation (a "Home" link, a ticket link). The staff build hands every
+//! attendee route except `/login` back with a full page load, and the linker
+//! drops those pages from the staff wasm, which sits near its size ceiling
+//! (`scripts/verify/frontend_size_budget.sh`). `/login` stays real because
+//! `ProtectedRoute` sends a signed-out visitor there inside the staff shell.
+//! The devnet sandbox (`/sandbox`, [`SandboxRoute`]) is one of them.
 
 /// Path patterns served by the staff shell, in `_redirects` placeholder syntax.
 /// `tests/staff_shell_split.rs` pins `_redirects` to this list.
@@ -30,8 +33,21 @@ pub const STAFF_PATHS: [&str; 5] = [
 
 #[cfg(feature = "staff")]
 pub use staff::{
-    AttendeeShellHandoff as HomeRoute, AttendeeShellHandoff as SandboxRoute, ProtectedAdmin,
-    ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack, ProtectedScanner,
+    ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack,
+    ProtectedScanner,
+};
+
+#[cfg(feature = "staff")]
+pub use staff::{
+    AttendeeShellHandoff as Adventure, AttendeeShellHandoff as Claim,
+    AttendeeShellHandoff as DataPrivacy, AttendeeShellHandoff as Deposit,
+    AttendeeShellHandoff as DevDashboard, AttendeeShellHandoff as DevProfile,
+    AttendeeShellHandoff as Discover, AttendeeShellHandoff as EventRecap,
+    AttendeeShellHandoff as Faq, AttendeeShellHandoff as Feedback,
+    AttendeeShellHandoff as HomeRoute, AttendeeShellHandoff as NfcCheckin,
+    AttendeeShellHandoff as PastEvents, AttendeeShellHandoff as PostEventRegister,
+    AttendeeShellHandoff as Privacy, AttendeeShellHandoff as PublicEvent,
+    AttendeeShellHandoff as SandboxRoute, AttendeeShellHandoff as Ticket,
 };
 
 #[cfg(not(feature = "staff"))]
@@ -42,7 +58,12 @@ pub use attendee::{
 };
 
 #[cfg(not(feature = "staff"))]
-pub use crate::pages::landing::Landing as HomeRoute;
+pub use crate::pages::{
+    Discover, EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister,
+    adventure::page::Adventure, claim::Claim, data_privacy::DataPrivacy, deposit::Deposit,
+    dev_dashboard::DevDashboard, dev_profile::DevProfile, faq::Faq, landing::Landing as HomeRoute,
+    privacy::Privacy, public_event::PublicEvent, ticket::page::Ticket,
+};
 
 #[cfg(not(feature = "staff"))]
 pub use crate::pages::sandbox::Sandbox as SandboxRoute;
@@ -58,8 +79,9 @@ mod staff {
     };
     use leptos::prelude::*;
 
-    /// The landing reached inside the staff shell (a "Home" link). A full page
-    /// load of `/` gets the attendee shell from the edge.
+    /// An attendee page reached inside the staff shell (a "Home" link, a ticket
+    /// link). A full page load of the same URL gets the attendee shell from the
+    /// edge.
     #[component]
     pub fn AttendeeShellHandoff() -> impl IntoView {
         super::handoff::shell_handoff(
