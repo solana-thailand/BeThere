@@ -139,10 +139,16 @@ pub fn raster_kind_from_path(path: &str) -> Option<RasterKind> {
     }
 }
 
+/// Longest id [`is_safe_id`] accepts. Event ids are the slug of the name and
+/// the name has no length cap, so a long title gives a long id (171 bytes
+/// for a real-looking one, `.issues/183` local check). The bound is R2's
+/// 1024-byte key limit less the `og/` / `posters/` prefix and `.png` suffix.
+pub const MAX_SAFE_ID_LEN: usize = 1000;
+
 /// An id that is safe inside an R2 key and a URL path.
 pub fn is_safe_id(id: &str) -> bool {
     !id.is_empty()
-        && id.len() <= 128
+        && id.len() <= MAX_SAFE_ID_LEN
         && id
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')

@@ -385,3 +385,26 @@ fn cards_are_cached_for_an_hour() {
     );
     assert_eq!(og_card_key("ev-1"), "og/ev-1.png");
 }
+
+/// Event ids are the slug of the name, and the name has no length cap. A
+/// 128-byte limit once dropped a long-titled event to the stock head and
+/// refused its card upload with a 400 (`.issues/183`, local check 2026-10-08).
+#[test]
+fn ids_from_long_titles_are_usable() {
+    use event_checkin_domain::slug::Slug;
+    use event_checkin_worker::og_meta::{MAX_SAFE_ID_LEN, is_safe_id};
+    use event_checkin_worker::storage::og_card_key;
+    let name = "The Extraordinarily Long Annual Solana Builders and Validators Community \
+                Gathering Featuring Deep Dives Into Token Extensions, Compressed NFTs, and \
+                Firedancer Performance Tuning";
+    let id = Slug::from_text(name).or_prefixed("event");
+    assert!(id.len() > 128, "fixture must be longer than the old cap");
+    assert!(is_safe_id(&id), "{id}");
+    assert!(og_card_key(&id).len() <= 1024, "R2 key limit");
+    assert!(og_card_key(&"a".repeat(MAX_SAFE_ID_LEN)).len() <= 1024);
+    assert!(is_safe_id(&"a".repeat(MAX_SAFE_ID_LEN)));
+    assert!(!is_safe_id(&"a".repeat(MAX_SAFE_ID_LEN + 1)));
+    for bad in ["", "a/b", "../x", "a.png", "a b", "ก"] {
+        assert!(!is_safe_id(bad), "{bad:?}");
+    }
+}

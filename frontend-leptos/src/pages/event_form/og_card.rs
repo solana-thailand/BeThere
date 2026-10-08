@@ -59,10 +59,19 @@ mod draw {
         // Load the faces for the glyphs this card uses: Google Fonts serves
         // Anuphan per script, so the Thai subset loads only if asked for.
         let all_text = format!("BeThere {} {}", event.name, event.location);
+        let loads = js_sys::Array::new();
         for font in [LOGO_FONT, TITLE_FONT, LINE_FONT] {
-            // A face that will not load still draws in a fallback font.
-            let _ = JsFuture::from(document.fonts().load_with_text(font, &all_text)).await;
+            loads.push(&document.fonts().load_with_text(font, &all_text));
         }
+        // A face that will not load still draws in a fallback font, and one
+        // that never settles must not stall the card: `fonts.load` stayed
+        // pending for 30 s+ in Chrome after a navigation cut a font fetch
+        // short, and the card was then never uploaded (`.issues/183`).
+        let _ = JsFuture::from(js_sys::Promise::race(&js_sys::Array::of2(
+            &js_sys::Promise::all_settled(&loads),
+            &delay(FONT_WAIT_MS),
+        )))
+        .await;
 
         ctx.set_fill_style_str(PAPER);
         ctx.fill_rect(0.0, 0.0, f64::from(OG_WIDTH), f64::from(OG_HEIGHT));
@@ -131,6 +140,18 @@ mod draw {
         let _ = ctx.draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
             &img, sx, sy, sw, sh, ART.x, ART.y, ART.w, ART.h,
         );
+    }
+
+    /// Longest wait for the card's fonts before drawing with what is loaded.
+    const FONT_WAIT_MS: i32 = 3_000;
+
+    /// A promise that resolves after `ms` milliseconds.
+    fn delay(ms: i32) -> js_sys::Promise {
+        js_sys::Promise::new(&mut |resolve, _reject| {
+            if let Some(window) = web_sys::window() {
+                let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms);
+            }
+        })
     }
 
     async fn load_image(src: &str) -> Result<HtmlImageElement, JsValue> {

@@ -160,3 +160,26 @@ fn the_layout_stays_inside_the_card() {
     );
     assert!(BAR.y + BAR.h <= h);
 }
+
+/// The canvas draw is wasm-only, so this is a source guard: the font wait must
+/// stay bounded. An unbounded `fonts.load` stayed pending for 30 s+ in Chrome
+/// after a navigation cut a font fetch short, and the card was never uploaded
+/// (`.issues/183`, local check 2026-10-08).
+#[test]
+fn card_font_wait_is_bounded() {
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/pages/event_form/og_card.rs");
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    for needle in [
+        "js_sys::Promise::race(",
+        "&delay(FONT_WAIT_MS)",
+        "Promise::all_settled(&loads)",
+    ] {
+        assert!(src.contains(needle), "og_card.rs lost `{needle}`");
+    }
+    assert!(
+        !src.contains("JsFuture::from(document.fonts().load_with_text"),
+        "a bare fonts.load await can stall the card forever"
+    );
+}
