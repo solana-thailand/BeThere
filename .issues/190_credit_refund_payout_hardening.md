@@ -210,6 +210,19 @@ by-product of defects 1–2.
 
 ## Not verified
 
-- No browser check of the request card or the payout row yet (see the
-  session report), no staging run, and `pii_log_probe.sh` does not drive these
-  endpoints (its request list predates them).
+- Verified locally (2026-10-08, `wrangler dev --local`, fresh state, no
+  credentials, migrations 0001–0059 applied, headless Chrome): the attendee
+  `POST /api/deposit/hold` wrote the `deposit` snapshot
+  (`e2e-event:e2e-att-01`); `GET credit-refund-request` returned only the
+  masked preview; the landing wallet card read "We'll send it to Kasikornbank
+  (KBANK) •••• 7890 · Somchai E. — the account from your deposit on 30 Aug
+  2026" (and the Thai text), with no account digits in the page HTML; one tap
+  queued the request and the queue showed the full account with "From
+  deposit on 30 Aug 2026"; "Use a different account" + a PromptPay ID stored
+  `source='attendee'`, `replaced_deposit_account=1`, and the queue showed the
+  red "Changed from the deposit account" warning. No account digits in the
+  worker log.
+- Not verified: the admin hold path at runtime (source guard only), the
+  backfill on remote D1 (window function, `UNION` cap), any staging run, and
+  `pii_log_probe.sh` does not drive these endpoints (its request list
+  predates them).
