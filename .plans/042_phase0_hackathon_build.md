@@ -107,6 +107,7 @@ then the landing, then the share tags. Each item ships on its own.
   (needs the Worker to rewrite the head of `/e/*`), PWA manifest icons
   (still the SVG).
   **0.6 on prod (2026-10-06, `event-checkin-42`):** the prod head carries `og:image`/`twitter:image` = `/og-image.png` (200 `image/png`) and the PNG favicons. Left: paste a link into X, Facebook's Sharing Debugger and LINE; each needs a signed-in account, so a person does it.
+  **Crawler probe (2026-10-08, `event-checkin-8a`):** prod `/` fetched with the facebookexternalhit, Twitterbot and LINE (`line-poker`) user agents returns the same head: absolute `og:image` = `twitter:image` = `/og-image.png`, `og:image:type` png, 1200×630, `og:description`, `og:url`, `twitter:card` `summary_large_image`. The PNG answers 200 `image/png`, 218,761 bytes, really 1200×630 (`file`). Every documented requirement is met; only the in-app render remains, and it needs a signed-in person.
 - [x] **Phase 1.0 (Thai-safe slugs), early,** on `develop`: the four builders
   are one `event_checkin_domain::slug::Slug`. ASCII names keep the slug they
   had; a name that keeps under 3 ASCII characters after dropping non-ASCII
