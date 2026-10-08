@@ -197,6 +197,12 @@ Owner decisions raised by phase 3:
   **Reopen trigger (2026-10-01, `event-checkin-45`):** the legal review returns section
   numbers; then change EN and TH together.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's legal review of the section numbers.
+  - [x] Citations checked against the Act (2026-10-08, `event-checkin-c0`):
+    `docs/pdpa_citation_check.md`, for the reviewer. Erasure is s.33 and
+    the contract basis is s.24(3), as suspected. The `/privacy` §5 "s.37
+    technical-impossibility exemption" has no counterpart in the Act, so
+    that line needs a decision on the basis, not just a new number. No
+    catalog text was changed; the item stays open on the legal review.
 - [x] **Kept (2026-09-29):** it renders only in `usdc_payment.rs`, the escrow
   path where an unclaimed deposit is really lost.
   Deposit page EN copy "Don't lose your deposit — claim it back" (USDC
