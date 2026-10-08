@@ -84,7 +84,12 @@ pub(crate) async fn try_insert_walkin(
         .and_then(|m| m.changes)
         .unwrap_or(0);
 
-    Ok(changes > 0)
+    let inserted = changes > 0;
+    if inserted {
+        // Booking code (.issues/178), assigned once the row exists.
+        super::assign_display_code_best_effort(db, event_id, id).await;
+    }
+    Ok(inserted)
 }
 
 /// Count walk-in attendees for an event from D1.

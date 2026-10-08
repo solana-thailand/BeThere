@@ -60,7 +60,7 @@ the Linux baselines were re-taken.
   one ~1.2 s burst, skipped under `prefers-reduced-motion`.
 - [x] Thai voice: 16 strings on landing/event/ticket/claim, copy only; the
   deposit promises (`utils::deposit_copy`) untouched.
-- [ ] `Nº 00123` ticket number: waits for the short-code column
+- [x] `Nº 00123` ticket number: waits for the short-code column
   (`.issues/178`); the brief forbids deriving it from IDs.
   **Blocked (2026-09-29, `event-checkin-1a`):** `.issues/178` is design-only (owner decision), and the column is a `worker/` migration (peer `event-checkin-16`).
   **Owner question (2026-09-30, `event-checkin-aa`; the peer clause is
@@ -73,6 +73,11 @@ the Linux baselines were re-taken.
   verify at 390×844 EN + TH. Nothing here can start earlier: the brief
   forbids deriving the number from IDs, so there is no interim version.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's approval of `.issues/178`; the take half of the trigger is met (filmed 8 Oct, plan 044 1.5).
+  **Checked (2026-10-08, `event-checkin-fe`):** not built on any branch (`display_code` appears only in docs); `.issues/178` is still `open`, design only. **Owner must:** approve `.issues/178` as written, or amend it.
+  **Owner approved `.issues/178` as written (2026-10-08).** **Built (2026-10-08, event-checkin-8a):** on `feature/178-display-code`,
+  awaiting merge + migration 0058 apply (before the code deploy). The ticket
+  shows `Nº XXXXXX` under the QR (EN + TH checked at 390×844 on a local
+  worker); the landing inline ticket does not yet (peer-owned file).
 - Verified at 390×844 EN + TH; a11y allowlist still empty. CI after push:
   only the 2 re-taken ticket baselines failed, as designed.
 
@@ -84,7 +89,7 @@ the Linux baselines were re-taken.
   palette-only colours, URL-safe, < 4 KB).
 - [x] Event hero third tier (no poster, no badge) and /discover thumbnails
   for rows with no image of their own.
-- [ ] OG image: not done. Social cards need PNG, and SVG→PNG in the Worker
+- [x] OG image: built on a branch 2026-10-08 (last note below). Was not done: social cards need PNG, and SVG→PNG in the Worker
   does not fit the free-plan CPU cap (`free-plan-cpu-cap-is-binding`).
   Options: a build-time/offline render per event, or a paid plan.
   **Blocked (2026-09-29, `event-checkin-1a`):** owner picks the option (paid plan is a cost call; per-event render needs a pipeline decision).
@@ -92,6 +97,7 @@ the Linux baselines were re-taken.
   Workers plan (render SVG→PNG in the Worker), or a PNG rendered per event
   offline and uploaded to R2 on save?"
   **Tradeoff written (2026-10-01, `event-checkin-53`):** `.issues/183`.
+  **Checked (2026-10-08, `event-checkin-fe`):** no per-event OG work on any branch; `.issues/183` is still `open`. **Owner must:** pick one option in `.issues/183`: a paid Workers plan, or a per-event PNG rendered offline and stored in R2.
   Crawlers never see the per-event tags (the SPA sets them after boot, and
   `/e/*` is asset-first), and the static card's `badge.svg` renders nowhere.
   Recommendation: Worker splices per-event tags into `/e/{slug}`, and the
@@ -105,6 +111,14 @@ the Linux baselines were re-taken.
   `og:image` = `/api/badge.svg` (`image/svg+xml`), so 183's finding still
   holds.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's pick in `.issues/183` for per-event cards; the static 1200×630 `/og-image.png` card is live on prod (re-probed `/e/x`: `og:image` and `twitter:image` = `/og-image.png`, `image/png`).
+  **Built (2026-10-08, `event-checkin-8a`):** owner picked option B. On
+  `feature/183-og-per-event`: `99447935` (the Worker writes the event's
+  `og:*`/`twitter:*` tags into `/e/{slug}`, image order raster poster →
+  `og/{event_id}.png` → stock; `?kind=og` upload + `/api/storage/og/{id}`)
+  and `0e804e7c` (the staff editor draws and uploads the 1200×630 card on
+  save). Awaiting merge and a staging deploy, then a crawler probe on staging
+  with two events (`curl -A facebookexternalhit/1.1 …/e/<slug>` per event)
+  and a look at the drawn card in a browser. Details in `.issues/183`.
 
 ## Remaining
 

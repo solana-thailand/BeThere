@@ -227,11 +227,15 @@ pub async fn admin_hold_deposit_handler(
     let now = Utc::now().to_rfc3339();
 
     let settled = match d1 {
-        Some(db) => {
-            crate::db::thb_deposits::try_settle_hold_credit(db, &event.id, &attendee_id, &now)
-                .await
-                .map_err(AppError::Internal)?
-        }
+        Some(db) => crate::db::thb_deposits::try_settle_hold_credit(
+            db,
+            &event.id,
+            &attendee_id,
+            &now,
+            &attendee_email,
+        )
+        .await
+        .map_err(AppError::Internal)?,
         None => true, // no D1 (tests/local) — non-atomic fallback
     };
     if !settled {

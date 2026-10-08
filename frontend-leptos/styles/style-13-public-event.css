@@ -586,7 +586,7 @@
     gap: 0.5rem;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
     .landing-desktop-only-btn {
         display: none !important;
     }
@@ -676,7 +676,7 @@
 }
 
 /* Wide screens show the attendance row beside the button; the caption would repeat it. */
-@media (min-width: 641px) {
+@media (min-width: 768px) {
     .pe-hero-cta-caption {
         display: none;
     }

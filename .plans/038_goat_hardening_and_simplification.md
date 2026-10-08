@@ -24,12 +24,14 @@ Wave 1 (`.plans/037`).
 - [x] **D3:** `.issues/168`. sccache works when the target-dir path is the
   same (135/135 hits) and cannot hit across paths. The comment is fixed. The
   global `incremental=false` trade-off is the owner's call.
-- [ ] **D4:** cargo-heal in the fix loop. Use it as needed; it is not a
+- [x] **D4:** cargo-heal in the fix loop. Use it as needed; it is not a
   deliverable. The memory `cargo-heal-not-adopted` records a 2026-09-13
   evaluation.
   **Not closable:** a standing practice, not a deliverable (`cargo-heal-not-adopted`); nothing blocks it.
   **No reopen trigger (2026-10-01, `event-checkin-45`):** it has no gate to
   lift; it stays open as a practice and closes with the plan.
+  **Closed with the plan (2026-10-08, `event-checkin-fe`):** P1-2 was the
+  last open deliverable, so D4 closes as agreed; the practice carries on.
 - [x] **D5:** loop discipline, followed throughout.
 
 ## P0
@@ -83,7 +85,7 @@ Wave 1 (`.plans/037`).
   - First load −7,055 B br4.
   - Before/after evidence is these numbers plus local screenshots (not
     committed: public repo, and Mac-only renders).
-- [~] **P1-2:** attendee flow audit (`.issues/173`). The happy path is 4 taps
+- [x] **P1-2:** attendee flow audit (`.issues/173`). The happy path is 4 taps
   plus form fields, with no dead ends.
   - Fixed: C1 (the claim countdown read "28901h"; it now reuses the event
     page's day-aware formatter) and C2 ("Recommended" on the only payment
@@ -91,6 +93,8 @@ Wave 1 (`.plans/037`).
   - `/claim` was added to the visual + a11y page list (45 e2e tests).
   - C3–C5, C7 (LM-2 ticket banners) and C8 (LM-3 claim trim): owner
     approved 2026-09-29, applied (see `.issues/173`). C6 folds into P2-b.
+  - Closed (2026-10-08, `event-checkin-fe`): all of C1–C8 are applied, C6 by
+    P2-b. `.issues/173` is deployed; the cuts (`c93080eb`) are on `main`.
 
 ## P2: add
 

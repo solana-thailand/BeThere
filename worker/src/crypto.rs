@@ -30,23 +30,36 @@ fn get_subtle_crypto() -> Result<Object, String> {
         .ok_or_else(|| "crypto.subtle is not an object".to_string())
 }
 
+/// Fill `buf` from the runtime CSPRNG (`crypto.getRandomValues`).
+fn fill_random(buf: &mut [u8]) -> Result<(), String> {
+    let global = js_sys::global();
+    let crypto_val = Reflect::get(&global, &JsValue::from_str("crypto"))
+        .map_err(|e| format!("failed to get global crypto: {e:?}"))?;
+    let get_random_values = Reflect::get(&crypto_val, &JsValue::from_str("getRandomValues"))
+        .map_err(|e| format!("failed to get crypto.getRandomValues: {e:?}"))?;
+    let view = Uint8Array::new_with_length(buf.len() as u32);
+    js_sys::Function::from(get_random_values)
+        .call1(&crypto_val, &view)
+        .map_err(|e| format!("crypto.getRandomValues failed: {e:?}"))?;
+    view.copy_to(buf);
+    Ok(())
+}
+
+/// `N` bytes from the runtime CSPRNG.
+pub fn random_bytes<const N: usize>() -> Result<[u8; N], String> {
+    let mut buf = [0u8; N];
+    fill_random(&mut buf)?;
+    Ok(buf)
+}
+
 /// `bytes` bytes from the runtime CSPRNG (`crypto.getRandomValues`), hex-encoded.
 ///
 /// For anything an attacker must not predict (challenge nonces). Not a UUIDv7:
 /// its timestamp and in-millisecond counter are guessable, leaving only part
 /// of it random.
 pub fn random_hex(bytes: usize) -> Result<String, String> {
-    let global = js_sys::global();
-    let crypto_val = Reflect::get(&global, &JsValue::from_str("crypto"))
-        .map_err(|e| format!("failed to get global crypto: {e:?}"))?;
-    let get_random_values = Reflect::get(&crypto_val, &JsValue::from_str("getRandomValues"))
-        .map_err(|e| format!("failed to get crypto.getRandomValues: {e:?}"))?;
-    let view = Uint8Array::new_with_length(bytes as u32);
-    js_sys::Function::from(get_random_values)
-        .call1(&crypto_val, &view)
-        .map_err(|e| format!("crypto.getRandomValues failed: {e:?}"))?;
     let mut buf = vec![0u8; bytes];
-    view.copy_to(&mut buf);
+    fill_random(&mut buf)?;
     Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
 }
 

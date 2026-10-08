@@ -15,8 +15,15 @@ classifier as `ThbDeposit::source()` for rows whose `deposit_source` is NULL
 Events that ended before the promise (PROMISE_FROM) are reported as backlog
 and do not fail the run; an overdue refund on a later event exits 1.
 
-Read-only: one SELECT through `wrangler d1 execute`. Prints attendee ids
-(internal, Issue 070) and amounts, never names, emails or bank details.
+Held-credit refund requests (`.issues/190`) are the second list: an attendee
+who asked for their rolling credit back (`contacts.credit_refund_requested`)
+is owed it within the same 7 days, counted from the request. A request open
+longer exits 1 too; one opened before the promise is backlog. Contacts are
+shown as a short BLAKE2b reference of the email, never the address.
+
+Read-only: two SELECTs through `wrangler d1 execute`. Prints attendee ids
+(internal, Issue 070), contact references and amounts, never names, emails or
+bank details.
 
 Usage:
     python3 scripts/verify/refund_window_report.py              # prod
@@ -28,6 +35,7 @@ Exit: 0 nothing overdue since the promise, 1 overdue (or self-test failed), 2 er
 """
 
 import argparse
+import hashlib
 import sqlite3
 import sys
 import time
@@ -62,6 +70,67 @@ WHERE d.verified = 1
       END) = 'cash'
 ORDER BY e.event_end_ms, d.event_id, d.attendee_id
 """
+
+
+# Open held-credit refund requests. `?1` = now in epoch ms. `credit_thb` is the
+# requesting email's own ledger sum — the admin queue shows the person's total
+# (linked emails), which can be larger; the age is what this report is about.
+CREDIT_QUERY = """
+SELECT c.email AS email,
+       c.credit_refund_requested_at AS requested_at,
+       CAST(ROUND(((?1 / 86400000.0 + 2440587.5) - julianday(c.credit_refund_requested_at))
+                  * 86400000.0) AS INTEGER) AS ms_open,
+       COALESCE((SELECT SUM(l.delta) FROM credit_ledger l
+                 WHERE l.currency = 'thb' AND l.email = LOWER(c.email)), 0) AS credit_thb
+FROM contacts c
+WHERE c.credit_refund_requested = 1
+ORDER BY c.credit_refund_requested_at
+"""
+
+
+def contact_ref(email: str) -> str:
+    """A short, stable reference for a contact — never the address itself."""
+    return hashlib.blake2b(email.lower().encode(), digest_size=5).hexdigest()
+
+
+def classify_credit(row: dict, now_ms: int) -> str:
+    opened, open_ms = row["requested_at"], row["ms_open"]
+    match (opened, open_ms):
+        case (None, _) | ("", _) | (_, None):
+            return "unknown_start"
+        case (_, ms) if ms <= WINDOW_DAYS * DAY_MS:
+            return "within_window"
+        case _ if now_ms - open_ms < PROMISE_FROM_MS:
+            return "backlog"
+        case _:
+            return "overdue"
+
+
+def summarize_credit(rows: list[dict], now_ms: int) -> dict:
+    states = [classify_credit(r, now_ms) for r in rows]
+    return {
+        "open": len(rows),
+        "thb": sum(r["credit_thb"] or 0 for r in rows),
+        "overdue": states.count("overdue"),
+        "backlog": states.count("backlog"),
+    }
+
+
+def render_credit(s: dict, rows: list[dict], now_ms: int, detail: bool) -> str:
+    lines = [
+        f"Held-credit refund requests open (window {WINDOW_DAYS} days after the request, D3)",
+        f"  open: {s['open']} requests, ฿{s['thb']:,} on the requesting emails",
+        f"  {'❌' if s['overdue'] else '✅'} overdue since the promise: {s['overdue']}",
+        f"  backlog from before the promise (not failing): {s['backlog']}",
+    ]
+    if detail:
+        lines += [
+            f"    contact {contact_ref(r['email'])} ฿{r['credit_thb']} "
+            f"{'' if r['ms_open'] is None else f'{r['ms_open'] / DAY_MS:.1f}d'} "
+            f"{classify_credit(r, now_ms)}"
+            for r in rows
+        ]
+    return "\n".join(lines)
 
 
 def classify(row: dict) -> str:
@@ -166,16 +235,55 @@ def self_test() -> int:
     if (s["overdue"], s["backlog"], s["thb"]) != (2, 1, 3200):
         failures.append(f"totals: got overdue={s['overdue']} backlog={s['backlog']} thb={s['thb']}, want 2, 1, 3200")
     print(render(s, rows, True, "self-test fixture"))
+
+    # Held-credit refund requests (`.issues/190`). (email, flagged, opened ms ago
+    # from `now` — None for a NULL timestamp, held THB)
+    def stamp(ms_ago):
+        return None if ms_ago is None else datetime.fromtimestamp((now - ms_ago) / 1000, timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+    requests = [
+        ("late@x.example", 1, 10 * DAY_MS, 500),    # OVERDUE
+        ("fresh@x.example", 1, 3 * DAY_MS, 300),    # within the window
+        ("paid@x.example", 0, 20 * DAY_MS, 0),      # cleared: not open
+        ("old@x.example", 1, 40 * DAY_MS, 200),     # opened before the promise: backlog
+    ]
+    for email, flagged, ago, held in requests:
+        db.execute(
+            "INSERT INTO contacts (email, name, credit_refund_requested, credit_refund_requested_at) VALUES (?,?,?,?)",
+            (email, "P", flagged, stamp(ago)),
+        )
+        db.execute(
+            "INSERT INTO credit_ledger (email, organization_id, currency, delta, reason, deposit_id) VALUES (?,'','thb',?,'hold',?)",
+            (email, held, f"e:{email}"),
+        )
+    credit_rows = [dict(r) for r in db.execute(CREDIT_QUERY, (now,))]
+    cs = summarize_credit(credit_rows, now)
+    got_credit = {r["email"]: classify_credit(r, now) for r in credit_rows}
+    want_credit = {"late@x.example": "overdue", "fresh@x.example": "within_window", "old@x.example": "backlog"}
+    if got_credit != want_credit:
+        failures.append(f"credit request classes: got {got_credit}, want {want_credit}")
+    if (cs["open"], cs["overdue"], cs["backlog"], cs["thb"]) != (3, 1, 1, 1000):
+        failures.append(f"credit totals: got {cs}, want open=3 overdue=1 backlog=1 thb=1000")
+    # The gate has to be able to go red: the same fixture without the overdue
+    # request must read clean, and with it must not.
+    clean = summarize_credit([r for r in credit_rows if r["email"] != "late@x.example"], now)
+    if clean["overdue"] != 0 or cs["overdue"] == 0:
+        failures.append("credit overdue check cannot tell a late request from none")
+    rendered = render_credit(cs, credit_rows, now, True)
+    if "@" in rendered:
+        failures.append("the credit report printed an email address")
+    print(rendered)
+
     for f in failures:
         print(f"❌ {f}")
-    print(f"\n{'❌' if failures else '✅'} self-test: {2 - len(failures)}/2 checks")
+    print(f"\n{'❌' if failures else '✅'} self-test: {6 - len(failures)}/6 checks")
     return 1 if failures else 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--staging", action="store_true", help="read the staging D1 instead of prod")
-    parser.add_argument("--detail", action="store_true", help="one line per owed deposit")
+    parser.add_argument("--detail", action="store_true", help="one line per owed deposit and open credit request")
     parser.add_argument("--self-test", action="store_true", help="prove the owed set and the overdue exit on fixtures")
     args = parser.parse_args()
     if args.self_test:
@@ -183,12 +291,15 @@ def main() -> int:
     now_ms = int(time.time() * 1000)
     try:
         rows = d1_remote.select(QUERY.replace("?1", str(now_ms)), args.staging)
+        credit_rows = d1_remote.select(CREDIT_QUERY.replace("?1", str(now_ms)), args.staging)
     except (RuntimeError, ValueError, KeyError, IndexError) as e:
         print(f"❌ {e}", file=sys.stderr)
         return 2
     s = summarize(rows)
     print(render(s, rows, args.detail, "staging" if args.staging else "production"))
-    return 1 if s["overdue"] else 0
+    cs = summarize_credit(credit_rows, now_ms)
+    print(render_credit(cs, credit_rows, now_ms, args.detail))
+    return 1 if s["overdue"] or cs["overdue"] else 0
 
 
 if __name__ == "__main__":

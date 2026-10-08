@@ -287,6 +287,31 @@
         opacity: 1;
     }
 }
+/* Booking code under the QR (.issues/178): `Nº 7KQ2XM`, read aloud at the door. */
+.ticket-code {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    margin: 0 0 0.75rem;
+    text-align: center;
+}
+.ticket-code-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+.ticket-code-value {
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--text-primary);
+}
+.ticket-code-hint {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    max-width: 260px;
+}
 .ticket-qr-actions {
     display: flex;
     align-items: center;
@@ -665,7 +690,7 @@ a.ticket-series-card:hover {
     background: transparent;
     border-style: dashed;
 }
-@media (max-width: 380px) {
+@media (max-width: 359px) {
     .ticket-series-neighbors {
         grid-template-columns: 1fr;
     }

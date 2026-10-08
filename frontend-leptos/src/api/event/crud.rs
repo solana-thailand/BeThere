@@ -137,8 +137,34 @@ pub async fn upload_poster(
     blob: &web_sys::Blob,
     content_type: &str,
 ) -> Result<PosterMutationData, ApiError> {
-    let path = format!("/events/{event_id}/poster");
-    let response = api_post_blob(&path, blob, content_type).await?;
+    post_image(&format!("/events/{event_id}/poster"), blob, content_type).await
+}
+
+/// What the share-card upload returns.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct OgCardData {
+    #[serde(default)]
+    pub og_image_url: String,
+}
+
+/// POST /api/events/{id}/poster?kind=og — store the 1200×630 share card the
+/// editor drew (`.issues/183`). Leaves `poster_url` and the event alone.
+pub async fn upload_og_card(event_id: &str, png: &web_sys::Blob) -> Result<OgCardData, ApiError> {
+    post_image(
+        &format!("/events/{event_id}/poster?kind=og"),
+        png,
+        "image/png",
+    )
+    .await
+}
+
+/// POST raw image bytes and unwrap the `ApiResponse` envelope.
+async fn post_image<T: serde::de::DeserializeOwned + Default>(
+    path: &str,
+    blob: &web_sys::Blob,
+    content_type: &str,
+) -> Result<T, ApiError> {
+    let response = api_post_blob(path, blob, content_type).await?;
 
     if !response.ok() {
         let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
@@ -155,11 +181,10 @@ pub async fn upload_poster(
         });
     }
 
-    let wrapper: ApiResponse<PosterMutationData> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse poster response: {e}"),
-            status: response.status(),
-        })?;
+    let wrapper: ApiResponse<T> = response_json(&response).await.map_err(|e| ApiError {
+        message: format!("Failed to parse upload response: {e}"),
+        status: response.status(),
+    })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper

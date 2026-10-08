@@ -8,6 +8,7 @@ pub mod config;
 pub mod image_kind;
 pub mod models;
 pub mod money;
+pub mod og_card;
 pub mod onchain;
 pub mod pr_pack;
 pub mod slip_ocr;

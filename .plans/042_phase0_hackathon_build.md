@@ -95,6 +95,7 @@ then the landing, then the share tags. Each item ships on its own.
   **0.4 blocked (2026-10-06, `event-checkin-42`):** needs the owner's sandbox organizer + faucet keys and a Turnstile site key, and ships only via a staging push.
   **0.5 blocked (2026-10-06, `event-checkin-42`):** built on `feature/042-landing` (peer `event-checkin-0d`, `.plans/043`); L8–L10 wait for owner content, L12 for the CI baselines, prod for an owner go after the take.
   **Still waiting (2026-10-08, `event-checkin-19`):** 0.4 on the owner's sandbox organizer + faucet keys and a Turnstile site key.
+  **Checked (2026-10-08, `event-checkin-fe`):** no sandbox work on any branch. The Turnstile key is optional (the plan allows rate limits only). **Owner must:** decide who holds the sandbox organizer and faucet keys and how much devnet USDC to fund them with. Also blocked by overlap: a `/sandbox` route edits `frontend-leptos/src/lib.rs` and `pages/mod.rs`, which `event-checkin-f0` has open for R4.0 in `/tmp/ec-f0-r4`, so it starts after R4.0 lands.
 - [~] **0.6** built on `develop`: `og:image` / `twitter:image` were the 400×400
   `/api/badge.svg`, which X, Facebook and LINE do not render; now
   `/og-image.png`, 1200×630, one bilingual card (crawlers do not run the SPA,
@@ -106,6 +107,7 @@ then the landing, then the share tags. Each item ships on its own.
   (needs the Worker to rewrite the head of `/e/*`), PWA manifest icons
   (still the SVG).
   **0.6 on prod (2026-10-06, `event-checkin-42`):** the prod head carries `og:image`/`twitter:image` = `/og-image.png` (200 `image/png`) and the PNG favicons. Left: paste a link into X, Facebook's Sharing Debugger and LINE; each needs a signed-in account, so a person does it.
+  **Crawler probe (2026-10-08, `event-checkin-8a`):** prod `/` fetched with the facebookexternalhit, Twitterbot and LINE (`line-poker`) user agents returns the same head: absolute `og:image` = `twitter:image` = `/og-image.png`, `og:image:type` png, 1200×630, `og:description`, `og:url`, `twitter:card` `summary_large_image`. The PNG answers 200 `image/png`, 218,761 bytes, really 1200×630 (`file`). Every documented requirement is met; only the in-app render remains, and it needs a signed-in person.
 - [x] **Phase 1.0 (Thai-safe slugs), early,** on `develop`: the four builders
   are one `event_checkin_domain::slug::Slug`. ASCII names keep the slug they
   had; a name that keeps under 3 ASCII characters after dropping non-ASCII

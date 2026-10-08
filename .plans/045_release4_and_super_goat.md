@@ -92,6 +92,21 @@ path. Sender (owner, 2026-10-08): **bethere.sol@gmail.com** via option 1.
 Setup: `docs/gmail_sender_setup.md` (owner steps 1–6, then the consent
 helper `scripts/gmail_refresh_token.py`). Waiting on: the owner running
 those steps; the build itself starts with Release 4 (not before 13 Oct).
+Branding check (2026-10-08): the consent screen requires a home page and
+privacy link, and Google rejected the prod origin as not registered to the
+account. Search Console ownership tag shipped to prod (pull 163, `main`
+`a911a575`, version `29e787a2`); owner: Verify in Search Console, wait 24 h,
+then "I have fixed the issues". Until then the app may stay in Testing
+(test user bethere.sol, 7-day refresh tokens): fine for staging, not for
+real sends.
+Setup done 2026-10-08: branding verified and published, app In production
+(data-access verification for `gmail.send` deliberately skipped: one
+consenting account, under the 100-user cap). Desktop client in Cloud project
+`serene-anagram-511006-j9` (`bethere-mail`); consent as bethere.sol; the
+refresh token exchanged for a 1 h access token with scope `gmail.send` only
+(no mail sent). Files `~/.bethere-gmail-client.json` and
+`~/.bethere-gmail-refresh-token` (600) wait for R4.12 to load them as
+staging secrets.
 
 ## Super GOAT (after Release 4, in the spec's order)
 

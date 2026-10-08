@@ -344,11 +344,22 @@ pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
 /// concurrent or prior hold/refund won), so the caller must NOT grant credit.
 /// This closes the check-then-write race where two concurrent `/hold` requests
 /// both pass the in-memory guard and double-increment credit.
+///
+/// **The only writer of `held_as_credit = 1`**, so it is also where the
+/// deposit's refund account is copied to the credit holder `holder_email`
+/// (`.issues/190`, [`credit_refund_accounts::snapshot_from_deposit`]) — the
+/// attendee already gave it with the deposit and is not asked again when they
+/// want the credit back. The copy runs only after THIS call won the flip, and
+/// it is best-effort: a deposit without a usable account, or a failed copy,
+/// never fails the hold (the attendee can still type an account on the card).
+///
+/// [`credit_refund_accounts::snapshot_from_deposit`]: super::credit_refund_accounts::snapshot_from_deposit
 pub async fn try_settle_hold_credit(
     db: &D1Database,
     event_id: &str,
     attendee_id: &str,
     held_at: &str,
+    holder_email: &str,
 ) -> Result<bool, String> {
     let stmt = db.prepare(
         "UPDATE thb_deposits SET held_as_credit = 1, held_as_credit_at = ?1 \
@@ -371,7 +382,33 @@ pub async fn try_settle_hold_credit(
         .flatten()
         .and_then(|m| m.changes)
         .unwrap_or(0);
-    Ok(changes > 0)
+    if changes == 0 {
+        return Ok(false);
+    }
+    // Never logs the account: the error names the statement, the fields are
+    // bound values D1 does not echo.
+    match super::credit_refund_accounts::snapshot_from_deposit(
+        db,
+        holder_email,
+        event_id,
+        attendee_id,
+    )
+    .await
+    {
+        Ok(copied) => tracing::info!(
+            event_id = %event_id,
+            attendee_id = %attendee_id,
+            copied,
+            "held deposit: refund account snapshot"
+        ),
+        Err(e) => tracing::warn!(
+            event_id = %event_id,
+            attendee_id = %attendee_id,
+            error = %e,
+            "held deposit: refund account snapshot failed (non-fatal; the attendee can enter one)"
+        ),
+    }
+    Ok(true)
 }
 
 /// Atomically claim the "refund" settlement for a verified THB deposit.

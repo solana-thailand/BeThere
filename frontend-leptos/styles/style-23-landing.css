@@ -160,7 +160,7 @@ mark.lp-hl {
     outline: 3px solid var(--lp-field);
     outline-offset: 3px;
 }
-@media (max-width: 900px) {
+@media (max-width: 767px) {
     .lp-nav-links {
         display: none;
     }
@@ -432,7 +432,7 @@ mark.lp-hl {
     }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 767px) {
     .lp-hero {
         padding: 40px 0;
     }
@@ -441,7 +441,7 @@ mark.lp-hl {
         gap: 28px;
     }
 }
-@media (max-width: 560px) {
+@media (max-width: 480px) {
     .lp-hero-h1 {
         font-size: 46px;
     }
@@ -556,12 +556,12 @@ a.lp-event:focus-visible {
         transform: none;
     }
 }
-@media (max-width: 860px) {
+@media (max-width: 767px) {
     .lp-event-list {
         grid-template-columns: 1fr 1fr;
     }
 }
-@media (max-width: 560px) {
+@media (max-width: 480px) {
     .lp-h2 {
         font-size: 30px;
     }
@@ -625,7 +625,9 @@ a.lp-event:focus-visible {
 }
 .lp-lanes {
     display: grid;
-    grid-template-columns: 200px repeat(4, 1fr);
+    /* The route column gives up width first: from 768px the four step
+       columns sit at their longest word and 200px would overflow. */
+    grid-template-columns: minmax(120px, 200px) repeat(4, 1fr);
     border: 2px solid var(--lp-ink);
     background: var(--lp-paper);
 }
@@ -663,6 +665,8 @@ a.lp-event:focus-visible {
 }
 .lp-lane-toggle {
     display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
     gap: 10px;
     align-items: flex-start;
     text-align: left;
@@ -811,7 +815,7 @@ a.lp-event:focus-visible {
         transition: none;
     }
 }
-@media (max-width: 860px) {
+@media (max-width: 767px) {
     .lp-lanes {
         display: block;
         border: 0;
@@ -1183,7 +1187,7 @@ a.lp-event:focus-visible {
     box-shadow: 6px 6px 0 var(--lp-field);
 }
 /* Wide screens with a mouse: the placement text shows on hover or focus. */
-@media (hover: hover) and (min-width: 901px) {
+@media (hover: hover) and (min-width: 768px) {
     .lp-spot p {
         max-height: 0;
         opacity: 0;
@@ -1205,12 +1209,12 @@ a.lp-event:focus-visible {
         transition: none;
     }
 }
-@media (max-width: 860px) {
+@media (max-width: 767px) {
     .lp-spots {
         grid-template-columns: 1fr 1fr;
     }
 }
-@media (max-width: 560px) {
+@media (max-width: 480px) {
     .lp-tiers {
         grid-template-columns: 1fr;
     }
@@ -1352,7 +1356,7 @@ a.lp-event:focus-visible {
     color: var(--lp-ink-2);
     font-size: 15px;
 }
-@media (max-width: 860px) {
+@media (max-width: 767px) {
     .lp-usdc {
         grid-template-columns: 1fr;
     }
@@ -1429,14 +1433,14 @@ a.lp-event:focus-visible {
 }
 /* The goal text stays beside the globe when the country panel makes the
    globe column tall. */
-@media (min-width: 901px) {
+@media (min-width: 768px) {
     .lp-goal-text {
         position: sticky;
         top: 96px;
         padding-top: 24px;
     }
 }
-@media (max-width: 900px) {
+@media (max-width: 767px) {
     .lp-goal-grid {
         grid-template-columns: 1fr;
     }
@@ -1570,7 +1574,7 @@ a.lp-event:focus-visible {
     gap: 48px;
     align-items: center;
 }
-@media (max-width: 900px) {
+@media (max-width: 767px) {
     .lp-story-grid {
         grid-template-columns: 1fr;
     }

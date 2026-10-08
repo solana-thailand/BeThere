@@ -46,6 +46,11 @@ Do all of them signed in as **bethere.sol@gmail.com**.
 7. Tell the agent the two files are ready. Don't paste their contents into
    chat.
 
+**Status 2026-10-08:** owner steps 1–6 done. Branding verified and
+published, app *In production*. Data-access verification (demo video, scope
+justification) is not needed: one consenting account, well under the
+100-user cap for unverified apps. Don't press "Fix the issue" for it.
+
 ## Agent steps (at R4.12 build time, with the owner's go per environment)
 
 - Worker secrets, staging first: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`,

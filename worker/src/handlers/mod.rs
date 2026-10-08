@@ -210,6 +210,8 @@ pub fn routes(state: AppState) -> Router<()> {
             "/storage/posters/{event_id}",
             get(crate::storage::serve_poster),
         )
+        // R2 share-card serving (public — og:image of /e/{slug}, .issues/183)
+        .route("/storage/og/{event_id}", get(crate::storage::serve_og_card))
         // Landing photos (public — only names on landing-photos.jsonl)
         .route(
             "/storage/landing-photos/{name}",
@@ -358,6 +360,12 @@ pub fn routes(state: AppState) -> Router<()> {
     // Protected routes — require staff auth
     let protected = Router::new()
         .route("/attendees", get(attendee::list_attendees))
+        // Scanner "Enter code" (.issues/178): staff-only, event-scoped, returns
+        // just the attendee id for the existing lookup + check-in flow.
+        .route(
+            "/attendees/by-code/{code}",
+            get(attendee::get_attendee_by_display_code),
+        )
         .route(
             "/attendee/{id}",
             get(attendee::get_attendee).delete(attendee::delete_attendee),
@@ -515,6 +523,10 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/storage/refunds/{event_id}/{attendee_id}",
             get(crate::storage::serve_refund),
+        )
+        .route(
+            "/storage/credit-payouts/{org}/{owner}/{request}",
+            get(crate::storage::serve_credit_payout),
         )
         // Held-as-credit list (admin) — sibling of refunded list, filters on
         // held_as_credit = true (Issue #061 Phase 2).

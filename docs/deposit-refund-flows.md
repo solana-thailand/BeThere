@@ -260,18 +260,58 @@ deposit.
 
 ### 4.2 Request return of held credit (attendee → organizer)
 
-`POST /api/deposit/request-credit-refund` → `request_credit_refund_handler`
-(`hold_refund_request.rs:75`, attendee-authed, JWT email only — no body).
+Held credit is paid back through its **own** flow, not the THB deposit refund
+tooling: `/refund/mark` and `/refund/batch-thb` refuse a held deposit by design
+(§4.4), so they cannot pay out credit. Hardened in `.issues/190` (owner option
+(a), 2026-10-08). Code: `thb/handlers/hold_refund_request.rs`,
+`thb/handlers/credit_payout.rs`, `db/credit_ledger.rs::try_refund`,
+`db/credit_refund_accounts.rs`, migration `0059_credit_refund_payout.sql`.
 
-- **Visibility-only flag**, *not* a payout (Issue #061 §D3). Sets
-  `credit_refund_requested` on the contact (cross-event, since credit is a
-  rolling balance across events), dual-written to D1 + Sheets. Idempotent — a
-  re-call just re-stamps the timestamp.
-- The organizer then pays out through the *existing* THB refund tooling
-  (`/refund/mark` or `/refund/batch-thb`) and clears the flag.
-- Reads/admin: `GET /api/deposit/credit-refund-request` (attendee's own flag),
-  `GET /api/deposit/credit-refund-requests` (admin queue),
-  `POST /api/deposit/clear-credit-refund-request` (admin clears after payout).
+1. **Request (attendee).** `POST /api/deposit/request-credit-refund` →
+   `request_credit_refund_handler` (attendee-authed; the email is the JWT's,
+   never the body). Body `{"account": …}`: a PromptPay ID
+   (`{"method":"promptpay","promptpay_id":"0812345678"}`, a 10-digit mobile
+   number starting with 0 or a 13-digit ID) or a bank account
+   (`{"method":"bank","bank_name","bank_account","account_name"}`, the same
+   fields and rule as the THB deposit refund account —
+   `domain::models::credit_payout`). One D1 batch sets
+   `contacts.credit_refund_requested` and upserts the account into
+   `credit_refund_accounts`; a 0-row flag `UPDATE` fails the request. The
+   Sheets mirror is best-effort. A re-call re-stamps the timestamp and replaces
+   the account. The ticket card is `pages/ticket/credit_refund_card.rs`.
+2. **Queue (organizer).** `GET /api/deposit/credit-refund-requests` — organizers
+   only, org-scoped: super-admin sees all; a global admin/organizer sees the
+   default org plus orgs they own; an org owner sees their orgs; a per-event
+   scanner gets 403. A row shows the payable balance (ledger, person-wide), any
+   credit still locked to an event, the account, and the request's age against
+   the 7-day promise (D3). Page: `pages/admin_deposit_credit_requests.rs`.
+3. **Payout (organizer, out-of-band).** The organizer transfers the money from
+   their own bank app to the account shown.
+4. **Record it.** `POST /api/deposit/clear-credit-refund-request` with
+   `{"email", "paid": {"thb", "usdc"}, "proof"?}`. `paid` is what was actually
+   transferred, in the ledger's units (whole baht). The clear:
+   - refuses (409) when nothing is payable and credit is still locked (#120 §3);
+   - refuses (409, nothing written) when `paid` differs from the payable
+     balance — re-checked **inside** the one guarded `INSERT … SELECT` that
+     writes the reversal (`credit_ledger::try_refund`), so a registration that
+     spends the credit after the organizer looked cannot be paid twice and no
+     balance can go negative. `try_refund` is the only writer of `refund` rows;
+     `record()` refuses that reason;
+   - stores the optional slip (image, magic-byte checked, ≤ 3 MB) in R2 under
+     `credit-payouts/{org}/{owner-hash}/{request}` (served staff-only);
+   - audits `credit_refund_paid_out` in the global audit log (actor = the staff
+     email, amounts, slip path);
+   - clears the flag and deletes the account (one batch). A second clear of the
+     same request is a no-op (the reversal key `refund:{email}:{requested_at}:
+     {org}:{currency}` already exists).
+5. **Retention.** The nightly cleanup deletes accounts older than 90 days or
+   whose request is closed; PDPA erasure deletes it too.
+   `scripts/verify/refund_window_report.py` lists requests open longer than 7
+   days.
+
+Known gap: a payout while part of the credit is locked pays the payable part
+and closes the request; the locked part returns at the event's end with no open
+request (`.issues/124`).
 
 ### 4.3 Organizer cash refund (staff)
 
@@ -313,7 +353,7 @@ also hold on an attendee's behalf via `POST /api/refund/hold/{attendee_id}`
 | Surface | File | Owns (per method) |
 |---|---|---|
 | **Deposit page — AlreadyDeposited** | `pages/deposit/already_deposited.rs` | **USDC**: the "Claim Refund" CTA (→ `RefundChooseWallet`) when refundable + window open; else "available after event" / "non-refundable" notices. **THB**: no action here — points the attendee to the ticket page ("manage it from your ticket"). |
-| **Ticket page — action cards** | `pages/ticket/action_cards.rs` | `DepositActionCard` (pay), `DepositVerifiedCard`, `DepositPendingCard`, `RefundCard` (return receipt), `ReclaimActionCard` / `MovedOnlineCard` (deadline). **USDC**: `RolloverActionCard` (self-contained wallet sign → `/escrow/rollover-deposit`). **THB**: `HoldDepositCard` (→ `/deposit/hold`) and `RequestCreditRefundCard` (→ `/deposit/request-credit-refund`, only rendered once `held_as_credit == true`). |
+| **Ticket page — action cards** | `pages/ticket/action_cards.rs` | `DepositActionCard` (pay), `DepositVerifiedCard`, `DepositPendingCard`, `RefundCard` (return receipt), `ReclaimActionCard` / `MovedOnlineCard` (deadline). **USDC**: `RolloverActionCard` (self-contained wallet sign → `/escrow/rollover-deposit`). **THB**: `HoldDepositCard` (→ `/deposit/hold`) and `RequestCreditRefundCard` (`pages/ticket/credit_refund_card.rs`, → `/deposit/request-credit-refund` with the payout account, only rendered once the attendee holds credit). |
 | **Claim success screen** | `pages/claim.rs` | `ClaimState::Success(ClaimMintData)` — post-check-in NFT mint result (asset ID + explorer link). Not a deposit action, but the terminal step of the attendee journey. |
 
 Rule of thumb: **USDC refund/rollover is owned by the deposit page + the ticket
@@ -328,7 +368,7 @@ never mislabels a ฿ deposit as USDC.
 | Method | Initiate | Verify | Refund / credit | Who acts | On-chain vs manual |
 |---|---|---|---|---|---|
 | **USDC** | `POST /api/deposit/usdc` → Solana Pay; wallet signs `deposit` TX | Automatic — TX confirmed on-chain + signer cross-check (`/confirm` poll or `/webhook`) | `POST /api/escrow/refund` (refund+close, atomic); `/escrow/rollover-deposit` to move to next event; `/escrow/close-deposit` to reclaim rent | **Attendee** signs every money-moving TX; organizer only runs escrow lifecycle | **On-chain** (attendee-signed; escrow program is source of truth) |
-| **THB** | `POST /api/deposit/thb/upload` (slip + bank info → R2); or admin `/thb/admin-upload` | **Organizer** approves `POST /api/deposit/thb/verify` | Hold: attendee `POST /api/deposit/hold` (→ rolling credit, auto-applied next event). Request-return: attendee `POST /api/deposit/request-credit-refund` (flag only). Cash refund: organizer `POST /api/refund/mark/{id}` (+ `/batch-thb`, `/manual`) | Upload + hold + request-return = **attendee**; verify + cash refund = **organizer** | **Manual** (bank transfer; D1 CAS settlement + Sheets mirror) |
+| **THB** | `POST /api/deposit/thb/upload` (slip + bank info → R2); or admin `/thb/admin-upload` | **Organizer** approves `POST /api/deposit/thb/verify` | Hold: attendee `POST /api/deposit/hold` (→ rolling credit, auto-applied next event). Request-return: attendee `POST /api/deposit/request-credit-refund` (flag + payout account); organizer pays out and records it with `POST /api/deposit/clear-credit-refund-request` (§4.2). Cash refund: organizer `POST /api/refund/mark/{id}` (+ `/batch-thb`, `/manual`) | Upload + hold + request-return = **attendee**; verify + cash refund = **organizer** | **Manual** (bank transfer; D1 CAS settlement + Sheets mirror) |
 | **Rolling credit** (`CreditThb`/`CreditUsdc`) | Auto-applied at registration (`signup.rs` §5c/§7b) from a prior held balance | Recorded as a pre-verified `ThbDeposit` (`SYSTEM_ROLLING_CREDIT`) | Exit via `request-credit-refund` (organizer pays out through THB tooling) | System applies; attendee requests exit; organizer pays out | **Manual** (D1 `credit_ledger`) |
 
 ---

@@ -178,7 +178,7 @@ req POST /api/checkin/nfc/verify "{\"event_id\":\"$EVENT_ID\",\"tag_id\":\"zpiin
 req GET /api/my-notifications
 req POST "/api/deposit/hold" "{\"event_id\":\"$EVENT_ID\",\"attendee_id\":\"$ATT_ID\"}"
 req GET "/api/deposit/credit-balance"
-req POST "/api/deposit/request-credit-refund" "{\"bank_name\":\"ZpiiBank\",\"bank_account_number\":\"$BANK_ACCT\",\"bank_account_name\":\"$ATT_NAME\"}"
+req POST "/api/deposit/request-credit-refund" "{\"account\":{\"method\":\"bank\",\"bank_name\":\"ZpiiBank\",\"bank_account\":\"$BANK_ACCT\",\"account_name\":\"$ATT_NAME\"}}"
 req GET "/api/deposit/credit-refund-request"
 
 echo "=== authed staff/admin endpoints ==="
@@ -193,6 +193,8 @@ req GET "/api/refund/queue?event_id=$EVENT_ID"
 req GET "/api/refund/held?event_id=$EVENT_ID"
 req GET "/api/refund/refunded?event_id=$EVENT_ID"
 req GET "/api/deposit/credit-used?event_id=$EVENT_ID"
+req GET "/api/deposit/credit-refund-requests"
+req POST "/api/deposit/clear-credit-refund-request" "{\"email\":\"$ATT_EMAIL\",\"paid\":{\"thb\":0}}"
 req GET "/api/dashboard/live?event_id=$EVENT_ID"
 req GET "/api/events/$EVENT_ID/audit"
 req GET /api/audit/global

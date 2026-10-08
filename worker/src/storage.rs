@@ -10,8 +10,10 @@
 //! | `refunds/` | Refund transfer receipts | `refunds/{event_id}/{attendee_id}.jpg` |
 //! | `badges/` | Event badge SVG files | `badges/{event_id}.svg` |
 //! | `posters/` | Event marketing posters | `posters/{event_id}.{ext}` |
+//! | `og/` | Browser-made 1200×630 share cards | `og/{event_id}.png` |
 //! | `metadata/` | NFT metadata JSON | `metadata/{event_id}.json` |
 //! | `exports/` | Walk-in CSV exports | `exports/{event_id}/{timestamp}.csv` |
+//! | `credit-payouts/` | Held-credit payout transfer slips | `credit-payouts/{org}/{owner}/{request}.jpg` |
 
 use axum::{
     extract::{Path, State},
@@ -41,11 +43,48 @@ pub const PREFIX_BADGES: &str = "badges/";
 /// R2 key prefix for event marketing poster images.
 pub const PREFIX_POSTERS: &str = "posters/";
 
+/// R2 key prefix for the per-event share cards (`.issues/183`).
+pub const PREFIX_OG: &str = "og/";
+
 /// R2 key prefix for NFT metadata JSON files.
 pub const PREFIX_METADATA: &str = "metadata/";
 
 /// R2 key prefix for walk-in CSV export files.
 pub const PREFIX_EXPORTS: &str = "exports/";
+
+/// R2 key prefix for the organizer's transfer slip of a held-credit payout
+/// (`.issues/190`). Staff-only, like `refunds/`.
+pub const PREFIX_CREDIT_PAYOUTS: &str = "credit-payouts/";
+
+/// The R2 key (without extension) of one credit payout's transfer slip:
+/// `credit-payouts/{org}/{owner}/{request}`.
+///
+/// - `org`: the organization the payout is for, `default` for the default
+///   (empty-id) organization — a key segment cannot be empty.
+/// - `owner`: BLAKE3 of the lowercased contact email, first 16 hex chars. The
+///   key is logged on upload, and an email in it would put the address in the
+///   log stream (Issue 070).
+/// - `request`: the request's `requested_at` reduced to digits, so a new
+///   request never overwrites an earlier payout's slip.
+///
+/// Every segment is `[a-z0-9_-]`, so the key is also a valid URL path.
+pub fn credit_payout_key(organization_id: &str, email: &str, requested_at: &str) -> String {
+    let org: String = match organization_id.trim() {
+        "" => "default".to_string(),
+        id => id
+            .chars()
+            .map(
+                |c| match c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    true => c.to_ascii_lowercase(),
+                    false => '_',
+                },
+            )
+            .collect(),
+    };
+    let owner = blake3::hash(email.trim().to_lowercase().as_bytes()).to_hex();
+    let request: String = requested_at.chars().filter(char::is_ascii_digit).collect();
+    format!("{PREFIX_CREDIT_PAYOUTS}{org}/{}/{request}", &owner[..16])
+}
 
 /// Build an R2 key for a THB payment slip image.
 pub fn slip_key(event_id: &str, attendee_id: &str) -> String {
@@ -66,6 +105,12 @@ pub fn badge_key(event_id: &str) -> String {
 /// Extension is derived from the uploaded content-type (png/jpg/webp/svg).
 pub fn poster_key(event_id: &str, ext: &str) -> String {
     format!("{PREFIX_POSTERS}{event_id}.{ext}")
+}
+
+/// Build the R2 key of an event's share card. Keyed by event id, never by
+/// slug: a slug can change and be reused.
+pub fn og_card_key(event_id: &str) -> String {
+    format!("{PREFIX_OG}{event_id}.png")
 }
 
 /// Build an R2 key for an NFT metadata JSON file.
@@ -211,6 +256,9 @@ pub enum Visibility {
     /// Public, but must be removable on request: the landing's event photos.
     /// Kept for an hour at most, so a photo taken down stops showing soon.
     Removable,
+    /// Public and redrawn whenever the organizer saves the event: the share
+    /// cards. An hour, so an edit reaches a fresh crawl the same day.
+    Regenerated,
 }
 
 impl Visibility {
@@ -218,7 +266,7 @@ impl Visibility {
         match self {
             Self::Public => "public, max-age=86400",
             Self::Private => "private, no-store",
-            Self::Removable => "public, max-age=3600",
+            Self::Removable | Self::Regenerated => "public, max-age=3600",
         }
     }
 }
@@ -314,6 +362,19 @@ pub async fn serve_refund(
     serve_r2_object(&state, &key, Visibility::Private, None).await
 }
 
+/// GET /api/storage/credit-payouts/{org}/{owner}/{request}
+///
+/// Serves a held-credit payout transfer slip (`credit_payout_key`). Staff-only
+/// financial document, like the refund receipts above.
+#[worker::send]
+pub async fn serve_credit_payout(
+    State(state): State<AppState>,
+    Path((org, owner, request)): Path<(String, String, String)>,
+) -> Response {
+    let key = format!("{PREFIX_CREDIT_PAYOUTS}{org}/{owner}/{request}");
+    serve_r2_object(&state, &key, Visibility::Private, None).await
+}
+
 /// GET /api/storage/badges/{event_id}
 ///
 /// Serves an event badge SVG from R2.
@@ -345,6 +406,28 @@ pub async fn serve_poster(
 ) -> Response {
     let key = format!("{PREFIX_POSTERS}{event_id}");
     serve_r2_object(&state, &key, Visibility::Public, if_none_match(&headers)).await
+}
+
+/// GET /api/storage/og/{event_id}
+///
+/// Serves an event's browser-made share card (`og/{event_id}.png`,
+/// `.issues/183`). The exact key is tried first, so a hit costs one R2 get.
+#[worker::send]
+pub async fn serve_og_card(
+    State(state): State<AppState>,
+    Path(event_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !crate::og_meta::is_safe_id(&event_id) {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    serve_r2_object(
+        &state,
+        &og_card_key(&event_id),
+        Visibility::Regenerated,
+        if_none_match(&headers),
+    )
+    .await
 }
 
 /// GET /api/storage/landing-photos/{name}
@@ -417,7 +500,9 @@ async fn serve_r2_object(
                 let content_type = content_type_from_key(candidate);
                 let cache_control = visibility.cache_control();
                 let etag = match visibility {
-                    Visibility::Public | Visibility::Removable => found.http_etag.as_deref(),
+                    Visibility::Public | Visibility::Removable | Visibility::Regenerated => {
+                        found.http_etag.as_deref()
+                    }
                     Visibility::Private => None,
                 };
                 // A matching validator means the client already holds these

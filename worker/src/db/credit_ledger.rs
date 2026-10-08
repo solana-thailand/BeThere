@@ -24,6 +24,25 @@ use super::person::person_emails_of;
 use std::collections::{HashMap, HashSet};
 use worker::{D1Database, D1Type};
 
+/// One person's payable credit: every `(organization_id, currency)` bucket with
+/// a positive balance, as `organization_id, currency, balance` rows.
+///
+/// Shared by the read the organizer's payout is checked against
+/// ([`positive_balances`]) and the guarded write that pays it out
+/// ([`try_refund`]), so the number confirmed and the number reversed come from
+/// one definition. Same literal-argument contract as [`person_emails_of!`].
+macro_rules! positive_buckets_of {
+    ($email:literal) => {
+        concat!(
+            "SELECT organization_id, currency, SUM(delta) AS balance \
+             FROM credit_ledger WHERE email IN ",
+            $crate::db::person::person_emails_of!($email),
+            " GROUP BY organization_id, currency HAVING SUM(delta) > 0"
+        )
+    };
+}
+pub(crate) use positive_buckets_of;
+
 /// Audit reason label for a hold entry (deposit converted to rolling credit).
 /// `apply` (spend) is written inline by [`try_spend`]; `backfill` is used by the
 /// SQL backfill.
@@ -77,12 +96,7 @@ pub async fn release_ended_applies(db: &D1Database) -> Result<usize, String> {
         .run()
         .await
         .map_err(|e| format!("D1 credit_ledger release_ended_applies: {e:?}"))?;
-    Ok(result
-        .meta()
-        .ok()
-        .flatten()
-        .and_then(|m| m.changes)
-        .unwrap_or(0))
+    Ok(rows_written(&result))
 }
 
 /// Record a signed credit movement.
@@ -92,6 +106,12 @@ pub async fn release_ended_applies(db: &D1Database) -> Result<usize, String> {
 /// if a matching row already exists this is a no-op returning `Ok(false)`; a
 /// fresh insert returns `Ok(true)`. Pass `deposit_id = None` for manual adjusts
 /// (always inserts). `email` is lowercased here.
+///
+/// **Not for payouts.** A `refund` row takes money out of a balance, so it has
+/// to be guarded against that balance in the same statement — [`try_refund`]
+/// is its only writer, and this function refuses the reason outright
+/// (`.issues/190`: an unguarded reversal racing a registration spend could
+/// drive a balance negative).
 #[allow(clippy::too_many_arguments)]
 pub async fn record(
     db: &D1Database,
@@ -104,6 +124,9 @@ pub async fn record(
     deposit_id: Option<&str>,
     note: Option<&str>,
 ) -> Result<bool, String> {
+    if reason == REASON_REFUND {
+        return Err("credit_ledger::record refuses refund rows — use try_refund".to_string());
+    }
     let email_lc = email.to_lowercase();
     let currency_lc = currency.to_lowercase();
     let sql = "INSERT INTO credit_ledger \
@@ -126,13 +149,20 @@ pub async fn record(
         .run()
         .await
         .map_err(|e| format!("D1 credit_ledger record run: {e:?}"))?;
-    let changes = result
+    Ok(rows_written(&result) > 0)
+}
+
+/// Rows a single INSERT wrote. Every ledger writer reads its outcome from this
+/// and nothing else: a guarded `INSERT … SELECT … WHERE` that refuses, and an
+/// `ON CONFLICT DO NOTHING` that dedups, both succeed with 0 rows, so the
+/// count is the only signal of whether money moved.
+fn rows_written(result: &worker::D1Result) -> usize {
+    result
         .meta()
         .ok()
         .flatten()
         .and_then(|m| m.changes)
-        .unwrap_or(0);
-    Ok(changes > 0)
+        .unwrap_or(0)
 }
 
 /// Atomically spend `amount` of credit for a new event's deposit.
@@ -182,13 +212,104 @@ pub async fn try_spend(
         .run()
         .await
         .map_err(|e| format!("D1 credit_ledger try_spend run: {e:?}"))?;
-    let changes = result
-        .meta()
-        .ok()
-        .flatten()
-        .and_then(|m| m.changes)
-        .unwrap_or(0);
-    Ok(changes > 0)
+    Ok(rows_written(&result) > 0)
+}
+
+/// How a guarded payout reversal ([`try_refund`]) ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefundOutcome {
+    /// Reversed this many `(organization, currency)` buckets.
+    Recorded(usize),
+    /// This request's reversal is already in the ledger — a double clear or a
+    /// retry after a later step failed. Nothing new was written.
+    AlreadyRecorded,
+    /// The payable balance is not what the organizer confirmed (a registration
+    /// spent some of it, or an event returned more). Nothing was written.
+    Mismatch,
+}
+
+/// The guarded payout reversal. One statement: it reverses every positive
+/// bucket of the person **only if** the payable totals still equal what the
+/// organizer confirmed (`?3` THB, `?4` USDC) and no bucket is in a currency
+/// that cannot be confirmed. Each row writes `-balance` of its bucket as read
+/// inside the same statement, so no bucket can be driven below zero, and a
+/// spend that lands first changes the total and makes the guard refuse.
+///
+/// `?1` lowercased email, `?2` the request's `requested_at`, `?5` the note.
+/// The key format is the one the reversal has always used, so a request
+/// reversed before this change cannot be reversed again.
+pub(crate) const TRY_REFUND_SQL: &str = concat!(
+    "INSERT INTO credit_ledger \
+     (email, organization_id, currency, delta, reason, event_id, deposit_id, note) \
+     SELECT ?1, b.organization_id, b.currency, -b.balance, 'refund', NULL, \
+            'refund:' || ?1 || ':' || ?2 || ':' || b.organization_id || ':' || b.currency, ?5 \
+     FROM (",
+    positive_buckets_of!("?1"),
+    ") b WHERE (SELECT COALESCE(SUM(t.balance), 0) FROM (",
+    positive_buckets_of!("?1"),
+    ") t WHERE t.currency = 'thb') = ?3 \
+       AND (SELECT COALESCE(SUM(t.balance), 0) FROM (",
+    positive_buckets_of!("?1"),
+    ") t WHERE t.currency = 'usdc') = ?4 \
+       AND NOT EXISTS (SELECT 1 FROM (",
+    positive_buckets_of!("?1"),
+    ") t WHERE t.currency NOT IN ('thb', 'usdc')) \
+     ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING"
+);
+
+/// Whether any reversal row of one request (`refund:{email}:{requested_at}:`
+/// prefix) exists. `substr`, not `LIKE`: an email may contain `_` or `%`.
+pub(crate) const REFUND_RECORDED_SQL: &str = "SELECT COUNT(*) AS n FROM credit_ledger \
+     WHERE reason = 'refund' AND substr(deposit_id, 1, length(?1)) = ?1";
+
+/// Reverse a person's payable credit as the ledger side of an out-of-band
+/// payout of exactly `paid` (see [`TRY_REFUND_SQL`] for the guard).
+///
+/// Zero rows written is either a retry of a request already reversed
+/// ([`RefundOutcome::AlreadyRecorded`]) or a refusal
+/// ([`RefundOutcome::Mismatch`]); the request key tells them apart. Errors
+/// propagate so the caller aborts before clearing the request.
+pub async fn try_refund(
+    db: &D1Database,
+    email: &str,
+    requested_at: &str,
+    paid: event_checkin_domain::models::credit_payout::PaidAmounts,
+    note: &str,
+) -> Result<RefundOutcome, String> {
+    release_ended_applies(db).await?;
+    let email_lc = email.to_lowercase();
+    let result = db
+        .prepare(TRY_REFUND_SQL)
+        .bind_refs(&[
+            D1Type::Text(&email_lc),
+            D1Type::Text(requested_at),
+            int_bind("credit_ledger.refund_thb", paid.thb)?,
+            int_bind("credit_ledger.refund_usdc", paid.usdc)?,
+            D1Type::Text(note),
+        ])
+        .map_err(|e| format!("D1 credit_ledger try_refund bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 credit_ledger try_refund run: {e:?}"))?;
+    let written = rows_written(&result);
+    if written > 0 {
+        return Ok(RefundOutcome::Recorded(written));
+    }
+    let prefix = format!("refund:{email_lc}:{requested_at}:");
+    let stmt = db
+        .prepare(REFUND_RECORDED_SQL)
+        .bind_refs(&[D1Type::Text(&prefix)])
+        .map_err(|e| format!("D1 credit_ledger refund_recorded bind: {e:?}"))?;
+    let recorded = safe_all_rows(&stmt)
+        .await?
+        .into_iter()
+        .next()
+        .and_then(|v| v.get("n").and_then(serde_json::Value::as_i64))
+        .ok_or_else(|| "D1 credit_ledger refund_recorded: no count row".to_string())?;
+    Ok(match recorded {
+        0 => RefundOutcome::Mismatch,
+        _ => RefundOutcome::AlreadyRecorded,
+    })
 }
 
 /// Current credit balance for `(email's person, organization_id, currency)`.
@@ -286,12 +407,9 @@ pub async fn positive_balances(db: &D1Database, email: &str) -> Result<Vec<Credi
     release_ended_applies(db).await?;
     let email_lc = email.to_lowercase();
     let sql = concat!(
-        "SELECT organization_id, currency, COALESCE(SUM(delta), 0) AS balance \
-         FROM credit_ledger WHERE email IN ",
-        person_emails_of!("?1"),
-        " GROUP BY organization_id, currency \
-         HAVING SUM(delta) > 0 \
-         ORDER BY organization_id, currency"
+        "SELECT organization_id, currency, balance FROM (",
+        positive_buckets_of!("?1"),
+        ") ORDER BY organization_id, currency"
     );
     let stmt = db
         .prepare(sql)

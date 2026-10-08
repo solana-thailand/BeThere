@@ -37,7 +37,7 @@
     width: 100%;
     margin-top: 1rem;
 }
-@media (min-width: 420px) {
+@media (min-width: 481px) {
     .dep2-method-grid {
         grid-template-columns: 1fr 1fr;
     }
