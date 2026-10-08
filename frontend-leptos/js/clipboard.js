@@ -1,69 +1,13 @@
 /**
- * Clipboard and QR code utilities.
+ * Clipboard utility.
  *
- * Primary export: `copyToClipboard()` — used by 5 Rust modules via
- * `#[wasm_bindgen(module = "/js/clipboard.js")]`.
- *
- * Also contains QR code generation helpers (`generateQrDataUrl`,
- * `preloadQrLibraries`) using QRious (lazy-loaded by lazy_assets.js).
+ * Only export: `copyToClipboard()`, used by Rust modules via
+ * `#[wasm_bindgen(module = "/js/clipboard.js")]`. QR codes are drawn in Rust
+ * (`src/utils/qr_gen.rs`), so the old QRious helpers are gone.
  *
  * Uses wasm_bindgen module imports instead of `js_sys::eval()`
  * to avoid requiring `'unsafe-eval'` in CSP.
  */
-
-/**
- * Preload QR libraries (jsQR + QRious) so they are ready when needed.
- *
- * Call this on component mount for pages that render QR codes.
- * Deduplicates — safe to call multiple times.
- *
- * @returns {Promise<void>}
- */
-export async function preloadQrLibraries() {
-  try {
-    var { loadQrLibraries } = await import("./lazy_assets.js");
-    await loadQrLibraries();
-  } catch (e) {
-    console.error("[qr_generate] Failed to preload QR libraries:", e);
-  }
-}
-
-/**
- * Generate a QR code image as a base64 PNG data URL.
- *
- * Requires QRious to be loaded (via preloadQrLibraries or startCamera preload).
- * Returns null if QRious hasn't been loaded yet — callers should ensure
- * preload is called on component mount before QR codes are needed.
- *
- * @param {string} text - The text to encode (e.g. claim URL).
- * @param {number} [size=200] - The size of the QR code in pixels.
- * @returns {string|null} Base64 data URL (e.g. "data:image/png;base64,...")
- *                        or null if QRious is not loaded.
- */
-export function generateQrDataUrl(text, size) {
-  if (typeof QRious === "undefined") {
-    console.error(
-      "[qr_generate] QRious library not loaded — call preloadQrLibraries() on mount",
-    );
-    return null;
-  }
-
-  var qrSize = size || 200;
-
-  // padding: 0 — the QR fills the canvas tightly.
-  // Visual centering is handled by CSS asymmetric padding on the .qr-wrapper,
-  // which compensates for the QR code's bottom-right-heavy data pattern.
-  var qr = new QRious({
-    value: text,
-    size: qrSize,
-    level: "M",
-    background: "#ffffff",
-    foreground: "#000000",
-    padding: 0,
-  });
-
-  return qr.toDataURL("image/png");
-}
 
 /**
  * Copy text to the system clipboard.

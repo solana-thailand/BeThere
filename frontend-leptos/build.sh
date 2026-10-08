@@ -139,7 +139,7 @@ build() {
     ~/.cargo/bin/trunk build --release
 
     # Trunk only copies JS files directly referenced by #[wasm_bindgen(module = "...")].
-    # lazy_assets.js is imported by scanner.js/clipboard.js/slip_qr.js but not by Rust directly,
+    # lazy_assets.js is imported by scanner.js/slip_qr.js but not by Rust directly,
     # so trunk skips it. Copy manually to avoid module resolution failures at runtime.
     # An unmatched glob expands to the literal pattern, so test each directory
     # itself rather than the string being non-empty.
