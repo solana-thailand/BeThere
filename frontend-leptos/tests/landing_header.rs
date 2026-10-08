@@ -39,26 +39,35 @@ fn lang_bar_is_off_on_the_landing_only() {
     assert!(!shows_lang_bar("/admin"));
 }
 
-/// Refunds are paid by hand and deposits are THB by PromptPay: the meta
-/// descriptions use the landing's own line, the same in every tag.
+/// Refunds are paid by hand and deposits are THB by PromptPay: the search
+/// description is the landing's own line; the share descriptions lead with
+/// the ladder's total (owner, 7 Oct), summed from the same table the page
+/// shows, so the card's words and the page cannot disagree.
 #[test]
 fn share_descriptions_claim_nothing_automated() {
-    let html = read("index.html");
     let line = "Free events. Hold your seat with a deposit, show up, get it all back.";
-    for tag in [
-        "name=\"description\"",
-        "property=\"og:description\"",
-        "name=\"twitter:description\"",
-    ] {
-        let at = html.find(tag).unwrap_or_else(|| panic!("{tag} missing"));
-        let content = &html[at..at + 200];
-        assert!(
-            content.contains(line),
-            "{tag} does not use the landing line"
-        );
-    }
-    for claim in ["automated", "Attendees commit money"] {
-        assert!(!html.contains(claim), "index.html still says {claim:?}");
+    let (paid, came) = event_checkin_frontend::pages::landing::story::ladder_total();
+    let share = format!("{came} of {paid} who paid a deposit came (RTM #1–#6, staff not counted).");
+    // staff-shell.html is generated from index.html at build time.
+    for shell in ["index.html"] {
+        let html = read(shell);
+        for (tag, wanted) in [
+            ("name=\"description\"", line),
+            ("property=\"og:description\"", share.as_str()),
+            ("name=\"twitter:description\"", share.as_str()),
+        ] {
+            let at = html
+                .find(tag)
+                .unwrap_or_else(|| panic!("{shell}: {tag} missing"));
+            let content = &html[at..(at + 260).min(html.len())];
+            assert!(
+                content.contains(wanted),
+                "{shell}: {tag} does not say {wanted:?}"
+            );
+        }
+        for claim in ["automated", "Attendees commit money", "Get Refunded"] {
+            assert!(!html.contains(claim), "{shell} still says {claim:?}");
+        }
     }
 }
 

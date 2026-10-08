@@ -23,10 +23,10 @@
 
         <!-- Open Graph / Social -->
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="BeThere — Show Up. Get Refunded." />
+        <meta property="og:title" content="BeThere — Show up. Get it all back." />
         <meta
             property="og:description"
-            content="Free events. Hold your seat with a deposit, show up, get it all back."
+            content="90 of 94 who paid a deposit came (RTM #1–#6, staff not counted). Free events, a refundable deposit, all back after the event."
         />
         <meta
             property="og:url"
@@ -46,15 +46,15 @@
         <meta property="og:image:height" content="630" />
         <meta
             property="og:image:alt"
-            content="BeThere: แค่มาให้ถึง ก็ได้คืนเต็ม ๆ · Show up. Get it all back."
+            content="BeThere: Show up. Get it all back. 96%: 90 of 94 who paid a deposit came (RTM #1–#6). Deposit ฿500, back after the event."
         />
 
         <!-- Twitter Card -->
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="BeThere — Show Up. Get Refunded." />
+        <meta name="twitter:title" content="BeThere — Show up. Get it all back." />
         <meta
             name="twitter:description"
-            content="Free events. Hold your seat with a deposit, show up, get it all back."
+            content="90 of 94 who paid a deposit came (RTM #1–#6, staff not counted). Free events, a refundable deposit, all back after the event."
         />
         <meta name="twitter:creator" content="@ozoneRatchapon" />
         <meta
@@ -63,7 +63,7 @@
         />
         <meta
             name="twitter:image:alt"
-            content="BeThere: แค่มาให้ถึง ก็ได้คืนเต็ม ๆ · Show up. Get it all back."
+            content="BeThere: Show up. Get it all back. 96%: 90 of 94 who paid a deposit came (RTM #1–#6). Deposit ฿500, back after the event."
         />
 
         <!-- Theme -->
@@ -91,8 +91,15 @@
         <link data-trunk rel="copy-file" href="share/bethere-64.png" />
         <link data-trunk rel="copy-file" href="share/bethere-180.png" />
         <link data-trunk rel="copy-file" href="share/og-image.png" />
+        <!-- The sponsor contact card's photo (1x, 2x), loading="lazy". -->
+        <link data-trunk rel="copy-file" href="share/ozone-avatar-56.jpg" />
+        <link data-trunk rel="copy-file" href="share/ozone-avatar-112.jpg" />
         <!-- The landing's "why a deposit" film (EN/TH), fetched only on click. -->
         <link data-trunk rel="copy-dir" href="media" />
+        <!-- The goal globe (.plans/043 L10): code and data, loaded by
+             src/pages/landing/goal.rs only when the section comes into view.
+             copy-dir emits no tag, so neither is on the first load. -->
+        <link data-trunk rel="copy-dir" href="globe" />
 
         <!-- PWA — Service worker boot. Trunk copy-file puts sw.js in dist/. -->
         <link data-trunk rel="copy-file" href="sw.js" />

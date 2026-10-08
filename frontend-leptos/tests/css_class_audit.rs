@@ -75,6 +75,10 @@
 //!   `inner_html` in this crate carry no classes today; if that changes, the
 //!   raw-string scan in `used_broad()` covers the dead direction, but the
 //!   unstyled direction will not see them.
+//! - **Classes set by `globe/globe.js`.** The lazily loaded globe builds its
+//!   own country panel and toggles `lp-dragging`, outside `src/`. Its string
+//!   literals are added to the dead direction's scan (`lazy_js_sources`); the
+//!   unstyled direction does not read JS.
 //! - **CSS-only classes referenced solely by other CSS** (e.g. a `.a .b` where
 //!   `.b` is never emitted by Rust). Such a selector can never match, and the
 //!   dead direction correctly reports `.b` — that is intended, not a gap.
@@ -227,6 +231,12 @@ fn rust_sources() -> String {
     let mut out = String::new();
     walk(&crate_root().join("src"), &mut out);
     out
+}
+
+/// Lazily loaded JS that sets classes itself (see the module comment).
+fn lazy_js_sources() -> String {
+    let path = crate_root().join("globe").join("globe.js");
+    fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
 fn is_class_start(c: char) -> bool {
@@ -398,7 +408,7 @@ fn used_in_class_position(rs: &str) -> BTreeSet<String> {
 #[test]
 fn no_dead_css_classes() {
     let css = css_sources();
-    let rs = rust_sources();
+    let rs = rust_sources() + &lazy_js_sources();
     let defined = css_classes(&css);
     let used = used_broad(&rs);
 

@@ -34,6 +34,7 @@ mod org_store;
 /// Crawler documents and the 404 rule; public for `tests/crawl_routes.rs`.
 pub mod crawl;
 /// `/media/*` with byte ranges (the landing film); public for `tests/media_path.rs`.
+pub mod landing_photos;
 pub mod media;
 pub mod precompressed;
 mod quiz;

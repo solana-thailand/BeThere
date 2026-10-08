@@ -7,6 +7,8 @@
 pub mod auth;
 /// The card's deposit rule and order; public for `tests/landing_event_card.rs`.
 pub mod event_card;
+/// The goal bar and the globe loader; public for `tests/landing_goal.rs`.
+pub mod goal;
 /// The landing's header and side index; public for `tests/landing_header.rs`.
 pub mod header;
 mod hero;
@@ -18,12 +20,16 @@ mod join;
 pub mod nav;
 mod notifications;
 mod page;
+/// The photo reel; public for `tests/landing_photo_reel.rs`.
+pub mod photos;
 mod registrations;
 mod sofar;
 /// Sponsor placements; public for `tests/landing_sponsors.rs`.
 pub mod sponsors;
 /// The shared stats fetch and duration label; public for tests.
 pub mod stats;
+/// The commitment ladder; public for `tests/landing_story.rs`.
+pub mod story;
 pub mod theme;
 mod upcoming;
 mod waitlist;

@@ -93,7 +93,7 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
 /// The films' revision, in each URL: the files keep their names and are
 /// cached for a day, so a re-render bumps this together with
 /// `CACHE_KEY_VERSION` in worker/src/media.rs (which ignores the query).
-const FILM_REV: &str = "v=4";
+const FILM_REV: &str = "v=5";
 
 /// "Why a deposit · 1 min": the one-minute film (the commitment ladder) in a
 /// dialog, with captions. The file is fetched only on the first click
@@ -118,8 +118,14 @@ fn WhyFilm() -> impl IntoView {
             captions.set_srclang(lang);
             video.set_src(&src);
         }
-        if dialog.show_modal().is_ok() {
-            let _ = video.play();
+        // play() rejects (AbortError) when the dialog closes before playback
+        // starts; await it so the rejection is handled, not logged as uncaught.
+        if dialog.show_modal().is_ok()
+            && let Ok(promise) = video.play()
+        {
+            wasm_bindgen_futures::spawn_local(async move {
+                let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+            });
         }
     };
     // A click on the backdrop lands on the dialog itself, not the video.

@@ -25,3 +25,12 @@ pub async fn get_public_stats(
         .map_err(AppError::Internal)?;
     Ok(ApiOk::new(stats))
 }
+
+/// `GET /api/public/landing-photos` — the landing reel's list (.plans/043
+/// L9): what `landing-photos.jsonl` holds, in order. The images themselves
+/// come from `/api/storage/landing-photos/{name}`.
+#[worker::send]
+pub async fn get_landing_photos()
+-> Result<ApiOk<Vec<crate::landing_photos::LandingPhoto>>, WorkerError> {
+    Ok(ApiOk::new(crate::landing_photos::photos()))
+}
