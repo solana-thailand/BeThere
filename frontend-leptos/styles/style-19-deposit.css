@@ -221,7 +221,7 @@
 .pe-sticky-cta {
     display: none;
 }
-@media (max-width: 640px) {
+@media (max-width: 767px) {
     .pe-sticky-cta {
         position: fixed;
         left: 0;

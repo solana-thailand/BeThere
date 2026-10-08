@@ -234,7 +234,7 @@
 .notification-table th { white-space: nowrap; }
 .notification-table td:first-child { min-width: 12rem; }
 .notification-scroll-hint { display: none; font-size: .875rem; }
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .notification-scroll-hint { display: block; }
 }
 
@@ -249,7 +249,7 @@
 .attendee-inbox-copy p { margin: 0; color: var(--text-secondary); font-size: .875rem; }
 .attendee-inbox-event { color: var(--text-muted); font-size: .75rem; }
 .attendee-inbox-actions { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .attendee-inbox-item { align-items: stretch; flex-direction: column; }
   .attendee-inbox-actions { justify-content: flex-end; }
 }

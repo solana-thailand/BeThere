@@ -310,12 +310,48 @@ Owner decisions raised by phase 3:
 - [x] Toast: classes; an always-present `role="status" aria-live="polite"`
   region (content changes inside it, so it is announced). Verified in the
   browser: same colours and position.
-- [ ] Breakpoints: 8 sets → 360/480/768. Not started; it touches every
+- [x] Breakpoints: 8 sets → 360/480/768. Not started; it touches every
   stylesheet and needs a per-file visual diff. Held 2026-09-29 (session
   `event-checkin-4e`): it moves layout on every demo-facing page one week
   before the 6–8 Oct freeze; start it after the take.
   **Blocked:** the 6–8 Oct demo freeze; start after the take. No owner question; it is dated.
   **Reopen trigger (2026-10-01, `event-checkin-45`):** the 8 Oct take is filmed.
+  **Done outside the landing (2026-10-08, `event-checkin-19`, branch
+  `feature/037-breakpoints`):** the trigger was met (take filmed 8 Oct, plan
+  044 1.5). Every width query outside `style-23-landing.css` is now
+  `max 359 / 480 / 767` or `min 481 / 768` (12 queries in 10 files moved):
+  - 720 → 480 (live dashboard header): its controls fit on one row down to
+    481; on 767 they broke onto their own row at 721–767.
+  - 640 → 767, 641 → 768 (sticky CTA + its caption, quiz editor and the event
+    form grid, inbox rows, notification hint), 600 → 767 (community-link
+    rows), 768 → 767 (at exactly 768 both `max 768` and `min 768` matched).
+    480 was tried for `.quiz-settings-grid` and rejected: the event form
+    reuses it and went to a ragged two columns at 481–640.
+  - 380 → 359 (ticket series neighbours stay two-up on 360–430 phones);
+    `min 420` → `min 481` (deposit method grid): at 420–480 a single
+    PromptPay card sat in half the width with its button wrapped; now full.
+  - Method: one develop build on the local fixture worker; per page and width
+    the media rules were rewritten in place and screenshotted before/after
+    (16 pages, 17 widths 360–800, plus the admin Quiz and Edit Event tabs).
+    No new horizontal overflow, no page errors. Then the real rebuild was
+    checked against the predicted images (deposit 0 px, the rest noise).
+    The 390 and 1440 e2e baselines cannot change: no moved edge lies between
+    the old and new value at either width.
+  - Guard: `tests/breakpoint_set.rs` (floored, 4); it names all 12 old
+    queries when run on develop's stylesheets.
+- [x] Breakpoints, landing (2026-10-08, session `event-checkin-f0`, after
+  pull 157 merged): the 13 width queries in `style-23-landing.css` moved
+  900/860 → max 767, 560 → max 480, `min 901` → `min 768`; `min 1240` (the
+  side rail) stays and joins the set as a min-only "wide" edge. The exemption
+  is gone; the guard is now 359/480/767 (max) and 481/768/1240 (min).
+  - A/B on the live prod landing, rules rewritten in place, 15 widths
+    (481–1024): only 481–560 and 768–900 change, as intended. One defect
+    surfaced: at 768–792px the desktop swimlane overflowed by up to 25px
+    (four step columns at their longest word plus a fixed 200px route
+    column). Fixed with `minmax(120px, 200px)` for the route column and a
+    wrapping route header (the LIVE/DEVNET tag drops under the name when
+    narrow). No overflow at any width; 1024 and 1440 are pixel-identical to
+    before, and the e2e baselines (390, 1440) are untouched.
 - [x] Remaining hardcoded colours in other Rust files (2026-09-29, session
   `event-checkin-4e`). 20 inline text colours in 6 files now use tokens:
   `#94a3b8`/`#64748b` → `--text-muted`, `#cbd5e1` → `--text-secondary`,

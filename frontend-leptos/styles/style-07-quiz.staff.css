@@ -3,7 +3,7 @@
    right after style-07-quiz.css, so the cascade order is unchanged. */
 
 /* ===== Quiz Editor Responsive ===== */
-@media (max-width: 640px) {
+@media (max-width: 767px) {
     .quiz-editor-title-row {
         flex-direction: column;
         align-items: flex-start;

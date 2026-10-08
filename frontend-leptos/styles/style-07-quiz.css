@@ -657,7 +657,7 @@
 }
 
 /* Fallback: show D-pad on small screens regardless of hover/pointer capability */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
     .adventure-dpad {
         display: flex;
     }
