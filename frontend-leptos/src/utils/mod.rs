@@ -415,6 +415,16 @@ pub fn format_event_day_parts(ms: i64) -> (String, String) {
     (d.get_date().to_string(), month.to_uppercase())
 }
 
+/// The day of an RFC 3339 time in the reader's language (`30 Aug 2026`);
+/// an unparseable value falls back to its first ten characters.
+pub fn format_iso_day(iso: &str) -> String {
+    let ms = js_sys::Date::parse(iso);
+    match ms.is_nan() {
+        true => iso.chars().take(10).collect(),
+        false => format_event_day(ms as i64),
+    }
+}
+
 pub fn format_event_day(ms: i64) -> String {
     if ms <= 0 {
         return String::new();

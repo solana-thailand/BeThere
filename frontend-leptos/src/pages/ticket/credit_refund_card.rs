@@ -1,17 +1,23 @@
 //! "Request Return of Held Credit" (Issue #061 Phase 3, `.issues/190`).
 //!
-//! The attendee asks for their held credit back and says where to send it: a
-//! PromptPay ID or a bank account, validated by the same rule the THB deposit
-//! refund account and the worker use (`utils::credit_payout`). The organizer
-//! sees the account in the payout queue, transfers the money, and records it.
+//! The attendee asks for their held credit back. When they already gave a
+//! refund account with their deposit (or on an earlier request), the card
+//! names it, masked — "We'll send it to KBank •••• 7890" — and one tap
+//! requests the refund to it. "Use a different account", or no account on
+//! file, opens the form: a PromptPay ID or a bank account, validated by the
+//! same rule the THB deposit refund account and the worker use
+//! (`utils::credit_payout`). The organizer sees the account in the payout
+//! queue, transfers the money, and records it.
 
-use event_checkin_domain::models::credit_payout::{RefundAccountError, RefundMethod};
+use event_checkin_domain::models::credit_payout::{
+    RefundAccountError, RefundMethod, SavedAccountPreview,
+};
 use leptos::prelude::*;
 
 use crate::api;
 use crate::icons::{Icon, IconName};
 use crate::pages::deposit::types::THAI_BANKS;
-use crate::utils::credit_payout::account_from_form;
+use crate::utils::credit_payout::{account_from_form, saved_account_label, saved_account_sentence};
 
 /// State machine for the "Request Return of Held Credit" flow. `Loading`
 /// fetches the attendee's own flag state on mount, so a reload mounts in
@@ -32,6 +38,26 @@ enum RequestCreditRefundState {
     Requested { message: String },
     /// Error.
     Error(String),
+}
+
+/// "We'll send it to KBank •••• 7890 · Somchai J. — the account from your
+/// deposit on 30 Aug 2026." Follows a language switch.
+fn saved_account_text(preview: SavedAccountPreview) -> impl Fn() -> String {
+    let i18n = crate::i18n::use_i18n();
+    move || {
+        let locale = i18n.get_locale();
+        let label = saved_account_label(
+            &preview,
+            crate::i18n::td_string!(locale, ticket.action.return_promptpay),
+        );
+        saved_account_sentence(
+            &preview,
+            crate::i18n::td_string!(locale, ticket.action.return_saved_from_deposit),
+            crate::i18n::td_string!(locale, ticket.action.return_saved_from_attendee),
+            &label,
+            &crate::utils::format_iso_day(&preview.captured_at),
+        )
+    }
 }
 
 /// The attendee-facing text for a refused account (the domain's messages are
@@ -65,15 +91,17 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
     let (bank_account, set_bank_account) = signal(String::new());
     let (account_name, set_account_name) = signal(String::new());
     let (form_error, set_form_error) = signal(None::<Signal<&'static str>>);
+    // The masked account already on file; `None` → the form, as before.
+    let (saved, set_saved) = signal(None::<SavedAccountPreview>);
 
     // On mount: fetch the attendee's own flag state. A failed read (or signed
     // out) degrades to `Ready`: the read never redirects, because this card
     // mounts on the public ticket page (`.issues/142`).
     Effect::new(move |_| {
         leptos::task::spawn_local(async move {
-            let requested = api::get_credit_refund_request_status()
-                .await
-                .is_some_and(|status| status.requested);
+            let status = api::get_credit_refund_request_status().await;
+            let requested = status.as_ref().is_some_and(|status| status.requested);
+            set_saved.set(status.and_then(|status| status.saved_account));
             set_state.set(match requested {
                 true => RequestCreditRefundState::AlreadyRequested,
                 false => RequestCreditRefundState::Ready,
@@ -108,6 +136,30 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
                 }
                 Err(e) => {
                     log::error!("[credit-refund] failed: {}", e.message);
+                    set_state.set(RequestCreditRefundState::Error(e.message));
+                }
+            }
+        });
+    };
+
+    // One tap: the account on file. A 400 (it was paid out or purged in the
+    // meantime) shows the error with "try again", which opens the form.
+    let submit_saved = move |_| {
+        set_state.set(RequestCreditRefundState::Requesting);
+        leptos::task::spawn_local(async move {
+            match api::request_credit_refund_saved().await {
+                Ok(resp) => {
+                    log::info!("[credit-refund] request to the saved account submitted");
+                    set_state.set(RequestCreditRefundState::Requested {
+                        message: resp.message,
+                    });
+                }
+                Err(e) => {
+                    log::error!(
+                        "[credit-refund] saved-account request failed: {}",
+                        e.message
+                    );
+                    set_saved.set(None);
                     set_state.set(RequestCreditRefundState::Error(e.message));
                 }
             }
@@ -207,19 +259,40 @@ pub fn RequestCreditRefundCard() -> impl IntoView {
                         </div>
                     }.into_any(),
 
-                    RequestCreditRefundState::Ready => view! {
-                        <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_title))}</div>
-                        <div class="ticket-action-desc">
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_desc))}
-                        </div>
-                        <button
-                            class="btn btn-outline btn-sm ticket-action-btn"
-                            on:click=move |_| set_state.set(RequestCreditRefundState::Confirm)
-                        >
-                            <Icon icon=IconName::Check class="icon-sm" />
-                            " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_cta))}
-                        </button>
-                    }.into_any(),
+                    RequestCreditRefundState::Ready => match saved.get() {
+                        Some(preview) => view! {
+                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_title))}</div>
+                            <div class="ticket-action-desc">
+                                {saved_account_text(preview)}
+                            </div>
+                            <button
+                                class="btn btn-primary btn-sm ticket-action-btn"
+                                on:click=submit_saved
+                            >
+                                <Icon icon=IconName::Check class="icon-sm" />
+                                " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_saved_cta))}
+                            </button>
+                            <button
+                                class="btn btn-outline btn-xs ticket-action-cancel"
+                                on:click=move |_| set_state.set(RequestCreditRefundState::Confirm)
+                            >
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_saved_other))}
+                            </button>
+                        }.into_any(),
+                        None => view! {
+                            <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_title))}</div>
+                            <div class="ticket-action-desc">
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_desc))}
+                            </div>
+                            <button
+                                class="btn btn-outline btn-sm ticket-action-btn"
+                                on:click=move |_| set_state.set(RequestCreditRefundState::Confirm)
+                            >
+                                <Icon icon=IconName::Check class="icon-sm" />
+                                " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_cta))}
+                            </button>
+                        }.into_any(),
+                    },
 
                     RequestCreditRefundState::Confirm => view! {
                         <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_confirm_title))}</div>

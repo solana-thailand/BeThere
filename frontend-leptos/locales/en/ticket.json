@@ -222,7 +222,11 @@
     "return_bank": "Bank account",
     "return_promptpay_placeholder": "PromptPay ID (mobile or ID number)",
     "return_err_promptpay": "Enter a 10-digit mobile number starting with 0, or a 13-digit ID number.",
-    "return_err_bank": "Fill in the bank, the account number and the account name."
+    "return_err_bank": "Fill in the bank, the account number and the account name.",
+    "return_saved_from_deposit": "We'll send it to {account} — the account from your deposit on {date}.",
+    "return_saved_from_attendee": "We'll send it to {account} — the account you gave us on {date}.",
+    "return_saved_cta": "Request refund to this account",
+    "return_saved_other": "Use a different account"
   },
   "code": {
     "label": "Ticket code",

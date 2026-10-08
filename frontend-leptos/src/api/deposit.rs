@@ -607,7 +607,9 @@ pub async fn get_credit_used(event_id: Option<&str>) -> Result<CreditUsedRespons
 
 // ===== Phase 3 — Credit Refund Request (exit path) =====
 
-pub use event_checkin_domain::models::credit_payout::{PaidAmounts, RefundAccount};
+pub use event_checkin_domain::models::credit_payout::{
+    AccountSource, PaidAmounts, RefundAccount, SavedAccountPreview,
+};
 
 /// Response for POST /api/deposit/request-credit-refund — attendee requests
 /// return of their held rolling credit (Issue #061 §D3). The flag is the queue
@@ -632,6 +634,14 @@ pub async fn request_credit_refund(
     api_post_json("/deposit/request-credit-refund", &body).await
 }
 
+/// POST /api/deposit/request-credit-refund with `{use_saved: true}` — the
+/// one-tap request to the account already on file (from the deposit, or an
+/// earlier request). A 400 when nothing is on file any more.
+pub async fn request_credit_refund_saved() -> Result<RequestCreditRefundResponse, ApiError> {
+    let body = serde_json::json!({ "use_saved": true });
+    api_post_json("/deposit/request-credit-refund", &body).await
+}
+
 /// Response for GET /api/deposit/credit-refund-request — the attendee's own
 /// flag state. Backs the ticket page's already-requested card state on reload
 /// (mirrors the held_as_credit UX pattern).
@@ -639,6 +649,11 @@ pub async fn request_credit_refund(
 pub struct CreditRefundRequestStatus {
     #[serde(default)]
     pub requested: bool,
+    /// The payout account on file, masked by the worker (bank, last four
+    /// digits, holder's first name and initial). `None` when nothing is on
+    /// file — the card then asks for an account.
+    #[serde(default)]
+    pub saved_account: Option<SavedAccountPreview>,
 }
 
 /// GET /api/deposit/credit-refund-request — the attendee's own flag state, or
@@ -680,6 +695,15 @@ pub struct CreditRefundRequest {
     /// the account was collected (ask the attendee).
     #[serde(default)]
     pub account: Option<RefundAccount>,
+    /// Where `account` came from: the attendee's deposit, or typed by them.
+    #[serde(default)]
+    pub account_source: Option<AccountSource>,
+    /// When the account was given (deposit upload time, or entry time).
+    #[serde(default)]
+    pub account_captured_at: Option<String>,
+    /// The attendee replaced their deposit account with a different one.
+    #[serde(default)]
+    pub account_replaced_deposit: bool,
 }
 
 /// Response for GET /api/deposit/credit-refund-requests — admin lists contacts

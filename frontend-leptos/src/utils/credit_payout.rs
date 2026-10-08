@@ -1,12 +1,13 @@
 //! Pure helpers for the held-credit payout (`.issues/190`): the attendee's
-//! refund-account form and the organizer's payout queue.
+//! refund-account form and one-tap preview, and the organizer's payout queue.
 //!
 //! Validation is the domain's (`credit_payout::RefundAccount::normalized`) —
 //! the same rule the worker applies and the THB deposit refund account uses —
 //! so the form can never accept what the server refuses, or the reverse.
 
 use event_checkin_domain::models::credit_payout::{
-    PaidAmounts, RefundAccount, RefundAccountError, RefundMethod, is_overdue,
+    AccountSource, PaidAmounts, RefundAccount, RefundAccountError, RefundMethod,
+    SavedAccountPreview, is_overdue,
 };
 
 /// Build and validate the account from the form's raw inputs. Only the fields
@@ -97,4 +98,67 @@ pub fn account_copy_value(account: &RefundAccount) -> String {
         RefundAccount::Bank { bank_account, .. } => bank_account.as_str(),
     };
     raw.chars().filter(char::is_ascii_digit).collect()
+}
+
+/// The saved account as the attendee sees it on the one-tap card:
+/// `Kasikornbank •••• 7890 · Somchai J.` or `PromptPay •••• 5678`. Built from
+/// the worker's masked preview only — the attendee API never sends more.
+pub fn saved_account_label(preview: &SavedAccountPreview, promptpay_label: &str) -> String {
+    let name = match preview.method {
+        RefundMethod::PromptPay => promptpay_label.to_string(),
+        RefundMethod::Bank => preview.bank_name.clone().unwrap_or_default(),
+    };
+    let number = match preview.last4.is_empty() {
+        true => format!("{name} ••••"),
+        false => format!("{name} •••• {}", preview.last4),
+    };
+    match &preview.holder {
+        Some(holder) => format!("{number} · {holder}"),
+        None => number,
+    }
+}
+
+/// "We'll send it to {account} — the account from your deposit on {date}."
+/// The template follows where the account came from; `date` is already
+/// formatted for the reader's language.
+pub fn saved_account_sentence(
+    preview: &SavedAccountPreview,
+    from_deposit: &str,
+    from_attendee: &str,
+    account_label: &str,
+    date: &str,
+) -> String {
+    let template = match preview.source {
+        AccountSource::Deposit => from_deposit,
+        AccountSource::Attendee => from_attendee,
+    };
+    crate::locale::fill(template, &[("account", account_label), ("date", date)])
+}
+
+/// The organizer queue's provenance badge: `(css class, text)`. A replaced
+/// deposit account is a warning — someone with the attendee's session changed
+/// where the money goes, so the organizer confirms before paying.
+pub fn account_source_badge(
+    source: Option<AccountSource>,
+    replaced_deposit: bool,
+    captured_date: &str,
+) -> Option<(&'static str, String)> {
+    match (source, replaced_deposit) {
+        (None, _) => None,
+        (Some(_), true) => Some((
+            "badge badge-danger",
+            "Changed from the deposit account — confirm with the attendee before paying"
+                .to_string(),
+        )),
+        (Some(AccountSource::Deposit), false) => Some((
+            "badge badge-info",
+            match captured_date.is_empty() {
+                true => "From deposit".to_string(),
+                false => format!("From deposit on {captured_date}"),
+            },
+        )),
+        (Some(AccountSource::Attendee), false) => {
+            Some(("badge badge-neutral", "Entered by attendee".to_string()))
+        }
+    }
 }

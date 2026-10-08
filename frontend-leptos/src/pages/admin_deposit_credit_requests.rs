@@ -15,7 +15,9 @@ use crate::api::{self, ClearCreditRefundRequest, CreditRefundRequest};
 use crate::components::{self, ToastMessage, ToastType};
 use crate::icons::{Icon, IconName};
 use crate::utils;
-use crate::utils::credit_payout::{account_copy_value, account_lines, age_line, parse_paid};
+use crate::utils::credit_payout::{
+    account_copy_value, account_lines, account_source_badge, age_line, parse_paid,
+};
 use event_checkin_domain::models::credit_payout::is_overdue;
 
 /// Same cap as the deposit refund proof (`admin_deposit.rs`): the worker's
@@ -71,6 +73,9 @@ fn CreditRefundRow(
         requested_at,
         age_hours,
         account,
+        account_source,
+        account_captured_at,
+        account_replaced_deposit,
     } = req;
     let (paid_thb, set_paid_thb) = signal(String::new());
     let (paid_usdc, set_paid_usdc) = signal(String::new());
@@ -95,6 +100,16 @@ fn CreditRefundRow(
     };
     let overdue = is_overdue(age_hours);
     let copy_value = account.as_ref().map(account_copy_value);
+    // Where the account came from (`.issues/190`): the attendee's deposit, or
+    // typed by them — and a warning when they replaced the deposit account.
+    let source_badge = account_source_badge(
+        account_source,
+        account_replaced_deposit,
+        &account_captured_at
+            .as_deref()
+            .map(utils::format_iso_day)
+            .unwrap_or_default(),
+    );
 
     let on_proof = move |ev: leptos::ev::Event| {
         let target: JsValue = event_target::<web_sys::HtmlInputElement>(&ev).into();
@@ -195,6 +210,9 @@ fn CreditRefundRow(
                     <div class="admin-dep-bank-section">
                         <div class="panel-hint admin-dep-bank-label">"Pay to"</div>
                         {account_view}
+                        {source_badge.map(|(class, text)| view! {
+                            <div class="panel-hint"><span class=class>{text}</span></div>
+                        })}
                     </div>
                 </div>
                 <div>
