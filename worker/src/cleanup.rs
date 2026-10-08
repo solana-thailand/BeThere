@@ -68,6 +68,21 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
     let mut summary = CleanupSummary::default();
     let now_ms = chrono::Utc::now().timestamp_millis();
 
+    // Phase 0: credit payout accounts (`.issues/190`). Not tied to any event,
+    // so it runs before the event index read that can abort the rest: a
+    // malformed index must not keep account numbers alive.
+    if let Some(db) = d1 {
+        match crate::db::credit_refund_accounts::purge(db).await {
+            Ok(count) => summary.credit_refund_accounts_purged = count,
+            Err(e) => {
+                tracing::error!(error = %e, "cleanup: credit payout account purge failed");
+                summary
+                    .failures
+                    .push(CleanupFailure::CreditRefundAccountPurgeFailed);
+            }
+        }
+    }
+
     let index = match get_event_index(kv).await {
         Ok(idx) => idx,
         Err(e) => {
@@ -309,6 +324,7 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
         onchain_events_deleted = summary.onchain_events_deleted,
         onchain_dedup_deleted = summary.onchain_dedup_deleted,
         jwt_blacklist_deleted = summary.jwt_blacklist_deleted,
+        credit_refund_accounts_purged = summary.credit_refund_accounts_purged,
         "cleanup: daily pass complete"
     );
 
@@ -522,6 +538,9 @@ pub enum CleanupFailure {
         archived: i64,
         unarchived: i64,
     },
+    /// The credit payout account purge failed; account numbers past their
+    /// retention (or of closed requests) were not deleted. Retries tomorrow.
+    CreditRefundAccountPurgeFailed,
 }
 
 impl std::fmt::Display for CleanupFailure {
@@ -545,6 +564,12 @@ impl std::fmt::Display for CleanupFailure {
                 "deposit archive incomplete for event {event_id} — {archived} archived, \
                  {unarchived} live deposit(s) unmatched, delete refused"
             ),
+            Self::CreditRefundAccountPurgeFailed => {
+                write!(
+                    f,
+                    "credit payout account purge failed — account details kept"
+                )
+            }
         }
     }
 }
@@ -568,6 +593,8 @@ pub struct CleanupSummary {
     pub onchain_events_deleted: usize,
     pub onchain_dedup_deleted: usize,
     pub jwt_blacklist_deleted: usize,
+    /// Credit payout accounts deleted: past retention, or their request closed.
+    pub credit_refund_accounts_purged: usize,
     /// Phases that failed this run. Empty on a healthy pass.
     ///
     /// Exists because every one of these sites used to write only to `tracing`:

@@ -82,16 +82,24 @@ pub(crate) async fn upsert_contact(
 /// are blanked rather than nulled — the same defect class as `clear_developer_pii`.
 /// A NULL aborted the whole statement on the NOT NULL constraint, so the erasure
 /// silently cleared nothing, `name` included.
+///
+/// Also deletes the contact's credit payout account (`.issues/190`) in the same
+/// batch — an account number is the most sensitive thing a contact leaves.
 pub(crate) async fn clear_contact_pii(db: &D1Database, email: &str) -> Result<(), String> {
     let sql = "UPDATE contacts SET \
          name = '[DELETED]', \
          contact_channel = '', contact_handle = '', \
          last_registered = datetime('now') \
          WHERE LOWER(email) = ?";
-    db.prepare(sql)
+    let contact = db
+        .prepare(sql)
         .bind_refs(&[D1Type::Text(email)])
-        .map_err(|e| format!("D1 clear_contact_pii bind: {e:?}"))?
-        .run()
+        .map_err(|e| format!("D1 clear_contact_pii bind: {e:?}"))?;
+    let account = db
+        .prepare("DELETE FROM credit_refund_accounts WHERE email = LOWER(?1)")
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 clear_contact_pii account bind: {e:?}"))?;
+    db.batch(vec![contact, account])
         .await
         .map_err(|e| format!("D1 clear_contact_pii: {e:?}"))?;
     Ok(())
@@ -276,13 +284,18 @@ pub struct CreditLiability {
 // Credit refund-from-credit request flag (Issue #061 Phase 3 — exit path)
 // ---------------------------------------------------------------------------
 
-/// Set the `credit_refund_requested` flag on a contact (and stamp `now`).
+/// Set the `credit_refund_requested` flag on a contact (and stamp `now`), and
+/// store where the attendee wants the money sent (`.issues/190`).
 ///
 /// Idempotent: a re-request from the attendee just refreshes the timestamp
-/// (surfaces "still waiting" to the organizer without a separate counter). The
-/// organizer clears the flag manually after processing the payout — there is
-/// no automated state machine for v1 (Issue #061 §D3). Lowercases the email
-/// because `contacts.email` is the lowercased primary key.
+/// (surfaces "still waiting" to the organizer without a separate counter) and
+/// replaces the account. The organizer clears the flag after paying out
+/// (`clear_credit_refund_request_handler`). Lowercases the email because
+/// `contacts.email` is the lowercased primary key.
+///
+/// The flag and the account are one D1 batch (one transaction): the queue can
+/// never show a request without its account, and the account row can only be
+/// written while the flag is set (its `WHERE EXISTS`).
 ///
 /// Returns `true` when a row was actually flagged. An `UPDATE` that matches no
 /// contact is **not** a D1 error — it succeeds having changed nothing — so the
@@ -294,25 +307,27 @@ pub struct CreditLiability {
 pub(crate) async fn set_credit_refund_requested(
     db: &D1Database,
     email: &str,
+    account: &event_checkin_domain::models::credit_payout::RefundAccount,
 ) -> Result<bool, String> {
     let email_lower = email.to_lowercase();
-    let stmt = db.prepare(
-        "UPDATE contacts \
-         SET credit_refund_requested = 1, \
-         credit_refund_requested_at = datetime('now') \
-         WHERE email = ?1",
-    );
-    let result = stmt
+    let flag = db
+        .prepare(
+            "UPDATE contacts \
+             SET credit_refund_requested = 1, \
+             credit_refund_requested_at = datetime('now') \
+             WHERE email = ?1",
+        )
         .bind_refs(&[D1Type::Text(&email_lower)])
-        .map_err(|e| format!("D1 set_credit_refund_requested bind: {e:?}"))?
-        .run()
+        .map_err(|e| format!("D1 set_credit_refund_requested bind: {e:?}"))?;
+    let save = super::credit_refund_accounts::save_statement(db, &email_lower, account)?;
+    let results = db
+        .batch(vec![flag, save])
         .await
         .map_err(|e| format!("D1 set_credit_refund_requested run: {e:?}"))?;
 
-    let changes = result
-        .meta()
-        .ok()
-        .flatten()
+    let changes = results
+        .first()
+        .and_then(|r| r.meta().ok().flatten())
         .and_then(|m| m.changes)
         .unwrap_or(0);
     Ok(changes > 0)
@@ -328,16 +343,21 @@ pub(crate) async fn clear_credit_refund_requested(
     // Clears every email of the person: the reversal is person-wide, so a
     // sibling flag left set would re-queue a request for credit that is already
     // paid back and now reads ฿0.
+    //
+    // The payout account goes in the same batch: once the request is closed,
+    // nothing needs the account number any more (`.issues/190`).
     let email_lower = email.to_lowercase();
-    let stmt = db.prepare(concat!(
-        "UPDATE contacts \
+    let flag = db
+        .prepare(concat!(
+            "UPDATE contacts \
          SET credit_refund_requested = 0, credit_refund_requested_at = NULL \
          WHERE LOWER(email) IN ",
-        crate::db::person::person_emails_of!("?1")
-    ));
-    stmt.bind_refs(&[D1Type::Text(&email_lower)])
-        .map_err(|e| format!("D1 clear_credit_refund_requested bind: {e:?}"))?
-        .run()
+            crate::db::person::person_emails_of!("?1")
+        ))
+        .bind_refs(&[D1Type::Text(&email_lower)])
+        .map_err(|e| format!("D1 clear_credit_refund_requested bind: {e:?}"))?;
+    let account = super::credit_refund_accounts::delete_for_person_statement(db, &email_lower)?;
+    db.batch(vec![flag, account])
         .await
         .map_err(|e| format!("D1 clear_credit_refund_requested run: {e:?}"))?;
 
@@ -376,6 +396,53 @@ pub struct CreditRefundRequest {
     pub locked_until: String,
     #[serde(default)]
     pub requested_at: String,
+    /// Whole hours the request has been open — the D3 7-day clock
+    /// (`credit_payout::is_overdue`). 0 when `requested_at` is missing.
+    #[serde(default)]
+    pub age_hours: i64,
+    /// Where the attendee asked to be paid (`.issues/190`). `None` for a
+    /// request made before migration 0059, or a stored row that does not parse.
+    #[serde(default, skip_deserializing)]
+    pub account: Option<event_checkin_domain::models::credit_payout::RefundAccount>,
+    /// Every organization the person's ledger rows belong to — the payout
+    /// scope check needs all of them covered. Not sent to the client.
+    #[serde(default, skip_serializing)]
+    pub org_ids: String,
+    // The stored account columns, folded into `account` by
+    // [`credit_refund_requests`] and never serialized as-is.
+    #[serde(default, skip_serializing)]
+    pub account_method: Option<String>,
+    #[serde(default, skip_serializing)]
+    pub promptpay_id: Option<String>,
+    #[serde(default, skip_serializing)]
+    pub bank_name: Option<String>,
+    #[serde(default, skip_serializing)]
+    pub bank_account: Option<String>,
+    #[serde(default, skip_serializing)]
+    pub account_name: Option<String>,
+}
+
+impl CreditRefundRequest {
+    /// The organization ids from `org_ids` (a JSON array built by SQLite).
+    /// An unparseable value is an empty list, which no non-super-admin scope
+    /// covers — so a corrupt row is hidden, never shown to the wrong org.
+    pub fn organization_ids(&self) -> Option<Vec<String>> {
+        serde_json::from_str(&self.org_ids).ok()
+    }
+
+    /// Fold the stored account columns into [`Self::account`].
+    fn with_account(mut self) -> Self {
+        self.account = self.account_method.as_deref().and_then(|method| {
+            event_checkin_domain::models::credit_payout::RefundAccount::from_columns(
+                method,
+                self.promptpay_id.take(),
+                self.bank_name.take(),
+                self.bank_account.take(),
+                self.account_name.take(),
+            )
+        });
+        self
+    }
 }
 
 /// List all contacts with an open "credit refund requested" flag — backs the
@@ -436,8 +503,18 @@ pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest>
                      WHERE ",
         crate::db::credit_ledger::unreturned_apply_of!("LOWER(c.email)"),
         " ORDER BY e.event_end_ms DESC LIMIT 1), '') AS locked_until, \
-           COALESCE(c.credit_refund_requested_at, '') AS requested_at \
+           COALESCE(c.credit_refund_requested_at, '') AS requested_at, \
+           COALESCE(CAST((julianday('now') - julianday(c.credit_refund_requested_at)) * 24 \
+                         AS INTEGER), 0) AS age_hours, \
+           (SELECT json_group_array(DISTINCT l.organization_id) FROM credit_ledger l \
+             WHERE l.email IN ",
+        crate::db::person::person_emails_of!("LOWER(c.email)"),
+        ") AS org_ids, \
+           a.method AS account_method, a.promptpay_id AS promptpay_id, \
+           a.bank_name AS bank_name, a.bank_account AS bank_account, \
+           a.account_name AS account_name \
          FROM contacts c \
+         LEFT JOIN credit_refund_accounts a ON a.email = LOWER(c.email) \
          WHERE c.credit_refund_requested = 1 \
            AND NOT EXISTS (SELECT 1 FROM contacts c2 \
              WHERE c2.credit_refund_requested = 1 \
@@ -457,6 +534,7 @@ pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest>
         Ok(rows) => rows
             .into_iter()
             .filter_map(|v| serde_json::from_value::<CreditRefundRequest>(v).ok())
+            .map(CreditRefundRequest::with_account)
             .collect(),
         // Non-fatal: the deposits view must still render without the queue.
         // Logged upstream if needed; here we degrade to empty.

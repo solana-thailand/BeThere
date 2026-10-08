@@ -12,6 +12,7 @@
 //! | `posters/` | Event marketing posters | `posters/{event_id}.{ext}` |
 //! | `metadata/` | NFT metadata JSON | `metadata/{event_id}.json` |
 //! | `exports/` | Walk-in CSV exports | `exports/{event_id}/{timestamp}.csv` |
+//! | `credit-payouts/` | Held-credit payout transfer slips | `credit-payouts/{org}/{owner}/{request}.jpg` |
 
 use axum::{
     extract::{Path, State},
@@ -46,6 +47,40 @@ pub const PREFIX_METADATA: &str = "metadata/";
 
 /// R2 key prefix for walk-in CSV export files.
 pub const PREFIX_EXPORTS: &str = "exports/";
+
+/// R2 key prefix for the organizer's transfer slip of a held-credit payout
+/// (`.issues/190`). Staff-only, like `refunds/`.
+pub const PREFIX_CREDIT_PAYOUTS: &str = "credit-payouts/";
+
+/// The R2 key (without extension) of one credit payout's transfer slip:
+/// `credit-payouts/{org}/{owner}/{request}`.
+///
+/// - `org`: the organization the payout is for, `default` for the default
+///   (empty-id) organization — a key segment cannot be empty.
+/// - `owner`: BLAKE3 of the lowercased contact email, first 16 hex chars. The
+///   key is logged on upload, and an email in it would put the address in the
+///   log stream (Issue 070).
+/// - `request`: the request's `requested_at` reduced to digits, so a new
+///   request never overwrites an earlier payout's slip.
+///
+/// Every segment is `[a-z0-9_-]`, so the key is also a valid URL path.
+pub fn credit_payout_key(organization_id: &str, email: &str, requested_at: &str) -> String {
+    let org: String = match organization_id.trim() {
+        "" => "default".to_string(),
+        id => id
+            .chars()
+            .map(
+                |c| match c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                    true => c.to_ascii_lowercase(),
+                    false => '_',
+                },
+            )
+            .collect(),
+    };
+    let owner = blake3::hash(email.trim().to_lowercase().as_bytes()).to_hex();
+    let request: String = requested_at.chars().filter(char::is_ascii_digit).collect();
+    format!("{PREFIX_CREDIT_PAYOUTS}{org}/{}/{request}", &owner[..16])
+}
 
 /// Build an R2 key for a THB payment slip image.
 pub fn slip_key(event_id: &str, attendee_id: &str) -> String {
@@ -311,6 +346,19 @@ pub async fn serve_refund(
     Path((event_id, attendee_id)): Path<(String, String)>,
 ) -> Response {
     let key = format!("{PREFIX_REFUNDS}{event_id}/{attendee_id}");
+    serve_r2_object(&state, &key, Visibility::Private, None).await
+}
+
+/// GET /api/storage/credit-payouts/{org}/{owner}/{request}
+///
+/// Serves a held-credit payout transfer slip (`credit_payout_key`). Staff-only
+/// financial document, like the refund receipts above.
+#[worker::send]
+pub async fn serve_credit_payout(
+    State(state): State<AppState>,
+    Path((org, owner, request)): Path<(String, String, String)>,
+) -> Response {
+    let key = format!("{PREFIX_CREDIT_PAYOUTS}{org}/{owner}/{request}");
     serve_r2_object(&state, &key, Visibility::Private, None).await
 }
 

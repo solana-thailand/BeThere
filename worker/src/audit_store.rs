@@ -65,6 +65,10 @@ pub enum AuditAction {
     /// (off-chain THB; sibling of `RefundMarked`). Recorded for auditability
     /// of the credit-granting action (Issue #032 / #061).
     DepositHeldAsCredit,
+    /// An organizer paid held rolling credit back out and cleared the request
+    /// (`.issues/190`). Global log; `actor` is the staff email, `target` the
+    /// contact, metadata the confirmed amounts and the transfer slip path.
+    CreditRefundPaidOut,
     ClaimForfeited,
 
     // Check-in

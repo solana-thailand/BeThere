@@ -8,6 +8,7 @@ pub mod claim_locks;
 pub mod contacts;
 pub mod credit_coverage;
 pub mod credit_ledger;
+pub mod credit_refund_accounts;
 pub mod d1_int;
 pub mod d1_safe;
 pub mod dashboard;

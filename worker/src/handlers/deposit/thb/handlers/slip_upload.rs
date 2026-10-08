@@ -218,23 +218,14 @@ pub async fn upload_thb_slip_handler(
     .await;
 
     // Bank info is required for THB refund processing
-    if body
-        .bank_account
-        .as_ref()
-        .is_none_or(|v| v.trim().is_empty())
-    {
-        return Err(AppError::Validation("bank_account is required".to_string()).into());
-    }
-    if body.bank_name.as_ref().is_none_or(|v| v.trim().is_empty()) {
-        return Err(AppError::Validation("bank_name is required".to_string()).into());
-    }
-    if body
-        .account_name
-        .as_ref()
-        .is_none_or(|v| v.trim().is_empty())
-    {
-        return Err(AppError::Validation("account_name is required".to_string()).into());
-    }
+    // One rule for every refund account (`domain::models::credit_payout`):
+    // the credit refund request validates its bank option with it too.
+    event_checkin_domain::models::credit_payout::validate_bank_refund_fields(
+        body.bank_account.as_deref(),
+        body.bank_name.as_deref(),
+        body.account_name.as_deref(),
+    )
+    .map_err(|e| AppError::Validation(e.to_string()))?;
 
     // Check if already deposited
     let existing = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)
