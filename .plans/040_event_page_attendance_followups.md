@@ -39,6 +39,7 @@ which shipped before the 6 Oct freeze.
   `MIN_PUBLIC_UNCAPPED_COUNT` if the owner wants small numbers shown.
   **Blocked (2026-10-06, `event-checkin-42`):** owner preference, and any change moves the `/e/{slug}` attendance row (event flow, 6–8 Oct freeze); 10 stays until the owner says otherwise.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's preference; the freeze half has lapsed.
+  **Checked (2026-10-08, `event-checkin-fe`):** `MIN_PUBLIC_UNCAPPED_COUNT` is 10 on every branch. **Owner must:** say "keep 10" (then this closes) or name the new number.
 
 ## Deploys
 

@@ -197,6 +197,7 @@ Owner decisions raised by phase 3:
   **Reopen trigger (2026-10-01, `event-checkin-45`):** the legal review returns section
   numbers; then change EN and TH together.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's legal review of the section numbers.
+  **Checked (2026-10-08, `event-checkin-fe`):** not done on any branch; `develop`, `main` and every feature branch still carry Sections 19/29/37/38 in `privacy.json`. **Owner must:** return the lawyer's numbers for `deletion_body` (s.33 / s.24(3)?) and a basis decision for `chain_note` (`docs/pdpa_citation_check.md`).
   - [x] Citations checked against the Act (2026-10-08, `event-checkin-c0`):
     `docs/pdpa_citation_check.md`, for the reviewer. Erasure is s.33 and
     the contract basis is s.24(3), as suspected. The `/privacy` §5 "s.37

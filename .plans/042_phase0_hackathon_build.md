@@ -95,6 +95,7 @@ then the landing, then the share tags. Each item ships on its own.
   **0.4 blocked (2026-10-06, `event-checkin-42`):** needs the owner's sandbox organizer + faucet keys and a Turnstile site key, and ships only via a staging push.
   **0.5 blocked (2026-10-06, `event-checkin-42`):** built on `feature/042-landing` (peer `event-checkin-0d`, `.plans/043`); L8–L10 wait for owner content, L12 for the CI baselines, prod for an owner go after the take.
   **Still waiting (2026-10-08, `event-checkin-19`):** 0.4 on the owner's sandbox organizer + faucet keys and a Turnstile site key.
+  **Checked (2026-10-08, `event-checkin-fe`):** no sandbox work on any branch. The Turnstile key is optional (the plan allows rate limits only). **Owner must:** decide who holds the sandbox organizer and faucet keys and how much devnet USDC to fund them with. Also blocked by overlap: a `/sandbox` route edits `frontend-leptos/src/lib.rs` and `pages/mod.rs`, which `event-checkin-f0` has open for R4.0 in `/tmp/ec-f0-r4`, so it starts after R4.0 lands.
 - [~] **0.6** built on `develop`: `og:image` / `twitter:image` were the 400×400
   `/api/badge.svg`, which X, Facebook and LINE do not render; now
   `/og-image.png`, 1200×630, one bilingual card (crawlers do not run the SPA,

@@ -73,6 +73,7 @@ the Linux baselines were re-taken.
   verify at 390×844 EN + TH. Nothing here can start earlier: the brief
   forbids deriving the number from IDs, so there is no interim version.
   **Still waiting (2026-10-08, `event-checkin-19`):** the owner's approval of `.issues/178`; the take half of the trigger is met (filmed 8 Oct, plan 044 1.5).
+  **Checked (2026-10-08, `event-checkin-fe`):** not built on any branch (`display_code` appears only in docs); `.issues/178` is still `open`, design only. **Owner must:** approve `.issues/178` as written, or amend it.
 - Verified at 390×844 EN + TH; a11y allowlist still empty. CI after push:
   only the 2 re-taken ticket baselines failed, as designed.
 
@@ -92,6 +93,7 @@ the Linux baselines were re-taken.
   Workers plan (render SVG→PNG in the Worker), or a PNG rendered per event
   offline and uploaded to R2 on save?"
   **Tradeoff written (2026-10-01, `event-checkin-53`):** `.issues/183`.
+  **Checked (2026-10-08, `event-checkin-fe`):** no per-event OG work on any branch; `.issues/183` is still `open`. **Owner must:** pick one option in `.issues/183`: a paid Workers plan, or a per-event PNG rendered offline and stored in R2.
   Crawlers never see the per-event tags (the SPA sets them after boot, and
   `/e/*` is asset-first), and the static card's `badge.svg` renders nowhere.
   Recommendation: Worker splices per-event tags into `/e/{slug}`, and the
