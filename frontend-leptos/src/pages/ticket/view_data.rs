@@ -10,6 +10,8 @@ pub struct TicketViewData {
     // QR
     pub qr_image: Option<String>,
     pub has_qr: bool,
+    /// Booking code shown under the QR (.issues/178). Empty = not shown.
+    pub display_code: String,
 
     // Attendee
     pub name: String,
@@ -116,6 +118,7 @@ impl TicketViewData {
         Self {
             qr_image: data.qr_image.clone(),
             has_qr: data.qr_image.is_some(),
+            display_code: data.display_code.clone(),
             name: data.attendee.name.clone(),
             ticket_name: data.attendee.ticket_name.clone(),
             participation: data.participation_type.clone(),

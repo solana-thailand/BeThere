@@ -181,6 +181,7 @@ pub fn Scanner() -> impl IntoView {
     });
 
     // Handle manual form submission
+    let i18n = crate::i18n::use_i18n();
     let handle_manual_submit = move |ev: leptos::ev::SubmitEvent| {
         ev.prevent_default();
         let value = manual_input.get().trim().to_string();
@@ -192,8 +193,18 @@ pub fn Scanner() -> impl IntoView {
             );
             return;
         }
-        match extract_attendee_id(&value) {
-            Some(id) => process_attendee_id(&id, set_check_in_state, set_toast, set_session_total),
+        match classify_manual_entry(&value) {
+            Some(ManualEntry::Code(code)) => process_display_code(
+                code,
+                active_event_id.get_untracked(),
+                i18n.get_locale_untracked(),
+                set_check_in_state,
+                set_toast,
+                set_session_total,
+            ),
+            Some(ManualEntry::AttendeeId(id)) => {
+                process_attendee_id(&id, set_check_in_state, set_toast, set_session_total)
+            }
             None => {
                 components::show_toast(&set_toast, "Invalid attendee ID format", ToastType::Error)
             }
@@ -1258,7 +1269,9 @@ pub fn Scanner() -> impl IntoView {
                                 <div class="manual-input-group">
                                     <input
                                         type="text"
-                                        placeholder="Enter attendee ID (e.g. gst-abc123)"
+                                        placeholder=crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.code.scanner_placeholder))
+                                        autocapitalize="characters"
+                                        autocomplete="off"
                                         prop:value=move || manual_input.get()
                                         on:input=move |ev| {
                                             let val = event_target_value(&ev);

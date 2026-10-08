@@ -218,5 +218,12 @@
     "return_requested_desc": "You've already requested a return of your held credit. The organizer has been notified and will process it through their standard refund channel.",
     "return_submitted": "Request Submitted",
     "return_failed": "Request Failed"
+  },
+  "code": {
+    "label": "Ticket code",
+    "hint": "If the QR won't scan, read this code to staff.",
+    "scanner_placeholder": "Ticket code (e.g. 7KQ2XM) or attendee ID",
+    "scanner_not_found": "No ticket with that code in this event",
+    "scanner_pick_event": "Choose an event before entering a ticket code"
   }
 }

@@ -464,6 +464,11 @@ pub struct AttendeeData {
     /// Empty = no calendar link shown.
     #[serde(default)]
     pub calendar_subscribe_url: String,
+    /// Short booking code printed under the QR as `Nº XXXXXX` (.issues/178).
+    /// Empty = none yet. Not a credential: only the staff scanner's
+    /// event-scoped lookup accepts it.
+    #[serde(default)]
+    pub display_code: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

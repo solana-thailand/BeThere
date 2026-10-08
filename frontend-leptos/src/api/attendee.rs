@@ -228,6 +228,51 @@ pub async fn get_public_ticket(
     })
 }
 
+/// `{ "attendee_id": … }` from the by-code lookup.
+#[derive(Debug, Clone, Default, Deserialize)]
+struct AttendeeIdByCode {
+    attendee_id: String,
+}
+
+/// GET /api/attendees/by-code/:code?event_id=xxx (staff, .issues/178)
+///
+/// Resolves a ticket's booking code to the attendee id within one event. The
+/// scanner then runs its normal `get_attendee` + `check_in` flow with that id,
+/// so the code itself unlocks nothing. Not cached: a code typed at the door
+/// must hit the server's event-access check every time.
+pub async fn lookup_attendee_id_by_code(
+    code: &event_checkin_domain::models::attendee::DisplayCode,
+    event_id: Option<&str>,
+) -> Result<String, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/attendees/by-code/{code}?event_id={eid}"),
+        _ => format!("/attendees/by-code/{code}"),
+    };
+    let response = super::api_get_no_cache(&path).await?;
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Request failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+    let json = super::fetch::response_text(&response).await?;
+    let wrapper: ApiResponse<AttendeeIdByCode> =
+        serde_json::from_str(&json).map_err(|e| ApiError {
+            message: format!("Failed to parse code lookup: {e}"),
+            status: 0,
+        })?;
+    wrapper.data.map(|d| d.attendee_id).ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
 pub async fn check_in(
