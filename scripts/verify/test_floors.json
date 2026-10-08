@@ -59,6 +59,7 @@
     "qr_svg_path tests/qr_svg_path.rs": 2,
     "refund_account_digits tests/refund_account_digits.rs": 6,
     "refund_queue_checked_in tests/refund_queue_checked_in.rs": 2,
+    "scanner_event_scope tests/scanner_event_scope.rs": 2,
     "scanner_scan_wakeup tests/scanner_scan_wakeup.rs": 3,
     "scanner_single_detail_fetch tests/scanner_single_detail_fetch.rs": 2,
     "serde_contract tests/serde_contract.rs": 55,

@@ -147,7 +147,13 @@ pub fn Scanner() -> impl IntoView {
                     if let Some(qr_data) = check_qr_result_js() {
                         log::info!("[scanner] QR code detected: {qr_data}");
                         match extract_attendee_id(&qr_data) {
-                            Some(id) => process_attendee_id(&id, set_state, set_t, set_s_total),
+                            Some(id) => process_attendee_id(
+                                &id,
+                                active_event_id.get_untracked(),
+                                set_state,
+                                set_t,
+                                set_s_total,
+                            ),
                             None => components::show_toast(
                                 &set_t,
                                 "Invalid QR code format",
@@ -176,7 +182,13 @@ pub fn Scanner() -> impl IntoView {
             let _ = window.history().and_then(|h| {
                 h.replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&clean_path))
             });
-            process_attendee_id(&scan_id, set_check_in_state, set_toast, set_session_total);
+            process_attendee_id(
+                &scan_id,
+                active_event_id.get_untracked(),
+                set_check_in_state,
+                set_toast,
+                set_session_total,
+            );
         }
     });
 
@@ -202,9 +214,13 @@ pub fn Scanner() -> impl IntoView {
                 set_toast,
                 set_session_total,
             ),
-            Some(ManualEntry::AttendeeId(id)) => {
-                process_attendee_id(&id, set_check_in_state, set_toast, set_session_total)
-            }
+            Some(ManualEntry::AttendeeId(id)) => process_attendee_id(
+                &id,
+                active_event_id.get_untracked(),
+                set_check_in_state,
+                set_toast,
+                set_session_total,
+            ),
             None => {
                 components::show_toast(&set_toast, "Invalid attendee ID format", ToastType::Error)
             }

@@ -20,8 +20,13 @@ use super::state::*;
 /// - Not approved → `NotApproved`
 /// - Not In-Person → `NotInPerson`
 /// - Approved & In-Person → `Found` (ready to confirm)
+///
+/// `event_id` is the event selected in the scanner. Without it the server
+/// resolves the active event, so a lookup could read a different event than
+/// the one the check-in is then written to (`.issues/153`: the id is global).
 pub(super) fn process_attendee_id(
     id: &str,
+    event_id: Option<String>,
     set_state: WriteSignal<CheckInState>,
     set_toast: WriteSignal<Option<components::ToastMessage>>,
     set_session_total: WriteSignal<u32>,
@@ -30,7 +35,7 @@ pub(super) fn process_attendee_id(
     let attendee_id = id.to_string();
     set_state.set(CheckInState::LookingUp);
     leptos::task::spawn_local(async move {
-        lookup_and_classify(attendee_id, None, set_state, set_toast).await;
+        lookup_and_classify(attendee_id, event_id, set_state, set_toast).await;
     });
 }
 
