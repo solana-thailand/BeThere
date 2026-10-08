@@ -45,16 +45,16 @@ section numbers are the same in both languages.
 EN and TH carry the same numbers (`มาตรา 37`, `มาตรา 29`, `มาตรา 38`), so
 both change together.
 
-## Internal docs (not user-facing; listed, not edited)
+## Internal docs (not user-facing)
 
 | File | We say | Finding |
 |---|---|---|
 | `docs/pdpa_breach_procedure.md` | 72 h notice, s.37(4) | Right |
 | `docs/pdpa_ropa.md` | RoPA s.39; DPO s.41; processor agreement s.40; transfer s.28/29; bases s.24/s.19 | Right |
 | `docs/ux_roadmap.md` PDPA-1 | consent, Section 19 | Right |
-| `docs/ux_roadmap.md` PDPA-2 | photos, "Section 20 (sensitive data)" | Wrong: s.20 is about minors; sensitive data is s.26, and an ordinary photo is not sensitive data unless it is used as biometric data |
+| `docs/ux_roadmap.md` PDPA-2 | photos, "Section 20 (sensitive data)" | Wrong: s.20 is about minors; sensitive data is s.26, and an ordinary photo is not sensitive data unless it is used as biometric data. **Fixed** to s.19 + s.26-if-biometric |
 | `docs/ux_roadmap.md` PDPA-3 | notice, Section 23 | Right |
-| `docs/ux_roadmap.md` PDPA-4 | erasure, "Section 29" | Wrong: s.33 |
+| `docs/ux_roadmap.md` PDPA-4 | erasure, "Section 29" | Wrong: s.33. **Fixed** |
 
 ## Candidate wording for when the review returns
 
