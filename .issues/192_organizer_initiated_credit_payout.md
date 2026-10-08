@@ -68,7 +68,20 @@ means the organizer already knows where to send the money.
       **Not masked account:** the payout deletes the account row, so there
       is nothing to mask. Keeping a masked copy (bank + last four) in an
       append-only ledger is new retention; owner's call, not built.
-- [ ] Fix the cramped payout form and the Buddhist-era date on English pages.
+- [x] Fix the cramped payout form and the Buddhist-era date on English pages
+      (`dd7f9c8c`). **Date cause:** `I18nContextProvider` wraps every route,
+      staff pages included, so a Thai browser or a stored `th` pick made
+      `current_date_tag()` return `th-TH` on English-only admin pages. Now
+      `locale::date_tag_on` keeps `en-GB` off attendee paths
+      (`tests/i18n_catalog.rs`). **Form cause:** the row reused the shared
+      `.admin-dep-confirm-row`, one non-wrapping flex line used by six other
+      pages. It now has its own `.admin-dep-payout-form` grid with one label
+      per field. Verified in headless Chrome against a local worker with
+      `bethere.lang=th` (`<html lang="th">`): the row reads "From deposit on
+      30 Aug 2026" and no 2569 appears; the control
+      `toLocaleDateString('th-TH')` in the same page gives "30 ส.ค. 2569".
+      At 1280px the two fields sit side by side, at 375px they stack, and
+      there is no horizontal overflow.
 - [ ] Staging: run the payout end to end with a held deposit, and open the
       ticket page afterwards: the card must read "Credit Paid Back" (not yet
       seen in a browser).
