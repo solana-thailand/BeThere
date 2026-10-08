@@ -185,7 +185,7 @@ Phase 3: every string on the attendee routes comes from the catalog.
   wallet modal.
 
 Owner decisions raised by phase 3:
-- [ ] **Owner, 2026-09-29: legal review first; text unchanged until then.**
+- [ ] **Owner, 2026-09-29: legal review first; text unchanged until then.** **Blocked (2026-10-08, `event-checkin-fe`):** only the lawyer's review of `privacy.json` (EN + TH) remains.
   Privacy notice PDPA section numbers (§5 "s.37 technical-impossibility
   exemption", /data-privacy "s.29 erasure", "s.38 contract exemption") look
   wrong against the Act (erasure is usually s.33, contract basis s.24(3)).
