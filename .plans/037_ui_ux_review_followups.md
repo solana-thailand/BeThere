@@ -339,11 +339,19 @@ Owner decisions raised by phase 3:
     the old and new value at either width.
   - Guard: `tests/breakpoint_set.rs` (floored, 4); it names all 12 old
     queries when run on develop's stylesheets.
-- [ ] Breakpoints, landing: `style-23-landing.css` keeps 560/860/900 and `min 1240` (release 3 adds `min 901`)
-  (exempt in `tests/breakpoint_set.rs`).
-  **Waiting on (2026-10-08):** release 3 (pull 157) merging, which rewrites
-  the file and needs the owner's go; move its queries after that and drop
-  the exemption.
+- [x] Breakpoints, landing (2026-10-08, session `event-checkin-f0`, after
+  pull 157 merged): the 13 width queries in `style-23-landing.css` moved
+  900/860 → max 767, 560 → max 480, `min 901` → `min 768`; `min 1240` (the
+  side rail) stays and joins the set as a min-only "wide" edge. The exemption
+  is gone; the guard is now 359/480/767 (max) and 481/768/1240 (min).
+  - A/B on the live prod landing, rules rewritten in place, 15 widths
+    (481–1024): only 481–560 and 768–900 change, as intended. One defect
+    surfaced: at 768–792px the desktop swimlane overflowed by up to 25px
+    (four step columns at their longest word plus a fixed 200px route
+    column). Fixed with `minmax(120px, 200px)` for the route column and a
+    wrapping route header (the LIVE/DEVNET tag drops under the name when
+    narrow). No overflow at any width; 1024 and 1440 are pixel-identical to
+    before, and the e2e baselines (390, 1440) are untouched.
 - [x] Remaining hardcoded colours in other Rust files (2026-09-29, session
   `event-checkin-4e`). 20 inline text colours in 6 files now use tokens:
   `#94a3b8`/`#64748b` → `--text-muted`, `#cbd5e1` → `--text-secondary`,

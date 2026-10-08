@@ -4,8 +4,9 @@
 //! 641, 720, 767, 768, 860, 900). Neighbouring rules disagreed by a few
 //! pixels, so a page could be half "phone" and half "tablet" at the same
 //! width: at exactly 768px `(max-width: 768px)` and `(min-width: 768px)` both
-//! matched. Every width query outside [`EXEMPT`] now uses one of the
-//! canonical edges below, and this keeps new ones on the grid.
+//! matched. Every width query now uses one of the canonical edges below,
+//! and this keeps new ones on the grid. The landing (release 3: 560, 860,
+//! 900, 901, 1240) moved onto it after pull 157 merged.
 //!
 //! Height, orientation, hover and pointer queries are not checked.
 
@@ -14,12 +15,9 @@ use std::path::PathBuf;
 
 /// `max-width` edges: small phone, phone, below tablet.
 const MAX_WIDTHS: &[u32] = &[359, 480, 767];
-/// `min-width` edges: the first pixel above a phone, tablet and up.
-const MIN_WIDTHS: &[u32] = &[481, 768];
-
-/// Files not yet moved to the set. The landing page is rewritten by release 3
-/// (pull 157); its queries move after that merges (`.plans/037`).
-const EXEMPT: &[&str] = &["style-23-landing.css"];
+/// `min-width` edges: the first pixel above a phone, tablet and up, and wide
+/// desktop (the landing's side rail needs 1240px beside the content column).
+const MIN_WIDTHS: &[u32] = &[481, 768, 1240];
 
 fn styles_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("styles")
@@ -79,13 +77,13 @@ fn off_grid_widths_are_rejected() {
 }
 
 #[test]
-fn exempt_files_exist() {
-    for name in EXEMPT {
-        assert!(
-            styles_dir().join(name).is_file(),
-            "{name} is exempt but gone; drop it from EXEMPT"
-        );
-    }
+fn the_wide_edge_is_min_only() {
+    assert!(allowed("min-width", 1240));
+    assert!(!allowed("max-width", 1240));
+    assert!(
+        !allowed("max-width", 1239),
+        "nothing is styled \"below wide\""
+    );
 }
 
 #[test]
@@ -104,9 +102,6 @@ fn width_queries_use_the_breakpoint_set() {
             .and_then(|n| n.to_str())
             .unwrap_or_default()
             .to_owned();
-        if EXEMPT.contains(&name.as_str()) {
-            continue;
-        }
         let css = fs::read_to_string(&path).expect("read stylesheet");
         for (feature, px) in width_queries(&css) {
             checked += 1;
@@ -121,7 +116,7 @@ fn width_queries_use_the_breakpoint_set() {
     );
     assert!(
         off_grid.is_empty(),
-        "width queries off the 359/480/767 (max) and 481/768 (min) set:\n{}",
+        "width queries off the 359/480/767 (max) and 481/768/1240 (min) set:\n{}",
         off_grid.join("\n")
     );
 }
