@@ -53,10 +53,9 @@ use event_checkin_domain::models::error::AppError;
 use serde::{Deserialize, Serialize};
 
 use event_checkin_domain::models::credit_payout::{
-    PaidAmounts, RefundAccount, SavedAccountPreview, payout_mismatch_message,
+    PaidAmounts, RefundAccount, SavedAccountPreview,
 };
 
-use crate::db::credit_ledger::RefundOutcome;
 use crate::error::{ApiOk, WorkerError};
 use crate::state::AppState;
 
@@ -392,37 +391,6 @@ pub struct ClearCreditRefundResponse {
     pub message: String,
 }
 
-/// Ledger note on every payout reversal row.
-const PAYOUT_NOTE: &str = "held-credit payout processed by organizer";
-
-/// Reverse the person's payable credit as the ledger side of an out-of-band
-/// payout of exactly `paid` — one guarded statement
-/// (`credit_ledger::try_refund`), the only writer of `refund` rows.
-///
-/// Returns `Err` — and therefore aborts the clear — if the write fails. That is
-/// deliberate: a cleared flag with an unreversed ledger is a double payout (the
-/// attendee has the cash *and* spendable credit), whereas a failed clear leaves
-/// the request in the queue to retry. The request key (`refund:{email}:
-/// {requested_at}:…`) makes the retry a no-op once the reversal has landed.
-async fn reverse_held_credit(
-    db: &worker::D1Database,
-    email: &str,
-    requested_at: &str,
-    paid: PaidAmounts,
-    contact_fingerprint: &str,
-) -> Result<RefundOutcome, String> {
-    let outcome =
-        crate::db::credit_ledger::try_refund(db, email, requested_at, paid, PAYOUT_NOTE).await?;
-    tracing::info!(
-        contact_fingerprint = %contact_fingerprint,
-        thb = paid.thb,
-        usdc = paid.usdc,
-        outcome = ?outcome,
-        "held credit payout reversal"
-    );
-    Ok(outcome)
-}
-
 /// The organizer records a held-credit payout and clears the request
 /// (Issue #061 §D3, hardened in `.issues/190`).
 ///
@@ -430,7 +398,7 @@ async fn reverse_held_credit(
 /// organization the credit belongs to.
 ///
 /// **The guarded reversal gates the clear.** The organizer confirms what they
-/// transferred (`paid`); [`reverse_held_credit`] writes only if that still
+/// transferred (`paid`); `credit_payout::settle_payout` writes only if that still
 /// equals the payable balance, in the same statement as the write, so a
 /// registration that spent the credit after the organizer looked turns into a
 /// 409 with nothing recorded instead of a reversal of a number nobody paid.
@@ -480,17 +448,7 @@ pub async fn clear_credit_refund_request_handler(
     if let Some(requested_at) =
         crate::db::contacts::get_credit_refund_requested_at(db, &body.email).await
     {
-        // Every bucket the person holds, across orgs and currencies — the
-        // request is against the whole rolling balance (plan 022 §6).
-        let buckets = crate::db::credit_ledger::positive_balances(db, &body.email)
-            .await
-            .map_err(AppError::Internal)?;
-        if !scope.covers(buckets.iter().map(|b| b.organization_id.as_str())) {
-            return Err(AppError::Forbidden(
-                "this credit belongs to an organization you do not run".to_string(),
-            )
-            .into());
-        }
+        let buckets = super::credit_payout::scoped_buckets(db, &scope, &body.email).await?;
 
         // Issue #120 §3. Nothing to reverse *and* credit still locked to an
         // event that has not ended means the organizer is about to clear a
@@ -539,74 +497,18 @@ pub async fn clear_credit_refund_request_handler(
             }
         }
 
-        // The confirmed payout against what is payable now. This read is the
-        // fast path for the message; the guarded write below re-checks it in
-        // the same statement as the reversal, which is what makes it safe.
-        let mut payable = PaidAmounts::default();
-        for bucket in &buckets {
-            payable.add(&bucket.currency, bucket.balance);
-        }
-        if paid != payable {
-            tracing::warn!(
-                staff_fingerprint = %staff_fingerprint,
-                target_fingerprint = %target_fingerprint,
-                confirmed = %paid,
-                payable = %payable,
-                "refused to clear credit refund request — confirmed amount is stale"
-            );
-            return Err(AppError::Conflict(payout_mismatch_message(paid, payable)).into());
-        }
-
-        if !paid.is_zero() {
-            // The slip names the org of the first bucket (sorted); a payout
-            // spanning orgs is rare and the slip covers all of it.
-            let org = match buckets.first() {
-                Some(bucket) => bucket.organization_id.as_str(),
-                None => "",
-            };
-            let proof = match body.proof.as_deref().map(str::trim) {
-                Some(data_url) if !data_url.is_empty() => Some(
-                    super::credit_payout::store_payout_proof(
-                        &state,
-                        org,
-                        &body.email,
-                        &requested_at,
-                        data_url,
-                    )
-                    .await?,
-                ),
-                _ => None,
-            };
-
-            let outcome =
-                reverse_held_credit(db, &body.email, &requested_at, paid, &target_fingerprint)
-                    .await
-                    .map_err(AppError::Internal)?;
-            if outcome == RefundOutcome::Mismatch {
-                // The balance moved between the read above and the write.
-                let now = crate::db::credit_ledger::positive_balances(db, &body.email)
-                    .await
-                    .map_err(AppError::Internal)?;
-                let mut payable_now = PaidAmounts::default();
-                for bucket in &now {
-                    payable_now.add(&bucket.currency, bucket.balance);
-                }
-                return Err(AppError::Conflict(payout_mismatch_message(paid, payable_now)).into());
-            }
-
-            // Who paid is part of the payout: a failure aborts before the flag
-            // clears, and the retry re-audits (the reversal is already a no-op).
-            super::credit_payout::audit_payout(
-                &state,
-                &claims.email,
-                &body.email,
-                paid,
-                &requested_at,
-                proof.as_deref(),
-            )
-            .await
-            .map_err(AppError::Internal)?;
-        }
+        super::credit_payout::settle_payout(
+            &state,
+            db,
+            &claims.email,
+            &body.email,
+            &requested_at,
+            paid,
+            body.proof.as_deref(),
+            &buckets,
+            super::credit_payout::PayoutInitiator::Attendee,
+        )
+        .await?;
     }
 
     // D1 clear — source of truth. Best-effort log on failure: an unreachable

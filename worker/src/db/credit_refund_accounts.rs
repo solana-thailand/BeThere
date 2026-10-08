@@ -26,6 +26,7 @@ use event_checkin_domain::models::credit_payout::{
 use worker::D1Database;
 use worker::d1::{D1PreparedStatement, D1Type};
 
+use super::contacts::CreditRefundRequest;
 use super::d1_safe::safe_all_rows;
 
 /// SQL subquery: the email whose account row speaks for the person `$email`
@@ -284,4 +285,88 @@ pub async fn purge(db: &D1Database) -> Result<usize, String> {
         .flatten()
         .and_then(|m| m.changes)
         .unwrap_or(0))
+}
+
+/// Whether any email of the person (`?1` lowercased) has an open credit refund
+/// request. The organizer-initiated payout refuses then: the attendee chose
+/// where to be paid, and the request queue is where that choice is paid.
+pub(crate) const OPEN_REQUEST_FOR_PERSON_SQL: &str = concat!(
+    "SELECT COUNT(*) AS n FROM contacts c \
+     WHERE c.credit_refund_requested = 1 AND LOWER(c.email) IN ",
+    crate::db::person::person_emails_of!("?1")
+);
+
+/// People the organizer may pay out without a request (`.issues/192`): the
+/// account that speaks for the person is the one copied from their THB
+/// deposit (never one they typed or replaced it with), no email of theirs
+/// has an open request, and they hold payable credit. One row per person —
+/// the chosen account row is unique per person. Same column aliases as the
+/// request queue (`contacts::credit_refund_requests`), so both deserialize
+/// into [`CreditRefundRequest`] and the amounts are the ones the guarded
+/// reversal removes.
+pub(crate) const DEPOSIT_ACCOUNT_HOLDERS_SQL: &str = concat!(
+    "SELECT * FROM (SELECT \
+       a.email AS email, \
+       COALESCE((SELECT c.name FROM contacts c WHERE LOWER(c.email) IN ",
+    crate::db::person::person_emails_of!("a.email"),
+    " AND COALESCE(c.name, '') <> '' \
+         ORDER BY LOWER(c.email) = a.email DESC, LOWER(c.email) LIMIT 1), '') AS name, \
+       COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                 WHERE l.currency = 'thb' AND l.email IN ",
+    crate::db::person::person_emails_of!("a.email"),
+    "), 0) AS credit_thb, \
+       COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                 WHERE l.currency = 'usdc' AND l.email IN ",
+    crate::db::person::person_emails_of!("a.email"),
+    "), 0) AS credit_usdc, \
+       (SELECT json_group_array(DISTINCT l.organization_id) FROM credit_ledger l \
+         WHERE l.email IN ",
+    crate::db::person::person_emails_of!("a.email"),
+    ") AS org_ids, \
+       a.method AS account_method, a.promptpay_id AS promptpay_id, \
+       a.bank_name AS bank_name, a.bank_account AS bank_account, \
+       a.account_name AS account_name, \
+       a.source AS account_source_raw, a.captured_at AS account_captured_at, \
+       a.replaced_deposit_account AS account_replaced_deposit \
+     FROM credit_refund_accounts a \
+     WHERE a.source = 'deposit' AND a.email = ",
+    chosen_account_email_of!("a.email"),
+    " AND NOT EXISTS (SELECT 1 FROM contacts c \
+         WHERE c.credit_refund_requested = 1 AND LOWER(c.email) IN ",
+    crate::db::person::person_emails_of!("a.email"),
+    ")) h WHERE h.credit_thb > 0 OR h.credit_usdc > 0 \
+     ORDER BY h.account_captured_at, h.email"
+);
+
+/// Whether the person has an open credit refund request
+/// ([`OPEN_REQUEST_FOR_PERSON_SQL`]). Errors propagate: the payout must not
+/// guess.
+pub async fn open_request_for_person(db: &D1Database, email: &str) -> Result<bool, String> {
+    let email_lower = email.trim().to_lowercase();
+    let stmt = db
+        .prepare(OPEN_REQUEST_FOR_PERSON_SQL)
+        .bind_refs(&[D1Type::Text(&email_lower)])
+        .map_err(|e| format!("D1 credit_refund_accounts open request bind: {e:?}"))?;
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows
+        .first()
+        .and_then(|row| row.get("n"))
+        .and_then(|n| n.as_i64())
+        .unwrap_or(0)
+        > 0)
+}
+
+/// Payable credit holders whose deposit account the organizer may pay to
+/// without a request ([`DEPOSIT_ACCOUNT_HOLDERS_SQL`]). Ended events' credit is
+/// released first, as the reversal does, so the listed amount is the one it
+/// removes.
+pub async fn deposit_account_holders(db: &D1Database) -> Result<Vec<CreditRefundRequest>, String> {
+    crate::db::credit_ledger::release_ended_applies(db).await?;
+    let stmt = db.prepare(DEPOSIT_ACCOUNT_HOLDERS_SQL);
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|v| serde_json::from_value::<CreditRefundRequest>(v).ok())
+        .map(CreditRefundRequest::with_account)
+        .collect())
 }

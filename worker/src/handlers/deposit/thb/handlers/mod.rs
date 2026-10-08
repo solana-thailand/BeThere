@@ -4,6 +4,7 @@ mod credit_payout;
 mod hold_admin;
 mod hold_credit;
 mod hold_refund_request;
+mod organizer_credit_payout;
 mod refund;
 mod slip_admin_upload;
 mod slip_agent;
@@ -21,6 +22,9 @@ pub use hold_credit::{credit_balance_handler, hold_deposit_handler};
 pub use hold_refund_request::{
     clear_credit_refund_request_handler, credit_refund_request_status_handler,
     credit_refund_requests_handler, request_credit_refund_handler,
+};
+pub use organizer_credit_payout::{
+    credit_payout_candidates_handler, organizer_credit_payout_handler,
 };
 pub use refund::{batch_thb_refund_handler, mark_manual_refund_handler, mark_refund_handler};
 pub use slip_admin_upload::admin_upload_thb_slip_handler;
