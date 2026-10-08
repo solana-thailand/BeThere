@@ -1,7 +1,7 @@
 use super::types::*;
 use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
-use crate::utils::deposit_copy::{never_forfeited, thb_refund_window};
+use crate::utils::deposit_copy::{deposit_comes_back, thb_refund_window};
 use leptos::prelude::*;
 
 pub fn deposit_section(data: &PublicEventData) -> AnyView {
@@ -90,12 +90,12 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>
                     <span class="pe-refund-text">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.refund_attend))}</span>
                 </div>
-                // Deposit model D1 (owner, 2026-09-28): nothing is forfeited.
+                // Deposit model D1 (owner, 2026-09-28): a no-show still gets it back.
                 // Ask for notice, threaten nothing (docs/deposit-commitment-model.md §5).
                 // The promise itself lives in `utils::deposit_copy` (one home,
                 // EN and TH); the catalog carries the words around it.
                 {if show_thb {
-                    let promise = move || never_forfeited(i18n.get_locale());
+                    let promise = move || deposit_comes_back(i18n.get_locale());
                     view! {
                         <div class="pe-refund-item">
                             <span class="pe-check"><Icon icon=IconName::Check class="icon-xs" /></span>

@@ -618,7 +618,7 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | On-chain deposits | ✅ USDC escrow (devnet) | ❌ | ❌ | ❌ | ✅ ETH (defunct) |
 | Attendance NFTs | ✅ cNFT | ❌ | ❌ | ✅ (Gnosis) | ❌ |
 | Deposit refund | ✅ THB within 7 days, or kept as credit; USDC claimed from escrow | ❌ | Manual | ❌ | ✅ Payout pool |
-| No-show penalty | None: a deposit is never forfeited (next step: a no-show without notice covers only the per-head cost already spent) | ❌ | ❌ | ❌ | ✅ Pool split |
+| No-show penalty | None: a no-show still gets the deposit back (next step: a no-show without notice covers only the per-head cost already spent) | ❌ | ❌ | ❌ | ✅ Pool split |
 | Quiz/Adventure gating | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
 | Cost per NFT | **$0.001** | N/A | N/A | ~$0.05–0.20 | N/A |
 | Stablecoin deposits | ✅ USDC | ❌ | ❌ | ❌ | ❌ (volatile ETH) |

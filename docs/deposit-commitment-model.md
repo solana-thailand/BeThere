@@ -146,7 +146,7 @@ different answers.
 
 | # | Decision | What it means in copy and code |
 |---|---|---|
-| **D1** | **A now, A′ next.** Nothing is forfeited today. A′ (a no-show who gave no notice covers only the per-head cost the organizer already spent) is the stated next step, not a current rule. | Copy: "Your deposit is never forfeited." Ask people to tell the organizer if they can't come, but threaten nothing. The pitch may name A′ as the next step. No code change. |
+| **D1** | **A now, A′ next.** Nothing is forfeited today. A′ (a no-show who gave no notice covers only the per-head cost the organizer already spent) is the stated next step, not a current rule. | Copy (reworded by the owner 2026-10-08): "Can't make it? You still get your deposit back." The phrase "never forfeited" is retired. Ask people to tell the organizer if they can't come, but threaten nothing. The pitch may name A′ as the next step. No code change. |
 | **D2** | **The intent is 100% back for everyone.** `max_refundable_deposits` exists only for overflow: when the room is full and more people still want to come, the extra space costs money, and those overflow deposits help pay for it, so they may not come back in full. | Set `max_refundable_deposits` = `in_person_capacity` (RTM #6: 40 = 40), so every seat within capacity is fully refundable. No public copy until an event actually takes overflow deposits. |
 | **D3** | **THB refunds within 7 days after the event.** | Copy: "the organizer transfers it back within 7 days after the event." The organizer has to keep it: RTM #5 had 9 cash deposits unrefunded 25 days on. |
 | **D4** | **No fee today.** | Pitch: "no fee today". Drop the 2–5% and 1–2% figures, and any fee "on forfeits". |
@@ -277,8 +277,9 @@ the rule says, provably. It loses on onboarding, and it's rigid: the #118 rule
 - **Don't say** "automatic refund" (never true), "back to wallet" for PromptPay (it's a
   bank transfer or credit), "refunded at check-in" (refunds come after the event),
   "no-shows forfeit" (D1 = A: nothing is forfeited), a fee (D4: none today), or "98%".
-- **Do say:** "Your deposit is never forfeited", "THB refunds within 7 days after
-  the event" (D3), and lead with the THB price (D5).
+- **Do say:** "You still get your deposit back" (D1; "never forfeited" is retired
+  since 2026-10-08), "THB refunds within 7 days after the event" (D3), and lead
+  with the THB price (D5).
 - **Do say:** "43 of 46 depositors showed up (93%), vs 37% before deposits."
 
 ---
