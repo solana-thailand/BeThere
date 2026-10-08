@@ -200,6 +200,16 @@ pub(super) fn save_event(ctx: FormCtx, on_done: OnDone) {
         }
     }
 
+    // The share card (`.issues/183`), drawn after a successful save.
+    let card = crate::utils::og_card::CardEvent {
+        name: current_form.name.trim().to_string(),
+        slug: current_form.slug.trim().to_string(),
+        start_ms,
+        time_tba,
+        location: current_form.location.trim().to_string(),
+        poster_url: current_form.poster_url.trim().to_string(),
+    };
+
     set_saving.set(true);
 
     if is_create {
@@ -301,6 +311,9 @@ pub(super) fn save_event(ctx: FormCtx, on_done: OnDone) {
                     return;
                 }
             };
+
+            // Never blocks the save: drawn and uploaded in the background.
+            super::og_card::refresh(created.id.clone(), card);
 
             // Step 2: Initialize escrow on-chain (if wallet connected + deposit enabled)
             if do_escrow_init {
@@ -544,6 +557,8 @@ pub(super) fn save_event(ctx: FormCtx, on_done: OnDone) {
         leptos::task::spawn_local(async move {
             match api::update_event(&eid, &body).await {
                 Ok(data) => {
+                    // Never blocks the save: drawn and uploaded in the background.
+                    super::og_card::refresh(eid.clone(), card);
                     components::show_mutation_toast(
                         &set_toast,
                         &format!("Event '{}' updated", data.name),

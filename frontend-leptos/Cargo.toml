@@ -30,7 +30,16 @@ release_no_log = ["log/max_level_off"]
 # The staff shell (`dist/staff-app.html`): scanner, admin and organizer pages.
 # Off by default, so the attendee shell never carries them (.issues/169,
 # `src/staff_routes.rs`). `build.sh` builds both.
-staff = []
+# The canvas bindings draw the event share card on save (.issues/183,
+# `pages/event_form/og_card.rs`); only the staff shell needs them.
+staff = [
+  "web-sys/CanvasRenderingContext2d",
+  "web-sys/Document",
+  "web-sys/FontFaceSet",
+  "web-sys/HtmlCanvasElement",
+  "web-sys/HtmlImageElement",
+  "web-sys/TextMetrics",
+]
 
 [dependencies]
 leptos = { version = "0.8", features = ["csr"] }
