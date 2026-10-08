@@ -1,51 +1,62 @@
-//! Phase 3 exit path — "Request Return of Held Credit" (Issue #061 §D3).
+//! Phase 3 exit path — "Request Return of Held Credit" (Issue #061 §D3),
+//! hardened in `.issues/190` (owner option (a), 2026-10-08).
 //!
 //! Four endpoints:
 //!
-//!   POST /api/deposit/request-credit-refund        — attendee sets the flag (own contact)
+//!   POST /api/deposit/request-credit-refund        — attendee sets the flag and
+//!                                                    says where to send the money
 //!   GET  /api/deposit/credit-refund-request        — attendee reads own flag state
-//!   GET  /api/deposit/credit-refund-requests       — admin lists all open requests
-//!   POST /api/deposit/clear-credit-refund-request  — admin clears the flag after payout
+//!   GET  /api/deposit/credit-refund-requests       — organizer lists open requests
+//!   POST /api/deposit/clear-credit-refund-request  — organizer records the payout
 //!
-//! ## Why a visibility-only flag (not a payout endpoint)?
+//! ## The flow
 //!
-//! Issue #061 §D3 resolved this as a *visibility-only* signal — attendees need
-//! an exit so "hold forever" doesn't feel like a trap (Issue #032 trust risk),
-//! but automated payout = cash-on-hand liability + queue complexity not needed
-//! for v1. The organizer processes the actual payout through the existing THB
-//! refund queue tooling (`POST /api/refund/mark/{attendee_id}` /
-//! `/refund/batch-thb`); this flag is the queue signal only.
+//! 1. The attendee asks for their held credit back. If they already gave a
+//!    refund account with their THB deposit (copied when the deposit was held
+//!    as credit) or on an earlier request, the card shows it masked and one tap
+//!    requests the refund to it (`use_saved`). Otherwise — or if they choose
+//!    "use a different account" — they give a PromptPay ID or a bank account
+//!    (same rules as the THB deposit refund account). The flag and the account
+//!    are written in one D1 batch.
+//! 2. The organizer sees the request — amount, account, age against the 7-day
+//!    promise — in the payout queue (organizers only, scoped to the
+//!    organizations they run), transfers the money out-of-band, and clears the
+//!    request with the amount they transferred and, optionally, the slip.
+//! 3. The clear reverses the credit in ONE guarded ledger statement that only
+//!    writes if the payable balance still equals the confirmed amount
+//!    (`credit_ledger::try_refund`) — a mismatch is a 409 and writes nothing.
+//!    Then it audits who paid, and clears the flag and deletes the account.
+//!
+//! The THB deposit refund tooling (`/refund/mark`, `/refund/batch-thb`) is not
+//! part of this: it refuses held deposits by design.
 //!
 //! ## Why on `contacts`, not `thb_deposits`?
 //!
 //! Rolling credit is a cross-event balance — a single contact may hold credit
 //! from multiple past deposits across different events. A refund-from-credit
 //! request is against the rolling balance, not any specific source deposit.
-//! Mirrors the existing `deposit_credit_thb/usdc/since` columns K–M on the
-//! same table (Issue #032 architecture decision).
 //!
 //! ## Dual-write (D1 + Sheets)
 //!
-//! - **D1** is the source of truth for the admin/attendee reads in this module
-//!   (consistent with `credit_liability`'s D1-only read path, handover 104).
-//! - **Sheets** is the human-readable master; the write is best-effort but logged.
-//!   A failed/non-existent D1 contact row degrades to a Sheets-only record —
-//!   the attendee's request is still visible to a human scanning column N, and
-//!   the admin badge may miss it (same trade-off as the credit-liability chip).
+//! - **D1** is the source of truth for every read in this module.
+//! - **Sheets** is a display mirror; its writes are best-effort and logged.
 //!
 //! ## Idempotency
 //!
-//! Re-calls from the attendee just re-stamp `credit_refund_requested_at` —
-//! surfaces "still waiting" to the organizer without a per-click counter. The
-//! organizer clears the flag manually after processing the payout through the
-//! existing refund tooling (`clear_credit_refund_requested` in `db/contacts.rs`).
+//! Re-calls from the attendee re-stamp `credit_refund_requested_at` and replace
+//! the account. A second clear of the same request finds its reversal already
+//! in the ledger and writes nothing new.
 
 use axum::{Extension, Json, extract::State};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use serde::{Deserialize, Serialize};
 
-use crate::crypto::LogRedactor;
+use event_checkin_domain::models::credit_payout::{
+    PaidAmounts, RefundAccount, SavedAccountPreview, payout_mismatch_message,
+};
+
+use crate::db::credit_ledger::RefundOutcome;
 use crate::error::{ApiOk, WorkerError};
 use crate::state::AppState;
 
@@ -62,20 +73,59 @@ pub struct RequestCreditRefundResponse {
     pub message: String,
 }
 
+/// Body of the attendee's request: where to send the money — a new
+/// `account`, or `use_saved: true` for the account already on file (from their
+/// deposit, or an earlier request). A new account wins if both are sent.
+///
+/// Both are optional in the type only so that a client built before
+/// `.issues/190` (which posted `{}`) gets a validation message rather than a
+/// bare JSON rejection.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct RequestCreditRefundBody {
+    #[serde(default)]
+    pub account: Option<RefundAccount>,
+    #[serde(default)]
+    pub use_saved: bool,
+}
+
+/// What the attendee asked to be paid to.
+enum PayoutTarget {
+    New(RefundAccount),
+    Saved,
+}
+
+/// Turn the body into a target, validating a new account.
+fn payout_target(body: RequestCreditRefundBody) -> Result<PayoutTarget, AppError> {
+    match (body.account, body.use_saved) {
+        (Some(account), _) => account
+            .normalized()
+            .map(PayoutTarget::New)
+            .map_err(|e| AppError::Validation(e.to_string())),
+        (None, true) => Ok(PayoutTarget::Saved),
+        (None, false) => Err(AppError::Validation(NO_ACCOUNT_MESSAGE.to_string())),
+    }
+}
+
+/// No account in the request and none on file.
+const NO_ACCOUNT_MESSAGE: &str =
+    "add a PromptPay ID or a bank account so the organizer can pay you";
+
 /// Attendee requests return of their held rolling credit. Sets the
-/// `credit_refund_requested` flag on their own contact row (D1 + Sheets
-/// dual-write).
+/// `credit_refund_requested` flag on their own contact row and stores the
+/// payout account with it (D1, one batch), then mirrors the flag to Sheets.
 ///
 /// **JWT-gated** — the email comes from `claims.email`, never from the request
-/// body (VULN-012 pattern, same as `hold_deposit_handler`). No body needed: the
-/// flag is on the contact (cross-event), not event-scoped.
+/// body (VULN-012 pattern, same as `hold_deposit_handler`). The body carries
+/// only the payout account, validated by the same rules as the THB deposit
+/// refund account (`credit_payout::RefundAccount::normalized`).
 ///
-/// **Idempotent** — a re-call re-stamps the timestamp (surfaces "still waiting"
-/// to the organizer without a per-click counter for v1).
+/// **Idempotent** — a re-call re-stamps the timestamp and replaces the account.
+/// The account number is never logged.
 #[worker::send]
 pub async fn request_credit_refund_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
+    Json(body): Json<RequestCreditRefundBody>,
 ) -> Result<ApiOk<RequestCreditRefundResponse>, WorkerError> {
     // Issue 070: the contact email is the primary key of this whole flow, so it
     // appears on every branch below. Fingerprint it once under the deployment
@@ -84,8 +134,14 @@ pub async fn request_credit_refund_handler(
     let redactor = state.log_redactor();
     let attendee_fingerprint = redactor.fingerprint(&claims.email);
 
+    let target = payout_target(body)?;
+
     tracing::info!(
         attendee_fingerprint = %attendee_fingerprint,
+        method = match &target {
+            PayoutTarget::New(new) => new.method().as_str(),
+            PayoutTarget::Saved => "saved",
+        },
         "credit refund requested (attendee) — setting flag"
     );
 
@@ -107,7 +163,21 @@ pub async fn request_credit_refund_handler(
         AppError::Internal("D1 not configured — credit refund request cannot be queued".to_string())
     })?;
 
-    let flagged = crate::db::contacts::set_credit_refund_requested(db, &claims.email)
+    let new_account = match &target {
+        PayoutTarget::New(new) => Some(new),
+        PayoutTarget::Saved => {
+            // Nothing on file (never had one, or it was paid out / purged):
+            // the attendee is asked for an account, as before `.issues/190`.
+            let saved = crate::db::credit_refund_accounts::chosen_for_person(db, &claims.email)
+                .await
+                .map_err(AppError::Internal)?;
+            if saved.is_none() {
+                return Err(AppError::Validation(NO_ACCOUNT_MESSAGE.to_string()).into());
+            }
+            None
+        }
+    };
+    let flagged = crate::db::contacts::set_credit_refund_requested(db, &claims.email, new_account)
         .await
         .map_err(AppError::Internal)?;
 
@@ -169,10 +239,9 @@ pub async fn request_credit_refund_handler(
         "credit refund requested flag set on contact"
     );
 
-    // Audit entry deferred — the flag itself IS the persistent record for v1.
-    // A dedicated `AuditAction::CreditRefundRequested` variant is a follow-up
-    // (requires touching the enum + all its consumers; out of scope for the
-    // self-contained Phase 3 exit path).
+    // The request itself is not audited — the flag and the account row are its
+    // record. The money-moving step, the payout, is: `audit_payout` in the
+    // clear handler (`.issues/190`).
 
     Ok(ApiOk::new(RequestCreditRefundResponse {
         requested: true,
@@ -190,6 +259,11 @@ pub async fn request_credit_refund_handler(
 pub struct CreditRefundRequestStatus {
     /// Whether the attendee has an open "credit refund requested" flag.
     pub requested: bool,
+    /// The payout account on file, **masked** (bank, last four digits, holder's
+    /// first name and initial, where it came from and when). Never the full
+    /// number: this endpoint is the attendee's, and a session is not proof of
+    /// owning the bank account. `None` when nothing is on file.
+    pub saved_account: Option<SavedAccountPreview>,
 }
 
 /// Returns whether the authenticated attendee has an open "credit refund
@@ -205,16 +279,35 @@ pub async fn credit_refund_request_status_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<CreditRefundRequestStatus>, WorkerError> {
-    let requested = match state.d1.as_deref() {
-        Some(db) => crate::db::contacts::get_credit_refund_requested(db, &claims.email).await,
+    let (requested, saved_account) = match state.d1.as_deref() {
+        Some(db) => {
+            let requested =
+                crate::db::contacts::get_credit_refund_requested(db, &claims.email).await;
+            // A failed read shows the form instead of the one-tap card: the
+            // attendee types an account, which loses nothing.
+            let saved = crate::db::credit_refund_accounts::preview_for_person(db, &claims.email)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!(
+                        attendee_fingerprint = %state.log_fingerprint(&claims.email),
+                        error = %e,
+                        "saved payout account read failed — showing the form"
+                    );
+                    None
+                });
+            (requested, saved)
+        }
         // No D1 → cannot read the flag. Degrade to `false` so the attendee
         // sees the CTA rather than a broken "already requested" state. The
         // write path is idempotent so a false-negative just means they can
         // re-trigger (which re-stamps the timestamp — no harm).
-        None => false,
+        None => (false, None),
     };
 
-    Ok(ApiOk::new(CreditRefundRequestStatus { requested }))
+    Ok(ApiOk::new(CreditRefundRequestStatus {
+        requested,
+        saved_account,
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -230,11 +323,16 @@ pub struct CreditRefundRequestsResponse {
     pub requests: Vec<crate::db::contacts::CreditRefundRequest>,
 }
 
-/// Lists all contacts with an open "credit refund requested" flag — backs the
-/// admin badge on the Held-as-Credit tab. Cross-event (global), one D1
-/// round-trip via the partial index `idx_contacts_credit_refund_requested`
-/// (migration `0023`). Returns an empty list when D1 is unreachable so the
-/// admin view always renders.
+/// Lists the open "credit refund requested" rows the caller may pay out —
+/// backs the payout queue on the Held-as-Credit tab.
+///
+/// Organizers only, org-scoped (`credit_payout::payout_scope`): a row is shown
+/// only when every organization the person's credit belongs to is in the
+/// caller's scope, because the row carries the attendee's account number and
+/// clearing it moves all of that credit. A per-event scanner gets 403.
+///
+/// Returns an empty list when D1 is unreachable so the admin view still
+/// renders.
 #[worker::send]
 pub async fn credit_refund_requests_handler(
     State(state): State<AppState>,
@@ -244,11 +342,22 @@ pub async fn credit_refund_requests_handler(
         staff_fingerprint = %state.log_fingerprint(&claims.email),
         "credit refund requests listed (admin)"
     );
+    let scope = super::credit_payout::payout_scope(&state, &claims.email).await?;
+    super::credit_payout::require_payout_operator(&scope)?;
 
     let requests = match state.d1.as_deref() {
-        Some(db) => crate::db::contacts::credit_refund_requests(db).await,
+        Some(db) => crate::db::contacts::credit_refund_requests(db)
+            .await
+            .into_iter()
+            .filter(|row| {
+                // An unparseable org list is hidden from every scoped caller.
+                row.organization_ids()
+                    .is_some_and(|orgs| scope.covers(orgs.iter().map(String::as_str)))
+                    || scope == event_checkin_domain::models::credit_payout::PayoutScope::All
+            })
+            .collect(),
         // No D1 → cannot read the queue. Degrade to empty (the badge hides
-        // when count == 0). Logged upstream if needed.
+        // when count == 0).
         None => Vec::new(),
     };
 
@@ -259,13 +368,20 @@ pub async fn credit_refund_requests_handler(
 // POST /api/deposit/clear-credit-refund-request (admin)
 // ---------------------------------------------------------------------------
 
-/// Request body for the admin clear endpoint. The contact is identified by
-/// email (the `contacts` primary key) — using a JSON body rather than a path
-/// parameter because emails can contain characters that are awkward to URL-
-/// encode in a path segment. Mirrors the `AdminHoldRequest` body shape.
+/// Request body for the organizer's "paid — clear the request" action. The
+/// contact is identified by email in the body (emails are awkward in a path).
 #[derive(Debug, Clone, Deserialize)]
 pub struct ClearCreditRefundRequest {
     pub email: String,
+    /// What the organizer actually transferred, per currency (`.issues/190`).
+    /// Required; `Option` only so an old client gets a message, not a JSON
+    /// rejection. The reversal writes only if this equals the payable balance
+    /// at the moment of the write.
+    #[serde(default)]
+    pub paid: Option<PaidAmounts>,
+    /// The organizer's transfer slip as an uploaded image (`data:` URL).
+    #[serde(default)]
+    pub proof: Option<String>,
 }
 
 /// Response for the admin "clear request" action.
@@ -276,79 +392,54 @@ pub struct ClearCreditRefundResponse {
     pub message: String,
 }
 
-/// Reverse every positive credit bucket the contact still holds, as the ledger
-/// side of an out-of-band payout.
+/// Ledger note on every payout reversal row.
+const PAYOUT_NOTE: &str = "held-credit payout processed by organizer";
+
+/// Reverse the person's payable credit as the ledger side of an out-of-band
+/// payout of exactly `paid` — one guarded statement
+/// (`credit_ledger::try_refund`), the only writer of `refund` rows.
 ///
-/// The buckets are read by the caller (which also needs them for the locked-
-/// credit guard) and passed in, so the payout decision and the reversal act on
-/// one snapshot rather than two reads that can disagree.
-///
-/// Returns `Err` — and therefore aborts the clear — if any single reversal
-/// cannot be written. That is deliberate: a cleared
-/// flag with an unreversed ledger is a double payout (the attendee has the cash
-/// *and* spendable credit) and nothing downstream detects it, whereas a failed
-/// clear leaves the request in the organizer's queue to retry. The per-bucket
-/// idempotency key means the retry re-writes nothing that already landed.
+/// Returns `Err` — and therefore aborts the clear — if the write fails. That is
+/// deliberate: a cleared flag with an unreversed ledger is a double payout (the
+/// attendee has the cash *and* spendable credit), whereas a failed clear leaves
+/// the request in the queue to retry. The request key (`refund:{email}:
+/// {requested_at}:…`) makes the retry a no-op once the reversal has landed.
 async fn reverse_held_credit(
     db: &worker::D1Database,
     email: &str,
     requested_at: &str,
-    buckets: &[crate::db::credit_ledger::CreditBucket],
-    redactor: LogRedactor<'_>,
-) -> Result<(), String> {
-    for bucket in buckets {
-        let key = format!(
-            "refund:{}:{}:{}:{}",
-            email.to_lowercase(),
-            requested_at,
-            bucket.organization_id,
-            bucket.currency
-        );
-        crate::db::credit_ledger::record(
-            db,
-            email,
-            &bucket.organization_id,
-            &bucket.currency,
-            -bucket.balance,
-            crate::db::credit_ledger::REASON_REFUND,
-            None,
-            Some(&key),
-            Some("held-credit payout processed by organizer"),
-        )
-        .await?;
-        tracing::info!(
-            contact_fingerprint = %redactor.fingerprint(email),
-            organization_id = %bucket.organization_id,
-            currency = %bucket.currency,
-            amount = bucket.balance,
-            "reversed held credit in ledger on payout"
-        );
-    }
-    Ok(())
+    paid: PaidAmounts,
+    contact_fingerprint: &str,
+) -> Result<RefundOutcome, String> {
+    let outcome =
+        crate::db::credit_ledger::try_refund(db, email, requested_at, paid, PAYOUT_NOTE).await?;
+    tracing::info!(
+        contact_fingerprint = %contact_fingerprint,
+        thb = paid.thb,
+        usdc = paid.usdc,
+        outcome = ?outcome,
+        "held credit payout reversal"
+    );
+    Ok(outcome)
 }
 
-/// Admin clears the `credit_refund_requested` flag on a contact after
-/// processing the payout through the existing refund tooling (Issue #061 §D3).
-/// Sets the flag to 0 and nulls the timestamp so a subsequent attendee request
-/// starts a fresh timestamp.
+/// The organizer records a held-credit payout and clears the request
+/// (Issue #061 §D3, hardened in `.issues/190`).
 ///
-/// **Admin/staff-authed** via `resolve_event_with_access` is not appropriate
-/// here — the contact is cross-event (not scoped to one event), so there is no
-/// event_id to resolve against. The route is registered in the `protected`
-/// router block which already requires staff auth via `require_staff`.
+/// Organizers only, org-scoped like the queue: the caller must cover every
+/// organization the credit belongs to.
 ///
-/// **The ledger reversal gates the clear.** [`reverse_held_credit`] runs first
-/// and any failure aborts with a 500, leaving the request in the queue for the
-/// organizer to retry. Clearing without reversing would be a double payout, and
-/// no reconcile check detects credit outstanding against a cleared request.
+/// **The guarded reversal gates the clear.** The organizer confirms what they
+/// transferred (`paid`); [`reverse_held_credit`] writes only if that still
+/// equals the payable balance, in the same statement as the write, so a
+/// registration that spent the credit after the organizer looked turns into a
+/// 409 with nothing recorded instead of a reversal of a number nobody paid.
+/// Any failure aborts before the flag is touched.
 ///
-/// **Dual-write (D1 + Sheets)** — mirrors `request_credit_refund_handler`'s
-/// write path: D1 is source of truth, Sheets is the human-readable master.
-/// The two *flag clears* stay best-effort (logged, not fatal): they are
-/// idempotent, so a transient failure on either store is recovered by the next
-/// refresh's retry. The read paths (admin badge, attendee status) read from D1,
-/// which is why a Sheets lag is reconciliation-cosmetic rather than a
-/// correctness issue.
+/// Then the payout is audited (who, how much, the slip) and the flag cleared
+/// with the payout account deleted. The flag clears stay best-effort (logged,
+/// not fatal): they are idempotent, and the nightly purge deletes an account
+/// whose request is no longer open.
 #[worker::send]
 pub async fn clear_credit_refund_request_handler(
     State(state): State<AppState>,
@@ -356,8 +447,8 @@ pub async fn clear_credit_refund_request_handler(
     Json(body): Json<ClearCreditRefundRequest>,
 ) -> Result<ApiOk<ClearCreditRefundResponse>, WorkerError> {
     // Issue 070: both the acting admin and the target contact are identified by
-    // email. The event audit trail keeps the attributable actor under its own
-    // access controls; the general log stream gets fingerprints only.
+    // email. The audit trail keeps the attributable actor under its own access
+    // controls; the general log stream gets fingerprints only.
     let redactor = state.log_redactor();
     let staff_fingerprint = redactor.fingerprint(&claims.email);
     let target_fingerprint = redactor.fingerprint(&body.email);
@@ -368,20 +459,16 @@ pub async fn clear_credit_refund_request_handler(
         "admin clearing credit refund request flag"
     );
 
-    // Reverse the held credit in the ledger BEFORE clearing the flag, and only
-    // clear the flag if the reversal fully succeeded. Clearing the request ==
-    // the organizer paid the credit back out-of-band, so the credit must leave
-    // the ledger — otherwise the attendee keeps usable credit AND got the cash
-    // (double payout). `requested_at` is read while the flag is still set and
-    // used as the idempotency key, so the reversal happens exactly once per
-    // request and a retry after a partial failure re-runs only the buckets that
-    // did not land.
-    //
-    // Every bucket the attendee still holds is reversed, not just `("", "thb")`.
-    // The flag is on the contact, so the request is against the whole rolling
-    // balance across orgs and currencies; reading one hard-coded org would
-    // silently skip the reversal for an event whose Org ID column is filled in
-    // (plan 022 §6).
+    let scope = super::credit_payout::payout_scope(&state, &claims.email).await?;
+    super::credit_payout::require_payout_operator(&scope)?;
+    let paid = body.paid.ok_or_else(|| {
+        AppError::Validation(
+            "confirm the amount you transferred before clearing the request".to_string(),
+        )
+    })?;
+    paid.validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
     let db = state
         .d1
         .as_deref()
@@ -393,9 +480,17 @@ pub async fn clear_credit_refund_request_handler(
     if let Some(requested_at) =
         crate::db::contacts::get_credit_refund_requested_at(db, &body.email).await
     {
+        // Every bucket the person holds, across orgs and currencies — the
+        // request is against the whole rolling balance (plan 022 §6).
         let buckets = crate::db::credit_ledger::positive_balances(db, &body.email)
             .await
             .map_err(AppError::Internal)?;
+        if !scope.covers(buckets.iter().map(|b| b.organization_id.as_str())) {
+            return Err(AppError::Forbidden(
+                "this credit belongs to an organization you do not run".to_string(),
+            )
+            .into());
+        }
 
         // Issue #120 §3. Nothing to reverse *and* credit still locked to an
         // event that has not ended means the organizer is about to clear a
@@ -444,9 +539,74 @@ pub async fn clear_credit_refund_request_handler(
             }
         }
 
-        reverse_held_credit(db, &body.email, &requested_at, &buckets, redactor)
+        // The confirmed payout against what is payable now. This read is the
+        // fast path for the message; the guarded write below re-checks it in
+        // the same statement as the reversal, which is what makes it safe.
+        let mut payable = PaidAmounts::default();
+        for bucket in &buckets {
+            payable.add(&bucket.currency, bucket.balance);
+        }
+        if paid != payable {
+            tracing::warn!(
+                staff_fingerprint = %staff_fingerprint,
+                target_fingerprint = %target_fingerprint,
+                confirmed = %paid,
+                payable = %payable,
+                "refused to clear credit refund request — confirmed amount is stale"
+            );
+            return Err(AppError::Conflict(payout_mismatch_message(paid, payable)).into());
+        }
+
+        if !paid.is_zero() {
+            // The slip names the org of the first bucket (sorted); a payout
+            // spanning orgs is rare and the slip covers all of it.
+            let org = match buckets.first() {
+                Some(bucket) => bucket.organization_id.as_str(),
+                None => "",
+            };
+            let proof = match body.proof.as_deref().map(str::trim) {
+                Some(data_url) if !data_url.is_empty() => Some(
+                    super::credit_payout::store_payout_proof(
+                        &state,
+                        org,
+                        &body.email,
+                        &requested_at,
+                        data_url,
+                    )
+                    .await?,
+                ),
+                _ => None,
+            };
+
+            let outcome =
+                reverse_held_credit(db, &body.email, &requested_at, paid, &target_fingerprint)
+                    .await
+                    .map_err(AppError::Internal)?;
+            if outcome == RefundOutcome::Mismatch {
+                // The balance moved between the read above and the write.
+                let now = crate::db::credit_ledger::positive_balances(db, &body.email)
+                    .await
+                    .map_err(AppError::Internal)?;
+                let mut payable_now = PaidAmounts::default();
+                for bucket in &now {
+                    payable_now.add(&bucket.currency, bucket.balance);
+                }
+                return Err(AppError::Conflict(payout_mismatch_message(paid, payable_now)).into());
+            }
+
+            // Who paid is part of the payout: a failure aborts before the flag
+            // clears, and the retry re-audits (the reversal is already a no-op).
+            super::credit_payout::audit_payout(
+                &state,
+                &claims.email,
+                &body.email,
+                paid,
+                &requested_at,
+                proof.as_deref(),
+            )
             .await
             .map_err(AppError::Internal)?;
+        }
     }
 
     // D1 clear — source of truth. Best-effort log on failure: an unreachable

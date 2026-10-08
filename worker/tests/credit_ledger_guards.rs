@@ -136,17 +136,29 @@ fn balance_read_is_org_scoped() {
 #[test]
 fn credit_reads_and_spends_resolve_the_person() {
     let ledger = ledger_src();
-    for fn_name in ["try_spend", "balances", "positive_balances"] {
+    for fn_name in ["try_spend", "balances", "positive_balances", "try_refund"] {
         let start = ledger
             .find(&format!("pub async fn {fn_name}("))
             .unwrap_or_else(|| panic!("{fn_name} exists"));
         let body = &ledger[start..];
         let body = &body[..body.find("\n}\n").expect("fn ends")];
+        // `positive_buckets_of!` is the person-scoped bucket read shared by the
+        // payout check and the payout write (.issues/190); it is pinned below.
+        let scoped = body.contains("person_emails_of!(\"?1\")")
+            || body.contains("positive_buckets_of!(\"?1\")")
+            || body.contains("TRY_REFUND_SQL");
         assert!(
-            body.contains("person_emails_of!(\"?1\")") && !body.contains("WHERE email = ?1"),
+            scoped && !body.contains("WHERE email = ?1"),
             "{fn_name} must sum over the person's emails"
         );
     }
+    let buckets = &ledger[ledger
+        .find("macro_rules! positive_buckets_of")
+        .expect("positive_buckets_of exists")..];
+    assert!(
+        buckets[..buckets.find("\n}\n").expect("macro ends")].contains("person_emails_of!($email)"),
+        "the payable-bucket read must sum over the person's emails"
+    );
     for fn_name in ["liability", "thb_balances_by_email"] {
         let start = ledger
             .find(&format!("pub async fn {fn_name}("))
@@ -180,10 +192,10 @@ fn credit_reads_and_spends_resolve_the_person() {
         queue
             .matches("person_emails_of!(\"LOWER(c.email)\")")
             .count(),
-        3,
-        "the payout queue resolves the person three times: the THB sum, the USDC \
-         sum (both must match what the reversal removes) and the one-row-per-person \
-         filter"
+        4,
+        "the payout queue resolves the person four times: the THB sum, the USDC \
+         sum (both must match what the reversal removes), the organizations the \
+         payout scope must cover (.issues/190) and the one-row-per-person filter"
     );
     assert!(
         queue.contains("AND NOT EXISTS (SELECT 1 FROM contacts c2"),
@@ -479,8 +491,9 @@ fn refund_request_d1_write_fails_closed() {
          refund is queued when no organizer will ever see it"
     );
     assert!(
-        body.contains("crate::db::contacts::set_credit_refund_requested(db, &claims.email)")
-            && body.contains(".map_err(AppError::Internal)?"),
+        body.contains(
+            "crate::db::contacts::set_credit_refund_requested(db, &claims.email, new_account)"
+        ) && body.contains(".map_err(AppError::Internal)?"),
         "the D1 flag write must propagate its error to the caller"
     );
 
@@ -531,7 +544,7 @@ fn refund_request_sheets_mirror_is_non_fatal() {
     // and best-effort. The inverse (what shipped) 500s on a stale mirror while
     // letting the real record vanish.
     let d1_at = body
-        .find("set_credit_refund_requested(db, &claims.email)")
+        .find("set_credit_refund_requested(db, &claims.email, new_account)")
         .expect("D1 write must exist");
     let sheets_at = body
         .find("crate::sheets::contacts::set_credit_refund_requested")

@@ -145,11 +145,15 @@ pub async fn hold_deposit_handler(
     let now = Utc::now().to_rfc3339();
 
     let settled = match d1 {
-        Some(db) => {
-            crate::db::thb_deposits::try_settle_hold_credit(db, &event.id, &body.attendee_id, &now)
-                .await
-                .map_err(AppError::Internal)?
-        }
+        Some(db) => crate::db::thb_deposits::try_settle_hold_credit(
+            db,
+            &event.id,
+            &body.attendee_id,
+            &now,
+            &claims.email,
+        )
+        .await
+        .map_err(AppError::Internal)?,
         // No D1 (tests/local) — fall back to the non-atomic KV write.
         None => true,
     };

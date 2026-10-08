@@ -522,6 +522,10 @@ pub fn routes(state: AppState) -> Router<()> {
             "/storage/refunds/{event_id}/{attendee_id}",
             get(crate::storage::serve_refund),
         )
+        .route(
+            "/storage/credit-payouts/{org}/{owner}/{request}",
+            get(crate::storage::serve_credit_payout),
+        )
         // Held-as-credit list (admin) — sibling of refunded list, filters on
         // held_as_credit = true (Issue #061 Phase 2).
         .route("/refund/held", get(deposit::held_list_handler))

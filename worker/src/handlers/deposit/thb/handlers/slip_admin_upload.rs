@@ -128,23 +128,14 @@ pub async fn admin_upload_thb_slip_handler(
     super::slip_upload::validate_slip_url(&body.slip_url)?;
 
     // 3. Bank info required (refund pipeline depends on it — same as attendee).
-    if body
-        .bank_account
-        .as_ref()
-        .is_none_or(|v| v.trim().is_empty())
-    {
-        return Err(AppError::Validation("bank_account is required".to_string()).into());
-    }
-    if body.bank_name.as_ref().is_none_or(|v| v.trim().is_empty()) {
-        return Err(AppError::Validation("bank_name is required".to_string()).into());
-    }
-    if body
-        .account_name
-        .as_ref()
-        .is_none_or(|v| v.trim().is_empty())
-    {
-        return Err(AppError::Validation("account_name is required".to_string()).into());
-    }
+    // One rule for every refund account (`domain::models::credit_payout`):
+    // the credit refund request validates its bank option with it too.
+    event_checkin_domain::models::credit_payout::validate_bank_refund_fields(
+        body.bank_account.as_deref(),
+        body.bank_name.as_deref(),
+        body.account_name.as_deref(),
+    )
+    .map_err(|e| AppError::Validation(e.to_string()))?;
 
     // 4. Verify attendee exists (NO email-match check — admin path).
     //    The attendee lookup also gives us row_index, registration_date, and

@@ -29,6 +29,8 @@ def unescape(body):
 MACRO_SOURCES = {
     "person_emails_of": "db/person.rs",
     "unreturned_apply_of": "db/credit_ledger.rs",
+    "positive_buckets_of": "db/credit_ledger.rs",
+    "chosen_account_email_of": "db/credit_refund_accounts.rs",
 }
 
 # `name!("literal")` or `name!($param)`, with any path prefix (`crate::db::x::`,
@@ -133,7 +135,7 @@ APPLY_SPEND_SQL = concat_after(
 QUEUE_SQL = concat_after("db/contacts.rs", "pub async fn credit_refund_requests(")
 CLEAR_FLAG_SQL = concat_after(
     "db/contacts.rs", "pub(crate) async fn clear_credit_refund_requested(",
-    opener="db.prepare(concat!(",
+    opener=".prepare(concat!(",
 )
 CLAIMED_ELSEWHERE_SQL = concat_after(
     "db/person.rs", "const CLAIMED_ELSEWHERE_SQL: &str = "

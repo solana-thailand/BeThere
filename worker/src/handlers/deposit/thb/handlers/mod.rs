@@ -1,5 +1,6 @@
 mod admit;
 mod comp;
+mod credit_payout;
 mod hold_admin;
 mod hold_credit;
 mod hold_refund_request;
