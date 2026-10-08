@@ -294,7 +294,7 @@ fn CreditRefundRow(
                         })}
                     </div>
                 </div>
-                <div>
+                <div class="admin-dep-payout-status">
                     {match kind {
                         PayoutRowKind::Requested => view! { <span class="badge badge-warning">"Refund Requested"</span> },
                         PayoutRowKind::Unrequested => view! { <span class="badge badge-info">"Not requested"</span> },

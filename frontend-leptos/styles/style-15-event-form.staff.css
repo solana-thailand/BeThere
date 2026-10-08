@@ -423,6 +423,14 @@
     justify-content: flex-end;
     gap: 0.5rem;
 }
+/* Status badge + "Copy account": wrap with a gap instead of touching
+   when the row stacks on a phone. */
+.admin-dep-payout-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+}
 .admin-refund-form-row {
     margin-top: 4px;
     flex-wrap: wrap;

@@ -992,7 +992,9 @@ pub fn AdminDeposits(
                         fallback=|| view! { <div></div> }
                     >
                         <div class="admin-empty-state">
-                            "No deposits held as credit"
+                            // The held list is per event; the payout candidates above
+                            // are cross-event, so say which list is empty.
+                            "No deposits held as credit for this event"
                         </div>
                     </Show>
 
