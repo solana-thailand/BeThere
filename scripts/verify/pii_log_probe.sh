@@ -195,6 +195,8 @@ req GET "/api/refund/refunded?event_id=$EVENT_ID"
 req GET "/api/deposit/credit-used?event_id=$EVENT_ID"
 req GET "/api/deposit/credit-refund-requests"
 req POST "/api/deposit/clear-credit-refund-request" "{\"email\":\"$ATT_EMAIL\",\"paid\":{\"thb\":0}}"
+req GET "/api/deposit/credit-payout-candidates"
+req POST "/api/deposit/organizer-credit-payout" "{\"email\":\"$ATT_EMAIL\",\"paid\":{\"thb\":1}}"
 req GET "/api/dashboard/live?event_id=$EVENT_ID"
 req GET "/api/events/$EVENT_ID/audit"
 req GET /api/audit/global

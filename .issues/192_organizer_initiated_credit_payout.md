@@ -1,7 +1,8 @@
 # 192 · Organizer pays held credit back without an attendee request
 
 **Status:** in progress. The backend is on `feature/192-organizer-credit-payout`
-(session `event-checkin-9c`, 2026-10-09). The staff UI is not built yet.
+(session `event-checkin-9c`, 2026-10-09): backend and staff UI. Not yet
+merged or deployed.
 
 ## Why
 
@@ -45,9 +46,11 @@ means the organizer already knows where to send the money.
 
 ## Remaining
 
-- [ ] Staff UI: a "pay out" list next to the request queue on the deposit
-      page, slip required. Check the staff-shell size budget first (97% on
-      2026-10-09).
+- [x] Staff UI: `CreditPayoutCandidates` under the request queue on the
+      Held-as-Credit tab. It reuses `CreditRefundRow` with `PayoutRowKind::
+      Unrequested` (badge "Not requested", no request age, and the button
+      stays disabled until a slip is attached). It loads its own data, so
+      `admin_deposit.rs` (999 lines) gains only the mount.
 - [ ] Attendee ticket card: show the last payout, masked.
 - [ ] Fix the cramped payout form and the Buddhist-era date on English pages.
 - [ ] Staging: run the payout end to end with a held deposit.

@@ -751,6 +751,29 @@ pub async fn clear_credit_refund_request(
     api_post_json("/deposit/clear-credit-refund-request", body).await
 }
 
+/// Response for GET /api/deposit/credit-payout-candidates (`.issues/192`):
+/// people with payable credit and their deposit account on file, no request
+/// open. Same row shape as the request queue.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditPayoutCandidatesResponse {
+    #[serde(default)]
+    pub candidates: Vec<CreditRefundRequest>,
+}
+
+/// GET /api/deposit/credit-payout-candidates — organizer, org-scoped.
+pub async fn get_credit_payout_candidates() -> Result<CreditPayoutCandidatesResponse, ApiError> {
+    api_get_json("/deposit/credit-payout-candidates").await
+}
+
+/// POST /api/deposit/organizer-credit-payout — pay a candidate out to their
+/// deposit account without a request. Same body as the clear; the slip is
+/// required. Same guard: 409 unless `paid` equals the payable balance.
+pub async fn organizer_credit_payout(
+    body: &ClearCreditRefundRequest,
+) -> Result<serde_json::Value, ApiError> {
+    api_post_json("/deposit/organizer-credit-payout", body).await
+}
+
 // ===== Escrow API =====
 
 /// POST /api/escrow/refund — build refund TX

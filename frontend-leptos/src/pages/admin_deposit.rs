@@ -22,7 +22,7 @@ use crate::icons::{Icon, IconName};
 use crate::pages::admin_deposit_bank_info::{
     load_refund_note, refund_bank_info, refund_copy_buttons, refund_note_editor,
 };
-use crate::pages::admin_deposit_credit_requests::CreditRefundRequests;
+use crate::pages::admin_deposit_credit_requests::{CreditPayoutCandidates, CreditRefundRequests};
 use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
 use crate::pages::admin_deposit_settled::{SettledDepositList, SettledKind};
@@ -979,6 +979,13 @@ pub fn AdminDeposits(
                             set_refresh_counter=set_refresh_counter
                         />
                     </Show>
+
+                    // .issues/192 — holders the organizer can pay unasked.
+                    <CreditPayoutCandidates
+                        refresh_counter=refresh_counter
+                        set_toast=set_toast
+                        set_refresh_counter=set_refresh_counter
+                    />
 
                     <Show
                         when=move || held_count.get() == 0
