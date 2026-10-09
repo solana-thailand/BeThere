@@ -424,6 +424,8 @@ impl AppState {
         // wasm Workers runtime, so solana_escrow can only learn the target cluster this way.
         // Seeded once per isolate; defaults to devnet when SOLANA_CLUSTER is unset.
         crate::solana_escrow::seed_cluster_from_env(env);
+        // The devnet sandbox reads the cluster, so it is seeded after it.
+        crate::sandbox::config::seed_from_env(env, config.dev_mode);
 
         Ok(Self {
             config,

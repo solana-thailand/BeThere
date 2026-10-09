@@ -29,6 +29,7 @@ pub mod public_stats;
 pub mod qr;
 pub mod quiz;
 pub mod register;
+pub mod sandbox;
 pub mod social_link;
 pub mod user_log;
 pub mod waitlist;
@@ -139,6 +140,8 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/status/{attendee_id}",
             get(deposit::get_deposit_status_handler),
         )
+        // Sandbox on/off flips with a secret, so it must not be cached.
+        .route("/sandbox/config", get(sandbox::config))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     let public = Router::new()
@@ -217,6 +220,13 @@ pub fn routes(state: AppState) -> Router<()> {
             "/storage/landing-photos/{name}",
             get(crate::storage::serve_landing_photo),
         )
+        // Devnet sandbox (public; 404 unless staging + devnet + both keys, plan 042 0.4)
+        .route("/sandbox/events", post(sandbox::create_event))
+        .route("/sandbox/faucet", post(sandbox::faucet))
+        .route("/sandbox/deposit-tx", post(sandbox::deposit_tx))
+        .route("/sandbox/check-in", post(sandbox::check_in))
+        .route("/sandbox/refund-tx", post(sandbox::refund_tx))
+        .route("/sandbox/return-tx", post(sandbox::return_tx))
         // Wallet NFT verification (public — no auth needed to read on-chain data)
         .route("/wallet/leaderboard", get(wallet::get_leaderboard))
         .route("/wallet/{address}/nfts", get(wallet::get_wallet_nfts))
