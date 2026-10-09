@@ -12,8 +12,10 @@ and the owner's look; prod deploys are separate, owner-gated steps.
 
 ## Constraints every line respects
 
-- **Two shells.** Every new page lives in the attendee shell; the staff shell
-  is at 95.3 % of the 2 MiB ceiling, so nothing new is linked there.
+- **Two shells.** Every new page lives in the attendee shell. The staff shell
+  was at 95.3 % of the 2 MiB ceiling; since pull 181 (prod 2026-10-10) it hands
+  every attendee page to the attendee shell and sits at 63.5 %, but new pages
+  still go in the attendee shell only.
 - **First load.** The attendee first load is +35.9 KB over the 6 Oct baseline
   after Release 3 (warn, under fail). New pages are routes in the same wasm, so
   each line states its expected growth; anything heavy (canvas art, data) is
@@ -114,13 +116,13 @@ staging secrets.
 |---|---|---|
 | SG1 | `domain::record::door_history(person_id)` (the single definition: RTM meetups, door check-ins, staff/organizers and online excluded, merged emails once, smoke events out; 20 regulars today), `GET /api/me/record` (own record only), `/me/record`, per-event `events.regular_rule` JSON evaluated at registration (register form + ticket say why the seat costs ฿0), admin rule editor with the count of qualifying registrants | 4 d |
 | SG4 | "I showed up" card: `GET /api/me/showed/:slug.png` only if `door_history` says came (pre-rendered per event by ffilms, owner's call on cost), share button on the ticket and `/me/record`, public `/showed/:token` (random, revocable) with OG tags | 2 d |
-| SG3 | `/try` devnet sandbox: a standing daily sandbox event by cron, rolling `event_end` (60 s), a devnet USDC faucet the worker controls (Turnstile, 3 per hour per IP and per wallet), the worker signs `mark_checked_in` for sandbox events only (separate keypair, program-level event check), Explorer links per step, live tally; reuses `.plans/044` item 1's script and `docs/devnet-run-2026-10-08.md` | 4–5 d |
+| SG3 | **Partly built 2026-10-09 as `/sandbox` (plan 042 0.4, pull 173; staging only):** the Worker-held devnet organizer key signs `create_event` and `mark_checked_in` (sandbox events only: the escrow is derived from that key), a Circle-USDC faucet the Worker signs for (one grant per wallet per day, 50 grants / 200 events per day, deposit rate limiter), browser burner wallet, Explorer links per step, return-to-faucet, 120 s events. **Left for SG3:** the standing daily event by cron, Turnstile, a per-IP faucet cap, the live tally, the `/try` route + `TryBand`, organizer-rent reclaim (close_event). Revised estimate ≈ 2 d. Original line: `/try` devnet sandbox: a standing daily sandbox event by cron, rolling `event_end` (60 s), a devnet USDC faucet the worker controls (Turnstile, 3 per hour per IP and per wallet), the worker signs `mark_checked_in` for sandbox events only (separate keypair, program-level event check), Explorer links per step, live tally; reuses `.plans/044` item 1's script and `docs/devnet-run-2026-10-08.md` | 4–5 d |
 | SG2 | x402 design doc only. First the custody catch: x402 `exact` pays a `payTo` address, which would make BeThere custodial. Options: (a) a BeThere scheme whose payload is the signed escrow `deposit` transaction, verified (right event, right vault) then submitted; (b) `exact` to a vault PDA plus a server-side deposit record (the program cannot accept this today); (c) x402 only for non-refundable parts (none today). Plus the duplicate-settlement cache and the agent's 10 USDC cap. Recommendation, no build until the owner picks | 1 d |
 
 ## Totals and order
 
 - Release 4: R4.0–R4.13 ≈ 17.5 d (R4.12 waits on the sender domain).
-- Super GOAT: SG1 4 d, SG4 2 d, SG3 4–5 d, SG2 1 d ≈ 11–12 d.
+- Super GOAT: SG1 4 d, SG4 2 d, SG3 ≈ 2 d (was 4–5 d; see SG3), SG2 1 d ≈ 9 d.
 - Order after 13 Oct: R4.0 → R4.7 → R4.2 / R4.1 → R4.3 (+ R4.12 when the
   domain exists) → R4.5 / R4.6 → R4.8 → R4.9 → R4.4 → R4.10 / R4.11 / R4.13
   → SG1 → SG4 → SG3 → SG2.
