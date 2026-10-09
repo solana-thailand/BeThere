@@ -34,8 +34,9 @@ fn lang_bar_is_off_on_the_landing_only() {
     assert!(!shows_lang_bar("/"));
     assert!(!shows_lang_bar("/organizers"));
     assert!(!shows_lang_bar("/sponsors"));
+    // `/events` is framed too (the Discover list inside `SiteFrame`).
+    assert!(!shows_lang_bar("/events"));
     assert!(shows_lang_bar("/discover"));
-    assert!(shows_lang_bar("/events"));
     assert!(shows_lang_bar("/e/rtm-6"));
     assert!(!shows_lang_bar("/admin"));
 }

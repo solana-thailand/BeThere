@@ -7,6 +7,6 @@ mod events;
 mod organizers;
 mod sponsors;
 
-pub use events::DiscoverRedirect;
+pub use events::{DiscoverRedirect, EventsPage};
 pub use organizers::Organizers;
 pub use sponsors::SponsorsPage;

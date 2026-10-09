@@ -80,7 +80,7 @@ const ATTENDEE_EVENT_SUFFIXES: [&str; 2] = ["/recap", "/post-event-register"];
 /// Pages drawn in the site frame (`pages::landing::frame`), whose header
 /// carries the language switch inline. `tests/site_pages.rs` keeps this in
 /// step with `SitePage`.
-pub const FRAMED_PATHS: [&str; 3] = ["/", "/organizers", "/sponsors"];
+pub const FRAMED_PATHS: [&str; 4] = ["/", "/events", "/organizers", "/sponsors"];
 
 /// Whether `path` is a bilingual attendee page (`/` and `/login` included).
 /// `/events` is matched exactly: deeper `/events/…` pages are staff-only

@@ -86,6 +86,6 @@ fn nothing_links_to_the_sandbox_before_it_exists() {
 /// page to land on.
 #[test]
 fn sponsors_page_keeps_the_contact_anchor() {
-    assert!(read("src/pages/site/sponsors.rs").contains("<Sponsors />"));
+    assert!(read("src/pages/site/sponsors.rs").contains("<Sponsors page_title=true />"));
     assert!(read("src/pages/landing/sponsors.rs").contains("id=\"contact\""));
 }

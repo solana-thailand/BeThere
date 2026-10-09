@@ -44,14 +44,14 @@ pub use staff::{
     AttendeeShellHandoff as Adventure, AttendeeShellHandoff as Claim,
     AttendeeShellHandoff as DataPrivacy, AttendeeShellHandoff as Deposit,
     AttendeeShellHandoff as DevDashboard, AttendeeShellHandoff as DevProfile,
-    AttendeeShellHandoff as Discover, AttendeeShellHandoff as EventRecap,
-    AttendeeShellHandoff as Faq, AttendeeShellHandoff as Feedback,
-    AttendeeShellHandoff as HomeRoute, AttendeeShellHandoff as NfcCheckin,
-    AttendeeShellHandoff as PastEvents, AttendeeShellHandoff as PostEventRegister,
-    AttendeeShellHandoff as Privacy, AttendeeShellHandoff as PublicEvent,
-    AttendeeShellHandoff as SandboxRoute, AttendeeShellHandoff as Ticket,
-    AttendeeShellHandoff as DiscoverRedirect, AttendeeShellHandoff as EventsRoute,
-    AttendeeShellHandoff as OrganizersRoute, AttendeeShellHandoff as SponsorsRoute,
+    AttendeeShellHandoff as EventRecap, AttendeeShellHandoff as Faq,
+    AttendeeShellHandoff as Feedback, AttendeeShellHandoff as HomeRoute,
+    AttendeeShellHandoff as NfcCheckin, AttendeeShellHandoff as PastEvents,
+    AttendeeShellHandoff as PostEventRegister, AttendeeShellHandoff as Privacy,
+    AttendeeShellHandoff as PublicEvent, AttendeeShellHandoff as SandboxRoute,
+    AttendeeShellHandoff as Ticket, AttendeeShellHandoff as DiscoverRedirect,
+    AttendeeShellHandoff as EventsRoute, AttendeeShellHandoff as OrganizersRoute,
+    AttendeeShellHandoff as SponsorsRoute,
 };
 
 #[cfg(not(feature = "staff"))]
@@ -63,10 +63,10 @@ pub use attendee::{
 
 #[cfg(not(feature = "staff"))]
 pub use crate::pages::{
-    Discover, EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister,
-    adventure::page::Adventure, claim::Claim, data_privacy::DataPrivacy, deposit::Deposit,
-    dev_dashboard::DevDashboard, dev_profile::DevProfile, faq::Faq, landing::Landing as HomeRoute,
-    privacy::Privacy, public_event::PublicEvent, ticket::page::Ticket,
+    EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister, adventure::page::Adventure,
+    claim::Claim, data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
+    dev_profile::DevProfile, faq::Faq, landing::Landing as HomeRoute, privacy::Privacy,
+    public_event::PublicEvent, ticket::page::Ticket,
 };
 
 #[cfg(not(feature = "staff"))]
@@ -75,7 +75,7 @@ pub use crate::pages::sandbox::Sandbox as SandboxRoute;
 // The Release 4 site pages (.plans/045 R4.0) take the landing's path: the
 // attendee shell renders them, the staff shell hands them back.
 #[cfg(not(feature = "staff"))]
-pub use crate::pages::Discover as EventsRoute;
+pub use crate::pages::site::EventsPage as EventsRoute;
 #[cfg(not(feature = "staff"))]
 pub use crate::pages::site::{
     DiscoverRedirect, Organizers as OrganizersRoute, SponsorsPage as SponsorsRoute,

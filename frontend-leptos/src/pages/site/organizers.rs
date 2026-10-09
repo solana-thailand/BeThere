@@ -17,7 +17,7 @@ pub fn Organizers() -> impl IntoView {
     view! {
         <Title text=tr(|l| td_string!(l, landing.site.title_organizers)) />
         <SiteFrame here=SitePage::Organizers auth_state=auth_state>
-            <HowItWorks />
+            <HowItWorks page_title=true />
             <div class="lp-wrap">{try_line(TRY_LIVE)}</div>
         </SiteFrame>
     }

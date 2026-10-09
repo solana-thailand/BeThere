@@ -44,8 +44,9 @@ export const PAGES: AppPage[] = [
     ],
     still: true,
   },
-  // `/discover` now redirects to `/events`, which shows the same list until
-  // R4.3 (.plans/045); the baseline name stays so the shot is unchanged.
+  // `/discover` now redirects to `/events`, which shows the same list inside
+  // the site frame until R4.3 (.plans/045). The baseline name stays; the shot
+  // changed with the frame, so CI wrote a new one.
   { name: "discover", path: "/events", authed: false, ready: EVENT_LOADED },
   { name: "organizers", path: "/organizers", authed: false, ready: ".lp-lanes" },
   { name: "sponsors", path: "/sponsors", authed: false, ready: "#contact" },

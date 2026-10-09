@@ -17,7 +17,7 @@ pub fn SponsorsPage() -> impl IntoView {
     view! {
         <Title text=tr(|l| td_string!(l, landing.site.title_sponsors)) />
         <SiteFrame here=SitePage::Sponsors auth_state=auth_state>
-            <Sponsors />
+            <Sponsors page_title=true />
         </SiteFrame>
     }
 }

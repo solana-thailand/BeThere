@@ -3,8 +3,30 @@
 //! address, in shared links and the boot summary) moves there.
 
 use leptos::prelude::*;
+use leptos_meta::Title;
 use leptos_router::NavigateOptions;
 use leptos_router::hooks::{use_location, use_navigate};
+
+use crate::i18n::td_string;
+use crate::locale::tr;
+use crate::pages::DiscoverList;
+use crate::pages::landing::AuthState;
+use crate::pages::landing::frame::SiteFrame;
+
+use super::doors::SitePage;
+
+/// `/events`: the Discover list in the site frame, so the header and doors
+/// match the other site pages until R4.3 replaces the list.
+#[component]
+pub fn EventsPage() -> impl IntoView {
+    let (auth_state, set_auth_state) = signal(AuthState::Checking);
+    view! {
+        <Title text=tr(|l| td_string!(l, landing.site.title_events)) />
+        <SiteFrame here=SitePage::Events auth_state=auth_state>
+            <DiscoverList set_auth_state=set_auth_state />
+        </SiteFrame>
+    }
+}
 
 /// `/discover` → `/events`, keeping the query and the hash. The history
 /// entry is replaced, so Back does not land on the redirect again.

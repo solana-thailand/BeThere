@@ -18,7 +18,7 @@ use leptos::prelude::*;
 use serde::Deserialize;
 
 use crate::i18n::{Locale, t_string, td_string, use_i18n};
-use crate::pages::landing::{AuthState, SiteHeader};
+use crate::pages::landing::AuthState;
 
 #[derive(Clone, Deserialize)]
 struct PublicEventItem {
@@ -107,9 +107,12 @@ fn pick_image(poster: &str, badge: &str, slug: &str) -> String {
     }
 }
 
+/// The list behind `/events` (`pages::site::events::EventsPage`, which draws it
+/// in the site frame). It reports the session it learns to the frame's header
+/// through `set_auth_state`, so the page asks `/api/auth/me` once.
 #[component]
 #[allow(non_snake_case)]
-pub fn Discover() -> impl IntoView {
+pub fn DiscoverList(set_auth_state: WriteSignal<AuthState>) -> impl IntoView {
     let (upcoming, set_upcoming) = signal(Vec::<Row>::new());
     let (mine_now, set_mine_now) = signal(Vec::<Row>::new());
     let (mine_past, set_mine_past) = signal(Vec::<Row>::new());
@@ -117,10 +120,6 @@ pub fn Discover() -> impl IntoView {
     // Drives the sign-in prompt. A signed-out visitor sees only the public list
     // and has no way to know the page has two more sections for them.
     let (signed_in, set_signed_in) = signal(false);
-    // Fed to the shared header. The page already learns whether there is a
-    // session from `/my-registrations`, so it does not need a second call.
-    let (auth_state, set_auth_state) = signal(AuthState::Checking);
-    let (user_role, set_user_role) = signal(String::new());
 
     leptos::task::spawn_local(async move {
         let now_ms = js_sys::Date::now() as i64;
@@ -223,10 +222,7 @@ pub fn Discover() -> impl IntoView {
             _ => None,
         };
         match me {
-            Some(me) => {
-                set_user_role.set(me.role.clone());
-                set_auth_state.set(AuthState::SignedIn(me.email));
-            }
+            Some(me) => set_auth_state.set(AuthState::SignedIn(me.email)),
             None => set_auth_state.set(AuthState::NotSignedIn),
         }
 
@@ -238,9 +234,6 @@ pub fn Discover() -> impl IntoView {
         move |key: fn(Locale) -> &'static str| Signal::derive(move || key(i18n.get_locale()));
 
     view! {
-        // Outside the container for the same reason as `/feedback`: the nav
-        // wraps when squeezed into the reading width (`.issues/108`).
-        <SiteHeader auth_state=auth_state user_role=user_role />
         <div class="container dv-page">
 
             <header class="dv-head">

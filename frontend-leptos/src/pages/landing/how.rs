@@ -216,7 +216,12 @@ fn route_tab(route: Route) -> Catalog {
 }
 
 #[component]
-pub fn HowItWorks() -> impl IntoView {
+pub fn HowItWorks(
+    /// On `/organizers` the swimlane is the page, so its title is the page's
+    /// one `h1`; on the landing it is a section (`h2`).
+    #[prop(optional)]
+    page_title: bool,
+) -> impl IntoView {
     let i18n = use_i18n();
     let stats = use_landing_stats();
     let track = web_sys::window()
@@ -333,7 +338,10 @@ pub fn HowItWorks() -> impl IntoView {
     view! {
         <section id="how" class="lp-how">
             <div class="lp-wrap">
-                <h2 class="lp-h2">{crate::locale::tr(|l| td_string!(l, landing.how.title))}</h2>
+                {match page_title {
+                    true => view! { <h1 class="lp-h2">{crate::locale::tr(|l| td_string!(l, landing.how.title))}</h1> }.into_any(),
+                    false => view! { <h2 class="lp-h2">{crate::locale::tr(|l| td_string!(l, landing.how.title))}</h2> }.into_any(),
+                }}
                 <p class="lp-lede"><Markup text=crate::locale::tr(|l| td_string!(l, landing.how.lede)) /></p>
                 <div class="lp-lane-tabs" role="tablist">
                     {Route::ALL.into_iter().map(|route| view! {
