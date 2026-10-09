@@ -46,6 +46,20 @@ means the organizer already knows where to send the money.
 - `credit_ledger_guards.rs` and `credit_payout_guards.rs` follow the core and
   pin the organizer handler's order: checks, scope, settle, then delete.
 
+## Follow-up (2026-10-09, `event-checkin-d3`, deployed)
+
+The owner could not see paid-out credit anywhere, and "Record payout" looked
+broken. Shipped in pull 177, prod `8064041f` (main `ccc0f14a`), staging
+`89d1fd9d` first:
+- "Paid out" list on the Held as Credit tab (`GET /api/deposit/credit-payouts`,
+  global audit rows of `credit_refund_paid_out`, org-scoped; new entries carry
+  `metadata.organizations`).
+- Bug: payout slip links were `/api/credit-payouts/…`, which no route serves
+  (404); now `/api/storage/credit-payouts/…`, and recorded links are rewritten
+  in the list. The slips were always in R2.
+- The amount field starts at the payable balance (it was a placeholder) and
+  the button says what is missing.
+
 ## Remaining
 
 - [x] Staff UI: `CreditPayoutCandidates` under the request queue on the
