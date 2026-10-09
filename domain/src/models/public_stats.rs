@@ -87,15 +87,12 @@ pub enum StatsTrack {
     Neither,
 }
 
-/// The track of one stored value, by the app's own parser: a staff walk-in is
-/// on site, as in `TrackCounts::add`.
+/// The track of one stored value, by the app's own parser: a staff walk-in
+/// parses as `WalkIn` and is on site, as in `TrackCounts::add`.
 pub fn stats_track(stored: &str) -> StatsTrack {
-    use super::attendee::{PARTICIPATION_WALK_IN, ParticipationType};
-    if stored == PARTICIPATION_WALK_IN {
-        return StatsTrack::OnSite;
-    }
+    use super::attendee::ParticipationType;
     match ParticipationType::parse(stored) {
-        ParticipationType::InPerson => StatsTrack::OnSite,
+        ParticipationType::InPerson | ParticipationType::WalkIn => StatsTrack::OnSite,
         ParticipationType::Online => StatsTrack::Online,
         ParticipationType::Retrospective | ParticipationType::Other => StatsTrack::Neither,
     }

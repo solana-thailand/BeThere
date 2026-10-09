@@ -93,7 +93,9 @@ pub struct FunnelSnapshot {
     pub post_event_reg_count: u64,
     /// In-person registrants — the denominator for `no_show_count`. Online
     /// attendees are excluded. Mirrors `Attendee::is_in_person()` (empty /
-    /// unrecognized defaults to in-person for legacy events).
+    /// unrecognized defaults to in-person for legacy events), except that
+    /// walk-ins are left out: they are checked in on insert, so they can never
+    /// be no-shows.
     #[serde(default)]
     pub in_person_registered_count: u64,
     /// In-person registrants who checked in. `no_show_count` is this subtracted

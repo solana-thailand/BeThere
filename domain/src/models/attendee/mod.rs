@@ -31,9 +31,9 @@ pub use roster_page::{ROSTER_PAGE_MAX, RosterPage, roster_page};
 pub use row::AttendeeRow;
 pub use sheet_backfill::{BackfillPlan, CellWant, CellWrite, plan_backfill};
 pub use sheet_row::{RowMatch, SheetRow, column_index, column_letter, find_row, range_start};
-pub use status::{CheckInStatus, ParticipationType};
+pub use status::{CheckInStatus, PARTICIPATION_WALK_IN, ParticipationType};
 pub use ticket_name::{
     SYSTEM_TICKET_NAMES, TICKET_NAME_SELF_REGISTERED, TICKET_NAME_WALK_IN, is_system_ticket_name,
 };
-pub use track_counts::{PARTICIPATION_WALK_IN, TrackCounts};
+pub use track_counts::TrackCounts;
 pub use walkin::WalkinAttendee;

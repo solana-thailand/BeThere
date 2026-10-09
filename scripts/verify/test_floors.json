@@ -157,6 +157,7 @@
     "og_splice tests/og_splice.rs": 15,
     "onchain_event_id_exactness tests/onchain_event_id_exactness.rs": 6,
     "participation_type_parse tests/participation_type_parse.rs": 3,
+    "participation_walk_in tests/participation_walk_in.rs": 5,
     "pii_columns tests/pii_columns.rs": 4,
     "pod tests/pod.rs": 9,
     "possible_duplicates tests/possible_duplicates.rs": 7,
