@@ -119,6 +119,7 @@ that cannot fail is not a gate.
 | `domain_import_fence.py` | `domain`'s wasm32 graph reaching app/platform crates; JS bridge pinned both ways |
 | `third_party_licenses.sh` | `THIRD_PARTY_LICENSES.md` drift vs. the lockfiles (licence gate itself: `cargo deny check licenses`) |
 | `staff_css_fence.py` | a `styles/*.staff.css` selector the attendee wasm can match (it would render unstyled in the attendee shell) |
+| `e2e_lib_smoke.sh` | `scripts/e2e/lib/` helpers that need no chain or Worker (`.issues/076`) |
 | `bench_records.py` | `.benchmarks/` record headers (green gate, interleaved lanes, retractions) and citations that resolve |
 
 These are run by hand. Each script's header has its usage.

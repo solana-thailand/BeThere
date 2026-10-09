@@ -423,6 +423,29 @@
     justify-content: flex-end;
     gap: 0.5rem;
 }
+/* Why "Record payout" is still disabled, said next to it. */
+.admin-dep-payout-missing {
+    font-size: 0.8rem;
+    color: var(--warning);
+}
+/* "Paid out": payouts already recorded, one compact row each. */
+.admin-dep-payout-history-row {
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.admin-dep-payout-history-main {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+.admin-dep-payout-history-slip {
+    font-size: 0.85rem;
+    width: fit-content;
+}
 /* Status badge + "Copy account": wrap with a gap instead of touching
    when the row stacks on a phone. */
 .admin-dep-payout-status {

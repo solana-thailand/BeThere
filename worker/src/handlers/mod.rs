@@ -592,6 +592,11 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/organizer-credit-payout",
             post(deposit::organizer_credit_payout_handler),
         )
+        // Payouts already recorded (who, how much, by whom, slip); org-scoped.
+        .route(
+            "/deposit/credit-payouts",
+            get(deposit::credit_payout_history_handler),
+        )
         .route(
             "/refund/manual/{attendee_id}",
             post(deposit::mark_manual_refund_handler),
