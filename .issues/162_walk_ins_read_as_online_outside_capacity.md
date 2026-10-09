@@ -1,6 +1,6 @@
 # 162: Walk-ins read as online everywhere except the capacity count
 
-**Status:** in progress (2026-10-09, `event-checkin-d3`): the fix (`5284959c`, session `event-checkin-1a`) replayed onto develop `31e9e3e8` as branch `fix/162-walkin-in-person-2`, with `stats_track` reading `WalkIn` (an edit session `event-checkin-14` left uncommitted). Seen on staging 2026-10-09 before the fix: a walk-in's ticket rendered the online view. Earlier: fixed on branch `feature/162-walkin-in-person` (2026-10-01), held until after RTM #6 (4 Oct). Filed 2026-09-28 by session `event-checkin-fa` during the `/simplify` altitude review of `feature/028-w3-track-counts`.
+**Status:** deployed (2026-10-10, session `event-checkin-d3`, owner go): prod version `07ea1885` at main `9c3ed7e4` (release pull 182; pull 180 merged into develop as `05ea93ab`), staging `06bdbeb4` ran the same tree first. On staging a fresh walk-in's ticket API returned `participation_type: walkin, is_in_person: true` and the page rendered the in-person view (before the fix it rendered the online view). The fix is `5284959c` (session `event-checkin-1a`), replayed with `stats_track` reading `WalkIn`. Filed 2026-09-28 by session `event-checkin-fa`.
 
 ## What happens
 
