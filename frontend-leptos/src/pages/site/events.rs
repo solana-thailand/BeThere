@@ -23,7 +23,9 @@ pub fn EventsPage() -> impl IntoView {
     view! {
         <Title text=tr(|l| td_string!(l, landing.site.title_events)) />
         <SiteFrame here=SitePage::Events auth_state=auth_state>
-            <DiscoverList set_auth_state=set_auth_state />
+            <section class="lp-events-sec">
+                <DiscoverList set_auth_state=set_auth_state />
+            </section>
         </SiteFrame>
     }
 }

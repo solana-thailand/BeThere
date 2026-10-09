@@ -1753,6 +1753,26 @@ a.lp-event:focus-visible {
 .lp-doors-sec {
     padding: 40px 0;
     border-top: 2px solid var(--lp-ink);
+    /* Its own ground: without it the app's dark body showed through and the
+       ink heading vanished in the light theme. */
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+}
+/* /events: the Discover list inside the site frame. Its rules use the app's
+   colour variables, so they are mapped to the site theme here and the list
+   follows light and dark like the rest of the frame (.plans/045 R4.0). */
+.lp-events-sec {
+    padding: 8px 0 48px;
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+    --text-primary: var(--lp-ink);
+    --text-heading: var(--lp-ink);
+    --text-secondary: var(--lp-ink-2);
+    --text-muted: var(--lp-ink-3);
+    --border: var(--lp-line);
+    --bg-void: var(--lp-paper-2);
+    --bg-card: var(--lp-paper-2);
+    --bg-secondary: var(--lp-paper-2);
 }
 .lp-doors-sec .lp-h2 {
     margin: 0 0 18px;
