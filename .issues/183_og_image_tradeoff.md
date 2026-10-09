@@ -1,6 +1,6 @@
 # 183: OG image: per-event social cards, tradeoff before code
 
-**Status:** in progress (2026-10-08, `event-checkin-8a`). Owner picked
+**Status:** deployed (2026-10-09, `event-checkin-8a`): prod version `4d0203f0` at main `71720705` (tree = develop `9d37fb8f`), migrations 0058 + 0059 applied to prod and staging; staging `b5ca12fd`. Earlier: in progress (2026-10-08, `event-checkin-8a`). Owner picked
 option B on 2026-10-08. Built on `feature/183-og-per-event` (`99447935`
 Worker splice + card storage, `0e804e7c` editor draws the card); not merged,
 not deployed; verified on a local worker 2026-10-08 (below), fixes in

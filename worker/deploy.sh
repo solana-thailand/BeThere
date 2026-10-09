@@ -182,6 +182,35 @@ run_size_budget_gate() {
   return $rc
 }
 
+# ── Stale worker wasm guard ─────────────────────────────────────────────────
+# The [build] command bundles whatever wasm sits in the target dir it names.
+# On 2026-10-09 a worktree's real target/ dir held an old build while cargo
+# wrote elsewhere, and staging got a stale Worker with every check green.
+# wrangler.toml now passes one TD to both cargo and wasm-bindgen; this guard
+# catches any future drift. cargo rebuilds when a source mtime is newer than
+# its artifact, so after a successful build no source may be newer than the
+# wasm that got bundled. Run it after the [build] command (the size gate's
+# dry-run is that build).
+check_worker_wasm_fresh() {
+  local td="${CARGO_TARGET_DIR:-../target}"
+  local artifact="$td/wasm32-unknown-unknown/release/event_checkin_worker.wasm"
+  local newer
+
+  if [ ! -f "$artifact" ]; then
+    echo "❌ Worker wasm not found where the build reads it: $artifact" >&2
+    return 1
+  fi
+  newer=$(find src ../domain/src Cargo.toml ../domain/Cargo.toml ../Cargo.lock \
+    -newer "$artifact" -type f -print -quit 2>/dev/null || true)
+  if [ -n "$newer" ]; then
+    echo "❌ Stale worker wasm: $newer is newer than $artifact." >&2
+    echo "   cargo built somewhere else than the [build] command bundles from." >&2
+    echo "   Check CARGO_TARGET_DIR, ~/.cargo/config.toml target-dir and a real target/ dir." >&2
+    return 1
+  fi
+  echo "✅ Worker wasm is fresh ($artifact)"
+}
+
 # ── Post-deploy content-type verification ───────────────────────────────────
 # Find a Python interpreter able to run the PUT-fallback generators.
 # Sets PYTHON_BIN. Requires 3.11+ (tomllib) and the blake3 package.
@@ -457,6 +486,11 @@ else
   # leave this machine.
   if ! run_size_budget_gate; then
     echo "❌ Worker bundle failed the size budget — deploy aborted (nothing uploaded)." >&2
+    restore_pnp
+    exit 1
+  fi
+  if ! check_worker_wasm_fresh; then
+    echo "❌ Worker wasm is stale — deploy aborted (nothing uploaded)." >&2
     restore_pnp
     exit 1
   fi

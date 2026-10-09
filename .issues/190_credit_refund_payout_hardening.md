@@ -1,6 +1,6 @@
 # 190 · Held-credit payout: stale amount, unguarded reversal, no account, no audit
 
-**Status:** in progress. Built on `feature/190-credit-refund-payout` (from
+**Status:** deployed (2026-10-09, `event-checkin-8a`): prod version `4d0203f0` at main `71720705` (tree = develop `9d37fb8f`), migrations 0058 + 0059 applied to prod and staging; staging `b5ca12fd`. Earlier: in progress. Built on `feature/190-credit-refund-payout` (from
 `develop` `4d9cf386`, session `event-checkin-8a`), not merged, not deployed.
 Owner chose option (a), "harden the existing credit cash-out flow", on
 2026-10-08.

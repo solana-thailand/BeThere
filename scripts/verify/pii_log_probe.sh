@@ -21,7 +21,7 @@
 #                                              # -> http://127.0.0.1:9/token so
 #                                              # no Sheets call can succeed
 #   mv ~/.pnp.cjs ~/.pnp.cjs.bak               # wrangler esbuild vs Yarn PnP
-#   cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release
+#   cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release --target-dir ../target
 #   wasm-bindgen --target bundler --no-typescript --remove-name-section \
 #     ../target/wasm32-unknown-unknown/release/event_checkin_worker.wasm \
 #     --out-dir build/worker
@@ -195,6 +195,8 @@ req GET "/api/refund/refunded?event_id=$EVENT_ID"
 req GET "/api/deposit/credit-used?event_id=$EVENT_ID"
 req GET "/api/deposit/credit-refund-requests"
 req POST "/api/deposit/clear-credit-refund-request" "{\"email\":\"$ATT_EMAIL\",\"paid\":{\"thb\":0}}"
+req GET "/api/deposit/credit-payout-candidates"
+req POST "/api/deposit/organizer-credit-payout" "{\"email\":\"$ATT_EMAIL\",\"paid\":{\"thb\":1}}"
 req GET "/api/dashboard/live?event_id=$EVENT_ID"
 req GET "/api/events/$EVENT_ID/audit"
 req GET /api/audit/global

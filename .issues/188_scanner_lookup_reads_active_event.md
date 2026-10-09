@@ -1,6 +1,6 @@
 # 188: Scanner QR and id lookup read the active event, not the selected one
 
-**Status:** in progress. Fixed on the branch `feature/178-display-code`
+**Status:** deployed (2026-10-09, `event-checkin-8a`): prod version `4d0203f0` at main `71720705` (tree = develop `9d37fb8f`), migrations 0058 + 0059 applied to prod and staging; staging `b5ca12fd`. Earlier: in progress. Fixed on the branch `feature/178-display-code`
 (2026-10-08, session `event-checkin-8a`), not merged to `develop` yet. Found while
 building `.issues/178`.
 

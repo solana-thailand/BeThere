@@ -226,7 +226,9 @@
     "return_saved_from_deposit": "เราจะโอนเข้า {account} — บัญชีที่คุณให้ไว้ตอนวางมัดจำวันที่ {date}",
     "return_saved_from_attendee": "เราจะโอนเข้า {account} — บัญชีที่คุณแจ้งไว้เมื่อวันที่ {date}",
     "return_saved_cta": "ขอรับเงินคืนเข้าบัญชีนี้",
-    "return_saved_other": "ใช้บัญชีอื่น"
+    "return_saved_other": "ใช้บัญชีอื่น",
+    "return_paid_title": "คืนเครดิตแล้ว",
+    "return_paid_desc": "ผู้จัดงานโอนคืนให้คุณ {amount} เมื่อวันที่ {date} ตอนนี้ไม่มีเครดิตค้างอยู่แล้ว"
   },
   "code": {
     "label": "รหัสบัตร",
