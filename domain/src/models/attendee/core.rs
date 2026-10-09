@@ -77,13 +77,13 @@ impl Attendee {
         self.checked_in_at.is_some()
     }
 
-    /// Check if attendee's participation type is "In-Person".
+    /// Whether the attendee takes part in the room (in-person or walk-in).
     /// Online attendees should not be checked in at the physical event.
     ///
-    /// Delegates to [`ParticipationType::parse`]; defaults to in-person when
-    /// `participation_type` is empty (legacy events predate this field).
+    /// Delegates to [`ParticipationType::is_in_person`]; defaults to in-person
+    /// when `participation_type` is empty (legacy events predate this field).
     pub fn is_in_person(&self) -> bool {
-        self.participation_type_enum() == ParticipationType::InPerson
+        self.participation_type_enum().is_in_person()
     }
 
     /// Canonical typed participation type (see [`ParticipationType`]).

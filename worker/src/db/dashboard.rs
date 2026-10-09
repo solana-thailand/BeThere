@@ -154,10 +154,12 @@ pub async fn count_claims_minted(db: &D1Database, event_id: &str) -> Result<u64,
 /// the empty→in-person semantic guarantees the SQL predicate and the Rust
 /// classifier can never disagree on classification.
 ///
-/// Returns false for `online`, `test`, `walkin`, and any future unrecognized
-/// value — matching `ParticipationType::parse` (which classifies those as
-/// `Other`). Walk-in detection is separate: `claim/mint.rs` and
-/// `handlers/attendee.rs` query `participation_type = 'walkin'` literally.
+/// Returns false for `online`, `test`, and any future unrecognized value,
+/// matching `ParticipationType::parse` (which classifies those as `Other`).
+/// It also returns false for `walkin`, which `parse` calls the in-person
+/// `WalkIn` since .issues/162. That is deliberate here: this predicate feeds
+/// the no-show denominator, and a walk-in is checked in on insert, so leaving
+/// it out of both counts keeps `no_show_count` unchanged.
 ///
 /// Kept as a single `const` so the registered and checked-in in-person counts
 /// use the identical predicate and can never drift.

@@ -33,6 +33,7 @@ mod org_store;
 // Public so `worker/tests/precompressed_asset.rs` can drive the pure helpers.
 /// Crawler documents and the 404 rule; public for `tests/crawl_routes.rs`.
 pub mod crawl;
+pub mod credit_payout_history;
 /// `/media/*` with byte ranges (the landing film); public for `tests/media_path.rs`.
 pub mod landing_photos;
 pub mod media;
@@ -45,6 +46,7 @@ mod quiz;
 mod sheets;
 mod solana;
 // Public so `worker/tests/golden_vectors_escrow.rs` can pin PDA derivation.
+pub mod sandbox;
 pub mod solana_escrow;
 // Public so `worker/tests/security_spike_alert.rs` can drive the detector.
 pub mod spike;

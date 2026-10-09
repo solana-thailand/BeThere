@@ -226,7 +226,9 @@
     "return_saved_from_deposit": "We'll send it to {account} — the account from your deposit on {date}.",
     "return_saved_from_attendee": "We'll send it to {account} — the account you gave us on {date}.",
     "return_saved_cta": "Request refund to this account",
-    "return_saved_other": "Use a different account"
+    "return_saved_other": "Use a different account",
+    "return_paid_title": "Credit Paid Back",
+    "return_paid_desc": "The organizer sent you {amount} on {date}. No credit is held for you now."
   },
   "code": {
     "label": "Ticket code",

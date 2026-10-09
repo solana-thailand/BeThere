@@ -54,21 +54,18 @@ use crate::icons::{Icon, IconName};
 extern "C" {
     fn __bethere_build_tag() -> String;
 }
-use crate::pages::{
-    Discover, EventRecap, Feedback, NfcCheckin, PastEvents, PostEventRegister,
-    adventure::page::Adventure, claim::Claim, data_privacy::DataPrivacy, deposit::Deposit,
-    dev_dashboard::DevDashboard, dev_profile::DevProfile, faq::Faq, login::Login, privacy::Privacy,
-    public_event::PublicEvent, ticket::page::Ticket,
-};
+use crate::pages::login::Login;
 use crate::staff_routes::{
-    HomeRoute, ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack,
-    ProtectedScanner,
+    Adventure, Claim, DataPrivacy, Deposit, DevDashboard, DevProfile, Discover, EventRecap, Faq,
+    Feedback, HomeRoute, NfcCheckin, PastEvents, PostEventRegister, Privacy, ProtectedAdmin,
+    ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack, ProtectedScanner, PublicEvent,
+    SandboxRoute, Ticket,
 };
 
 /// Main application component.
 ///
 /// Sets up the Leptos router with routes:
-/// - `/` — Landing page (public marketing page; a hand-off in the staff build)
+/// - `/` — Landing page (public marketing page)
 /// - `/login` — Login page (Google OAuth sign-in)
 /// - `/claim/:token` — NFT claim page for attendees
 /// - `/staff` — Staff scanner page (QR code scanning + manual check-in)
@@ -76,7 +73,8 @@ use crate::staff_routes::{
 ///
 /// Staff routes (`/staff`, `/admin`, …) come from `staff_routes`: the real
 /// pages behind `ProtectedRoute` in the staff build, a hand-off to the staff
-/// shell in the attendee build (.issues/169).
+/// shell in the attendee build (.issues/169). Every other route except
+/// `/login` is the mirror: a hand-off to the attendee shell in the staff build.
 /// Drop the static summary `index.html` carries for fetches without
 /// JavaScript (`#boot-summary`), so it does not sit above the app.
 pub fn remove_boot_summary() {
@@ -151,6 +149,8 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/privacy") view=Privacy />
                     <Route path=path!("/faq") view=Faq />
                     <Route path=path!("/data-privacy") view=DataPrivacy />
+                    // Devnet sandbox, no login (.plans/042 0.4).
+                    <Route path=path!("/sandbox") view=SandboxRoute />
                     <Route path=path!("/adventure") view=Adventure />
                     <Route path=path!("/dashboard") view=DevDashboard />
                     <Route path=path!("/profile") view=DevProfile />

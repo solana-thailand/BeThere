@@ -22,7 +22,8 @@ use crate::icons::{Icon, IconName};
 use crate::pages::admin_deposit_bank_info::{
     load_refund_note, refund_bank_info, refund_copy_buttons, refund_note_editor,
 };
-use crate::pages::admin_deposit_credit_requests::CreditRefundRequests;
+use crate::pages::admin_deposit_credit_history::CreditPayoutHistory;
+use crate::pages::admin_deposit_credit_requests::{CreditPayoutCandidates, CreditRefundRequests};
 use crate::pages::admin_deposit_queue_comp::QueueCompAction;
 use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
 use crate::pages::admin_deposit_settled::{SettledDepositList, SettledKind};
@@ -980,12 +981,22 @@ pub fn AdminDeposits(
                         />
                     </Show>
 
+                    // .issues/192 — holders the organizer can pay unasked.
+                    <CreditPayoutCandidates
+                        refresh_counter=refresh_counter
+                        set_toast=set_toast
+                        set_refresh_counter=set_refresh_counter
+                    />
+                    <CreditPayoutHistory refresh_counter=refresh_counter/>
+
                     <Show
                         when=move || held_count.get() == 0
                         fallback=|| view! { <div></div> }
                     >
                         <div class="admin-empty-state">
-                            "No deposits held as credit"
+                            // The held list is per event; the payout candidates above
+                            // are cross-event, so say which list is empty.
+                            "No deposits held as credit for this event"
                         </div>
                     </Show>
 

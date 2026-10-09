@@ -17,8 +17,8 @@ fn walkin_sentinel_is_on_site() {
 
 #[test]
 fn walkin_stays_out_of_is_in_person() {
-    // Mirrors `ParticipationType::parse("walkin") == Other`; deposit badges and
-    // the participation toggle depend on this staying false.
+    // Deposit badges and the participation toggle depend on this staying
+    // false, even though the domain now parses it as the in-person `WalkIn`.
     assert!(!is_in_person("walkin"));
 }
 

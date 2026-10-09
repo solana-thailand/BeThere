@@ -67,6 +67,8 @@ BASELINE_DATE=2026-10-06
 
 # Staff shell (staff-app.html: scanner, admin, dashboard; .issues/169), read
 # with --shell staff. Same growth limits and product budget as above: staff
-# load it on the same venue data. Recorded from the build.sh dist of daaa65c9.
-STAFF_BASELINE_BYTES=1996228
-STAFF_BASELINE_DATE=2026-10-06
+# load it on the same venue data. Recorded from the build.sh dist after the
+staff build stopped carrying the attendee pages (they hand off to the attendee
+shell, `src/staff_routes.rs`): 2,041,016 → 1,318,308.
+STAFF_BASELINE_BYTES=1318308
+STAFF_BASELINE_DATE=2026-10-09

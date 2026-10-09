@@ -9,7 +9,9 @@
 //!    balance negative (defect 2).
 //! 2. The clear needs the organizer's confirmed amount and compares it inside
 //!    the write (defect 1), audits who paid, and only then clears.
-//! 3. Both payout endpoints are org-scoped and refuse per-event scanners.
+//! 3. Every payout endpoint is org-scoped and refuses per-event scanners.
+//!    The organizer-initiated payout (`.issues/192`) pays only to the
+//!    deposit account, never over an open request, and needs the slip.
 //! 4. The payout account dies at payout, on PDPA erasure, and in the purge
 //!    once no request is open and no credit is held — and never reaches the
 //!    log stream.
@@ -61,6 +63,10 @@ fn visit_rs(dir: &Path, f: &mut impl FnMut(&Path, &str)) {
 }
 
 const HANDLER: &str = "src/handlers/deposit/thb/handlers/hold_refund_request.rs";
+/// The money-moving core both payout paths share (`.issues/192`).
+const CORE: &str = "src/handlers/deposit/thb/handlers/credit_payout.rs";
+/// The organizer-initiated payout (`.issues/192`).
+const ORGANIZER: &str = "src/handlers/deposit/thb/handlers/organizer_credit_payout.rs";
 
 // ---------------------------------------------------------------------------
 // 1. One guarded writer of `refund` rows
@@ -162,6 +168,35 @@ fn try_refund_is_one_guarded_statement() {
 
 #[test]
 fn clear_needs_the_confirmed_amount_and_audits_before_clearing() {
+    // The core: compare → guarded reversal → 409 on mismatch → audit.
+    let core_code = strip_comments(&src(CORE));
+    let core = fn_body(&core_code, "pub(super) async fn settle_payout");
+    let at = |needle: &str| {
+        core.find(needle)
+            .unwrap_or_else(|| panic!("settle_payout lost `{needle}`"))
+    };
+    let compare = at("if paid != payable");
+    let reversal = at("try_refund(");
+    let mismatch = at("RefundOutcome::Mismatch");
+    let audit = at("audit_payout(");
+    assert!(
+        compare < reversal && reversal < mismatch && mismatch < audit,
+        "order must be: compare → guarded reversal → 409 on mismatch → audit"
+    );
+    assert!(
+        core[compare..reversal].contains("AppError::Conflict(payout_mismatch_message("),
+        "a stale amount must be refused before anything is written"
+    );
+    assert!(
+        core[mismatch..audit].contains("AppError::Conflict"),
+        "a reversal the guard refused must be a 409, not a clear"
+    );
+    assert!(
+        core[audit..].contains("map_err(AppError::Internal)"),
+        "an unrecorded payer must fail the payout (the retry re-audits)"
+    );
+
+    // The clear: the confirmed amount, then the core, then the clear.
     let code = strip_comments(&src(HANDLER));
     let handler = fn_body(&code, "pub async fn clear_credit_refund_request_handler");
     let at = |needle: &str| {
@@ -170,31 +205,47 @@ fn clear_needs_the_confirmed_amount_and_audits_before_clearing() {
             .unwrap_or_else(|| panic!("clear handler lost `{needle}`"))
     };
     let paid = at("body.paid.ok_or_else(");
-    let compare = at("if paid != payable");
-    let reversal = at("reverse_held_credit(");
-    let mismatch = at("RefundOutcome::Mismatch");
-    let audit = at("audit_payout(");
+    let settle = at("settle_payout(");
     let clear = at("contacts::clear_credit_refund_requested(");
     assert!(
-        paid < compare
-            && compare < reversal
-            && reversal < mismatch
-            && mismatch < audit
-            && audit < clear,
-        "order must be: confirmed amount → compare → guarded reversal → 409 on mismatch \
-         → audit → clear"
+        paid < settle && settle < clear,
+        "order must be: confirmed amount → settle_payout → clear"
     );
     assert!(
-        handler[mismatch..audit].contains("AppError::Conflict"),
-        "a reversal the guard refused must be a 409, not a clear"
+        handler[settle..clear].contains(".await?"),
+        "a refused or failed payout must abort the clear"
+    );
+}
+
+#[test]
+fn the_organizer_payout_pays_only_the_deposit_account_with_a_slip() {
+    let code = strip_comments(&src(ORGANIZER));
+    let handler = fn_body(&code, "pub async fn organizer_credit_payout_handler");
+    let at = |needle: &str| {
+        handler
+            .find(needle)
+            .unwrap_or_else(|| panic!("organizer payout lost `{needle}`"))
+    };
+    let settle = at("settle_payout(");
+    for needle in [
+        ".validate()",
+        "body.paid.is_zero()",
+        "attach the transfer slip",
+        "open_request_for_person(",
+        "AccountSource::Deposit",
+    ] {
+        assert!(
+            at(needle) < settle,
+            "`{needle}` must be checked before any money moves"
+        );
+    }
+    assert!(
+        handler[settle..].contains("Some(proof)"),
+        "the required slip must reach settle_payout"
     );
     assert!(
-        handler[audit..clear].contains("map_err(AppError::Internal)?"),
-        "an unrecorded payer must abort the clear (the retry re-audits)"
-    );
-    assert!(
-        handler[compare..reversal].contains("AppError::Conflict(payout_mismatch_message("),
-        "a stale amount must be refused before anything is written"
+        handler.contains("PayoutInitiator::Organizer"),
+        "the audit entry must say the organizer started it"
     );
 }
 
@@ -205,28 +256,47 @@ fn clear_needs_the_confirmed_amount_and_audits_before_clearing() {
 #[test]
 fn both_payout_endpoints_are_org_scoped() {
     let code = strip_comments(&src(HANDLER));
-    for handler in [
-        "pub async fn credit_refund_requests_handler",
-        "pub async fn clear_credit_refund_request_handler",
+    let organizer = strip_comments(&src(ORGANIZER));
+    for (code, handler) in [
+        (&code, "pub async fn credit_refund_requests_handler"),
+        (&code, "pub async fn clear_credit_refund_request_handler"),
+        (&organizer, "pub async fn credit_payout_candidates_handler"),
+        (&organizer, "pub async fn organizer_credit_payout_handler"),
     ] {
-        let body = fn_body(&code, handler);
+        let body = fn_body(code, handler);
         assert!(
             body.contains("payout_scope(&state, &claims.email).await?")
                 && body.contains("require_payout_operator(&scope)?"),
             "{handler} must resolve and enforce the caller's payout scope"
         );
     }
-    let list = fn_body(&code, "pub async fn credit_refund_requests_handler");
+    for (code, list) in [
+        (&code, "pub async fn credit_refund_requests_handler"),
+        (&organizer, "pub async fn credit_payout_candidates_handler"),
+    ] {
+        assert!(
+            fn_body(code, list).contains("scope.covers("),
+            "{list} must filter rows by scope"
+        );
+    }
+    let core = strip_comments(&src(CORE));
     assert!(
-        list.contains("scope.covers("),
-        "the queue must filter rows by scope"
+        fn_body(&core, "pub(super) async fn scoped_buckets").contains("scope.covers("),
+        "scoped_buckets must refuse credit outside the caller's scope"
     );
-    let clear = fn_body(&code, "pub async fn clear_credit_refund_request_handler");
-    let covers = clear.find("scope.covers(").expect("clear must check scope");
-    assert!(
-        covers < clear.find("reverse_held_credit(").expect("reversal"),
-        "the scope check must run before any money moves"
-    );
+    for (code, handler) in [
+        (&code, "pub async fn clear_credit_refund_request_handler"),
+        (&organizer, "pub async fn organizer_credit_payout_handler"),
+    ] {
+        let body = fn_body(code, handler);
+        let covers = body
+            .find("scoped_buckets(")
+            .unwrap_or_else(|| panic!("{handler} must check scope"));
+        assert!(
+            covers < body.find("settle_payout(").expect("settle_payout"),
+            "{handler}: the scope check must run before any money moves"
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------

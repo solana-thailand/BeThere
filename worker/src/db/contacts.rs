@@ -473,7 +473,7 @@ impl CreditRefundRequest {
     }
 
     /// Fold the stored account columns into [`Self::account`].
-    fn with_account(mut self) -> Self {
+    pub(crate) fn with_account(mut self) -> Self {
         self.account_source = self
             .account_source_raw
             .take()
