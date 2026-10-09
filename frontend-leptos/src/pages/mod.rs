@@ -3,6 +3,7 @@ pub mod admin_attendance_answer;
 pub mod admin_cancel;
 pub mod admin_deposit;
 pub mod admin_deposit_bank_info;
+pub mod admin_deposit_credit_history;
 pub mod admin_deposit_credit_requests;
 pub mod admin_deposit_queue_comp;
 pub mod admin_deposit_record_slip;

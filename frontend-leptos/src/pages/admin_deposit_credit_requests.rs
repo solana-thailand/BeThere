@@ -140,8 +140,15 @@ fn CreditRefundRow(
         account_captured_at,
         account_replaced_deposit,
     } = req;
-    let (paid_thb, set_paid_thb) = signal(String::new());
-    let (paid_usdc, set_paid_usdc) = signal(String::new());
+    // Start from what is payable: the organizer confirms it by attaching the
+    // slip, and edits it only if they sent something else (the worker refuses
+    // any amount that is not the payable balance).
+    let start = |amount: i64| match amount {
+        0 => String::new(),
+        n => n.to_string(),
+    };
+    let (paid_thb, set_paid_thb) = signal(start(credit_thb));
+    let (paid_usdc, set_paid_usdc) = signal(start(credit_usdc));
     let (proof, set_proof) = signal(None::<String>);
     let (pending, set_pending) = signal(false);
 
@@ -193,6 +200,17 @@ fn CreditRefundRow(
                 ),
             }
         });
+    };
+
+    // Why "Record payout" cannot be pressed yet, shown next to it.
+    let missing = move || match (
+        paid_thb.get().trim().is_empty() && paid_usdc.get().trim().is_empty(),
+        kind == PayoutRowKind::Unrequested && proof.get().is_none(),
+    ) {
+        (true, true) => Some("Enter the amount you transferred and attach the slip"),
+        (true, false) => Some("Enter the amount you transferred"),
+        (false, true) => Some("Attach the transfer slip to record this payout"),
+        (false, false) => None,
     };
 
     let record_payout = move |_| {
@@ -365,13 +383,12 @@ fn CreditRefundRow(
                             {move || proof.get().is_some().then(|| view! {
                                 <span class="badge badge-success">"Slip attached"</span>
                             })}
+                            {move || missing().map(|why| view! {
+                                <span class="admin-dep-payout-missing">{why}</span>
+                            })}
                             <button
                                 class="btn btn-success btn-sm"
-                                disabled=move || {
-                                    pending.get()
-                                        || (paid_thb.get().trim().is_empty() && paid_usdc.get().trim().is_empty())
-                                        || (kind == PayoutRowKind::Unrequested && proof.get().is_none())
-                                }
+                                disabled=move || pending.get() || missing().is_some()
                                 on:click=record_payout
                             >
                                 {move || match pending.get() {

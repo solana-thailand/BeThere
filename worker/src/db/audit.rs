@@ -80,3 +80,25 @@ pub(crate) async fn get_global_audit_entries(
         .results::<AuditRow>()
         .map_err(|e| format!("D1 get_global_audit_entries deserialize: {e:?}"))
 }
+
+/// Global audit rows (`event_id = '__global__'`) of one action, newest
+/// first. The credit payout history reads its own action so other global
+/// entries (email links, role changes) cannot push payouts out of the page.
+pub(crate) const GLOBAL_AUDIT_BY_ACTION_SQL: &str = "SELECT timestamp, actor, action, target, description, metadata \
+     FROM audit_log WHERE event_id = '__global__' AND action = ?1 \
+     ORDER BY timestamp DESC, id DESC LIMIT ?2";
+
+pub(crate) async fn get_global_audit_by_action(
+    db: &D1Database,
+    action: &str,
+    limit: usize,
+) -> Result<Vec<AuditRow>, String> {
+    db.prepare(GLOBAL_AUDIT_BY_ACTION_SQL)
+        .bind_refs(&[D1Type::Text(action), D1Type::Integer(limit as i32)])
+        .map_err(|e| format!("D1 get_global_audit_by_action bind: {e:?}"))?
+        .all()
+        .await
+        .map_err(|e| format!("D1 get_global_audit_by_action run: {e:?}"))?
+        .results::<AuditRow>()
+        .map_err(|e| format!("D1 get_global_audit_by_action deserialize: {e:?}"))
+}

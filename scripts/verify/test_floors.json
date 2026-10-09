@@ -101,6 +101,7 @@
     "credit_ledger_guards tests/credit_ledger_guards.rs": 16,
     "credit_payout tests/credit_payout.rs": 17,
     "credit_payout_guards tests/credit_payout_guards.rs": 12,
+    "credit_payout_history tests/credit_payout_history.rs": 6,
     "credit_release_and_staff_comp tests/credit_release_and_staff_comp.rs": 7,
     "d1_int_bind_exactness tests/d1_int_bind_exactness.rs": 4,
     "d1_sync_warning tests/d1_sync_warning.rs": 4,
