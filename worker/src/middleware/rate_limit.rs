@@ -174,8 +174,9 @@ fn rate_limit_for_path(path: &str) -> Option<(&'static RateLimitConfig, LimiterK
     if path.starts_with("/api/claim/") {
         return Some((&RATE_LIMIT_CLAIM, LimiterKind::Claim));
     }
-    // Deposit endpoints
-    if path.starts_with("/api/deposit/") {
+    // Deposit endpoints, and the devnet sandbox, which spends faucet USDC and
+    // organizer SOL (plan 042 0.4)
+    if path.starts_with("/api/deposit/") || path.starts_with("/api/sandbox/") {
         return Some((&RATE_LIMIT_DEPOSIT, LimiterKind::Deposit));
     }
     None

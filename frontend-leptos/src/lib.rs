@@ -62,7 +62,7 @@ use crate::pages::{
 };
 use crate::staff_routes::{
     HomeRoute, ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack,
-    ProtectedScanner,
+    ProtectedScanner, SandboxRoute,
 };
 
 /// Main application component.
@@ -151,6 +151,8 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/privacy") view=Privacy />
                     <Route path=path!("/faq") view=Faq />
                     <Route path=path!("/data-privacy") view=DataPrivacy />
+                    // Devnet sandbox, no login (.plans/042 0.4).
+                    <Route path=path!("/sandbox") view=SandboxRoute />
                     <Route path=path!("/adventure") view=Adventure />
                     <Route path=path!("/dashboard") view=DevDashboard />
                     <Route path=path!("/profile") view=DevProfile />
