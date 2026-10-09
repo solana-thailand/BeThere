@@ -15,7 +15,8 @@
 //! The landing (`/`, [`HomeRoute`]) is the mirror case: the edge always serves
 //! it from the attendee shell, so the staff build hands `/` back with a full
 //! page load and the linker drops the landing from the staff wasm, which sits
-//! near its size ceiling (`scripts/verify/frontend_size_budget.sh`).
+//! near its size ceiling (`scripts/verify/frontend_size_budget.sh`). The devnet
+//! sandbox (`/sandbox`, [`SandboxRoute`]) is handed back the same way.
 
 /// Path patterns served by the staff shell, in `_redirects` placeholder syntax.
 /// `tests/staff_shell_split.rs` pins `_redirects` to this list.
@@ -29,8 +30,8 @@ pub const STAFF_PATHS: [&str; 5] = [
 
 #[cfg(feature = "staff")]
 pub use staff::{
-    AttendeeShellHandoff as HomeRoute, ProtectedAdmin, ProtectedEventSummary,
-    ProtectedLiveDashboard, ProtectedPrPack, ProtectedScanner,
+    AttendeeShellHandoff as HomeRoute, AttendeeShellHandoff as SandboxRoute, ProtectedAdmin,
+    ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack, ProtectedScanner,
 };
 
 #[cfg(not(feature = "staff"))]
@@ -42,6 +43,9 @@ pub use attendee::{
 
 #[cfg(not(feature = "staff"))]
 pub use crate::pages::landing::Landing as HomeRoute;
+
+#[cfg(not(feature = "staff"))]
+pub use crate::pages::sandbox::Sandbox as SandboxRoute;
 
 pub use handoff::record_boot_path;
 

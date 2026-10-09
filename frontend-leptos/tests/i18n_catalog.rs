@@ -172,6 +172,7 @@ fn switch_shows_on_attendee_pages_only() {
         "/feedback",
         "/privacy",
         "/data-privacy",
+        "/sandbox",
         "/past-events",
         "/faq",
         "/profile",
