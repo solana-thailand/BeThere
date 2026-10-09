@@ -608,7 +608,7 @@ pub async fn get_credit_used(event_id: Option<&str>) -> Result<CreditUsedRespons
 // ===== Phase 3 — Credit Refund Request (exit path) =====
 
 pub use event_checkin_domain::models::credit_payout::{
-    AccountSource, PaidAmounts, RefundAccount, SavedAccountPreview,
+    AccountSource, CreditPayoutReceipt, PaidAmounts, RefundAccount, SavedAccountPreview,
 };
 
 /// Response for POST /api/deposit/request-credit-refund — attendee requests
@@ -654,6 +654,10 @@ pub struct CreditRefundRequestStatus {
     /// file — the card then asks for an account.
     #[serde(default)]
     pub saved_account: Option<SavedAccountPreview>,
+    /// The last payout while it settled everything held (`.issues/192`); the
+    /// card shows it instead of the request button.
+    #[serde(default)]
+    pub paid_back: Option<CreditPayoutReceipt>,
 }
 
 /// GET /api/deposit/credit-refund-request — the attendee's own flag state, or
@@ -749,6 +753,29 @@ pub async fn clear_credit_refund_request(
     body: &ClearCreditRefundRequest,
 ) -> Result<ClearCreditRefundResponse, ApiError> {
     api_post_json("/deposit/clear-credit-refund-request", body).await
+}
+
+/// Response for GET /api/deposit/credit-payout-candidates (`.issues/192`):
+/// people with payable credit and their deposit account on file, no request
+/// open. Same row shape as the request queue.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditPayoutCandidatesResponse {
+    #[serde(default)]
+    pub candidates: Vec<CreditRefundRequest>,
+}
+
+/// GET /api/deposit/credit-payout-candidates — organizer, org-scoped.
+pub async fn get_credit_payout_candidates() -> Result<CreditPayoutCandidatesResponse, ApiError> {
+    api_get_json("/deposit/credit-payout-candidates").await
+}
+
+/// POST /api/deposit/organizer-credit-payout — pay a candidate out to their
+/// deposit account without a request. Same body as the clear; the slip is
+/// required. Same guard: 409 unless `paid` equals the payable balance.
+pub async fn organizer_credit_payout(
+    body: &ClearCreditRefundRequest,
+) -> Result<serde_json::Value, ApiError> {
+    api_post_json("/deposit/organizer-credit-payout", body).await
 }
 
 // ===== Escrow API =====

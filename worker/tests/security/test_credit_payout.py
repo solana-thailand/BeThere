@@ -49,6 +49,12 @@ DELETE_FOR_PERSON_SQL = concat_after(
     "db/credit_refund_accounts.rs", "pub(crate) const DELETE_FOR_PERSON_SQL"
 )
 PURGE_SQL = concat_after("db/credit_refund_accounts.rs", "pub(crate) const PURGE_SQL")
+HOLDERS_SQL = concat_after(
+    "db/credit_refund_accounts.rs", "pub(crate) const DEPOSIT_ACCOUNT_HOLDERS_SQL"
+)
+OPEN_REQUEST_SQL = concat_after(
+    "db/credit_refund_accounts.rs", "pub(crate) const OPEN_REQUEST_FOR_PERSON_SQL"
+)
 
 
 def backfill_sql():
@@ -637,6 +643,84 @@ class CreditPayoutTests(CreditFixture):
             self.snapshot(f"p{n}@x.example", f"e{n}", f"a{n}")
         self.assertEqual(self.accounts(), from_backfill)
         self.assertEqual(len(from_backfill), 5, from_backfill)
+
+    # -- organizer-initiated payout (.issues/192) --------------------------
+
+    def holders(self):
+        return [dict(r) for r in self.db.execute(HOLDERS_SQL)]
+
+    def open_request(self, email):
+        return self.db.execute(OPEN_REQUEST_SQL, (email,)).fetchone()["n"] > 0
+
+    def held_deposit(self, email, event_id="e1", attendee_id="a1", amount=500, org=""):
+        """A held THB deposit whose account was copied at hold time."""
+        self.contact(email)
+        self.deposit(event_id, attendee_id, email)
+        self.hold(email, amount, f"{event_id}:{attendee_id}", org=org)
+        self.snapshot(email, event_id, attendee_id)
+
+    def test_a_deposit_account_holder_is_a_candidate(self):
+        self.held_deposit(GMAIL, org="org-a")
+        [row] = self.holders()
+        self.assertEqual(row["email"], GMAIL)
+        self.assertEqual(row["credit_thb"], 500)
+        self.assertEqual(row["org_ids"], '["org-a"]')
+        self.assertEqual(row["account_source_raw"], "deposit")
+        self.assertEqual(
+            (row["bank_name"], row["bank_account"], row["account_name"]), DEPOSIT_BANK
+        )
+
+    def test_an_open_request_is_paid_from_the_queue_not_here(self):
+        self.held_deposit(GMAIL)
+        self.contact(WORK)
+        self.link(GMAIL, WORK)
+        self.request(WORK, PROMPTPAY)
+        self.assertTrue(self.open_request(GMAIL), "person-wide, not per email")
+        self.assertEqual(self.holders(), [])
+
+    def test_an_account_the_attendee_typed_is_never_a_candidate(self):
+        self.held_deposit(GMAIL)
+        self.request(GMAIL, PROMPTPAY)
+        # The flag closes without a payout (a stale row the organizer dismissed
+        # before 0059) — the typed account must still not be paid unasked.
+        self.db.execute("UPDATE contacts SET credit_refund_requested = 0")
+        self.assertFalse(self.open_request(GMAIL))
+        self.assertEqual(self.holders(), [])
+
+    def test_no_payable_credit_is_no_candidate(self):
+        self.held_deposit(GMAIL)
+        self.assertEqual(self.spend(GMAIL, 500, "e2"), 1)
+        self.assertEqual(self.holders(), [])
+
+    def test_linked_emails_are_one_candidate_with_the_person_total(self):
+        self.held_deposit(GMAIL)
+        self.held_deposit(WORK, "e2", "a2", amount=300)
+        self.link(GMAIL, WORK)
+        [row] = self.holders()
+        self.assertEqual(row["credit_thb"], 800)
+
+    def test_the_name_is_the_account_emails_then_the_lowest_linked(self):
+        # The account sits on WORK, and GMAIL sorts lower, so "lowest linked"
+        # alone would pick GMAIL's name.
+        self.held_deposit(WORK)
+        self.contact(GMAIL)
+        self.link(GMAIL, WORK)
+        name = lambda e, n: self.db.execute(
+            "UPDATE contacts SET name = ? WHERE email = ?", (n, e)
+        )
+        name(WORK, "")
+        name(GMAIL, "Gmail Name")
+        self.assertEqual([r["name"] for r in self.holders()], ["Gmail Name"])
+        name(WORK, "Work Name")
+        self.assertEqual([r["name"] for r in self.holders()], ["Work Name"])
+
+    def test_an_organizer_payout_pays_once(self):
+        self.held_deposit(GMAIL)
+        self.assertEqual(self.refund(GMAIL, 500, requested_at="organizer-1"), ("recorded", 1))
+        # A double click is a new key against a zero balance: refused.
+        self.assertEqual(self.refund(GMAIL, 500, requested_at="organizer-2"), ("mismatch",))
+        self.assertEqual(self.payable(GMAIL), {})
+        self.assertEqual(self.holders(), [])
 
 
 class PiiErasureSqlIsTheSourceSql(unittest.TestCase):

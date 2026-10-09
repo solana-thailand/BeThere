@@ -581,6 +581,17 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/clear-credit-refund-request",
             post(deposit::clear_credit_refund_request_handler),
         )
+        // .issues/192 — the organizer pays held credit to the account from the
+        // attendee's THB deposit without a request. Same guarded core as the
+        // clear above; org-scoped; slip required.
+        .route(
+            "/deposit/credit-payout-candidates",
+            get(deposit::credit_payout_candidates_handler),
+        )
+        .route(
+            "/deposit/organizer-credit-payout",
+            post(deposit::organizer_credit_payout_handler),
+        )
         .route(
             "/refund/manual/{attendee_id}",
             post(deposit::mark_manual_refund_handler),

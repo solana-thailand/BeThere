@@ -309,6 +309,25 @@ tooling: `/refund/mark` and `/refund/batch-thb` refuse a held deposit by design
    `scripts/verify/refund_window_report.py` lists requests open longer than 7
    days.
 
+**Without a request (`.issues/192`).** The organizer can also pay credit back
+to the refund account the attendee gave with their THB deposit, without waiting
+for a request:
+
+- `GET /api/deposit/credit-payout-candidates` lists people who hold payable
+  credit, whose chosen account is the deposit one (`source = 'deposit'`; an
+  account they typed is never used unasked), and who have no open request on
+  any linked email. It is org-scoped like the queue. On the page, these rows
+  appear under the queue with the badge "Not requested".
+- `POST /api/deposit/organizer-credit-payout` takes the same body as the
+  clear, but the slip is **required**. It returns 409 while a request is open
+  (pay that one from the queue). It goes through the same core
+  (`credit_payout::settle_payout`): compare, guarded `try_refund`, 409 on
+  mismatch, audit (`initiated_by: organizer`). The reversal key is
+  `refund:{email}:organizer-{epoch ms}:…`. A double click gets a new key
+  against a zero balance and returns 409. No flag is opened, so a refusal
+  leaves nothing behind.
+- After the payout, the account row is deleted.
+
 Known gap: a payout while part of the credit is locked pays the payable part
 and closes the request; the locked part returns at the event's end with no open
 request (`.issues/124`).
@@ -368,7 +387,7 @@ never mislabels a ฿ deposit as USDC.
 | Method | Initiate | Verify | Refund / credit | Who acts | On-chain vs manual |
 |---|---|---|---|---|---|
 | **USDC** | `POST /api/deposit/usdc` → Solana Pay; wallet signs `deposit` TX | Automatic — TX confirmed on-chain + signer cross-check (`/confirm` poll or `/webhook`) | `POST /api/escrow/refund` (refund+close, atomic); `/escrow/rollover-deposit` to move to next event; `/escrow/close-deposit` to reclaim rent | **Attendee** signs every money-moving TX; organizer only runs escrow lifecycle | **On-chain** (attendee-signed; escrow program is source of truth) |
-| **THB** | `POST /api/deposit/thb/upload` (slip + bank info → R2); or admin `/thb/admin-upload` | **Organizer** approves `POST /api/deposit/thb/verify` | Hold: attendee `POST /api/deposit/hold` (→ rolling credit, auto-applied next event). Request-return: attendee `POST /api/deposit/request-credit-refund` (flag + payout account); organizer pays out and records it with `POST /api/deposit/clear-credit-refund-request` (§4.2). Cash refund: organizer `POST /api/refund/mark/{id}` (+ `/batch-thb`, `/manual`) | Upload + hold + request-return = **attendee**; verify + cash refund = **organizer** | **Manual** (bank transfer; D1 CAS settlement + Sheets mirror) |
+| **THB** | `POST /api/deposit/thb/upload` (slip + bank info → R2); or admin `/thb/admin-upload` | **Organizer** approves `POST /api/deposit/thb/verify` | Hold: attendee `POST /api/deposit/hold` (→ rolling credit, auto-applied next event). Request-return: attendee `POST /api/deposit/request-credit-refund` (flag + payout account); organizer pays out and records it with `POST /api/deposit/clear-credit-refund-request` (§4.2), or pays unasked to the deposit account with `POST /api/deposit/organizer-credit-payout` (§4.2, slip required). Cash refund: organizer `POST /api/refund/mark/{id}` (+ `/batch-thb`, `/manual`) | Upload + hold + request-return = **attendee**; verify + cash refund = **organizer** | **Manual** (bank transfer; D1 CAS settlement + Sheets mirror) |
 | **Rolling credit** (`CreditThb`/`CreditUsdc`) | Auto-applied at registration (`signup.rs` §5c/§7b) from a prior held balance | Recorded as a pre-verified `ThbDeposit` (`SYSTEM_ROLLING_CREDIT`) | Exit via `request-credit-refund` (organizer pays out through THB tooling) | System applies; attendee requests exit; organizer pays out | **Manual** (D1 `credit_ledger`) |
 
 ---

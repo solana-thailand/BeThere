@@ -280,67 +280,95 @@ fn no_caller_hardcodes_the_default_org() {
     );
 }
 
+/// The body of the first `fn` named `name` in `code`, up to its closing brace.
+fn fn_body<'a>(code: &'a str, name: &str) -> &'a str {
+    let start = code
+        .find(name)
+        .unwrap_or_else(|| panic!("`{name}` must exist"));
+    let rest = &code[start..];
+    &rest[..rest.find("\n}\n").map_or(rest.len(), |i| i + 2)]
+}
+
+fn handler_src(file: &str) -> String {
+    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/handlers/deposit/thb/handlers")
+        .join(file);
+    let src = fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
+    strip_comments(&src)
+}
+
 #[test]
 fn payout_reversal_fails_closed() {
-    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/handlers/deposit/thb/handlers/hold_refund_request.rs");
-    let src = fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
-    let code = strip_comments(&src);
-
-    // The reversal must propagate: `unwrap_or_default()` on the bucket read, or
-    // a `match`/`if let Err` that only logs, silently clears the flag with the
+    // One core moves the money for both payout paths (`.issues/192`). The
+    // reversal must propagate: `unwrap_or_default()` on the bucket read, or a
+    // `match`/`if let Err` that only logs, silently closes the payout with the
     // credit still live.
-    let helper = code
-        .find("async fn reverse_held_credit")
-        .map(|i| &code[i..])
-        .expect("reverse_held_credit must own the reversal so the failure path is one place");
-    let body = &helper[..helper.find("\n}\n").map_or(helper.len(), |i| i + 2)];
-
+    let core_src = handler_src("credit_payout.rs");
+    let core = fn_body(&core_src, "pub(super) async fn settle_payout");
     assert!(
-        !body.contains("unwrap_or_default") && !body.contains("unwrap_or("),
-        "reverse_held_credit must not swallow a write failure — a skipped reversal \
-         still lets the clear run (double payout)"
+        !core.contains("unwrap_or_default") && !core.contains("unwrap_or("),
+        "settle_payout must not swallow a failure — a skipped reversal still lets \
+         the clear run (double payout)"
+    );
+    let reversal_at = core
+        .find("try_refund(")
+        .expect("settle_payout must own the guarded reversal");
+    let audit_at = core
+        .find("audit_payout(")
+        .expect("settle_payout must audit the payout");
+    assert!(
+        core[reversal_at..audit_at].contains("map_err(AppError::Internal)?"),
+        "a failed reversal must abort the payout before it is audited or closed"
     );
     assert!(
-        body.contains(".await?"),
-        "every record() write must use `?` so a failure aborts the clear"
+        core[reversal_at..audit_at].contains("RefundOutcome::Mismatch"),
+        "a balance that moved under the guarded write must be a refusal"
     );
-
-    // And the handler must actually propagate that error before clearing.
-    let handler = code
-        .find("pub async fn clear_credit_refund_request_handler")
-        .map(|i| &code[i..])
-        .expect("clear handler must exist");
-    let reversal_at = handler
-        .find("reverse_held_credit(")
-        .expect("the clear handler must call reverse_held_credit");
-    let clear_at = handler
-        .find("contacts::clear_credit_refund_requested(")
-        .expect("the clear handler must clear the flag");
+    let buckets = fn_body(&core_src, "pub(super) async fn scoped_buckets");
     assert!(
-        reversal_at < clear_at,
-        "the ledger reversal must run BEFORE the flag clear"
-    );
-    assert!(
-        handler[reversal_at..clear_at].contains("map_err(AppError::Internal)?"),
-        "a failed reversal must abort the request — clearing the flag anyway leaves \
-         the attendee with the payout AND spendable credit, and nothing detects it"
+        buckets.contains("positive_balances(") && buckets.contains("map_err(AppError::Internal)?"),
+        "a failed bucket read must abort — an empty list reverses nothing and the \
+         payout would still close (double payout)"
     );
 
-    // The bucket read moved to the handler (the locked-credit guard needs the
-    // same snapshot), so the swallow check has to follow it there.
-    let buckets_at = handler
-        .find("positive_balances(")
-        .expect("the clear handler must read the buckets it pays out");
-    assert!(
-        buckets_at < reversal_at,
-        "the buckets must be read before the reversal that consumes them"
-    );
-    assert!(
-        handler[buckets_at..reversal_at].contains("map_err(AppError::Internal)?"),
-        "a failed bucket read must abort the clear — an empty list reverses nothing \
-         and the flag would still be cleared (double payout)"
-    );
+    // Each handler reads the buckets, then settles, and only then closes the
+    // payout — clearing the flag, or deleting the account.
+    for (file, handler, close) in [
+        (
+            "hold_refund_request.rs",
+            "pub async fn clear_credit_refund_request_handler",
+            "contacts::clear_credit_refund_requested(",
+        ),
+        (
+            "organizer_credit_payout.rs",
+            "pub async fn organizer_credit_payout_handler",
+            "delete_for_person_statement(",
+        ),
+    ] {
+        let src = handler_src(file);
+        let body = fn_body(&src, handler);
+        let buckets_at = body
+            .find("scoped_buckets(")
+            .unwrap_or_else(|| panic!("{handler} must read the buckets it pays out"));
+        let settle_at = body
+            .find("settle_payout(")
+            .unwrap_or_else(|| panic!("{handler} must pay through settle_payout"));
+        let close_at = body
+            .find(close)
+            .unwrap_or_else(|| panic!("{handler} must close the payout with {close}"));
+        assert!(
+            buckets_at < settle_at && settle_at < close_at,
+            "{handler}: buckets, then the reversal, then the close"
+        );
+        assert!(
+            body[buckets_at..settle_at].contains(".await?"),
+            "{handler}: a failed bucket read must abort"
+        );
+        assert!(
+            body[settle_at..close_at].contains(".await?"),
+            "{handler}: a failed reversal must abort before the close"
+        );
+    }
 }
 
 /// Issue #120 §3. A holder whose whole balance is applied to an event that has
@@ -350,17 +378,11 @@ fn payout_reversal_fails_closed() {
 /// which it can only do if it asks whether anything is locked.
 #[test]
 fn payout_clear_refuses_while_credit_is_locked() {
-    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/handlers/deposit/thb/handlers/hold_refund_request.rs");
-    let src = fs::read_to_string(&p).unwrap_or_else(|e| panic!("read {}: {e}", p.display()));
-    let code = strip_comments(&src);
-    let handler = code
-        .find("pub async fn clear_credit_refund_request_handler")
-        .map(|i| &code[i..])
-        .expect("clear handler must exist");
+    let code = handler_src("hold_refund_request.rs");
+    let handler = fn_body(&code, "pub async fn clear_credit_refund_request_handler");
     let reversal_at = handler
-        .find("reverse_held_credit(")
-        .expect("the clear handler must call reverse_held_credit");
+        .find("settle_payout(")
+        .expect("the clear handler must pay through settle_payout");
     let guard = &handler[..reversal_at];
 
     assert!(

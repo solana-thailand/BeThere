@@ -144,13 +144,33 @@ pub fn date_tag(locale: Locale) -> &'static str {
     }
 }
 
+/// The date tag for `locale` on `path`. English-only pages (admin, staff,
+/// dashboards) keep `en-GB` whatever the language: the provider wraps every
+/// route, so a Thai browser or a stored `th` pick otherwise put a
+/// Buddhist-era year beside English text (`.issues/192`).
+pub fn date_tag_on(locale: Locale, path: &str) -> &'static str {
+    match is_attendee_path(path) {
+        true => date_tag(locale),
+        false => date_tag(Locale::en),
+    }
+}
+
 /// The date tag for the current attendee language. Reactive: read inside a
 /// view closure and the date re-renders when the language switches. Outside
-/// the i18n provider (tests, staff pages) it is EN.
+/// the i18n provider (tests) and on English-only pages it is EN.
 pub fn current_date_tag() -> &'static str {
-    use_context::<leptos_i18n::I18nContext<Locale>>()
-        .map(|i18n| date_tag(i18n.get_locale()))
-        .unwrap_or("en-GB")
+    let Some(i18n) = use_context::<leptos_i18n::I18nContext<Locale>>() else {
+        return date_tag(Locale::en);
+    };
+    match i18n.get_locale() {
+        Locale::en => date_tag(Locale::en),
+        locale => {
+            let path = web_sys::window()
+                .and_then(|w| w.location().pathname().ok())
+                .unwrap_or_default();
+            date_tag_on(locale, &path)
+        }
+    }
 }
 
 /// A registration status code from `/api/my-registrations` (or `"postponed"`)

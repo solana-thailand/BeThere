@@ -401,8 +401,35 @@
 .admin-dep-credit-refund-row:last-child {
     margin-bottom: 0;
 }
-.admin-dep-clear-btn {
-    margin-left: 0.5rem;
+/* Credit payout form (.issues/192): one field per cell, wrapping to a
+   single column on a phone, instead of six controls on one flex line. */
+.admin-dep-payout-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+.admin-dep-payout-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+.admin-dep-payout-actions {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+/* Status badge + "Copy account": wrap with a gap instead of touching
+   when the row stacks on a phone. */
+.admin-dep-payout-status {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
 }
 .admin-refund-form-row {
     margin-top: 4px;

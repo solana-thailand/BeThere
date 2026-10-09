@@ -7,6 +7,11 @@
 //! worker writes the payout only if that still equals the payable balance; if
 //! a registration spent some of it meanwhile, the clear is refused with a 409
 //! and nothing is recorded.
+//!
+//! Below the queue, [`CreditPayoutCandidates`] (`.issues/192`) lists people
+//! nobody has heard from yet: payable credit and the refund account from their
+//! THB deposit on file. The organizer can pay them back the same way, with the
+//! slip required since no one asked.
 
 use leptos::prelude::*;
 use wasm_bindgen::JsValue;
@@ -48,7 +53,7 @@ pub fn CreditRefundRequests(
                     .get()
                     .into_iter()
                     .map(|req| view! {
-                        <CreditRefundRow req=req set_toast=set_toast set_refresh_counter=set_refresh_counter/>
+                        <CreditRefundRow req=req kind=PayoutRowKind::Requested set_toast=set_toast set_refresh_counter=set_refresh_counter/>
                     })
                     .collect_view()
             }}
@@ -56,10 +61,68 @@ pub fn CreditRefundRequests(
     }
 }
 
-/// One open request: the account, the age, and the record-payout form.
+/// Credit holders the organizer may pay out without a request: their
+/// deposit account is on file and nothing is open. Loads itself on every
+/// refresh of the deposit page; renders nothing when there is no one.
+#[component]
+pub fn CreditPayoutCandidates(
+    refresh_counter: ReadSignal<u32>,
+    set_toast: WriteSignal<Option<ToastMessage>>,
+    set_refresh_counter: WriteSignal<u32>,
+) -> impl IntoView {
+    let (candidates, set_candidates) = signal(Vec::<CreditRefundRequest>::new());
+    Effect::new(move |_| {
+        let _ = refresh_counter.get();
+        leptos::task::spawn_local(async move {
+            match api::get_credit_payout_candidates().await {
+                Ok(data) => set_candidates.set(data.candidates),
+                // Non-fatal, like the queue: a scanner gets 403 and sees nothing.
+                Err(e) => log::warn!("[admin-deposit] failed to load payout candidates: {e}"),
+            }
+        });
+    });
+    view! {
+        <Show when=move || !candidates.get().is_empty() fallback=|| ()>
+            <div class="admin-dep-credit-refund-requests">
+                <div class="admin-dep-flow-hint">
+                    <Icon icon=IconName::Info class="icon-sm"/>
+                    {move || {
+                        let count = candidates.get().len();
+                        format!(
+                            "{count} contact{} hold credit and gave a refund account with their deposit. You can pay it back without waiting for a request — attach the transfer slip.",
+                            if count != 1 { "s" } else { "" }
+                        )
+                    }}
+                </div>
+                {move || {
+                    candidates
+                        .get()
+                        .into_iter()
+                        .map(|req| view! {
+                            <CreditRefundRow req=req kind=PayoutRowKind::Unrequested set_toast=set_toast set_refresh_counter=set_refresh_counter/>
+                        })
+                        .collect_view()
+                }}
+            </div>
+        </Show>
+    }
+}
+
+/// Whether the person asked for the payout.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PayoutRowKind {
+    /// An open request from the queue; the slip is optional.
+    Requested,
+    /// The organizer pays to the deposit account unasked; the slip is required.
+    Unrequested,
+}
+
+/// One payout row: the account, the age (requests only), and the
+/// record-payout form.
 #[component]
 fn CreditRefundRow(
     req: CreditRefundRequest,
+    kind: PayoutRowKind,
     set_toast: WriteSignal<Option<ToastMessage>>,
     set_refresh_counter: WriteSignal<u32>,
 ) -> impl IntoView {
@@ -145,10 +208,24 @@ fn CreditRefundRow(
             paid,
             proof: proof.get_untracked(),
         };
+        if kind == PayoutRowKind::Unrequested && body.proof.is_none() {
+            components::show_toast(
+                &set_toast,
+                "Attach the transfer slip — they did not ask for this payout",
+                ToastType::Error,
+            );
+            return;
+        }
         set_pending.set(true);
         leptos::task::spawn_local(async move {
-            match api::clear_credit_refund_request(&body).await {
-                Ok(_) => {
+            let result = match kind {
+                PayoutRowKind::Requested => {
+                    api::clear_credit_refund_request(&body).await.map(|_| ())
+                }
+                PayoutRowKind::Unrequested => api::organizer_credit_payout(&body).await.map(|_| ()),
+            };
+            match result {
+                Ok(()) => {
                     components::show_toast(
                         &set_toast,
                         &format!("Recorded the {paid} payout."),
@@ -200,13 +277,15 @@ fn CreditRefundRow(
                             </div>
                         }
                     })}
-                    <div class="panel-hint">{format!("Requested: {requested_display}")}</div>
-                    <div class="panel-hint">
-                        {match overdue {
-                            true => view! { <span class="badge badge-danger">{age_line(age_hours)}</span> }.into_any(),
-                            false => view! { <span>{age_line(age_hours)}</span> }.into_any(),
-                        }}
-                    </div>
+                    {(kind == PayoutRowKind::Requested).then(|| view! {
+                        <div class="panel-hint">{format!("Requested: {requested_display}")}</div>
+                        <div class="panel-hint">
+                            {match overdue {
+                                true => view! { <span class="badge badge-danger">{age_line(age_hours)}</span> }.into_any(),
+                                false => view! { <span>{age_line(age_hours)}</span> }.into_any(),
+                            }}
+                        </div>
+                    })}
                     <div class="admin-dep-bank-section">
                         <div class="panel-hint admin-dep-bank-label">"Pay to"</div>
                         {account_view}
@@ -215,8 +294,11 @@ fn CreditRefundRow(
                         })}
                     </div>
                 </div>
-                <div>
-                    <span class="badge badge-warning">"Refund Requested"</span>
+                <div class="admin-dep-payout-status">
+                    {match kind {
+                        PayoutRowKind::Requested => view! { <span class="badge badge-warning">"Refund Requested"</span> },
+                        PayoutRowKind::Unrequested => view! { <span class="badge badge-info">"Not requested"</span> },
+                    }}
                     {copy_value.map(|value| view! {
                         <button
                             class="btn btn-outline btn-sm"
@@ -240,53 +322,67 @@ fn CreditRefundRow(
                     </div>
                 }.into_any(),
                 false => view! {
-                    <div class="admin-dep-confirm-row">
-                        <label class="form-label">"THB you transferred"</label>
-                        <input
-                            type="text"
-                            inputmode="numeric"
-                            class="form-input dep-input"
-                            placeholder=credit_thb.to_string()
-                            prop:value=move || paid_thb.get()
-                            on:input=move |ev| set_paid_thb.set(event_target_value(&ev))
-                        />
-                        {(credit_usdc > 0).then(|| view! {
-                            <label class="form-label">"USDC you transferred"</label>
+                    <div class="admin-dep-payout-form">
+                        <label class="admin-dep-payout-field">
+                            <span class="form-label">"THB you transferred"</span>
                             <input
                                 type="text"
                                 inputmode="numeric"
                                 class="form-input dep-input"
-                                placeholder=credit_usdc.to_string()
-                                prop:value=move || paid_usdc.get()
-                                on:input=move |ev| set_paid_usdc.set(event_target_value(&ev))
+                                placeholder=credit_thb.to_string()
+                                prop:value=move || paid_thb.get()
+                                on:input=move |ev| set_paid_thb.set(event_target_value(&ev))
                             />
+                        </label>
+                        {(credit_usdc > 0).then(|| view! {
+                            <label class="admin-dep-payout-field">
+                                <span class="form-label">"USDC you transferred"</span>
+                                <input
+                                    type="text"
+                                    inputmode="numeric"
+                                    class="form-input dep-input"
+                                    placeholder=credit_usdc.to_string()
+                                    prop:value=move || paid_usdc.get()
+                                    on:input=move |ev| set_paid_usdc.set(event_target_value(&ev))
+                                />
+                            </label>
                         })}
-                        <label class="form-label">"Transfer slip (optional — JPEG, PNG, WebP, max 3MB)"</label>
-                        <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            class="file-input-styled"
-                            on:change=on_proof
-                        />
-                        {move || proof.get().is_some().then(|| view! {
-                            <span class="badge badge-success">"Slip attached"</span>
-                        })}
-                        <button
-                            class="btn btn-success btn-xs admin-dep-clear-btn"
-                            disabled=move || {
-                                pending.get()
-                                    || (paid_thb.get().trim().is_empty() && paid_usdc.get().trim().is_empty())
-                            }
-                            on:click=record_payout
-                        >
-                            {move || match pending.get() {
-                                true => view! { <span>"Recording..."</span> }.into_any(),
-                                false => view! {
-                                    <Icon icon=IconName::Check class="icon-sm"/>
-                                    " Record payout"
-                                }.into_any(),
-                            }}
-                        </button>
+                        <label class="admin-dep-payout-field">
+                            <span class="form-label">
+                                {match kind {
+                                    PayoutRowKind::Requested => "Transfer slip (optional — JPEG, PNG, WebP, max 3MB)",
+                                    PayoutRowKind::Unrequested => "Transfer slip (required — JPEG, PNG, WebP, max 3MB)",
+                                }}
+                            </span>
+                            <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                class="file-input-styled"
+                                on:change=on_proof
+                            />
+                        </label>
+                        <div class="admin-dep-payout-actions">
+                            {move || proof.get().is_some().then(|| view! {
+                                <span class="badge badge-success">"Slip attached"</span>
+                            })}
+                            <button
+                                class="btn btn-success btn-sm"
+                                disabled=move || {
+                                    pending.get()
+                                        || (paid_thb.get().trim().is_empty() && paid_usdc.get().trim().is_empty())
+                                        || (kind == PayoutRowKind::Unrequested && proof.get().is_none())
+                                }
+                                on:click=record_payout
+                            >
+                                {move || match pending.get() {
+                                    true => view! { <span>"Recording..."</span> }.into_any(),
+                                    false => view! {
+                                        <Icon icon=IconName::Check class="icon-sm"/>
+                                        " Record payout"
+                                    }.into_any(),
+                                }}
+                            </button>
+                        </div>
                     </div>
                 }.into_any(),
             }}

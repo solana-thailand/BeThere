@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use event_checkin_frontend::i18n::{Locale, td_string};
-use event_checkin_frontend::locale::{date_tag, is_attendee_path, parse_locale};
+use event_checkin_frontend::locale::{date_tag, date_tag_on, is_attendee_path, parse_locale};
 
 /// Every namespace file of one locale, keyed by namespace, as one JSON object.
 fn catalog(locale: &str) -> serde_json::Value {
@@ -199,4 +199,16 @@ fn stored_picks_parse_and_dates_follow_the_locale() {
     assert_eq!(parse_locale("fr"), None);
     assert_eq!(date_tag(Locale::en), "en-GB");
     assert_eq!(date_tag(Locale::th), "th-TH");
+}
+
+/// A Thai pick dates attendee pages in Buddhist era but never the
+/// English-only staff pages (.issues/192: BE year beside English text).
+#[test]
+fn english_only_pages_keep_gregorian_dates_under_a_thai_pick() {
+    assert_eq!(date_tag_on(Locale::th, "/ticket/a1"), "th-TH");
+    assert_eq!(date_tag_on(Locale::th, "/"), "th-TH");
+    for path in ["/admin", "/staff", "/dashboard/live", "/events/e1/summary"] {
+        assert_eq!(date_tag_on(Locale::th, path), "en-GB", "{path}");
+    }
+    assert_eq!(date_tag_on(Locale::en, "/ticket/a1"), "en-GB");
 }
