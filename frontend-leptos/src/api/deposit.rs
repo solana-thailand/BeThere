@@ -769,6 +769,36 @@ pub async fn get_credit_payout_candidates() -> Result<CreditPayoutCandidatesResp
     api_get_json("/deposit/credit-payout-candidates").await
 }
 
+/// One recorded held-credit payout (GET /api/deposit/credit-payouts).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditPayoutRecord {
+    pub paid_at: String,
+    pub contact: String,
+    pub paid_by: String,
+    #[serde(default)]
+    pub thb: i64,
+    #[serde(default)]
+    pub usdc: i64,
+    /// `organizer` (paid unasked) or `attendee` (from a request).
+    #[serde(default)]
+    pub initiated_by: String,
+    /// Staff-only slip link (the session cookie authorizes it).
+    #[serde(default)]
+    pub proof_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditPayoutHistoryResponse {
+    #[serde(default)]
+    pub payouts: Vec<CreditPayoutRecord>,
+}
+
+/// GET /api/deposit/credit-payouts — payouts already recorded, newest first;
+/// organizer, org-scoped.
+pub async fn get_credit_payout_history() -> Result<CreditPayoutHistoryResponse, ApiError> {
+    api_get_json("/deposit/credit-payouts").await
+}
+
 /// POST /api/deposit/organizer-credit-payout — pay a candidate out to their
 /// deposit account without a request. Same body as the clear; the slip is
 /// required. Same guard: 409 unless `paid` equals the payable balance.

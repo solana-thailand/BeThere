@@ -1,6 +1,7 @@
 mod admit;
 mod comp;
 mod credit_payout;
+mod credit_payout_history;
 mod hold_admin;
 mod hold_credit;
 mod hold_refund_request;
@@ -14,6 +15,7 @@ mod slip_upload;
 mod slip_verify;
 
 pub use comp::comp_thb_deposit_handler;
+pub use credit_payout_history::credit_payout_history_handler;
 pub use hold_admin::{
     admin_apply_credit_handler, admin_hold_deposit_handler, credit_liability_handler,
     held_list_handler,

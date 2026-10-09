@@ -69,7 +69,17 @@ pub const PREFIX_CREDIT_PAYOUTS: &str = "credit-payouts/";
 ///
 /// Every segment is `[a-z0-9_-]`, so the key is also a valid URL path.
 pub fn credit_payout_key(organization_id: &str, email: &str, requested_at: &str) -> String {
-    let org: String = match organization_id.trim() {
+    let org = credit_payout_org_segment(organization_id);
+    let owner = blake3::hash(email.trim().to_lowercase().as_bytes()).to_hex();
+    let request: String = requested_at.chars().filter(char::is_ascii_digit).collect();
+    format!("{PREFIX_CREDIT_PAYOUTS}{org}/{}/{request}", &owner[..16])
+}
+
+/// The `{org}` key segment of [`credit_payout_key`]: `default` for the
+/// default (empty-id) organization, otherwise the id lowercased with anything
+/// outside `[a-z0-9_-]` replaced by `_`.
+pub fn credit_payout_org_segment(organization_id: &str) -> String {
+    match organization_id.trim() {
         "" => "default".to_string(),
         id => id
             .chars()
@@ -80,10 +90,23 @@ pub fn credit_payout_key(organization_id: &str, email: &str, requested_at: &str)
                 },
             )
             .collect(),
-    };
-    let owner = blake3::hash(email.trim().to_lowercase().as_bytes()).to_hex();
-    let request: String = requested_at.chars().filter(char::is_ascii_digit).collect();
-    format!("{PREFIX_CREDIT_PAYOUTS}{org}/{}/{request}", &owner[..16])
+    }
+}
+
+/// The staff-only serving URL of a payout slip stored under `key`
+/// (`GET /api/storage/credit-payouts/…`).
+pub fn credit_payout_url(key: &str) -> String {
+    format!("/api/storage/{key}")
+}
+
+/// A payout slip URL as recorded in the audit log, made servable. Payouts
+/// before 2026-10-09 recorded `/api/credit-payouts/…`, which no route serves
+/// (the slip itself is in R2 under the same key).
+pub fn servable_credit_payout_url(recorded: &str) -> String {
+    match recorded.strip_prefix("/api/") {
+        Some(key) if key.starts_with(PREFIX_CREDIT_PAYOUTS) => credit_payout_url(key),
+        _ => recorded.to_string(),
+    }
 }
 
 /// Build an R2 key for a THB payment slip image.

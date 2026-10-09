@@ -127,7 +127,7 @@ pub(super) async fn store_payout_proof(
     )
     .await
     .map_err(|e| AppError::Internal(format!("transfer slip upload failed: {e}")))?;
-    Ok(format!("/api/{}", key))
+    Ok(crate::storage::credit_payout_url(&key))
 }
 
 /// Record who paid a held-credit payout, how much, and the slip — the
@@ -135,6 +135,7 @@ pub(super) async fn store_payout_proof(
 /// the moment that moves money. Global audit log (`__global__`): the payout is
 /// cross-event. The actor is the staff email, as in every other audit entry;
 /// the audit log is the access-controlled record that holds identities.
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn audit_payout(
     state: &AppState,
     staff_email: &str,
@@ -143,6 +144,7 @@ pub(super) async fn audit_payout(
     requested_at: &str,
     proof: Option<&str>,
     initiator: PayoutInitiator,
+    organizations: &[&str],
 ) -> Result<(), String> {
     let kv = state
         .events_kv
@@ -159,6 +161,8 @@ pub(super) async fn audit_payout(
             "requested_at": requested_at,
             "proof": proof,
             "initiated_by": initiator,
+            // Who may see the payout in the history (`credit_payout_history`).
+            "organizations": organizations,
         }),
     );
     crate::audit_store::append_global_audit(kv, entry, state.d1.as_deref()).await
@@ -270,6 +274,9 @@ pub(super) async fn settle_payout(
 
     // Who paid is part of the payout: a failure aborts before the request
     // clears, and the retry re-audits (the reversal is already a no-op).
+    let mut organizations: Vec<&str> = buckets.iter().map(|b| b.organization_id.as_str()).collect();
+    organizations.sort_unstable();
+    organizations.dedup();
     audit_payout(
         state,
         staff_email,
@@ -278,6 +285,7 @@ pub(super) async fn settle_payout(
         key_at,
         proof.as_deref(),
         initiator,
+        &organizations,
     )
     .await
     .map_err(AppError::Internal)
