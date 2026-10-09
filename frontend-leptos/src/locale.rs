@@ -77,18 +77,26 @@ const ATTENDEE_PREFIXES: [&str; 12] = [
 /// summary and PR pack) is staff-only.
 const ATTENDEE_EVENT_SUFFIXES: [&str; 2] = ["/recap", "/post-event-register"];
 
+/// Pages drawn in the site frame (`pages::landing::frame`), whose header
+/// carries the language switch inline. `tests/site_pages.rs` keeps this in
+/// step with `SitePage`.
+pub const FRAMED_PATHS: [&str; 4] = ["/", "/events", "/organizers", "/sponsors"];
+
 /// Whether `path` is a bilingual attendee page (`/` and `/login` included).
+/// `/events` is matched exactly: deeper `/events/…` pages are staff-only
+/// unless they end in an attendee suffix.
 pub fn is_attendee_path(path: &str) -> bool {
-    matches!(path, "/" | "/login")
+    matches!(path, "/login" | "/events")
+        || FRAMED_PATHS.contains(&path)
         || ATTENDEE_PREFIXES.iter().any(|p| path.starts_with(p))
         || (path.starts_with("/events/")
             && ATTENDEE_EVENT_SUFFIXES.iter().any(|s| path.ends_with(s)))
 }
 
 /// Whether the language bar above the page is drawn: on attendee pages,
-/// except the landing, whose header carries the switch inline.
+/// except the framed ones, whose header carries the switch inline.
 pub fn shows_lang_bar(path: &str) -> bool {
-    path != "/" && is_attendee_path(path)
+    !FRAMED_PATHS.contains(&path) && is_attendee_path(path)
 }
 
 /// The switch, on attendee pages only.

@@ -1,6 +1,8 @@
-# 045 · Release 4 and Super GOAT: plan only (nothing built before 13 Oct)
+# 045 · Release 4 and Super GOAT
 
-Status: plan, for the owner's review. Written 2026-10-08 by session
+Status: in progress. Owner approved the plan and the start on 2026-10-08
+(session `event-checkin-f0`), ahead of the 13 Oct date first written here.
+R4.0 with R4.5 and R4.6 is the first pull. Originally: plan, for the owner's review. Written 2026-10-08 by session
 `event-checkin-90` (`.plans/044` item 6). Basis: the prototype
 `bethere-ux/site/` in the devrel-helper repo (index, events, course,
 organizers, sponsors, try, record; shared `site.js`/`site.css`/`room.js`/
@@ -46,6 +48,23 @@ and the owner's look; prod deploys are separate, owner-gated steps.
 - Proof: the crawl-routes test pins both directions; e2e visual for each page;
   a test that `TryBand` renders nothing when the flag is off.
 - Go: none until the prod deploy.
+
+- **Built (2026-10-08, `feature/r4-0-site-routes`):**
+  - `pages/landing/frame.rs` `SiteFrame` (header, doors, footer; the auth
+    check and stats fetch moved out of `page.rs`), `pages/site/doors.rs`
+    (`SitePage`, `Doors`, the try band and try line), `/organizers` (the
+    swimlane as is, R4.5) and `/sponsors` (the sponsor section with `#contact`,
+    R4.6). The header now links pages (Events & courses · For organizers ·
+    Sponsors) as the prototype does; the landing's section dots stay.
+  - `/events` shows the existing Discover list until R4.3; `/discover` is a
+    client redirect to it (query and hash kept, history replaced). In-app
+    links and the boot summary point at `/events`; the sitemap lists
+    `/events`, `/organizers`, `/sponsors` and no longer `/discover`.
+  - The staff shell hands the three pages to the attendee shell, as it does
+    `/`, so none of them grows the staff wasm.
+  - **Deviation:** no `/try` route yet. Its content is SG3; a flagged-off
+    route would be an empty page. `TRY_LIVE` (false) gates the band and the
+    line, and `tests/site_pages.rs` fails if it and a `/try` route disagree.
 
 ## Pages
 

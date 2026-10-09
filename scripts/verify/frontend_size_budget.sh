@@ -162,7 +162,7 @@ while IFS= read -r ref; do
     /api/*) continue ;;  # served by the worker, not shipped in dist
     # Links in the static #boot-summary: a page and a worker document, not
     # loaded by the page itself.
-    /discover | /llms.txt) continue ;;
+    /events | /llms.txt) continue ;;
   esac
   if [ -f "$DIST_DIR$ref" ]; then
     files+=("$DIST_DIR$ref")

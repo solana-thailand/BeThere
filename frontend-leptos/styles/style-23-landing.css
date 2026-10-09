@@ -136,6 +136,11 @@ mark.lp-hl {
     text-decoration: underline;
     text-underline-offset: 4px;
 }
+.lp-nav-links a[aria-current="page"] {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 4px;
+}
 .lp-lang .lang-switch {
     min-height: 44px;
     color: var(--lp-ink);
@@ -1742,4 +1747,104 @@ a.lp-event:focus-visible {
     padding: 8px 12px;
     font: 600 14px/1.3 var(--lp-sans);
     color: #f4f0e6;
+}
+
+/* ===== Doors: every page ends on the others (.plans/045 R4.0) ===== */
+.lp-doors-sec {
+    padding: 40px 0;
+    border-top: 2px solid var(--lp-ink);
+    /* Its own ground: without it the app's dark body showed through and the
+       ink heading vanished in the light theme. */
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+}
+/* /events: the Discover list inside the site frame. Its rules use the app's
+   colour variables, so they are mapped to the site theme here and the list
+   follows light and dark like the rest of the frame (.plans/045 R4.0). */
+.lp-events-sec {
+    padding: 8px 0 48px;
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+    --text-primary: var(--lp-ink);
+    --text-heading: var(--lp-ink);
+    --text-secondary: var(--lp-ink-2);
+    --text-muted: var(--lp-ink-3);
+    --border: var(--lp-line);
+    --bg-void: var(--lp-paper-2);
+    --bg-card: var(--lp-paper-2);
+    --bg-secondary: var(--lp-paper-2);
+    /* The poster card's date chip sits on this one. */
+    --bg-primary: var(--lp-paper);
+    /* The app's orange is 2.44:1 on paper-2 (axe, the date chip's month);
+       the site's link colour is 4.69:1 light and 5.75:1 dark. */
+    --accent: var(--lp-t-field);
+    /* The date chip's ground: the app's orange tint under the month cost it
+       AA; plain paper keeps 5.18:1 light and 6.12:1 dark. */
+    --accent-bg: var(--lp-paper);
+    --accent-border: var(--lp-line);
+}
+.lp-doors-sec .lp-h2 {
+    margin: 0 0 18px;
+}
+.lp-doors {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+.lp-door {
+    display: grid;
+    gap: 8px;
+    align-content: start;
+    padding: 20px;
+    border: 2px solid var(--lp-ink);
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+    text-decoration: none;
+    transition:
+        transform var(--lp-micro) var(--lp-ease),
+        box-shadow var(--lp-micro) var(--lp-ease);
+}
+.lp-door:hover {
+    transform: translate(-3px, -3px);
+    box-shadow: 6px 6px 0 var(--lp-ink);
+}
+.lp-door b {
+    font-size: 20px;
+}
+.lp-door span {
+    color: var(--lp-ink-2);
+}
+.lp-door i {
+    font-style: normal;
+    font-weight: 700;
+    color: var(--lp-t-field);
+    margin-top: 6px;
+}
+.lp-door-try {
+    grid-column: 1 / -1;
+    border-color: var(--lp-t-dev);
+    border-style: dashed;
+}
+.lp-door-try i {
+    color: var(--lp-t-dev);
+}
+.lp-try-link {
+    margin: 0 0 32px;
+    font-weight: 700;
+}
+.lp-try-link a {
+    color: var(--lp-t-dev);
+}
+@media (prefers-reduced-motion: reduce) {
+    .lp-door {
+        transition: none;
+    }
+    .lp-door:hover {
+        transform: none;
+    }
+}
+@media (max-width: 767px) {
+    .lp-doors {
+        grid-template-columns: 1fr;
+    }
 }
