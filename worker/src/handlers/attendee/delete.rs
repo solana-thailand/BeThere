@@ -54,7 +54,7 @@ pub async fn delete_attendee(
             crate::claim::ClaimTokenPolicy::unrestricted(),
         )
         .await
-            && a.participation_type == "walkin"
+            && a.participation_type == event_checkin_domain::models::attendee::PARTICIPATION_WALK_IN
         {
             walkin = Some(event_checkin_domain::models::attendee::WalkinAttendee {
                 event_id: event.id.clone(),

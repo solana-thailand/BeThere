@@ -308,8 +308,10 @@ pub fn is_in_person(participation_type: &str) -> bool {
 }
 
 /// Walk-ins are stored with the literal sentinel `participation_type = 'walkin'`
-/// (`worker/src/db/attendees/walkin.rs`). `is_in_person` deliberately says no
-/// to it, mirroring `ParticipationType::parse("walkin") == Other`.
+/// (`worker/src/db/attendees/walkin.rs`). The domain parses it as
+/// `ParticipationType::WalkIn`, which is in-person (.issues/162), but this
+/// string helper deliberately says no: deposit badges and the participation
+/// toggle key on it, and a walk-in has neither.
 pub fn is_walkin(participation_type: &str) -> bool {
     participation_type.trim().eq_ignore_ascii_case("walkin")
 }

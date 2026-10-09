@@ -49,6 +49,23 @@ fn every_staff_path_is_a_route_backed_by_staff_routes() {
     }
 }
 
+/// The staff wasm stays small only while it carries no attendee page: lib.rs
+/// takes every page except `/login` from `staff_routes`, which hands them off
+/// to the attendee shell in the staff build. A page imported straight from
+/// `crate::pages` would link it back into the staff wasm.
+#[test]
+fn lib_rs_takes_only_login_straight_from_pages() {
+    let direct: Vec<&str> = LIB_RS
+        .lines()
+        .filter(|l| l.trim_start().starts_with("use crate::pages"))
+        .collect();
+    assert_eq!(
+        direct,
+        ["use crate::pages::login::Login;"],
+        "route pages go through staff_routes so the staff build can hand them off"
+    );
+}
+
 #[test]
 fn redirects_ship_and_build_produces_the_staff_shell() {
     assert!(
