@@ -1778,6 +1778,10 @@ a.lp-event:focus-visible {
     /* The app's orange is 2.44:1 on paper-2 (axe, the date chip's month);
        the site's link colour is 4.69:1 light and 5.75:1 dark. */
     --accent: var(--lp-t-field);
+    /* The date chip's ground: the app's orange tint under the month cost it
+       AA; plain paper keeps 5.18:1 light and 6.12:1 dark. */
+    --accent-bg: var(--lp-paper);
+    --accent-border: var(--lp-line);
 }
 .lp-doors-sec .lp-h2 {
     margin: 0 0 18px;
