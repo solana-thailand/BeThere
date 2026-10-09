@@ -1773,6 +1773,11 @@ a.lp-event:focus-visible {
     --bg-void: var(--lp-paper-2);
     --bg-card: var(--lp-paper-2);
     --bg-secondary: var(--lp-paper-2);
+    /* The poster card's date chip sits on this one. */
+    --bg-primary: var(--lp-paper);
+    /* The app's orange is 2.44:1 on paper-2 (axe, the date chip's month);
+       the site's link colour is 4.69:1 light and 5.75:1 dark. */
+    --accent: var(--lp-t-field);
 }
 .lp-doors-sec .lp-h2 {
     margin: 0 0 18px;
