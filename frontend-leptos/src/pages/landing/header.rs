@@ -1,12 +1,11 @@
-//! The landing's own header and side index (`bethere-ux/landing.html`, nav
-//! and `nav.side`): a light bar with the wordmark, four section links, the
-//! language and theme switches inline, and sign-in on the right. On wide
-//! screens a column of dots marks where you are on the page.
+//! The site header and the landing's side index (`bethere-ux/site`, nav and
+//! `nav.side`): a light bar with the wordmark, the page links (.plans/045
+//! R4.0), the language and theme switches inline, and sign-in on the right.
+//! On wide screens the landing adds a column of dots marking where you are.
 //!
-//! Landing only. `/discover` and `/feedback` keep `SiteHeader` (app palette,
-//! hamburger), so this redesign does not move those pages. The global
-//! language bar is not drawn on `/` (`locale::shows_lang_bar`); the switch
-//! lives here instead.
+//! `/discover` and `/feedback` keep `SiteHeader` (app palette, hamburger).
+//! The global language bar is not drawn on framed pages
+//! (`locale::shows_lang_bar`); the switch lives here instead.
 
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -15,6 +14,7 @@ use wasm_bindgen::closure::Closure;
 
 use crate::i18n::{Locale, td_string};
 use crate::locale::{LanguageSwitch, tr};
+use crate::pages::site::doors::SitePage;
 
 use super::auth::{AuthState, trigger_landing_oauth, trigger_landing_signout};
 use super::theme::{Theme, ThemeToggle};
@@ -25,26 +25,6 @@ pub struct Section {
     pub id: &'static str,
     pub label: fn(Locale) -> &'static str,
 }
-
-/// The header's links, in page order.
-pub const HEADER_SECTIONS: [Section; 4] = [
-    Section {
-        id: "how",
-        label: |l| td_string!(l, landing.nav.how_header),
-    },
-    Section {
-        id: "goal",
-        label: |l| td_string!(l, landing.nav.so_far_goal),
-    },
-    Section {
-        id: "sponsors",
-        label: |l| td_string!(l, landing.nav.sponsors),
-    },
-    Section {
-        id: "join",
-        label: |l| td_string!(l, landing.nav.join),
-    },
-];
 
 /// The side index, in page order.
 pub const SIDE_SECTIONS: [Section; 7] = [
@@ -80,12 +60,15 @@ pub const SIDE_SECTIONS: [Section; 7] = [
 
 #[component]
 pub fn LandingHeader(auth_state: ReadSignal<AuthState>, theme: RwSignal<Theme>) -> impl IntoView {
-    let links = HEADER_SECTIONS
-        .iter()
-        .map(|s| view! { <a href=format!("#{}", s.id)>{tr(s.label)}</a> })
+    let nav_label = tr(|l| td_string!(l, landing.site.nav_label));
+    // `A` marks the current page with aria-current="page".
+    let links = SitePage::ALL
+        .into_iter()
+        .filter_map(|page| page.nav_label().map(|label| (page, label)))
+        .map(|(page, label)| view! { <A href=page.path()>{tr(label)}</A> })
         .collect::<Vec<_>>();
     view! {
-        <nav class="lp-nav">
+        <nav class="lp-nav" aria-label=move || nav_label.get()>
             <div class="lp-wrap lp-nav-row">
                 <a class="lp-logo" href="/">"BeThere"</a>
                 <div class="lp-nav-links">{links}</div>

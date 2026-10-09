@@ -56,10 +56,10 @@ extern "C" {
 }
 use crate::pages::login::Login;
 use crate::staff_routes::{
-    Adventure, Claim, DataPrivacy, Deposit, DevDashboard, DevProfile, Discover, EventRecap, Faq,
-    Feedback, HomeRoute, NfcCheckin, PastEvents, PostEventRegister, Privacy, ProtectedAdmin,
-    ProtectedEventSummary, ProtectedLiveDashboard, ProtectedPrPack, ProtectedScanner, PublicEvent,
-    SandboxRoute, Ticket,
+    Adventure, Claim, DataPrivacy, Deposit, DevDashboard, DevProfile, DiscoverRedirect, EventRecap,
+    EventsRoute, Faq, Feedback, HomeRoute, NfcCheckin, OrganizersRoute, PastEvents,
+    PostEventRegister, Privacy, ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard,
+    ProtectedPrPack, ProtectedScanner, PublicEvent, SandboxRoute, SponsorsRoute, Ticket,
 };
 
 /// Main application component.
@@ -144,8 +144,12 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/events/:slug/post-event-register") view=PostEventRegister />
                     // One page, every event the person attended (.issues/091).
                     <Route path=path!("/feedback") view=Feedback />
-                    // What is on, and what I am part of (.issues/096).
-                    <Route path=path!("/discover") view=Discover />
+                    // What is on, and what I am part of (.issues/096). Release 4
+                    // moves it to /events; /discover redirects (.plans/045 R4.0).
+                    <Route path=path!("/events") view=EventsRoute />
+                    <Route path=path!("/discover") view=DiscoverRedirect />
+                    <Route path=path!("/organizers") view=OrganizersRoute />
+                    <Route path=path!("/sponsors") view=SponsorsRoute />
                     <Route path=path!("/privacy") view=Privacy />
                     <Route path=path!("/faq") view=Faq />
                     <Route path=path!("/data-privacy") view=DataPrivacy />

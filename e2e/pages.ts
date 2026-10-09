@@ -44,7 +44,11 @@ export const PAGES: AppPage[] = [
     ],
     still: true,
   },
-  { name: "discover", path: "/discover", authed: false, ready: EVENT_LOADED },
+  // `/discover` now redirects to `/events`, which shows the same list until
+  // R4.3 (.plans/045); the baseline name stays so the shot is unchanged.
+  { name: "discover", path: "/events", authed: false, ready: EVENT_LOADED },
+  { name: "organizers", path: "/organizers", authed: false, ready: ".lp-lanes" },
+  { name: "sponsors", path: "/sponsors", authed: false, ready: "#contact" },
   { name: "event", path: `/e/${EVENT_SLUG}`, authed: false, ready: EVENT_LOADED },
   { name: "privacy", path: "/privacy", authed: false, ready: ".pe-section-title" },
   { name: "faq", path: "/faq", authed: false, ready: ".faq-item" },

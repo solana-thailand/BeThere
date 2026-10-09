@@ -48,6 +48,7 @@ pub mod public_event;
 pub mod quiz_editor;
 pub mod sandbox;
 pub mod scanner;
+pub mod site;
 pub mod ticket;
 
 pub use event_summary::EventSummary;

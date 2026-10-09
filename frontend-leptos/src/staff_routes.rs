@@ -20,6 +20,8 @@
 //! (`scripts/verify/frontend_size_budget.sh`). `/login` stays real because
 //! `ProtectedRoute` sends a signed-out visitor there inside the staff shell.
 //! The devnet sandbox (`/sandbox`, [`SandboxRoute`]) is one of them.
+//! So are the site pages (`/events`, `/organizers`, `/sponsors`) and the
+//! `/discover` redirect (`.plans/045` R4.0).
 
 /// Path patterns served by the staff shell, in `_redirects` placeholder syntax.
 /// `tests/staff_shell_split.rs` pins `_redirects` to this list.
@@ -48,6 +50,8 @@ pub use staff::{
     AttendeeShellHandoff as PastEvents, AttendeeShellHandoff as PostEventRegister,
     AttendeeShellHandoff as Privacy, AttendeeShellHandoff as PublicEvent,
     AttendeeShellHandoff as SandboxRoute, AttendeeShellHandoff as Ticket,
+    AttendeeShellHandoff as DiscoverRedirect, AttendeeShellHandoff as EventsRoute,
+    AttendeeShellHandoff as OrganizersRoute, AttendeeShellHandoff as SponsorsRoute,
 };
 
 #[cfg(not(feature = "staff"))]
@@ -67,6 +71,15 @@ pub use crate::pages::{
 
 #[cfg(not(feature = "staff"))]
 pub use crate::pages::sandbox::Sandbox as SandboxRoute;
+
+// The Release 4 site pages (.plans/045 R4.0) take the landing's path: the
+// attendee shell renders them, the staff shell hands them back.
+#[cfg(not(feature = "staff"))]
+pub use crate::pages::Discover as EventsRoute;
+#[cfg(not(feature = "staff"))]
+pub use crate::pages::site::{
+    DiscoverRedirect, Organizers as OrganizersRoute, SponsorsPage as SponsorsRoute,
+};
 
 pub use handoff::record_boot_path;
 
