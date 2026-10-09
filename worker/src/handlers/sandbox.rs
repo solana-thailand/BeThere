@@ -18,13 +18,14 @@ use crate::sandbox::config::{
 };
 use crate::sandbox::keys::SandboxSigner;
 use crate::sandbox::quota::{self, Slot};
-use crate::sandbox::send::send_and_confirm;
+use crate::sandbox::send::{send_and_confirm, token_balance};
 use crate::sandbox::tx::{faucet_grant_tx, token_return_tx};
 use crate::solana_escrow::blockhash::get_latest_blockhash;
 use crate::solana_escrow::{
     EscrowError, build_deposit_transaction, build_init_escrow_transaction,
     build_mark_checked_in_transaction, build_refund_and_close_transaction, escrow_program_id,
-    pubkey_from_base58, usdc_mint, verify_attendee_deposit_onchain,
+    get_associated_token_address, pubkey_from_base58, pubkey_to_base58, usdc_mint,
+    verify_attendee_deposit_onchain,
 };
 use crate::state::AppState;
 
@@ -259,11 +260,23 @@ pub async fn faucet(
 
     let rpc_url = state.config.solana.full_rpc_url();
     let granted = async {
+        let mint = pubkey_from_base58(usdc_mint()).map_err(|e| chain_error("the faucet", e))?;
+        let faucet_ata = get_associated_token_address(keys.faucet.pubkey(), &mint)
+            .await
+            .map_err(|e| chain_error("the faucet", e))?;
+        let held = token_balance(&rpc_url, &pubkey_to_base58(&faucet_ata))
+            .await
+            .map_err(|e| chain_error("the faucet", e))?;
+        if held < FAUCET_USDC {
+            tracing::warn!(held, "sandbox faucet is out of test USDC");
+            return Err(AppError::RateLimited(
+                "the faucet is out of test USDC right now; try again later".to_string(),
+            ));
+        }
         let blockhash = get_latest_blockhash(&rpc_url)
             .await
             .and_then(|bh| pubkey_from_base58(&bh.value))
             .map_err(|e| chain_error("the faucet", e))?;
-        let mint = pubkey_from_base58(usdc_mint()).map_err(|e| chain_error("the faucet", e))?;
         let tx = faucet_grant_tx(
             keys.faucet.pubkey(),
             &recipient,

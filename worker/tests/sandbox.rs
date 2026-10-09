@@ -5,7 +5,7 @@
 use ed25519_dalek::{Signature, SigningKey, Verifier};
 use event_checkin_worker::sandbox::config::{Off, decide};
 use event_checkin_worker::sandbox::keys::{KeyError, SandboxSigner, signer_slot};
-use event_checkin_worker::sandbox::send::{SignatureState, signature_state};
+use event_checkin_worker::sandbox::send::{SignatureState, signature_state, token_amount};
 use event_checkin_worker::sandbox::tx::{USDC_DECIMALS, faucet_grant_tx, token_return_tx};
 use event_checkin_worker::solana_escrow::{get_associated_token_address, pubkey_from_base58};
 use serde_json::json;
@@ -243,4 +243,24 @@ fn sandbox_is_off_unless_staging_devnet_and_two_distinct_keys() {
     let keys = on(true, "devnet", Some(&organizer), Some(&faucet)).unwrap();
     assert_eq!(keys.organizer.pubkey(), signer(1).pubkey());
     assert_eq!(keys.faucet.pubkey(), signer(2).pubkey());
+}
+
+#[test]
+fn faucet_balance_reads_base_units_and_a_missing_account_as_zero() {
+    let balance =
+        json!({"result": {"value": {"amount": "1999999", "decimals": 6, "uiAmount": 1.999999}}});
+    assert_eq!(token_amount(&balance), Ok(1_999_999));
+    let missing =
+        json!({"error": {"code": -32602, "message": "Invalid param: could not find account"}});
+    assert_eq!(
+        token_amount(&missing),
+        Ok(0),
+        "a faucet never funded holds nothing"
+    );
+    let limited = json!({"error": {"code": 429, "message": "Too many requests"}});
+    assert!(
+        token_amount(&limited).is_err(),
+        "a rate limit is not an empty faucet"
+    );
+    assert!(token_amount(&json!({"result": {"value": {}}})).is_err());
 }

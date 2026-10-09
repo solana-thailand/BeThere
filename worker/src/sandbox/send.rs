@@ -44,6 +44,36 @@ pub fn signature_state(json: &serde_json::Value) -> Result<SignatureState, Strin
     }
 }
 
+/// Base units in one `getTokenAccountBalance` response; an account that does
+/// not exist yet holds 0.
+pub fn token_amount(json: &serde_json::Value) -> Result<u64, String> {
+    if let Some(error) = json.get("error") {
+        // -32602: "could not find account" — nothing has been sent to it yet.
+        return match error.get("code").and_then(|c| c.as_i64()) {
+            Some(-32602) => Ok(0),
+            _ => Err(format!("RPC error: {error}")),
+        };
+    }
+    let result = rpc_result(json)?;
+    result
+        .get("value")
+        .and_then(|v| v.get("amount"))
+        .and_then(|a| a.as_str())
+        .and_then(|a| a.parse::<u64>().ok())
+        .ok_or_else(|| "getTokenAccountBalance: no amount".to_string())
+}
+
+/// The token balance of `account` (base58), in base units.
+pub(crate) async fn token_balance(rpc_url: &str, account: &str) -> Result<u64, EscrowError> {
+    let json = call(
+        rpc_url,
+        "getTokenAccountBalance",
+        serde_json::json!([account, { "commitment": "confirmed" }]),
+    )
+    .await?;
+    token_amount(&json).map_err(EscrowError::RpcFailed)
+}
+
 async fn call(
     rpc_url: &str,
     method: &str,
