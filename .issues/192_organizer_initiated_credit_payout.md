@@ -1,8 +1,10 @@
 # 192 · Organizer pays held credit back without an attendee request
 
-**Status:** in progress. The backend is on `feature/192-organizer-credit-payout`
-(session `event-checkin-9c`, 2026-10-09): backend and staff UI. Not yet
-merged or deployed.
+**Status:** deployed (2026-10-09, session `event-checkin-d3`, owner go): prod
+version `f23284cd` at main `d86ec1c2` (release pull 174; pull 171 merged into
+develop as `36bf9c8c`), staging `b18200f4` ran the same tree first (parity gate
+passed, no `--force`). No migration. Built on `feature/192-organizer-credit-payout`
+(session `event-checkin-9c`) and `feature/192-payout-receipt` (`event-checkin-d0`).
 
 ## Why
 
@@ -82,6 +84,19 @@ means the organizer already knows where to send the money.
       `toLocaleDateString('th-TH')` in the same page gives "30 ส.ค. 2569".
       At 1280px the two fields sit side by side, at 375px they stack, and
       there is no horizontal overflow.
-- [ ] Staging: run the payout end to end with a held deposit, and open the
-      ticket page afterwards: the card must read "Credit Paid Back" (not yet
-      seen in a browser).
+- [x] Staging (2026-10-09, `b18200f4`): fixture through the API with the
+      dev-token (event with a ฿500 THB deposit → walk-in → admin slip upload
+      with a bank account, auto-verified → admin hold). The candidate listed
+      ฿1000 (an older ฿500 test hold on the same person) with the bank
+      account; a payout of ฿1001 got 409; ฿1000 paid ("Paid out 1000 THB.");
+      `credit-refund-request` returned `paid_back {thb: 1000}`; the row left
+      the candidate list. In headless Chrome the ticket page read "Credit Paid
+      Back — The organizer sent you 1000 THB on 9 Oct 2026. No credit is held
+      for you now." and offered no "Request Return"; the admin Held tab showed
+      the "Not requested" rows with the slip field and Record payout. The
+      walk-in had to be flipped to In-Person first: walk-ins still render the
+      online ticket (`.issues/162`, fix unmerged on `feature/162-walkin-in-person`).
+      One unpaid ฿500 candidate was left on staging for the owner to try.
+- [ ] Prod write smoke: `post_deploy_smoke.sh` falls back to `dev-token`,
+      which prod rejects, so the write half was untested on prod (reads
+      passed). Needs `SMOKE_TOKEN`.
