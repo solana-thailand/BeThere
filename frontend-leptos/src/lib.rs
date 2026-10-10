@@ -60,6 +60,7 @@ use crate::staff_routes::{
     EventsRoute, Faq, Feedback, HomeRoute, NfcCheckin, OrganizersRoute, PastEvents,
     PostEventRegister, Privacy, ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard,
     ProtectedPrPack, ProtectedScanner, PublicEvent, SandboxRoute, SponsorsRoute, Ticket,
+    UnsubscribeRoute,
 };
 
 /// Main application component.
@@ -155,6 +156,8 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/data-privacy") view=DataPrivacy />
                     // Devnet sandbox, no login (.plans/042 0.4).
                     <Route path=path!("/sandbox") view=SandboxRoute />
+                    // One-click unsubscribe from the event announcements (.plans/045 R4.12).
+                    <Route path=path!("/unsubscribe/:token") view=UnsubscribeRoute />
                     <Route path=path!("/adventure") view=Adventure />
                     <Route path=path!("/dashboard") view=DevDashboard />
                     <Route path=path!("/profile") view=DevProfile />

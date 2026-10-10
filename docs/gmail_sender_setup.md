@@ -66,6 +66,27 @@ justification) is not needed: one consenting account, well under the
   message per recipient (no BCC lists), spread over the notifications outbox.
   More than that means a domain and Brevo (`.plans/045` R4.12 option 3).
 
+## What is built (.plans/045 R4.12)
+
+- D1 (migration 0060): `subscribers` (email, locale, consent time, one-click
+  token), `announced_events` (when each public event was first seen open)
+  and `event_announcements` (one row per event per subscriber, written before
+  the send). The migration marks what is open at apply time as seen, so
+  turning it on mails nobody.
+- `POST /api/subscribe` (Turnstile, auth rate limit, same answer for new and
+  known addresses), `POST /api/unsubscribe/{token}` (no sign-in; the
+  `List-Unsubscribe` target) and the page `/unsubscribe/{token}` (a button,
+  nothing on load, because scanners follow links). PDPA erasure deletes both
+  tables' rows for the address.
+- The hourly cron `17 * * * *` (`src/subscribers/announce.rs`): marks newly
+  open public events, then mails subscribers who asked before the event
+  opened, 16 a run (384 a day). A 401/403/429 frees the claim for the next
+  run; any other refusal, a 5xx or a network error keeps it (no blind
+  replay). Without the three secrets it stores subscribers and sends nothing
+  (`skipped = "no gmail secrets"` in the log).
+- `MAIL_FROM = "bethere.sol@gmail.com"` is a var in `wrangler.toml`; the
+  secrets are the three above.
+
 ## Revoking
 
 - To stop sending at once: myaccount.google.com → Security → Third-party
