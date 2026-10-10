@@ -19,7 +19,7 @@ pub const CANONICAL_ORIGIN: &str = "https://bethere.solana-thailand.workers.dev"
 /// Every page the Leptos router knows (`frontend-leptos/src/lib.rs`), with
 /// `:name` for a path parameter. `tests/crawl_routes.rs` pins this list to the
 /// router in both directions.
-pub const APP_ROUTES: [&str; 27] = [
+pub const APP_ROUTES: [&str; 28] = [
     "/",
     "/login",
     "/claim/:token",
@@ -38,6 +38,7 @@ pub const APP_ROUTES: [&str; 27] = [
     "/faq",
     "/data-privacy",
     "/sandbox",
+    "/unsubscribe/:token",
     "/adventure",
     "/dashboard",
     "/profile",

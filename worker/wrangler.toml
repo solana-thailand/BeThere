@@ -97,6 +97,9 @@ SAMPLE_EVENT_SLUG = ""
 # Set to 1 only after migration 0030 and verified sender setup (docs/notifications.md).
 NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""
+# The Gmail account the announcer sends from (.plans/045 R4.12); the token
+# secrets GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN belong to it.
+MAIL_FROM = "bethere.sol@gmail.com"
 # What a cron dispatch run does with a queued message that has sat past its
 # kind's useful life (`.issues/128`). Ages are per kind, in
 # `notifications::policy::max_age_secs` — 3 days for a survey, 2 for a reminder,
@@ -229,11 +232,12 @@ EVENT_END_MS = "1777183200000"
 # - NFT_METADATA_URI        (optional — metadata JSON on Arweave/IPFS)
 # - NFT_IMAGE_URL           (optional — NFT badge image URL)
 
-# Cron trigger — daily cleanup of expired KV entries (A3 sustainability)
-# Runs at 03:00 UTC to delete expired session data, deposits, claim locks,
-# and fully-expired event configs per retention policy in cleanup.rs.
+# Cron triggers — daily cleanup of expired KV entries (A3 sustainability) at
+# 03:00 UTC (session data, deposits, claim locks, expired event configs per
+# cleanup.rs), and at :17 every hour the subscriber announcer (.plans/045
+# R4.12, src/subscribers/announce.rs; lib.rs ANNOUNCE_CRON must match).
 [triggers]
-crons = ["0 3 * * *"]
+crons = ["0 3 * * *", "17 * * * *"]
 
 # Smart Placement — co-locate Worker close to backends (D1, Google Sheets, Helius RPC)
 # Reduces check-in latency by minimizing network round-trips. Zero cost on all plans.
@@ -372,6 +376,9 @@ CLAIM_TOKEN_TTL_SECS = "2592000"
 # staging-only credentials and resources are deliberately configured.
 NOTIFICATIONS_ENABLED = "0"
 NOTIFICATION_FROM = ""
+# The Gmail account the announcer sends from (.plans/045 R4.12); the token
+# secrets GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN belong to it.
+MAIL_FROM = "bethere.sol@gmail.com"
 # Vars are non-inheritable: staging must redeclare this or it falls back to the
 # in-code default, which is the same `report` but not visibly so.
 NOTIFICATIONS_STALENESS = "report"

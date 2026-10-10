@@ -7,7 +7,7 @@ use event_checkin_worker::db::event_purge::{EVENT_PURGE_KEEPS, purge_statements}
 #[test]
 fn one_event_scoped_delete_per_statement() {
     let statements = purge_statements();
-    assert_eq!(statements.len(), 15, "{statements:#?}");
+    assert_eq!(statements.len(), 17, "{statements:#?}");
     for sql in &statements {
         assert!(
             sql.starts_with("DELETE FROM ") && sql.ends_with(" WHERE event_id = ?1"),
