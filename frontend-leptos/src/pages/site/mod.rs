@@ -4,6 +4,8 @@
 /// Pages, doors and the try band; public for `tests/site_pages.rs`.
 pub mod doors;
 mod events;
+/// The page head in the still room; public for `tests/site_heads.rs`.
+pub mod head;
 mod organizers;
 mod sponsors;
 

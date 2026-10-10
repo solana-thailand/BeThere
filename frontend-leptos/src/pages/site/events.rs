@@ -14,6 +14,7 @@ use crate::pages::landing::AuthState;
 use crate::pages::landing::frame::SiteFrame;
 
 use super::doors::SitePage;
+use super::head::PageHead;
 
 /// `/events`: the Discover list in the site frame, so the header and doors
 /// match the other site pages until R4.3 replaces the list.
@@ -23,6 +24,12 @@ pub fn EventsPage() -> impl IntoView {
     view! {
         <Title text=tr(|l| td_string!(l, landing.site.title_events)) />
         <SiteFrame here=SitePage::Events auth_state=auth_state>
+            <PageHead
+                kicker=|l| td_string!(l, landing.hero.kicker)
+                title=|l| td_string!(l, landing.site.head_events_1)
+                title_2=|l| td_string!(l, landing.site.head_events_2)
+                sub=|l| td_string!(l, landing.site.head_events_sub)
+            />
             <section class="lp-events-sec">
                 <DiscoverList set_auth_state=set_auth_state />
             </section>

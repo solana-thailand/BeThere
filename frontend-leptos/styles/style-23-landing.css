@@ -6,7 +6,7 @@
    site's navy (ASKS-4 §17). One ease; reduced motion settles everything.
    The hero is the exception: it is always the night room (R4.1), so it
    takes the dark tokens in both themes and the hall's card takes the
-   page's back. */
+   page's back. So does every site page's head (`.lp-head`, the still room). */
 
 .lp,
 .lp:not([data-theme="dark"]) .lp-hall-box {
@@ -27,7 +27,8 @@
 }
 
 .lp[data-theme="dark"],
-.lp-hero {
+.lp-hero,
+.lp-head {
     --lp-paper: #12152a;
     --lp-paper-2: #171b33;
     --lp-ink: #e9e4d3;
@@ -495,6 +496,70 @@ mark.lp-hl {
 @media (max-width: 480px) {
     .lp-hero-h1 {
         font-size: 46px;
+    }
+}
+
+/* A site page's head in the still room (pages/site/head.rs; the prototype's
+   .dark-head). The image is site_room.py's dim dither, fetched only when a
+   page head renders; until then, the night colour. */
+.lp-head {
+    position: relative;
+    isolation: isolate;
+    padding: 56px 0 44px;
+    border-bottom: 2px solid var(--lp-ink);
+    background: #0e1020 url("/room/rtm6-room-still.webp?v=1") center 40% / cover;
+    image-rendering: pixelated;
+    color: var(--lp-ink);
+    font: 400 17px/1.6 var(--lp-sans);
+}
+.lp-head::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(
+        90deg,
+        rgba(14, 16, 32, 0.82) 0%,
+        rgba(14, 16, 32, 0.55) 60%,
+        rgba(14, 16, 32, 0.35) 100%
+    );
+}
+.lp-head .lp-kicker {
+    color: var(--lp-t-field);
+}
+.lp-head-h1 {
+    margin: 0;
+    font-weight: 700;
+    font-size: clamp(44px, 5.6vw, 72px);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    color: var(--lp-ink);
+}
+:lang(th) .lp-head-h1 {
+    line-height: 1.18;
+    letter-spacing: -0.01em;
+}
+.lp-head-h1-2 {
+    color: var(--lp-h-field);
+}
+.lp-head-sub {
+    margin: 16px 0 0;
+    max-width: 34em;
+    font-size: 19px;
+    color: var(--lp-ink-2);
+}
+.lp-head .lp-actions {
+    margin-top: 24px;
+}
+@media (max-width: 480px) {
+    .lp-head {
+        padding: 32px 0 28px;
+    }
+    .lp-head-h1 {
+        font-size: 44px;
+    }
+    .lp-head-sub {
+        font-size: 17px;
     }
 }
 

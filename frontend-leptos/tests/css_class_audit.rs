@@ -310,6 +310,16 @@ fn extract_selector_classes(sel: &str, out: &mut BTreeSet<String>) {
     let chars: Vec<char> = sel.chars().collect();
     let mut i = 0;
     while i < chars.len() {
+        // A quoted string (`url("/room/x.webp")`, `[href=".x"]`) holds no
+        // class: skip to its closing quote.
+        if let q @ ('"' | '\'') = chars[i] {
+            i += 1;
+            while i < chars.len() && chars[i] != q {
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
         if chars[i] == '.' && chars.get(i + 1).is_some_and(|&c| is_class_start(c)) {
             let start = i + 1;
             let mut end = start;

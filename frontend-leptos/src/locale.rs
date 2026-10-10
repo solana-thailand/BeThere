@@ -121,7 +121,7 @@ pub fn AttendeeLanguageSwitch() -> impl IntoView {
 /// Use `t!` only where a key interpolates.
 ///
 /// ```ignore
-/// view! { <h1>{tr(|l| td_string!(l, discover.title))}</h1> }
+/// view! { <h1>{tr(|l| td_string!(l, landing.hero.kicker))}</h1> }
 /// ```
 pub fn tr(text: fn(Locale) -> &'static str) -> Signal<&'static str> {
     let i18n = use_i18n();

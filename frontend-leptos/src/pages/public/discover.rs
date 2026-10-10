@@ -236,11 +236,7 @@ pub fn DiscoverList(set_auth_state: WriteSignal<AuthState>) -> impl IntoView {
     view! {
         <div class="container dv-page">
 
-            <header class="dv-head">
-                <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, discover.title))}</h1>
-                <p class="subtitle">{crate::locale::tr(|l| crate::i18n::td_string!(l, discover.subtitle))}</p>
-            </header>
-
+            // The page head (`pages/site/head.rs`) carries the title.
             <Show when=move || loaded.get() && !signed_in.get() fallback=|| ()>
                 <p class="dv-signin-hint">
                     {crate::locale::tr(|l| crate::i18n::td_string!(l, discover.signin_hint))}

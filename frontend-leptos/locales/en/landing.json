@@ -301,7 +301,14 @@
     "try_usdc_line": "Try the USDC route yourself on devnet, 2 minutes →",
     "title_organizers": "BeThere for organizers · know who will really come before you order food",
     "title_sponsors": "BeThere for sponsors · where your logo goes",
-    "title_events": "Events & courses — BeThere"
+    "title_events": "Events & courses — BeThere",
+    "head_events_1": "Events",
+    "head_events_2": "and courses",
+    "head_events_sub": "Free events · hold your seat with a deposit · past events become courses",
+    "head_org_kicker": "For organizers",
+    "head_org_1": "Know who's coming",
+    "head_org_2": "before you order food.",
+    "head_org_sub": "Empty chairs and wasted food come from people who book and don't come."
   },
   "hall": {
     "label": "Every deposit payer of RTM #1–#6, one chair each",
