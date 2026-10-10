@@ -206,3 +206,24 @@ real-wallet signing in the sandbox is still untested.
   and progress), R4.8, R4.9. Owner items unchanged: `SMOKE_TOKEN`, sandbox
   real-wallet signing.
 
+## 10. Addendum (same day, night): R4.13, wrangler, R4.9
+
+- **R4.13** (pull 207, release 208, prod `4baf1431`): held THB credit in the
+  `/events` empty state. First real prod write smoke with the owner's token
+  (`~/.bethere-smoke-token`, 24 h; read with `$(cat …)`, never printed).
+- **wrangler 4.149** (pull 209, release 210, prod `a862d80d`). Each deploying
+  worktree now has its own `worker/node_modules` (`pnpm install
+  --frozen-lockfile`), not the symlink to the main checkout.
+- **R4.9 static home** (pull 211, release 213, prod `b6c59edc`): `/` is served
+  by the Worker (`run_worker_first` has `"/"`), `worker/src/home.rs` splices the
+  promise, 90/94 and the open events (or the cadence line) into
+  `#boot-summary`; 17,288 bytes; staging cpuTime median 1 ms
+  (`.benchmarks/008`). Trade-off: every home view is a Worker request.
+- **Deploy checks** (pull 212): the Content-Type, staff-shell and
+  security-header checks wait about a minute for the edge (20 s gave two false
+  reds after the wrangler upgrade).
+- R4.8 was already done by `.issues/183`. The owner tested sandbox signing with
+  their own wallet (works).
+- **Next in plan 045:** R4.4 (course pages and progress), R4.10 (click
+  counters), R4.11 (meals not ordered), then SG1/SG4.
+

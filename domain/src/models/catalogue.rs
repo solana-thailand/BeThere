@@ -25,6 +25,39 @@ pub enum Series {
 impl Series {
     /// The series a visitor can follow as a course, in display order.
     pub const COURSES: [Series; 2] = [Series::RoadToMainnet, Series::LatentSpace];
+
+    /// The course's address, `/events/<slug>` (.plans/045 R4.4), and its key
+    /// in `course_enrolments` / `course_progress`. A one-off is no course.
+    pub const fn course_slug(self) -> Option<&'static str> {
+        match self {
+            Series::RoadToMainnet => Some("road-to-mainnet"),
+            Series::LatentSpace => Some("solana-in-latent-space"),
+            Series::Single => None,
+        }
+    }
+
+    /// The course at `slug`, if there is one.
+    pub fn from_course_slug(slug: &str) -> Option<Series> {
+        Series::COURSES
+            .into_iter()
+            .find(|s| s.course_slug() == Some(slug))
+    }
+}
+
+/// A course's recorded episodes, oldest first: what `/events/<slug>` lists
+/// and the only episodes progress can be recorded for.
+pub fn course_episodes(series: Series) -> Vec<PastEvent> {
+    episodes(&CATALOGUE, series)
+        .into_iter()
+        .filter(|e| !e.video.is_empty())
+        .collect()
+}
+
+/// Whether `episode` (an event slug) is an episode of the course at
+/// `course` (a course slug): the worker's input check before it writes.
+pub fn is_course_episode(course: &str, episode: &str) -> bool {
+    Series::from_course_slug(course)
+        .is_some_and(|s| course_episodes(s).iter().any(|e| e.slug == episode))
 }
 
 /// One past public event.
