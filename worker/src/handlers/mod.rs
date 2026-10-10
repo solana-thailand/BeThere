@@ -101,6 +101,9 @@ pub fn routes(state: AppState) -> Router<()> {
             "/public/event-series/{event_id}",
             get(event_series::get_event_series),
         )
+        // Courses: active campaigns and their public episodes (.plans/045 R4.4).
+        .route("/public/courses", get(courses::list))
+        .route("/public/courses/{course}", get(courses::detail))
         .layer(middleware::from_fn(
             crate::middleware::cache_public_120_layer,
         ));

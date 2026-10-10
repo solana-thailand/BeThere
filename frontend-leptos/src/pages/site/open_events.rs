@@ -1,9 +1,10 @@
 //! The open events, in the `/events` head (.plans/045 R4.3, prototype
 //! events `h4-side`; the landing's upcoming cards of .plans/043 L3 moved
 //! here): each with a poster, when, where and the event's own deposit rule
-//! in one line. With nothing open, the empty state says how often the series
-//! runs and when it last did (`domain::models::catalogue::cadence`), points
-//! at the last recording, and offers what there is to do meanwhile.
+//! in one line. With nothing open, the empty state says how often the
+//! busiest course runs and when it last did (`domain::models::course::cadence`
+//! over the courses in D1), points at its last episode, and offers what there
+//! is to do meanwhile.
 
 use leptos::prelude::*;
 use serde::Deserialize;
@@ -12,7 +13,7 @@ use crate::api::ApiResponse;
 use crate::i18n::{t_string, use_i18n};
 
 use crate::pages::landing::event_card::{DepositRule, nearest_first};
-use event_checkin_domain::models::catalogue::{CATALOGUE, Series, cadence};
+use event_checkin_domain::models::course::{busiest, cadence};
 
 use super::doors::TRY_LIVE;
 use super::subscribe::SubscribeForm;
@@ -137,43 +138,41 @@ pub fn OpenEvents() -> impl IntoView {
     }
 }
 
-/// Nothing open: how often Road to Mainnet runs and when it last did, any
-/// credit the reader holds (R4.13), the subscribe form (R4.12), the last recording, then Discord and hosting your
+/// Nothing open: how often the busiest course runs and when it last did
+/// (from the courses in D1), any credit the reader holds (R4.13), the
+/// subscribe form (R4.12), its last episode, then Discord and hosting your
 /// own (and the devnet sandbox once it is live on this site).
 #[component]
 fn NothingOpen(sample_slug: Option<String>) -> impl IntoView {
     let i18n = use_i18n();
-    let rtm = cadence(&CATALOGUE, Series::RoadToMainnet);
-    let line = move || match rtm {
-        Some(c) => crate::locale::fill(
+    let courses = LocalResource::new(super::courses_data::courses);
+    // (title, id, cadence) of the course held most often, once loaded.
+    let quiet = move || {
+        let list = courses.get().unwrap_or_default();
+        busiest(&list)
+            .and_then(|c| cadence(&c.held_starts_ms).map(|k| (c.title.clone(), c.id.clone(), k)))
+    };
+    let line = move || match quiet() {
+        Some((title, _, c)) => crate::locale::fill(
             t_string!(i18n, landing.upcoming.cadence),
             &[
+                ("course", &title),
                 ("times", &c.times.to_string()),
                 ("weeks", &c.every_weeks.to_string()),
-                ("date", &crate::utils::format_event_day(c.last.start_ms)),
+                ("date", &crate::utils::format_event_day(c.last_ms)),
             ],
         ),
         None => t_string!(i18n, landing.upcoming.none_desc).to_string(),
     };
-    let last = rtm.filter(|c| !c.last.video.is_empty()).map(|c| {
-        let ep = c.last.ep;
-        let label = move || {
-            crate::locale::fill(
-                t_string!(i18n, landing.upcoming.watch_last),
-                &[("ep", &ep.to_string())],
-            )
-        };
-        view! {
-            <a
-                class="lp-btn"
-                href=format!("https://www.youtube.com/watch?v={}", c.last.video)
-                target="_blank"
-                rel="noopener noreferrer"
-            >
-                {label}
-            </a>
-        }
-    });
+    let last = move || {
+        quiet().map(|(_, id, c)| {
+            view! {
+                <a class="lp-btn" href=format!("/events/{id}?ep={}", c.times)>
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.watch_last))}
+                </a>
+            }
+        })
+    };
     view! {
         <div class="lp-card lp-event lp-event-empty">
             <h3>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_title))}</h3>

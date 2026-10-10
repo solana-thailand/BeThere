@@ -3,13 +3,13 @@
 //! serves `/` (`run_worker_first`) with the embedded `index.html`, whose
 //! `#boot-summary` block is replaced here by the promise, the payers who came
 //! (the same `facts::ladder_total` the hall draws) and the open events, else
-//! how often the series runs. The app removes the block when it mounts
+//! how often the busiest course runs (from D1, `courses.rs`). The app removes the block when it mounts
 //! (`remove_boot_summary`), exactly as it removes the stock one.
 //!
 //! Pure (tested natively in `tests/static_home.rs`); `home_page.rs` reads the
 //! open events and calls it.
 
-use event_checkin_domain::models::catalogue::{CATALOGUE, Series, cadence};
+use event_checkin_domain::models::course::Cadence;
 use event_checkin_domain::models::facts::ladder_total;
 use serde_json::Value;
 
@@ -67,15 +67,17 @@ pub fn home_events(events: &[Value]) -> Vec<HomeEvent> {
 
 /// The block that replaces `#boot-summary`. Same id and the same inline
 /// style as the stock block, so the app removes it and nothing jumps.
-pub fn summary_html(events: &[HomeEvent]) -> String {
+/// `quiet` is the busiest course's title and cadence, for when nothing is open.
+pub fn summary_html(events: &[HomeEvent], quiet: Option<(&str, Cadence)>) -> String {
     let (paid, came) = ladder_total();
     let open = match events.is_empty() {
-        true => match cadence(&CATALOGUE, Series::RoadToMainnet) {
-            Some(c) => format!(
-                "<p>Nothing open yet. Road to Mainnet has run {} times, about every {} weeks, last on {}.</p>",
+        true => match quiet {
+            Some((title, c)) => format!(
+                "<p>Nothing open yet. {} has run {} times, about every {} weeks, last on {}.</p>",
+                html_escape(title),
                 c.times,
                 c.every_weeks,
-                html_escape(&when(c.last.start_ms, false))
+                html_escape(&when(c.last_ms, false))
             ),
             None => "<p>Nothing open yet.</p>".to_string(),
         },

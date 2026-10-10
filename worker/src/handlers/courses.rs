@@ -1,7 +1,12 @@
-//! `/api/courses/{course}/…` (.plans/045 R4.4), attendee-authed: register
-//! once, then mark episodes watched. The course and episode must be in the
-//! catalogue (`domain::models::catalogue`), so nothing else reaches D1.
+//! Courses (.plans/045 R4.4): active campaigns as courses.
 //!
+//! Public, cached 120 s:
+//! - `GET /api/public/courses` → `[CourseSummary]`
+//! - `GET /api/public/courses/{course}` → `CourseDetail` (404 if none)
+//!
+//! Attendee-authed: register once, then mark episodes watched. The course id
+//! is checked for shape before D1, registration needs an active campaign,
+//! and a watched mark needs an episode of it (in `courses::WATCHED_SQL`).
 //! - `GET  /api/courses/{course}/progress` → `{ enrolled, watched: [slug] }`
 //! - `POST /api/courses/{course}/enrol`
 //! - `POST /api/courses/{course}/watched` `{ episode }`
@@ -11,7 +16,7 @@ use axum::{
     extract::{Path, State},
 };
 use event_checkin_domain::models::auth::Claims;
-use event_checkin_domain::models::catalogue::{Series, is_course_episode};
+use event_checkin_domain::models::course::is_course_id;
 use event_checkin_domain::models::error::AppError;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -25,9 +30,33 @@ pub struct WatchedRequest {
 }
 
 fn course(slug: &str) -> Result<(), AppError> {
-    match Series::from_course_slug(slug) {
-        Some(_) => Ok(()),
-        None => Err(AppError::NotFound("no such course".into())),
+    match is_course_id(slug) {
+        true => Ok(()),
+        false => Err(AppError::NotFound("no such course".into())),
+    }
+}
+
+#[worker::send]
+pub async fn list(State(state): State<AppState>) -> Result<ApiOk<Value>, WorkerError> {
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let courses = crate::courses::courses(d1(&state)?, now_ms)
+        .await
+        .map_err(AppError::Internal)?;
+    Ok(ApiOk::new(json!(courses)))
+}
+
+#[worker::send]
+pub async fn detail(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+) -> Result<ApiOk<Value>, WorkerError> {
+    course(&slug)?;
+    match crate::courses::course(d1(&state)?, &slug)
+        .await
+        .map_err(AppError::Internal)?
+    {
+        Some(detail) => Ok(ApiOk::new(json!(detail))),
+        None => Err(AppError::NotFound("no such course".into()).into()),
     }
 }
 
@@ -61,8 +90,15 @@ pub async fn enrol(
     Path(slug): Path<String>,
 ) -> Result<ApiOk<Value>, WorkerError> {
     course(&slug)?;
+    let db = d1(&state)?;
+    if !crate::courses::is_open(db, &slug)
+        .await
+        .map_err(AppError::Internal)?
+    {
+        return Err(AppError::NotFound("no such course".into()).into());
+    }
     let email = claims.email.to_lowercase();
-    crate::courses::enrol(d1(&state)?, &email, &slug)
+    crate::courses::enrol(db, &email, &slug)
         .await
         .map_err(AppError::Internal)?;
     Ok(ApiOk::new(json!({ "enrolled": true })))
@@ -76,7 +112,8 @@ pub async fn watched(
     Json(body): Json<WatchedRequest>,
 ) -> Result<ApiOk<Value>, WorkerError> {
     course(&slug)?;
-    if !is_course_episode(&slug, &body.episode) {
+    // Event slugs share the course id's shape; anything else never reaches D1.
+    if !is_course_id(&body.episode) {
         return Err(AppError::Validation("not an episode of this course".into()).into());
     }
     let email = claims.email.to_lowercase();

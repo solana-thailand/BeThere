@@ -63,7 +63,7 @@ fn unknown_paths_are_404() {
         "/e/",
         "/e/a/b",
         "/discoverx",
-        "/events/x",
+        "/events/Not_A_Course",
         "/index.php",
     ] {
         assert_eq!(route_kind(path), RouteKind::NotFound, "{path}");
@@ -72,11 +72,12 @@ fn unknown_paths_are_404() {
 }
 
 #[test]
-fn a_course_page_is_a_page_only_for_a_real_course() {
+fn a_course_page_is_a_page_only_for_a_course_id() {
     for path in ["/events/road-to-mainnet", "/events/solana-in-latent-space/"] {
         assert_eq!(route_kind(path), RouteKind::App, "{path}");
     }
-    for path in ["/events/x", "/events/intro-to-vibing-on-solana"] {
+    // Courses are campaigns in D1; only a slug-shaped id can be one.
+    for path in ["/events/Not_A_Course", "/events/a%20b", "/events/..."] {
         assert_eq!(route_kind(path), RouteKind::NotFound, "{path}");
     }
 }
