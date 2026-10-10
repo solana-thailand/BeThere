@@ -13,7 +13,7 @@ use crate::locale::tr;
 use event_checkin_domain::models::facts::{LADDER, LadderRow, ladder_total};
 
 /// The brand chair (the logo's mark), as in the prototype.
-const CHAIR: &str = "M2 0h4v14h14v4H8v12H4V18H2z M18 18h4v12h-4z";
+pub const CHAIR: &str = "M2 0h4v14h14v4H8v12H4V18H2z M18 18h4v12h-4z";
 const COLS: usize = 16;
 const DX: f32 = 29.0;
 const DY: f32 = 37.5;

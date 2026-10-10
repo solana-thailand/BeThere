@@ -61,16 +61,20 @@ pub fn use_site_auth() -> (ReadSignal<AuthState>, ReadSignal<String>) {
 pub fn SiteFrame(
     here: SitePage,
     auth_state: ReadSignal<AuthState>,
+    /// The page places the doors itself (the home, right under the hero).
+    #[prop(optional)]
+    own_doors: bool,
     children: Children,
 ) -> impl IntoView {
     let theme = RwSignal::new(initial_theme());
     // One stats fetch for every section that shows a number (rule 1).
     provide_landing_stats();
+    scroll_to_hash_after_mount();
     view! {
         <div class="landing-page lp" data-theme=move || theme.get().as_str()>
             <LandingHeader auth_state=auth_state theme=theme />
             {children()}
-            <Doors here=here />
+            {(!own_doors).then(|| view! { <Doors here=here /> })}
             <SiteFooter />
         </div>
     }
@@ -85,8 +89,8 @@ fn SiteFooter() -> impl IntoView {
                 <div class="lp-frow">
                     <a class="lp-flogo" href="/">"BeThere"</a>
                     <nav class="lp-flinks">
-                        // The swimlane lives on /organizers (and on the landing).
-                        <A href="/organizers">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.how))}</A>
+                        // The swimlane lives on /organizers.
+                        <A href="/organizers#how">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.how))}</A>
                         <a href="/faq">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.faq))}</a>
                         <A href="/login">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.footer.staff_portal))}</A>
                         <a href="https://discord.gg/PGbUgNmsns" target="_blank" rel="noopener noreferrer">"Discord"</a>
@@ -112,4 +116,35 @@ fn SiteFooter() -> impl IntoView {
             </div>
         </footer>
     }
+}
+
+/// A link from another page (`/organizers#how` in the hero) is followed by
+/// the router, which renders the new page before it writes the URL to the
+/// address bar and then scrolls: to the `#id` if it can find it then, else
+/// to the top, which is where it lands. So the hash is read from the
+/// router's location (already the new one) and, one task later, after the
+/// router's own scroll, the `#id` is brought into view.
+fn scroll_to_hash_after_mount() {
+    let hash = leptos_router::hooks::use_location().hash.get_untracked();
+    let Some(id) = hash
+        .strip_prefix('#')
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+    else {
+        return;
+    };
+    Effect::new(move |_| {
+        let id = id.clone();
+        let scroll = wasm_bindgen::closure::Closure::once_into_js(move || {
+            if let Some(el) = web_sys::window()
+                .and_then(|w| w.document())
+                .and_then(|d| d.get_element_by_id(&id))
+            {
+                el.scroll_into_view();
+            }
+        });
+        if let Some(window) = web_sys::window() {
+            let _ = window.set_timeout_with_callback(wasm_bindgen::JsCast::unchecked_ref(&scroll));
+        }
+    });
 }

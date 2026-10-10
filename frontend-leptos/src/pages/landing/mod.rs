@@ -18,7 +18,8 @@ pub mod header;
 pub mod hero;
 /// The swimlane; public for `tests/landing_how_routes.rs`.
 pub mod how;
-mod join;
+/// The organizer card; public for `pages::site::organizers`.
+pub mod join;
 /// The site header. Public because `/discover` uses it too — it was inline in
 /// `page.rs`, which is why that page had no chrome at all (`.issues/100`).
 pub mod nav;

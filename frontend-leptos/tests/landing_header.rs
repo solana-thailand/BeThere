@@ -1,8 +1,8 @@
-//! The landing header and side index (`bethere-ux/landing.html`), and the
-//! share/SEO copy that must not promise what the system does not do.
+//! The landing header (`bethere-ux/landing.html`), the links into the pages
+//! the home's sections moved to, and the share/SEO copy that must not
+//! promise what the system does not do.
 
 use event_checkin_frontend::locale::shows_lang_bar;
-use event_checkin_frontend::pages::landing::header::SIDE_SECTIONS;
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -10,20 +10,54 @@ fn read(path: &str) -> String {
     std::fs::read_to_string(format!("{ROOT}/{path}")).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
-/// Every side-index dot targets an element id the landing renders. The
-/// header links pages now (.plans/045 R4.0); `tests/site_pages.rs` pins them.
+/// The home's sections moved to their own pages (.plans/045): every link
+/// to `/organizers#id` or `/sponsors#id`, in code or in copy, lands on an
+/// element that page renders.
 #[test]
-fn every_section_link_has_a_target() {
-    let sources: String = std::fs::read_dir(format!("{ROOT}/src/pages/landing"))
-        .expect("landing dir")
-        .filter_map(|e| std::fs::read_to_string(e.ok()?.path()).ok())
-        .collect();
-    for s in SIDE_SECTIONS.iter() {
-        assert!(
-            sources.contains(&format!("id=\"{}\"", s.id)),
-            "no element with id=\"{}\" on the landing",
-            s.id
-        );
+fn every_moved_section_link_has_a_target() {
+    let pages: [(&str, &[&str]); 2] = [
+        (
+            "/organizers#",
+            &[
+                "src/pages/site/organizers.rs",
+                "src/pages/landing/story.rs",
+                "src/pages/landing/how.rs",
+            ],
+        ),
+        ("/sponsors#", &["src/pages/landing/sponsors.rs"]),
+    ];
+    let mut haystack = String::new();
+    for dir in ["src", "locales"] {
+        collect(&format!("{ROOT}/{dir}"), &mut haystack);
+    }
+    let mut seen = 0;
+    for (prefix, files) in pages {
+        let rendered: String = files.iter().map(|f| read(f)).collect();
+        for part in haystack.split(prefix).skip(1) {
+            let id: String = part
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+                .collect();
+            assert!(
+                rendered.contains(&format!("id=\"{id}\"")),
+                "{prefix}{id}: no element with that id on the page"
+            );
+            seen += 1;
+        }
+    }
+    assert!(
+        seen >= 5,
+        "expected the hero, nav and goal links, saw {seen}"
+    );
+}
+
+fn collect(dir: &str, out: &mut String) {
+    for entry in std::fs::read_dir(dir).unwrap().flatten() {
+        let path = entry.path();
+        match path.is_dir() {
+            true => collect(path.to_str().unwrap(), out),
+            false => out.push_str(&std::fs::read_to_string(&path).unwrap_or_default()),
+        }
     }
 }
 

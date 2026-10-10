@@ -46,8 +46,8 @@ pub fn SiteHeader(
                     </span>
                 </a>
                 <div class="landing-nav-links">
-                    <a href="/#how">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.how_it_works))}</a>
-                    <a href="/#join">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.for_organizers))}</a>
+                    <a href="/organizers#how">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.how_it_works))}</a>
+                    <a href="/organizers#join">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.for_organizers))}</a>
                 </div>
                 <div class="landing-nav-right" style="display:flex;align-items:center;gap:8px;">
                     <div class="landing-nav-actions">
@@ -150,8 +150,8 @@ pub fn SiteHeader(
                 if open {
                     view! {
                         <div class="landing-nav-mobile-menu">
-                            <a href="/#how" on:click=move |_| set_mobile_menu_open.set(false)>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.how_it_works))}</a>
-                            <a href="/#join" on:click=move |_| set_mobile_menu_open.set(false)>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.for_organizers))}</a>
+                            <a href="/organizers#how" on:click=move |_| set_mobile_menu_open.set(false)>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.how_it_works))}</a>
+                            <a href="/organizers#join" on:click=move |_| set_mobile_menu_open.set(false)>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.for_organizers))}</a>
                             <A href="/profile" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
                                 <Icon icon=IconName::User class="icon-sm" />
                                 {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.nav.developer_profile))}
