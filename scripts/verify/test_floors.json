@@ -68,7 +68,7 @@
     "scanner_scan_wakeup tests/scanner_scan_wakeup.rs": 3,
     "scanner_single_detail_fetch tests/scanner_single_detail_fetch.rs": 2,
     "serde_contract tests/serde_contract.rs": 55,
-    "site_events tests/site_events.rs": 2,
+    "site_events tests/site_events.rs": 3,
     "site_heads tests/site_heads.rs": 3,
     "site_pages tests/site_pages.rs": 5,
     "site_plan tests/site_plan.rs": 2,

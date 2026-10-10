@@ -137,8 +137,8 @@ pub fn OpenEvents() -> impl IntoView {
     }
 }
 
-/// Nothing open: how often Road to Mainnet runs and when it last did, the
-/// subscribe form (R4.12), the last recording, then Discord and hosting your
+/// Nothing open: how often Road to Mainnet runs and when it last did, any
+/// credit the reader holds (R4.13), the subscribe form (R4.12), the last recording, then Discord and hosting your
 /// own (and the devnet sandbox once it is live on this site).
 #[component]
 fn NothingOpen(sample_slug: Option<String>) -> impl IntoView {
@@ -178,6 +178,7 @@ fn NothingOpen(sample_slug: Option<String>) -> impl IntoView {
         <div class="lp-card lp-event lp-event-empty">
             <h3>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_title))}</h3>
             <p class="lp-rule">{line}</p>
+            <CreditHeld />
             <SubscribeForm />
             <div class="lp-row">
                 {sample_slug.map(|slug| view! {
@@ -266,5 +267,31 @@ fn event_card(
             {online_chip.map(|chip| view! { <div class="lp-row">{chip}</div> })}
             {(rule.is_some()).then(|| view! { <p class="lp-rule">{rule_text}</p> })}
         </a>
+    }
+}
+
+/// R4.13: a signed-in reader holding THB credit is told it can pay their
+/// next deposit. Nothing renders when signed out, at zero, or if the read
+/// fails (`get_credit_balance` never redirects to /login).
+#[component]
+fn CreditHeld() -> impl IntoView {
+    let i18n = use_i18n();
+    let thb = LocalResource::new(|| async {
+        crate::api::get_credit_balance()
+            .await
+            .map_or(0, |b| b.credit_thb)
+    });
+    move || {
+        let amount = thb.get().unwrap_or(0);
+        (amount > 0).then(|| {
+            let line = crate::locale::fill(
+                t_string!(i18n, landing.site.credit_held),
+                &[(
+                    "amount",
+                    &crate::pages::landing::stats::group_thousands(amount),
+                )],
+            );
+            view! { <p class="lp-credit-held">{line}</p> }
+        })
     }
 }
