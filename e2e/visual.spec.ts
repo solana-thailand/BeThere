@@ -28,11 +28,12 @@ for (const target of PAGES) {
         // The goal bar, its labels and source line move with the live stats
         // and with each refresh of globe-data.json. The photo reel's images
         // live in R2, which the e2e worker does not have.
-        // The scanner <video> fills the viewport, so it is hidden by
-        // screenshot.css rather than masked (a mask covers the UI above it).
+        // The scanner <video> and the landing's lit room fill their sections,
+        // so screenshot.css hides them rather than masking (a mask covers the
+        // UI above it).
         mask: [
           page.locator(
-            ".dashboard-last-updated, canvas, .lp-version, .lp-livebar, .lp-done, .lp-bar span, .lp-goal-text .lp-barlabel, .lp-goal-text .lp-fineprint, .lp-reel-track",
+            ".dashboard-last-updated, canvas:not(.lp-room), .lp-version, .lp-livebar, .lp-done, .lp-bar span, .lp-goal-text .lp-barlabel, .lp-goal-text .lp-fineprint, .lp-reel-track",
           ),
         ],
         stylePath: path.join(__dirname, "screenshot.css"),

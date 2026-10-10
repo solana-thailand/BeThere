@@ -104,6 +104,9 @@
              src/pages/landing/goal.rs only when the section comes into view.
              copy-dir emits no tag, so neither is on the first load. -->
         <link data-trunk rel="copy-dir" href="globe" />
+        <!-- The lit room behind the hero (.plans/045 R4.1): code and image,
+             loaded by src/pages/landing/room.rs after the hero mounts. -->
+        <link data-trunk rel="copy-dir" href="room" />
 
         <!-- PWA — Service worker boot. Trunk copy-file puts sw.js in dist/. -->
         <link data-trunk rel="copy-file" href="sw.js" />

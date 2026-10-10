@@ -26,6 +26,8 @@ mod page;
 /// The photo reel; public for `tests/landing_photo_reel.rs`.
 pub mod photos;
 mod registrations;
+/// The lit room's mount bridge; public for `tests/landing_room.rs`.
+pub mod room;
 mod sofar;
 /// Sponsor placements; public for `tests/landing_sponsors.rs`.
 pub mod sponsors;
