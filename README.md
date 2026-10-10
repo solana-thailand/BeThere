@@ -8,7 +8,7 @@ meetups in Bangkok since spring 2026.
 [![Rust](https://img.shields.io/badge/Rust-100%25-000000?logo=rust)](https://www.rust-lang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Edge-Cloudflare-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
 
-## What is deployed today (27 Sep 2026)
+## What is deployed today (10 Oct 2026)
 
 | Part | Where it runs | State |
 |---|---|---|
@@ -17,6 +17,9 @@ meetups in Bangkok since spring 2026.
 | Attendance badges (compressed NFT via Crossmint) | **Solana mainnet** | Live |
 | `bethere-escrow`: USDC deposit → on-chain check-in → refund | **Solana devnet** (`C6HDeZES…`) | Runs end to end (`scripts/e2e_devnet_test.sh`). **No real attendee money has gone through it**; mainnet is the next step |
 | `bethere-mcp`: an AI agent registers a person and pays the escrow deposit from its own wallet | Staging + devnet | Verified with Claude as the client |
+| The site (`.plans/045` Release 4): home with the lit room and the payers' hall, `/events` (open events, else how often the series runs, past events by series), `/organizers` (the room narrowed in three steps, how it works, a planning calculator), `/sponsors` | **Production** | Live. `/` is also served by the Worker as static HTML for crawlers and no-JS readers |
+| "Email me when it opens": one mail per newly opened public event, from bethere.sol@gmail.com via the Gmail API, one-click unsubscribe | **Production** | Live (hourly cron) |
+| `/sandbox`: deposit, show up, get it back on devnet with a test wallet or your own | **Staging** | Live on staging only (Worker-held devnet keys) |
 
 What is new in the Colosseum window (14 Sep – 12 Oct) and what came before:
 [`docs/submission/built_in_window.md`](docs/submission/built_in_window.md).
@@ -339,17 +342,25 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 
 | Path | Page | Auth |
 |------|------|------|
-| `/` | Landing — marketing page, upcoming events, My Registrations (auth-aware nav) | Public |
-| `/login` | Login — Google OAuth sign-in (staff/organizer entry point) | Public |
-| `/e/{slug}` | Public Event — event details, countdown, registration with Google Sign-In | Public |
-| `/deposit/{attendee_id}` | Deposit — wallet adapter + QR for USDC/THB deposit | Public |
-| `/ticket/{attendee_id}` | Ticket — QR code slip with check-in status + rollover option | Public |
-| `/claim/{token}` | Claim — quiz + NFT badge + refund | Token-gated |
-| `/staff` | Scanner — camera QR + manual lookup + walk-in registration | Staff |
-| `/admin` | Dashboard — attendee list, stats, escrow, cancellation, walk-in export/sync | Staff |
-| `/admin/events` | Events — create, edit, manage events | SuperAdmin |
-| `/adventure` | Rust Adventures — educational game | Public |
-| `/privacy` | Privacy Policy — PDPA compliance | Public |
+| `/` | Home: the lit room, the payers' hall, your registrations, doors, so far and the goal (static HTML from the Worker first) | Public |
+| `/events` | Events and courses: open events in the head (else the empty state, subscribe, held credit), your events, past events by series, how the deposit works | Public |
+| `/organizers` | For organizers: the room narrowed in three steps, how it works, the planning calculator, the organizer waitlist | Public |
+| `/sponsors` | For sponsors: where a logo goes, the contact card (`#contact`) | Public |
+| `/sandbox` | Devnet sandbox (on where the Worker has the sandbox keys: staging) | Public |
+| `/unsubscribe/{token}` | One-click unsubscribe from event announcements | Token |
+| `/login` | Login: Google OAuth sign-in (staff/organizer entry point) | Public |
+| `/e/{slug}` | Public event: details, countdown, registration | Public |
+| `/deposit/{attendee_id}` | Deposit: wallet adapter + QR for USDC/THB deposit | Public |
+| `/ticket/{attendee_id}` | Ticket: QR slip with check-in status, credit | Public |
+| `/claim/{token}` | Claim: quiz + NFT badge + refund | Token-gated |
+| `/staff` | Scanner: camera QR, manual lookup, walk-in registration (staff shell) | Staff |
+| `/admin` | Dashboard: attendees, stats, deposits, credit payouts, escrow, walk-ins (staff shell) | Staff |
+| `/adventure` | Rust Adventures: educational game | Public |
+| `/privacy`, `/data-privacy`, `/faq` | Privacy policy (PDPA), your data, FAQ | Public |
+
+`/discover` redirects to `/events`. The full list the Worker knows is
+`worker/src/crawl.rs` `APP_ROUTES`, pinned to the router by
+`worker/tests/crawl_routes.rs`.
 
 ## Architecture
 
@@ -475,10 +486,15 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 ## Tests
 
 ```bash
-# All off-chain tests (245 total)
-cargo test -p event-checkin-domain   # 73 tests — shared types, QR logic
-cargo test -p event-checkin-worker   # 80 tests — crypto, auth, sheets, events
-cd frontend-leptos && cargo test     # 92 tests — Leptos pages, adventure playtests
+# Workspace (domain + worker): about 1,270 tests in 137 binaries
+cargo test --workspace --locked
+# Frontend (outside the workspace): about 430 tests in 65 binaries
+cd frontend-leptos && cargo test --locked
+# Worker SQL against the real migrations (Python, sqlite)
+cd worker/tests/security && python3 -m unittest discover -p 'test_*.py'
+
+# Per-binary floors (CI fails a binary that drops below its floor):
+#   scripts/verify/test_floors.json, scripts/verify/test_count_floor.py
 
 # On-chain SVM tests (42 total)
 cd bethere-escrow && quasar test     # All 9 escrow instructions + rollover lifecycle
