@@ -84,6 +84,7 @@ Post-event: event summary freeze, public recap, PR pack
 | **Google OAuth** | `handlers/auth.rs` (`auth_url`, `auth_callback`) | Sign-in → verified email → session JWT. |
 | **Solana escrow program** | `worker/src/solana_escrow/` builds TXs; `bethere-escrow/` is the program | USDC deposit/refund/close/rollover/checkin/forfeit. Instructions keyed by discriminator 0–8 (`escrow_indexer/mod.rs`, `EscrowInstruction`). |
 | **Helius** | `state.rs:163` (`HELIUS_RPC_URL` + `HELIUS_API_KEY`) | RPC for TX build/verify; DAS API for reading wallet NFT inventories + leaderboard (`handlers/wallet.rs`); enhanced webhooks + RPC poller for on-chain event indexing (`escrow_indexer/webhook.rs`, `poller.rs`). |
+| **Gmail API** | `mail/` (`gmail.rs` token refresh + `users.messages.send`, `message.rs` RFC 5322) | Event announcements to subscribers from bethere.sol@gmail.com (`subscribers/announce.rs`, hourly); secrets `GMAIL_*`, var `MAIL_FROM` (`docs/gmail_sender_setup.md`). |
 | **Crossmint** | `claim/mint.rs`, `solana.rs` (`mint_compressed_nft`) | Custodial minting of the compressed proof-of-attendance NFT (tree + fees + signer). Host/cluster selected from the Helius cluster; `staging.crossmint.com` on devnet (`state.rs:168`). |
 
 On-chain events flow back in via the **escrow indexer**: Helius webhook
@@ -142,8 +143,17 @@ per sub-router (`middleware/cache.rs`): 60s public list, 120s public detail,
 `no-store` for user-specific/auth/dashboard, `no-cache` for health.
 
 Global middleware stack (outermost → in, `lib.rs:134`): security headers →
-correlation id → rate limit → the router. Cron cleanup runs daily via
-`#[event(scheduled)]` (`lib.rs:154`, `cleanup.rs`).
+correlation id → rate limit → the router. One cron trigger, hourly at :17
+(`schedule.rs`): the 03:xx UTC tick runs the daily cleanup and reconciles
+(`cleanup.rs`), every other tick the subscriber announcer
+(`subscribers/announce.rs`).
+
+Before the router, `fetch` (`lib.rs`) serves a few paths itself: the
+pre-compressed wasm and jsQR, the landing film, `/` as the static home
+(`home.rs` splices the opening into the embedded shell), `/e/{slug}` with the
+event's social tags (`og_page.rs`), the SPA shell for any other page
+`crawl::route_kind` knows, and a real 404 otherwise. Public subscribe routes:
+`POST /api/subscribe`, `POST /api/unsubscribe/{token}` (`handlers/subscribe.rs`).
 
 ---
 
