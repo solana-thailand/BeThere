@@ -232,12 +232,14 @@ EVENT_END_MS = "1777183200000"
 # - NFT_METADATA_URI        (optional — metadata JSON on Arweave/IPFS)
 # - NFT_IMAGE_URL           (optional — NFT badge image URL)
 
-# Cron triggers — daily cleanup of expired KV entries (A3 sustainability) at
-# 03:00 UTC (session data, deposits, claim locks, expired event configs per
-# cleanup.rs), and at :17 every hour the subscriber announcer (.plans/045
-# R4.12, src/subscribers/announce.rs; lib.rs ANNOUNCE_CRON must match).
+# One cron trigger, hourly at :17 (src/schedule.rs HOURLY_CRON must match):
+# the 03:17 UTC tick runs the daily cleanup of expired KV entries (A3
+# sustainability: session data, deposits, claim locks, expired event configs
+# per cleanup.rs) and the nightly reconciles; every other tick runs the
+# subscriber announcer (.plans/045 R4.12). A second trigger was refused on
+# prod by the schedules API (400, 2026-10-10), so there is only one.
 [triggers]
-crons = ["0 3 * * *", "17 * * * *"]
+crons = ["17 * * * *"]
 
 # Smart Placement — co-locate Worker close to backends (D1, Google Sheets, Helius RPC)
 # Reduces check-in latency by minimizing network round-trips. Zero cost on all plans.

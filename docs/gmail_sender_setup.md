@@ -78,9 +78,10 @@ justification) is not needed: one consenting account, well under the
   `List-Unsubscribe` target) and the page `/unsubscribe/{token}` (a button,
   nothing on load, because scanners follow links). PDPA erasure deletes both
   tables' rows for the address.
-- The hourly cron `17 * * * *` (`src/subscribers/announce.rs`): marks newly
+- The one hourly cron `17 * * * *` (`src/schedule.rs`; the 03:17 UTC tick
+  runs the daily jobs instead): `src/subscribers/announce.rs` marks newly
   open public events, then mails subscribers who asked before the event
-  opened, 16 a run (384 a day). A 401/403/429 frees the claim for the next
+  opened, 16 a run (368 a day). A 401/403/429 frees the claim for the next
   run; any other refusal, a 5xx or a network error keeps it (no blind
   replay). Without the three secrets it stores subscribers and sends nothing
   (`skipped = "no gmail secrets"` in the log).
