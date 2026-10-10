@@ -180,9 +180,11 @@ real-wallet signing in the sandbox is still untested.
 - **pull 202 (R4.12), release pull 203:** "Email me when it opens".
   Migration 0060 applied on staging and prod (backups
   `backup-staging-20261010-1817.sql`, `backup-prod-20261010-1829.sql`).
-  Gmail secrets set on **staging only** so far (owner's go: staging first, one
-  real test send to bethere.sol@gmail.com, then prod). Staging test event
-  `r4-12-mail-test-staging-delete-after` (delete after the test).
+  Gmail secrets set on staging, then prod (owner's go). The staging test
+  send to bethere.sol@gmail.com went at 12:17 UTC (Gmail accepted it); the
+  test event `r4-12-mail-test-staging-delete-after` is archived. The fix
+  (pull 204) shipped in release 205, prod `4f43669a`, with the single
+  `17 * * * *` trigger.
 - **Gotchas:** a stale `workerd` keeps serving an old build after
   `pkill wrangler` (kill the port's listener); the catalogue of past events is
   a hand-kept snapshot (`domain/src/models/catalogue.rs`) until R4.4 gives
@@ -200,7 +202,7 @@ real-wallet signing in the sandbox is still untested.
 - **Setting a worker secret makes a new deployment** with no `git:` message:
   after `wrangler secret put --env staging`, the staging parity gate refuses
   prod until staging is redeployed with `deploy.sh staging`.
-- **Next:** finish the Gmail test, set prod secrets, then R4.4 (course pages
+- **Next:** R4.4 (course pages
   and progress), R4.8, R4.9. Owner items unchanged: `SMOKE_TOKEN`, sandbox
   real-wallet signing.
 
