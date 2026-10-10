@@ -48,6 +48,7 @@ mod sheets;
 mod solana;
 // Public so `worker/tests/golden_vectors_escrow.rs` can pin PDA derivation.
 pub mod sandbox;
+pub mod schedule;
 pub mod solana_escrow;
 // Public so `worker/tests/security_spike_alert.rs` can drive the detector.
 pub mod spike;
@@ -241,15 +242,10 @@ async fn fetch(
     }
 }
 
-/// The hourly cron (`wrangler.toml` `[triggers]`) that runs only the
-/// subscriber announcer (.plans/045 R4.12); every other trigger is the
-/// daily job.
-pub const ANNOUNCE_CRON: &str = "17 * * * *";
-
-/// Scheduled jobs: at [`ANNOUNCE_CRON`] the subscriber announcer; otherwise
-/// the daily cleanup at 03:00 UTC, which deletes expired KV entries (session
+/// Scheduled jobs, one hourly trigger (`schedule.rs`): the 03:xx UTC tick
+/// runs the daily cleanup, which deletes expired KV entries (session
 /// progress, deposits, claim locks, event configs) per `cleanup.rs` and runs
-/// the nightly reconciles.
+/// the nightly reconciles; every other tick runs the subscriber announcer.
 #[event(scheduled)]
 async fn scheduled(event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
     // Same `OnceLock` guard as `fetch`: `tracing_wasm::set_as_global_default()`
@@ -265,7 +261,7 @@ async fn scheduled(event: worker::ScheduledEvent, env: Env, _ctx: worker::Schedu
     // so any escrow read from a future scheduled job would otherwise default to devnet.
     solana_escrow::seed_cluster_from_env(&env);
 
-    if event.cron() == ANNOUNCE_CRON {
+    if schedule::job_for(event.schedule()) == schedule::ScheduledJob::Announce {
         match env.d1("DB") {
             Ok(d1) => {
                 let summary = subscribers::announce::run(&env, &d1).await;

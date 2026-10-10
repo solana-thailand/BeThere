@@ -1,7 +1,7 @@
 //! The announcement mail (.plans/045 R4.12): what Gmail receives is valid
 //! RFC 5322 in UTF-8 with one-click unsubscribe, nothing can inject a header,
-//! the words name the event, its Bangkok time and both links, and the cron
-//! that drives it is the one wrangler.toml schedules.
+//! the words name the event, its Bangkok time and both links, and the one
+//! hourly cron runs the daily jobs at 03:xx UTC and the announcer otherwise.
 
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -116,19 +116,20 @@ fn only_a_minted_token_reaches_sql() {
 }
 
 #[test]
-fn the_hourly_cron_is_scheduled_and_claims_before_sending() {
+fn one_hourly_cron_runs_the_daily_jobs_at_three_and_announces_otherwise() {
+    use event_checkin_worker::schedule::{DAILY_HOUR_UTC, HOURLY_CRON, ScheduledJob, job_for};
     let root = env!("CARGO_MANIFEST_DIR");
     let toml = std::fs::read_to_string(format!("{root}/wrangler.toml")).unwrap();
-    let lib = std::fs::read_to_string(format!("{root}/src/lib.rs")).unwrap();
-    let cron = lib
-        .split("pub const ANNOUNCE_CRON: &str = \"")
-        .nth(1)
-        .and_then(|r| r.split('"').next())
-        .expect("ANNOUNCE_CRON");
+    // exactly one trigger, the hourly one (a second was refused on prod)
     assert!(
-        toml.contains(&format!("\"{cron}\"")),
-        "wrangler.toml must schedule {cron}"
+        toml.contains(&format!("crons = [\"{HOURLY_CRON}\"]")),
+        "wrangler.toml [triggers]"
     );
+    let at = |hour: i64| ((20_000 * 24 + hour) * 3_600_000 + 17 * 60_000) as f64;
+    assert_eq!(job_for(at(i64::from(DAILY_HOUR_UTC))), ScheduledJob::Daily);
+    for hour in (0..24).filter(|h| *h != i64::from(DAILY_HOUR_UTC)) {
+        assert_eq!(job_for(at(hour)), ScheduledJob::Announce, "{hour}:17");
+    }
     // The claim (the idempotency key) is written before the send.
     let job = std::fs::read_to_string(format!("{root}/src/subscribers/announce.rs")).unwrap();
     let claim = job.find("db::claim(").expect("claim");
