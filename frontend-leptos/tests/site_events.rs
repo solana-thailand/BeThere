@@ -25,3 +25,15 @@ fn the_open_list_is_fetched_once() {
     assert!(!home.contains("OpenEvents") && !home.contains("Upcoming"));
     assert!(read("src/pages/landing/hero.rs").contains(r#"<A href="/events""#));
 }
+
+/// R4.13: the empty state tells a reader with credit that it can pay their
+/// next deposit, through the read that never sends a signed-out visitor to
+/// /login.
+#[test]
+fn empty_state_shows_held_credit_without_a_login_redirect() {
+    let src = read("src/pages/site/open_events.rs");
+    let empty = &src[src.find("fn NothingOpen").unwrap()..];
+    assert!(empty.contains("<CreditHeld />"));
+    assert!(src.contains("crate::api::get_credit_balance()"));
+    assert!(src.contains("(amount > 0).then("));
+}

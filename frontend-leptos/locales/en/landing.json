@@ -152,7 +152,8 @@
     "learn": "Learn from past events ↓",
     "or": "Or",
     "or_try": "try a deposit on devnet",
-    "or_host": "host your own"
+    "or_host": "host your own",
+    "credit_held": "You hold ฿{amount} in credit. It can pay your next deposit when you register."
   },
   "story": {
     "title": "This seat goes to\nsomeone who can come.",
