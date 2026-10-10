@@ -141,6 +141,17 @@ mark.lp-hl {
     text-decoration-thickness: 2px;
     text-underline-offset: 4px;
 }
+/* The app's `nav a[aria-current="page"]` paints an orange block (a tab look
+   for the app header); in the site frame the current page is the underline
+   above, in the header and the footer alike. */
+.lp nav a[aria-current="page"] {
+    background: transparent;
+    color: inherit;
+    border-color: transparent;
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 4px;
+}
 .lp-lang .lang-switch {
     min-height: 44px;
     color: var(--lp-ink);
@@ -166,14 +177,30 @@ mark.lp-hl {
     outline-offset: 3px;
 }
 @media (max-width: 767px) {
+    /* Phones: the page links take their own row under the logo, rather than
+       disappearing (the doors at the foot were the only way across). */
+    .lp-nav-row {
+        gap: 10px;
+        height: auto;
+        min-height: 56px;
+        flex-wrap: wrap;
+    }
     .lp-nav-links {
-        display: none;
+        order: 10;
+        width: 100%;
+        margin: 0;
+        gap: 18px;
+        overflow-x: auto;
+        border-top: 1px solid var(--lp-line);
+    }
+    .lp-nav-links a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        white-space: nowrap;
     }
     .lp-lang {
         margin-left: auto;
-    }
-    .lp-nav-row {
-        gap: 10px;
     }
     .lp-nav-out {
         display: none;
