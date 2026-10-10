@@ -63,3 +63,23 @@ fn median_needs_three_and_takes_the_middle_gap() {
     // other series do not count
     assert_eq!(cadence(&three, Series::RoadToMainnet), None);
 }
+
+#[test]
+fn courses_have_addresses_and_only_their_episodes_count() {
+    use event_checkin_domain::models::catalogue::{course_episodes, is_course_episode};
+    for series in Series::COURSES {
+        let slug = series.course_slug().expect("a course has a slug");
+        assert_eq!(Series::from_course_slug(slug), Some(series));
+        assert_eq!(course_episodes(series).len(), 6, "{slug}");
+    }
+    assert_eq!(Series::Single.course_slug(), None);
+    assert_eq!(Series::from_course_slug("intro-to-vibing-on-solana"), None);
+    let rtm1 = "solana-x-ai-builders-the-road-to-mainnet-1-bangkok";
+    assert!(is_course_episode("road-to-mainnet", rtm1));
+    assert!(!is_course_episode("solana-in-latent-space", rtm1));
+    assert!(!is_course_episode(
+        "road-to-mainnet",
+        "intro-to-vibing-on-solana"
+    ));
+    assert!(!is_course_episode("nope", rtm1));
+}

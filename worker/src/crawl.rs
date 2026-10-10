@@ -19,7 +19,7 @@ pub const CANONICAL_ORIGIN: &str = "https://bethere.solana-thailand.workers.dev"
 /// Every page the Leptos router knows (`frontend-leptos/src/lib.rs`), with
 /// `:name` for a path parameter. `tests/crawl_routes.rs` pins this list to the
 /// router in both directions.
-pub const APP_ROUTES: [&str; 28] = [
+pub const APP_ROUTES: [&str; 29] = [
     "/",
     "/login",
     "/claim/:token",
@@ -31,6 +31,7 @@ pub const APP_ROUTES: [&str; 28] = [
     "/events/:slug/post-event-register",
     "/feedback",
     "/events",
+    "/events/:series",
     "/discover",
     "/organizers",
     "/sponsors",
@@ -88,7 +89,7 @@ pub fn route_kind(path: &str) -> RouteKind {
 }
 
 /// Whether `path` is one of [`APP_ROUTES`]. A trailing slash is ignored, a
-/// parameter matches one non-empty segment.
+/// parameter matches one non-empty segment (`:series` only a course slug).
 pub fn is_app_route(path: &str) -> bool {
     let trimmed = match path {
         "/" => "/",
@@ -102,6 +103,12 @@ pub fn is_app_route(path: &str) -> bool {
                 .iter()
                 .zip(&segments)
                 .all(|(want, got)| match want.strip_prefix(':') {
+                    // A course is one of the catalogue's (.plans/045 R4.4), so a
+                    // made-up `/events/x` stays a real 404.
+                    Some("series") => {
+                        event_checkin_domain::models::catalogue::Series::from_course_slug(got)
+                            .is_some()
+                    }
                     Some(_) => !got.is_empty(),
                     None => want == got,
                 })

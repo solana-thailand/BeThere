@@ -1,30 +1,30 @@
 //! "Learn from past events" on `/events` (.plans/045 R4.3, prototype
 //! events `#learn`): each series is a course, its recorded episodes in order
-//! (`domain::models::catalogue`). Until R4.4 adds course pages and progress,
-//! an episode opens its recording.
+//! (`domain::models::catalogue`); each card and episode opens the course page
+//! (`/events/<slug>`, R4.4), where registered readers watch and keep progress.
 
 use leptos::prelude::*;
 
 use crate::i18n::{Locale, t_string, td_string, use_i18n};
 use crate::locale::{fill, tr};
-use event_checkin_domain::models::catalogue::{CATALOGUE, Series, episodes};
+use event_checkin_domain::models::catalogue::{Series, course_episodes};
 
-type Catalog = fn(Locale) -> &'static str;
+pub(super) type Catalog = fn(Locale) -> &'static str;
 
 /// A course's title, kind and one line.
-fn course_copy(series: Series) -> (&'static str, Catalog, Catalog) {
+pub(super) fn course_copy(series: Series) -> (Catalog, Catalog, Catalog) {
     match series {
         Series::RoadToMainnet => (
-            "Road to Mainnet",
+            |_| "Road to Mainnet",
             |l| td_string!(l, landing.site.course_rtm_kind),
             |l| td_string!(l, landing.site.course_rtm_about),
         ),
         Series::LatentSpace => (
-            "Solana in Latent Space",
+            |_| "Solana in Latent Space",
             |l| td_string!(l, landing.site.course_latent_kind),
             |l| td_string!(l, landing.site.course_latent_about),
         ),
-        Series::Single => ("", |_| "", |_| ""),
+        Series::Single => (|_| "", |_| "", |_| ""),
     }
 }
 
@@ -34,10 +34,8 @@ pub fn Learn() -> impl IntoView {
     let cards = Series::COURSES
         .into_iter()
         .map(|series| {
-            let eps: Vec<_> = episodes(&CATALOGUE, series)
-                .into_iter()
-                .filter(|e| !e.video.is_empty())
-                .collect();
+            let eps = course_episodes(series);
+            let slug = series.course_slug().unwrap_or_default();
             let n = eps.len();
             let (title, kind, about) = course_copy(series);
             let rows = eps
@@ -54,14 +52,7 @@ pub fn Learn() -> impl IntoView {
                     };
                     view! {
                         <li>
-                            <a
-                                href=format!("https://www.youtube.com/watch?v={}", e.video)
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title=e.name
-                            >
-                                {line}
-                            </a>
+                            <a href=format!("/events/{slug}?ep={}", e.ep) title=e.name>{line}</a>
                         </li>
                     }
                 })
@@ -75,7 +66,7 @@ pub fn Learn() -> impl IntoView {
             view! {
                 <article class="lp-card lp-course">
                     <p class="lp-course-kind">{tr(kind)}</p>
-                    <h3>{title}</h3>
+                    <h3><a href=format!("/events/{slug}")>{tr(title)}</a></h3>
                     <p class="lp-course-about">{tr(about)}</p>
                     <details>
                         <summary>
@@ -85,6 +76,9 @@ pub fn Learn() -> impl IntoView {
                         </summary>
                         <ol class="lp-course-eps">{rows}</ol>
                     </details>
+                    <a class="lp-course-open" href=format!("/events/{slug}")>
+                        {tr(|l| td_string!(l, landing.site.course_open))}
+                    </a>
                 </article>
             }
         })

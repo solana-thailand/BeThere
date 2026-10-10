@@ -1,6 +1,8 @@
 //! The Release 4 site (.plans/045): the pages beside the landing and the
 //! doors that join them. The shared frame is `pages::landing::frame`.
 
+/// The course page; public for `tests/site_course.rs`.
+pub mod course;
 mod deposit_walk;
 /// Pages, doors and the try band; public for `tests/site_pages.rs`.
 pub mod doors;
@@ -18,6 +20,7 @@ mod sponsors;
 pub mod subscribe;
 mod unsubscribe;
 
+pub use course::CoursePage;
 pub use events::{DiscoverRedirect, EventsPage};
 pub use organizers::Organizers;
 pub use sponsors::SponsorsPage;
