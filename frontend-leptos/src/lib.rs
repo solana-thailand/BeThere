@@ -56,11 +56,11 @@ extern "C" {
 }
 use crate::pages::login::Login;
 use crate::staff_routes::{
-    Adventure, Claim, DataPrivacy, Deposit, DevDashboard, DevProfile, DiscoverRedirect, EventRecap,
-    EventsRoute, Faq, Feedback, HomeRoute, NfcCheckin, OrganizersRoute, PastEvents,
-    PostEventRegister, Privacy, ProtectedAdmin, ProtectedEventSummary, ProtectedLiveDashboard,
-    ProtectedPrPack, ProtectedScanner, PublicEvent, SandboxRoute, SponsorsRoute, Ticket,
-    UnsubscribeRoute,
+    Adventure, Claim, CourseRoute, DataPrivacy, Deposit, DevDashboard, DevProfile,
+    DiscoverRedirect, EventRecap, EventsRoute, Faq, Feedback, HomeRoute, NfcCheckin,
+    OrganizersRoute, PastEvents, PostEventRegister, Privacy, ProtectedAdmin, ProtectedEventSummary,
+    ProtectedLiveDashboard, ProtectedPrPack, ProtectedScanner, PublicEvent, SandboxRoute,
+    SponsorsRoute, Ticket, UnsubscribeRoute,
 };
 
 /// Main application component.
@@ -148,6 +148,8 @@ pub fn App() -> impl IntoView {
                     // What is on, and what I am part of (.issues/096). Release 4
                     // moves it to /events; /discover redirects (.plans/045 R4.0).
                     <Route path=path!("/events") view=EventsRoute />
+                    // A past series as a course (.plans/045 R4.4).
+                    <Route path=path!("/events/:series") view=CourseRoute />
                     <Route path=path!("/discover") view=DiscoverRedirect />
                     <Route path=path!("/organizers") view=OrganizersRoute />
                     <Route path=path!("/sponsors") view=SponsorsRoute />

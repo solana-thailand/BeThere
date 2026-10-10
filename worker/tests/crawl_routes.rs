@@ -72,6 +72,16 @@ fn unknown_paths_are_404() {
 }
 
 #[test]
+fn a_course_page_is_a_page_only_for_a_real_course() {
+    for path in ["/events/road-to-mainnet", "/events/solana-in-latent-space/"] {
+        assert_eq!(route_kind(path), RouteKind::App, "{path}");
+    }
+    for path in ["/events/x", "/events/intro-to-vibing-on-solana"] {
+        assert_eq!(route_kind(path), RouteKind::NotFound, "{path}");
+    }
+}
+
+#[test]
 fn api_and_documents_go_to_the_router() {
     for path in ["/api/health", "/robots.txt", "/sitemap.xml", "/llms.txt"] {
         assert_eq!(route_kind(path), RouteKind::Worker, "{path}");

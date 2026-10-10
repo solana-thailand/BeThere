@@ -5,6 +5,7 @@ mod audit_store;
 mod auth;
 mod claim;
 mod cleanup;
+pub mod courses;
 mod crypto;
 // Public for the same reason as `event_store` below — the worker compiles to a
 // cdylib with no downstream Rust consumer, and

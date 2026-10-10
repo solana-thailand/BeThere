@@ -52,6 +52,7 @@ pub use staff::{
     AttendeeShellHandoff as Ticket, AttendeeShellHandoff as DiscoverRedirect,
     AttendeeShellHandoff as EventsRoute, AttendeeShellHandoff as OrganizersRoute,
     AttendeeShellHandoff as SponsorsRoute, AttendeeShellHandoff as UnsubscribeRoute,
+    AttendeeShellHandoff as CourseRoute,
 };
 
 #[cfg(not(feature = "staff"))]
@@ -78,8 +79,8 @@ pub use crate::pages::sandbox::Sandbox as SandboxRoute;
 pub use crate::pages::site::EventsPage as EventsRoute;
 #[cfg(not(feature = "staff"))]
 pub use crate::pages::site::{
-    DiscoverRedirect, Organizers as OrganizersRoute, SponsorsPage as SponsorsRoute,
-    UnsubscribePage as UnsubscribeRoute,
+    CoursePage as CourseRoute, DiscoverRedirect, Organizers as OrganizersRoute,
+    SponsorsPage as SponsorsRoute, UnsubscribePage as UnsubscribeRoute,
 };
 
 pub use handoff::record_boot_path;

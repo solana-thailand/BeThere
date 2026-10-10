@@ -9,6 +9,7 @@ pub mod checkin;
 pub mod claim;
 pub mod community;
 pub mod contacts;
+pub mod courses;
 pub mod crawl;
 pub mod dashboard;
 pub mod deposit;
@@ -328,6 +329,10 @@ pub fn routes(state: AppState) -> Router<()> {
             "/privacy/unsubscribe-marketing",
             post(privacy::unsubscribe_marketing),
         )
+        // Courses: register once, mark episodes watched (.plans/045 R4.4).
+        .route("/courses/{course}/progress", get(courses::progress))
+        .route("/courses/{course}/enrol", post(courses::enrol))
+        .route("/courses/{course}/watched", post(courses::watched))
         // Developer profile (attendee-authed — read/update own profile)
         .route(
             "/my-profile",
