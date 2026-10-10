@@ -166,6 +166,7 @@
     "precompressed_asset tests/precompressed_asset.rs": 4,
     "public_cache_policy tests/public_cache_policy.rs": 5,
     "public_health_no_counts tests/public_health_no_counts.rs": 2,
+    "public_stats_by_event tests/public_stats_by_event.rs": 4,
     "public_stats_contract tests/public_stats_contract.rs": 7,
     "quiz_readiness_guard tests/quiz_readiness_guard.rs": 2,
     "r2_cache_policy tests/r2_cache_policy.rs": 5,
