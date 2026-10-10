@@ -35,6 +35,8 @@ mod org_store;
 pub mod crawl;
 pub mod credit_payout_history;
 /// `/media/*` with byte ranges (the landing film); public for `tests/media_path.rs`.
+pub mod home;
+mod home_page;
 pub mod landing_photos;
 pub mod mail;
 pub mod media;
@@ -190,6 +192,14 @@ async fn fetch(
     // Not a static file (`not_found_handling = "none"`): a page, the API or a
     // crawler document, else 404 rather than the shell with a 200.
     let route = crawl::route_kind(path);
+    // The home carries a server-rendered opening (.plans/045 R4.9); any miss
+    // serves the stock shell below.
+    if path == "/"
+        && req.method() == axum::http::Method::GET
+        && let Some(body) = home_page::render(&env, INDEX_HTML).await
+    {
+        return Ok(spa_shell(body));
+    }
     // An event page carries that event's social tags (`.issues/183`); any
     // miss serves the stock shell below.
     if route == crawl::RouteKind::App
