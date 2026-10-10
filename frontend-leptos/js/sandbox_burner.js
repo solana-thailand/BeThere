@@ -116,16 +116,50 @@ export async function signTransaction(txB64, burner, subtle = globalThis.crypto.
   return tx;
 }
 
-async function rpc(rpcUrl, method, params, fetchFn) {
-  const response = await fetchFn(rpcUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: "sandbox", method, params }),
-  });
-  if (!response.ok) throw new Error(`${method}: HTTP ${response.status}`);
-  const json = await response.json();
-  if (json.error) throw new Error(`${method}: ${json.error.message || JSON.stringify(json.error)}`);
-  return json.result;
+/** Attempts per RPC call: the public devnet RPC answers 429 under load, and
+ *  a room on one Wi-Fi shares one IP (a 429 hit a staging run on 2026-10-10). */
+const RPC_ATTEMPTS = 5;
+
+/** Wait before attempt `n` (1-based): Retry-After when the server sends it,
+ *  else 1 s, 2 s, 4 s, 8 s with up to 30 % jitter so a room does not retry in step. */
+export function retryDelayMs(n, retryAfter) {
+  const header = Number(retryAfter);
+  if (Number.isFinite(header) && header > 0) return Math.min(header, 15) * 1000;
+  const base = 1000 * 2 ** (n - 1);
+  return Math.round(base * (1 + Math.random() * 0.3));
+}
+
+/** One JSON-RPC call, retried on 429, 5xx and network errors. Resending a
+ *  signed transaction is safe: its signature is its identity. */
+async function rpc(rpcUrl, method, params, fetchFn, attempts = RPC_ATTEMPTS) {
+  let last;
+  for (let n = 1; n <= attempts; n++) {
+    let response;
+    try {
+      response = await fetchFn(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "sandbox", method, params }),
+      });
+    } catch (e) {
+      last = new Error(`${method}: ${e && e.message ? e.message : e}`);
+      if (n < attempts) await sleep(retryDelayMs(n));
+      continue;
+    }
+    if (response.status === 429 || response.status >= 500) {
+      last = new Error(`${method}: HTTP ${response.status}`);
+      if (n < attempts) {
+        const header = response.headers && response.headers.get ? response.headers.get("Retry-After") : null;
+        await sleep(retryDelayMs(n, header));
+      }
+      continue;
+    }
+    if (!response.ok) throw new Error(`${method}: HTTP ${response.status}`);
+    const json = await response.json();
+    if (json.error) throw new Error(`${method}: ${json.error.message || JSON.stringify(json.error)}`);
+    return json.result;
+  }
+  throw last;
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
