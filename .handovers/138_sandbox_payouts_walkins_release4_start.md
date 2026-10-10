@@ -227,3 +227,23 @@ real-wallet signing in the sandbox is still untested.
 - **Next in plan 045:** R4.4 (course pages and progress), R4.10 (click
   counters), R4.11 (meals not ordered), then SG1/SG4.
 
+## 11. Addendum (11 Oct, after midnight): R4.4 courses
+
+- **R4.4** (pull 216, release 217, prod `61c3c6c6`): `/events/road-to-mainnet`
+  and `/events/solana-in-latent-space`. Register once (sign in, one click),
+  watch episode by episode (youtube-nocookie, loaded on click), mark watched,
+  progress bar, next episode. Migration 0061 applied on staging and prod
+  (backup `backup-prod-20261011-0054.sql`). PDPA erasure covers it.
+- **README and `docs/architecture.md`** brought up to date (pull 215).
+- **Worktrees moved out of `/tmp`:** macOS's midnight cleanup deleted the
+  `.git` links and ~1,400 files from `/tmp/ec-d6-dev` and `/tmp/ec-rel`. The
+  deploy worktrees are now `~/worktrees/event-checkin/ec-dev` (develop) and
+  `~/worktrees/event-checkin/ec-rel` (main), each with its own
+  `pnpm install --frozen-lockfile`.
+- **Not done:** the prototype's "lamps" (one light in the home's room per
+  watched episode) and talk titles per episode; sandbox on prod (needs the
+  owner's decision: a `SANDBOX_ENABLED` flag instead of `DEV_MODE`, devnet keys
+  as prod secrets).
+- **Next in plan 045:** R4.10 (click counters), R4.11 (meals not ordered),
+  then SG1 ("my record") and SG4 ("I showed up").
+
