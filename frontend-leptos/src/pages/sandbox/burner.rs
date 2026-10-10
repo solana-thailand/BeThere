@@ -16,6 +16,9 @@ extern "C" {
 
     #[wasm_bindgen(js_name = "forgetBurner")]
     fn forget_burner_js();
+
+    #[wasm_bindgen(js_name = "confirmSignature")]
+    fn confirm_signature_js(rpc_url: &str, signature: &str) -> js_sys::Promise;
 }
 
 /// The text of a rejected promise: an `Error`'s message, or the value itself.
@@ -57,4 +60,9 @@ pub async fn burner_supported() -> bool {
 /// Drop the burner; the next call makes a new one.
 pub fn forget_burner() {
     forget_burner_js();
+}
+
+/// Wait for a signature a real wallet sent to reach `confirmed`.
+pub async fn confirm_signature(rpc_url: &str, signature: &str) -> Result<String, String> {
+    string_of(confirm_signature_js(rpc_url, signature)).await
 }

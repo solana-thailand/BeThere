@@ -36,5 +36,15 @@
   "start_over": "เริ่มใหม่ด้วยกระเป๋าใหม่",
   "working": "กำลังทำงาน…",
   "view_tx": "ดูบน explorer",
-  "back_home": "← กลับไปที่ BeThere"
+  "back_home": "← กลับไปที่ BeThere",
+  "signer_title": "ใช้กระเป๋าไหน",
+  "signer_burner": "กระเป๋าทดสอบ (สร้างในเบราว์เซอร์นี้)",
+  "signer_use": "ใช้",
+  "signer_why": "ฝึกด้วยกระเป๋าของคุณเองบน devnet เป็นขั้นตอนเดียวกับการวางมัดจำ USDC ในอีเวนต์ของ BeThere",
+  "signer_none": "ไม่พบกระเป๋า Solana ในเบราว์เซอร์นี้ ใช้กระเป๋าทดสอบได้เลยโดยไม่ต้องมี ถ้าอยากฝึกด้วยกระเป๋าของคุณเอง ติดตั้ง Phantom หรือ Solflare แล้วตั้งเป็น Devnet",
+  "faucet_more": "เติมโทเคนทดสอบให้กระเป๋าของคุณเอง:",
+  "faucet_sol": "SOL: faucet.solana.com",
+  "faucet_usdc": "USDC: faucet.circle.com (เลือก Solana Devnet)",
+  "notice_own": "คุณกำลังใช้กระเป๋าของคุณเองบน Solana devnet ใช้แค่โทเคนทดสอบ ไม่มีเงินจริงเคลื่อนไหว",
+  "wallet_label_own": "กระเป๋าของคุณ"
 }
