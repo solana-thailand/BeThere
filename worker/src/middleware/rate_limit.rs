@@ -166,6 +166,11 @@ fn rate_limit_for_path(path: &str) -> Option<(&'static RateLimitConfig, LimiterK
     if path == "/api/auth/me" {
         return None;
     }
+    // Anonymous writes to the subscriber list (.plans/045 R4.12): the auth
+    // budget, per IP.
+    if path == "/api/subscribe" || path.starts_with("/api/unsubscribe/") {
+        return Some((&RATE_LIMIT_AUTH, LimiterKind::Auth));
+    }
     // Auth endpoints
     if path.starts_with("/api/auth/") {
         return Some((&RATE_LIMIT_AUTH, LimiterKind::Auth));

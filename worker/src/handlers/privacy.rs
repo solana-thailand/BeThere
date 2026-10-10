@@ -235,6 +235,12 @@ pub async fn delete_request(
                 summary.record_failure("delete_developer_responses");
             }
         }
+
+        // 5. The event-announcement subscription and its send log (.plans/045 R4.12)
+        if let Err(e) = crate::subscribers::db::erase(db, &email).await {
+            tracing::warn!(subject_fingerprint = %subject_fingerprint, error = %e, "D1 subscriber erase failed");
+            summary.record_failure("erase_subscriber");
+        }
     }
 
     // Audit log

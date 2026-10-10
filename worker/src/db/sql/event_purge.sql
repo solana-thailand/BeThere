@@ -38,4 +38,8 @@ DELETE FROM quiz_configs WHERE event_id = ?1
 ;
 DELETE FROM adventure_configs WHERE event_id = ?1
 ;
+DELETE FROM event_announcements WHERE event_id = ?1
+;
+DELETE FROM announced_events WHERE event_id = ?1
+;
 DELETE FROM attendees WHERE event_id = ?1

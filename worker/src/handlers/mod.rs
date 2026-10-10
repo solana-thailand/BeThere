@@ -31,6 +31,7 @@ pub mod quiz;
 pub mod register;
 pub mod sandbox;
 pub mod social_link;
+pub mod subscribe;
 pub mod user_log;
 pub mod waitlist;
 pub mod walkin;
@@ -182,6 +183,10 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // Waitlist signup (public)
         .route("/waitlist", post(waitlist::join_waitlist))
+        // "Email me when the next event opens" and its one-click unsubscribe
+        // (.plans/045 R4.12; public, no sign-in).
+        .route("/subscribe", post(subscribe::subscribe))
+        .route("/unsubscribe/{token}", post(subscribe::unsubscribe))
         // Turnstile widget config for the waitlist and register forms (.issues/170).
         .route("/public/turnstile/config", get(bot_check::turnstile_config))
         // Deposit TX details (public — returns Solana Pay URL for wallet)

@@ -772,6 +772,64 @@ a.lp-event:focus-visible {
 .lp-open {
     min-height: 12rem;
 }
+/* "Email me when it opens" (pages/site/subscribe.rs, R4.12) */
+.lp-sub {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin: 4px 0;
+}
+.lp-sub-row input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 13px 12px;
+    font: 500 16px/1.2 var(--lp-sans);
+    border: 2px solid var(--lp-ink);
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+}
+.lp-sub-row input:focus-visible {
+    outline: 3px solid var(--lp-field);
+    outline-offset: 2px;
+}
+.lp-sub-consent,
+.lp-sub-error {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 13px;
+    color: var(--lp-ink-2);
+}
+.lp-sub-consent a {
+    color: inherit;
+}
+.lp-sub-error {
+    color: var(--lp-t-warm);
+}
+.lp-sub-error:empty {
+    display: none;
+}
+.lp-sub-ok {
+    margin: 4px 0;
+    font-weight: 600;
+    color: var(--lp-t-ok);
+}
+@media (max-width: 480px) {
+    .lp-sub {
+        grid-template-columns: 1fr;
+    }
+}
+/* /unsubscribe/:token */
+.lp-unsub {
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+    font: 400 17px/1.6 var(--lp-sans);
+    padding: 64px 0 72px;
+    border-bottom: 2px solid var(--lp-ink);
+}
+.lp-unsub a {
+    color: var(--lp-t-field);
+}
+
 /* "Or try a deposit on devnet · Discord · host your own" */
 .lp-open-or {
     margin: 2px 0 0;
@@ -813,7 +871,9 @@ a.lp-event:focus-visible {
     --lp-t-ok: #167147;
     --lp-t-dev: #875916;
 }
-.lp[data-theme="dark"] {
+.lp[data-theme="dark"],
+.lp-hero,
+.lp-head {
     --lp-sol: #3ccf9e;
     --lp-t-sol: #3ccf9e;
     --lp-t-ok: #3ccf8e;

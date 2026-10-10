@@ -15,6 +15,7 @@ use crate::pages::landing::event_card::{DepositRule, nearest_first};
 use event_checkin_domain::models::catalogue::{CATALOGUE, Series, cadence};
 
 use super::doors::TRY_LIVE;
+use super::subscribe::SubscribeForm;
 
 /// Lightweight event item from the public events API.
 #[derive(Clone, Deserialize)]
@@ -137,8 +138,8 @@ pub fn OpenEvents() -> impl IntoView {
 }
 
 /// Nothing open: how often Road to Mainnet runs and when it last did, the
-/// last recording, then Discord and hosting your own (and the devnet
-/// sandbox once it is live on this site).
+/// subscribe form (R4.12), the last recording, then Discord and hosting your
+/// own (and the devnet sandbox once it is live on this site).
 #[component]
 fn NothingOpen(sample_slug: Option<String>) -> impl IntoView {
     let i18n = use_i18n();
@@ -177,6 +178,7 @@ fn NothingOpen(sample_slug: Option<String>) -> impl IntoView {
         <div class="lp-card lp-event lp-event-empty">
             <h3>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_title))}</h3>
             <p class="lp-rule">{line}</p>
+            <SubscribeForm />
             <div class="lp-row">
                 {sample_slug.map(|slug| view! {
                     <a href=format!("/e/{slug}") class="lp-btn lp-btn-primary">

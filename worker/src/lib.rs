@@ -36,6 +36,7 @@ pub mod crawl;
 pub mod credit_payout_history;
 /// `/media/*` with byte ranges (the landing film); public for `tests/media_path.rs`.
 pub mod landing_photos;
+pub mod mail;
 pub mod media;
 /// Per-event `og:*` / `twitter:*` tags for `/e/{slug}`; public for `tests/og_splice.rs`.
 pub mod og_meta;
@@ -56,6 +57,7 @@ pub mod turnstile;
 // drives `Visibility` and `if_none_match_hits` directly (`.issues/114`).
 pub mod slip_vision;
 pub mod storage;
+pub mod subscribers;
 mod virtual_checkin;
 
 // Export DO class for workers-rs macro registration
@@ -239,12 +241,17 @@ async fn fetch(
     }
 }
 
-/// Scheduled job: cleanup daily at 03:00 UTC.
-///
-/// Deletes expired KV entries (session progress, deposits, claim locks,
-/// event configs) based on retention policy defined in `cleanup.rs`.
+/// The hourly cron (`wrangler.toml` `[triggers]`) that runs only the
+/// subscriber announcer (.plans/045 R4.12); every other trigger is the
+/// daily job.
+pub const ANNOUNCE_CRON: &str = "17 * * * *";
+
+/// Scheduled jobs: at [`ANNOUNCE_CRON`] the subscriber announcer; otherwise
+/// the daily cleanup at 03:00 UTC, which deletes expired KV entries (session
+/// progress, deposits, claim locks, event configs) per `cleanup.rs` and runs
+/// the nightly reconciles.
 #[event(scheduled)]
-async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
+async fn scheduled(event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
     // Same `OnceLock` guard as `fetch`: `tracing_wasm::set_as_global_default()`
     // panics with `SetGlobalDefaultError` if a dispatcher is already installed.
     // The cron and the fetch handler share an isolate, so an unguarded call here
@@ -257,6 +264,25 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     // Seed the escrow cluster in this isolate too — the cron path does not build AppState,
     // so any escrow read from a future scheduled job would otherwise default to devnet.
     solana_escrow::seed_cluster_from_env(&env);
+
+    if event.cron() == ANNOUNCE_CRON {
+        match env.d1("DB") {
+            Ok(d1) => {
+                let summary = subscribers::announce::run(&env, &d1).await;
+                tracing::info!(
+                    newly_open = summary.newly_open,
+                    due = summary.due,
+                    sent = summary.sent,
+                    refused = summary.refused,
+                    ambiguous = summary.ambiguous,
+                    skipped = summary.skipped,
+                    "announce run"
+                );
+            }
+            Err(_) => tracing::warn!("announce: DB not bound, skipping"),
+        }
+        return;
+    }
 
     let events_kv = match env.kv("EVENTS").ok() {
         Some(kv) => kv,
