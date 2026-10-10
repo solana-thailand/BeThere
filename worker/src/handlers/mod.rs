@@ -13,6 +13,7 @@ pub mod courses;
 pub mod crawl;
 pub mod dashboard;
 pub mod deposit;
+pub mod door_clicks;
 pub mod email_link;
 pub mod escrow_index;
 pub mod event_series;
@@ -187,6 +188,8 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // Waitlist signup (public)
         .route("/waitlist", post(waitlist::join_waitlist))
+        // Door clicks: page × door × day counts, no cookies (.plans/045 R4.10).
+        .route("/public/click", post(door_clicks::click))
         // "Email me when the next event opens" and its one-click unsubscribe
         // (.plans/045 R4.12; public, no sign-in).
         .route("/subscribe", post(subscribe::subscribe))

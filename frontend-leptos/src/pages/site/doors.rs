@@ -55,6 +55,16 @@ impl SitePage {
         }
     }
 
+    /// The page's name in the door counters (`worker/src/door_clicks.rs`).
+    pub const fn key(self) -> &'static str {
+        match self {
+            SitePage::Home => "home",
+            SitePage::Events => "events",
+            SitePage::Organizers => "organizers",
+            SitePage::Sponsors => "sponsors",
+        }
+    }
+
     /// The header link label. The landing has none: the logo is its link.
     pub fn nav_label(self) -> Option<fn(Locale) -> &'static str> {
         match self {
@@ -96,6 +106,15 @@ pub fn doors_from(here: SitePage) -> impl Iterator<Item = SitePage> {
     SitePage::ALL.into_iter().filter(move |p| *p != here)
 }
 
+/// Count a door click (.plans/045 R4.10): page × door × day, no cookies, no
+/// id. `sendBeacon` survives the navigation the click starts.
+pub fn count_click(page: SitePage, door: &'static str) {
+    if let Some(nav) = web_sys::window().map(|w| w.navigator()) {
+        let body = format!(r#"{{"page":"{}","door":"{door}"}}"#, page.key());
+        let _ = nav.send_beacon_with_opt_str("/api/public/click", Some(&body));
+    }
+}
+
 /// The doors section at the foot of a page.
 #[component]
 pub fn Doors(here: SitePage) -> impl IntoView {
@@ -107,7 +126,7 @@ pub fn Doors(here: SitePage) -> impl IntoView {
         .map(|page| {
             let copy = page.door();
             view! {
-                <a class="lp-door" href=page.path()>
+                <a class="lp-door" href=page.path() on:click=move |_| count_click(here, page.key())>
                     <b>{tr(copy.title)}</b>
                     <span>{tr(copy.line)}</span>
                     <i>{tr(copy.cta)}</i>
@@ -121,7 +140,7 @@ pub fn Doors(here: SitePage) -> impl IntoView {
                 <h2 class="lp-h2">{heading}</h2>
                 <div class="lp-doors">
                     {cards}
-                    {try_band(TRY_LIVE)}
+                    {try_band(TRY_LIVE, here)}
                 </div>
             </div>
         </section>
@@ -129,13 +148,13 @@ pub fn Doors(here: SitePage) -> impl IntoView {
 }
 
 /// The try band, or nothing while the sandbox is not live.
-pub fn try_band(live: bool) -> Option<AnyView> {
+pub fn try_band(live: bool, here: SitePage) -> Option<AnyView> {
     if !live {
         return None;
     }
     Some(
         view! {
-            <a class="lp-door lp-door-try" href=TRY_PATH>
+            <a class="lp-door lp-door-try" href=TRY_PATH on:click=move |_| count_click(here, "try")>
                 <b>{tr(|l| td_string!(l, landing.site.try_title))}</b>
                 <span>{tr(|l| td_string!(l, landing.site.try_line))}</span>
                 <i>{tr(|l| td_string!(l, landing.site.try_cta))}</i>

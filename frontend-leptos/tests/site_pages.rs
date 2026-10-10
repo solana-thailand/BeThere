@@ -73,9 +73,22 @@ fn framed_paths_match_the_pages_in_the_frame() {
 /// devnet sandbox at /sandbox), and render nothing while TRY_LIVE is off.
 #[test]
 fn the_try_links_go_to_the_sandbox_route() {
-    assert!(try_band(false).is_none());
+    assert!(try_band(false, SitePage::Home).is_none());
     assert!(try_line(false).is_none());
     assert!(TRY_LIVE, "on since the sandbox went to prod (2026-10-11)");
+    // the counters know every page and the try door (worker door_clicks::DOORS)
+    let worker = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../worker/src/door_clicks.rs"
+    ))
+    .unwrap();
+    for page in SitePage::ALL {
+        assert!(
+            worker.contains(&format!("\"{}\"", page.key())),
+            "{}",
+            page.key()
+        );
+    }
     assert!(
         router_paths().iter().any(|p| p == TRY_PATH),
         "{TRY_PATH} must be a route"
