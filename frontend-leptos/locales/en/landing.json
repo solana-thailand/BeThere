@@ -152,8 +152,7 @@
     "learn": "Learn from past events ↓",
     "or": "Or",
     "or_try": "try a deposit on devnet",
-    "or_host": "host your own",
-    "credit_held": "You hold ฿{amount} in credit. It can pay your next deposit when you register."
+    "or_host": "host your own"
   },
   "story": {
     "title": "This seat goes to\nsomeone who can come.",
@@ -347,7 +346,8 @@
     "unsub_done": "Done. You won't get these emails any more.",
     "unsub_again": "Changed your mind? Subscribe again on Events & courses.",
     "unsub_error": "Could not unsubscribe. Try again in a minute.",
-    "unsub_title_page": "Unsubscribe · BeThere"
+    "unsub_title_page": "Unsubscribe · BeThere",
+    "credit_held": "You hold ฿{amount} in credit. It can pay your next deposit when you register."
   },
   "hall": {
     "label": "Every deposit payer of RTM #1–#6, one chair each",

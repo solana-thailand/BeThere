@@ -285,7 +285,7 @@ fn CreditHeld() -> impl IntoView {
         let amount = thb.get().unwrap_or(0);
         (amount > 0).then(|| {
             let line = crate::locale::fill(
-                t_string!(i18n, landing.upcoming.credit_held),
+                t_string!(i18n, landing.site.credit_held),
                 &[(
                     "amount",
                     &crate::pages::landing::stats::group_thousands(amount),
