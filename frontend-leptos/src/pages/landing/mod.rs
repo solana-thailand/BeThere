@@ -11,6 +11,7 @@ pub mod event_card;
 pub mod frame;
 /// The goal bar and the globe loader; public for `tests/landing_goal.rs`.
 pub mod goal;
+pub mod hall;
 /// The landing's header and side index; public for `tests/landing_header.rs`.
 pub mod header;
 mod hero;

@@ -26,7 +26,6 @@
     "sub": "{Free|#sponsors} events. Hold your seat with a {deposit|#how}.\n{Show up|#story}, {get it all back|#how}, plus a {badge on Solana|#usdc}.\nEvery event is also {online|#goal}, free.",
     "now": "Today: ฿500 by PromptPay\nComing: USDC on Solana, claimed back by you",
     "quote": "“Let's go, everyone.”",
-    "after_event": "after the event",
     "why": "Why a deposit · 1 min",
     "film_close": "Close the film",
     "film_captions": "Captions"
@@ -303,5 +302,13 @@
     "title_organizers": "BeThere for organizers · know who will really come before you order food",
     "title_sponsors": "BeThere for sponsors · where your logo goes",
     "title_events": "Events & courses — BeThere"
+  },
+  "hall": {
+    "label": "Every deposit payer of RTM #1–#6, one chair each",
+    "big": "who paid a deposit, came",
+    "point": "Point at the chairs to see each event",
+    "paid": "paid",
+    "came": "came",
+    "fine": "A deposit doesn't make people come. It tells you who will. · RTM #1–#6 · staff not counted"
   }
 }
