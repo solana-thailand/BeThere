@@ -3,7 +3,8 @@
 //!
 //! The free plan allows 50 outbound requests per invocation (one token
 //! refresh, then one per mail), and `docs/gmail_sender_setup.md` budgets 400
-//! recipients a day (Gmail allows about 500): 16 an hour is 384 a day. Each mail is claimed before it is
+//! recipients a day (Gmail allows about 500): 16 a tick, 23 ticks a day (the
+//! 03:xx tick runs the daily jobs instead, `schedule.rs`) is 368. Each mail is claimed before it is
 //! sent (one per event per subscriber). A refusal for the account (401, 403,
 //! 429) frees the claim for the next run; any other refusal, a network error
 //! or a 5xx keeps it: the mail is bad, or it may have gone, and an ambiguous

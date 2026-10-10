@@ -159,3 +159,48 @@ real-wallet signing in the sandbox is still untested.
 - Probes used (scratch, not in git): `staging_site_probe.mjs` (20 page ×
   theme × viewport checks), `events_probe.mjs` (boot time per route, 4xx),
   `room_probe.mjs` (lit / quiet / reduced motion), `hall_probe*.mjs`.
+
+## 9. Addendum (same day, evening): the site as in the prototype, and subscribe
+
+- **Why:** the owner said the pages looked unfinished. A page-by-page
+  comparison with the prototype (`bethere-ux/site/`) confirmed it: the home
+  was still the old long landing, `/organizers` only the swimlane, `/events` a
+  bare list, no page heads. Plan 045 had underscoped R4.2/R4.5.
+- **pull 199:** first-load baselines reset to the R4.1 prod build (+99 KB of
+  deliberate growth listed in the commit).
+- **pull 200 → prod `755a3750`** (release pull 201): page heads in the still
+  room (`pages/site/head.rs`), `/organizers` as in the prototype (story, how,
+  the planning tile `pages/site/plan.rs` on `facts::expected_came`, the
+  organizer card), the home trimmed to hero → doors → so far + goal, and
+  R4.3 `/events` (open events in the head, else the empty state from
+  `domain::models::catalogue::cadence`; learn from past events; the deposit
+  strip; 90/94). Also: copy markup links may be same-site paths; in-app
+  `#id` links scroll (the router used to land at the top); the side dot index
+  went.
+- **pull 202 (R4.12), release pull 203:** "Email me when it opens".
+  Migration 0060 applied on staging and prod (backups
+  `backup-staging-20261010-1817.sql`, `backup-prod-20261010-1829.sql`).
+  Gmail secrets set on **staging only** so far (owner's go: staging first, one
+  real test send to bethere.sol@gmail.com, then prod). Staging test event
+  `r4-12-mail-test-staging-delete-after` (delete after the test).
+- **Gotchas:** a stale `workerd` keeps serving an old build after
+  `pkill wrangler` (kill the port's listener); the catalogue of past events is
+  a hand-kept snapshot (`domain/src/models/catalogue.rs`) until R4.4 gives
+  events a series and recording; Turnstile is off on staging.
+- **Prod incident, fixed (2026-10-10 ~11:48 UTC, minutes):** the R4.12
+  release's `wrangler deploy` uploaded the full version (`ab7717a4`, git
+  `79269e71`), then the schedules API answered 400 to the second cron on
+  prod. `deploy.sh` read that as the 10013 bug and ran the PUT fallback,
+  which replaced the live version with one lacking `_redirects` (staff pages
+  got the attendee shell), `_headers`, the rate limiters and placement.
+  Rolled back to `ab7717a4` (`wrangler rollback`); verified: staff shell on
+  `/admin`, `/staff`, 20/20 page checks. Prod's cron stayed the old daily one.
+  Fix PR: one hourly trigger per worker (`src/schedule.rs`, daily jobs in the
+  03:xx tick) and `deploy.sh` never falls back after a live upload.
+- **Setting a worker secret makes a new deployment** with no `git:` message:
+  after `wrangler secret put --env staging`, the staging parity gate refuses
+  prod until staging is redeployed with `deploy.sh staging`.
+- **Next:** finish the Gmail test, set prod secrets, then R4.4 (course pages
+  and progress), R4.8, R4.9. Owner items unchanged: `SMOKE_TOKEN`, sandbox
+  real-wallet signing.
+

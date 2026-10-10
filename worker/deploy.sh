@@ -532,7 +532,12 @@ else
   fi
 
   # ── Step 1: Try standard wrangler deploy ──
-  if CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" --message "$(deploy_provenance)" 2>&1; then
+  # The output is kept so a failure can be told apart: below.
+  deploy_log=$(mktemp)
+  wrangler_rc=0
+  CI=true npx wrangler deploy "${WRANGLER_ENV_ARGS[@]}" --message "$(deploy_provenance)" 2>&1 | tee "$deploy_log" || wrangler_rc=$?
+  if [ "$wrangler_rc" -eq 0 ]; then
+    rm -f "$deploy_log"
     echo "✅ Deployed via wrangler"
     record_deploy_tag wrangler
     if verify_content_types && verify_security_headers strict; then
@@ -543,6 +548,23 @@ else
       exit 1
     fi
   fi
+
+  # Uploaded and live, and only the cron schedules failed (2026-10-10: the
+  # schedules API answered 400 to a second cron on prod). The version that is
+  # live has every binding, _headers and _redirects. The PUT fallback below
+  # would replace it with one that has none of them (it did, until rolled
+  # back), so stop here instead.
+  if grep -q "Some triggers failed to deploy" "$deploy_log"; then
+    rm -f "$deploy_log"
+    echo "" >&2
+    echo "❌ The worker version uploaded and is LIVE with its full config; only the cron triggers failed." >&2
+    echo "   Not falling back (the PUT path would drop _headers, _redirects and the rate limiters)." >&2
+    echo "   Fix [triggers] in wrangler.toml (plan limits, cron syntax), then deploy again." >&2
+    verify_content_types || true
+    restore_pnp
+    exit 1
+  fi
+  rm -f "$deploy_log"
 
   # Staging has no PUT API fallback (that path is production-hardcoded; see
   # header note). Surface the failure clearly and stop.
