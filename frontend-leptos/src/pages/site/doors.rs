@@ -11,9 +11,14 @@ use leptos::prelude::*;
 use crate::i18n::{Locale, td_string};
 use crate::locale::tr;
 
-/// Whether the devnet sandbox (`/try`, SG3) is live. Flip it when SG3 ships;
-/// until then no try band or try line renders anywhere.
-pub const TRY_LIVE: bool = false;
+/// Whether the devnet sandbox (`/sandbox`, SG3) is live: the try band under
+/// the doors and the try lines link to it. On since the owner put the
+/// sandbox on prod (2026-10-11); the route answers on every deploy, and says
+/// so where the sandbox keys are not set.
+pub const TRY_LIVE: bool = true;
+
+/// Where the try band and lines go.
+pub const TRY_PATH: &str = "/sandbox";
 
 /// One page of the site: the landing and the pages Release 4 adds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -130,7 +135,7 @@ pub fn try_band(live: bool) -> Option<AnyView> {
     }
     Some(
         view! {
-            <a class="lp-door lp-door-try" href="/try">
+            <a class="lp-door lp-door-try" href=TRY_PATH>
                 <b>{tr(|l| td_string!(l, landing.site.try_title))}</b>
                 <span>{tr(|l| td_string!(l, landing.site.try_line))}</span>
                 <i>{tr(|l| td_string!(l, landing.site.try_cta))}</i>
@@ -149,7 +154,7 @@ pub fn try_line(live: bool) -> Option<AnyView> {
     Some(
         view! {
             <p class="lp-try-link">
-                <a href="/try">{tr(|l| td_string!(l, landing.site.try_usdc_line))}</a>
+                <a href=TRY_PATH>{tr(|l| td_string!(l, landing.site.try_usdc_line))}</a>
             </p>
         }
         .into_any(),

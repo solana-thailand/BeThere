@@ -15,7 +15,7 @@ use crate::i18n::{t_string, use_i18n};
 use crate::pages::landing::event_card::{DepositRule, nearest_first};
 use event_checkin_domain::models::course::{busiest, cadence};
 
-use super::doors::TRY_LIVE;
+use super::doors::{TRY_LIVE, TRY_PATH};
 use super::subscribe::SubscribeForm;
 
 /// Lightweight event item from the public events API.
@@ -194,7 +194,7 @@ fn NothingOpen(sample_slug: Option<String>) -> impl IntoView {
                 {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.or))}
                 " "
                 {TRY_LIVE.then(|| view! {
-                    <a href="/try">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.or_try))}</a>
+                    <a href=TRY_PATH>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.or_try))}</a>
                     " · "
                 })}
                 <a href=DISCORD_URL target="_blank" rel="noopener noreferrer">"Discord"</a>

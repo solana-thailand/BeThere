@@ -103,6 +103,10 @@ NOTIFICATION_FROM = ""
 # The Gmail account the announcer sends from (.plans/045 R4.12); the token
 # secrets GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN belong to it.
 MAIL_FROM = "bethere.sol@gmail.com"
+# The devnet sandbox (/sandbox, .plans/042 0.4): on where this is "1" and the
+# devnet keys SANDBOX_ORGANIZER_KEY / SANDBOX_FAUCET_KEY are set (owner,
+# 2026-10-11: prod too). Off by itself if the escrow cluster is not devnet.
+SANDBOX_ENABLED = "1"
 # What a cron dispatch run does with a queued message that has sat past its
 # kind's useful life (`.issues/128`). Ages are per kind, in
 # `notifications::policy::max_age_secs` — 3 days for a survey, 2 for a reminder,
@@ -384,6 +388,10 @@ NOTIFICATION_FROM = ""
 # The Gmail account the announcer sends from (.plans/045 R4.12); the token
 # secrets GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN belong to it.
 MAIL_FROM = "bethere.sol@gmail.com"
+# The devnet sandbox (/sandbox, .plans/042 0.4): on where this is "1" and the
+# devnet keys SANDBOX_ORGANIZER_KEY / SANDBOX_FAUCET_KEY are set (owner,
+# 2026-10-11: prod too). Off by itself if the escrow cluster is not devnet.
+SANDBOX_ENABLED = "1"
 # Vars are non-inheritable: staging must redeclare this or it falls back to the
 # in-code default, which is the same `report` but not visibly so.
 NOTIFICATIONS_STALENESS = "report"

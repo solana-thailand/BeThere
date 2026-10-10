@@ -4,7 +4,7 @@
 
 use event_checkin_frontend::locale::FRAMED_PATHS;
 use event_checkin_frontend::pages::site::doors::{
-    SitePage, TRY_LIVE, doors_from, try_band, try_line,
+    SitePage, TRY_LIVE, TRY_PATH, doors_from, try_band, try_line,
 };
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
@@ -69,16 +69,16 @@ fn framed_paths_match_the_pages_in_the_frame() {
     assert_eq!(framed, expected);
 }
 
-/// SG3 (the devnet sandbox) is not built: no `/try` route, and so no band
-/// or line may link to it.
+/// The try band and lines link only to a route the router has (SG3, the
+/// devnet sandbox at /sandbox), and render nothing while TRY_LIVE is off.
 #[test]
-fn nothing_links_to_the_sandbox_before_it_exists() {
+fn the_try_links_go_to_the_sandbox_route() {
     assert!(try_band(false).is_none());
     assert!(try_line(false).is_none());
-    let has_try_route = router_paths().iter().any(|p| p == "/try");
-    assert_eq!(
-        TRY_LIVE, has_try_route,
-        "TRY_LIVE must flip together with the /try route"
+    assert!(TRY_LIVE, "on since the sandbox went to prod (2026-10-11)");
+    assert!(
+        router_paths().iter().any(|p| p == TRY_PATH),
+        "{TRY_PATH} must be a route"
     );
 }
 
