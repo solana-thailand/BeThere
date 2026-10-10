@@ -2,6 +2,7 @@
 
 mod burner;
 mod page;
+mod signer;
 mod steps;
 
 pub use page::Sandbox;

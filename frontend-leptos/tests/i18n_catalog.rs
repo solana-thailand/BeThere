@@ -169,6 +169,9 @@ fn switch_shows_on_attendee_pages_only() {
         "/ticket/att-1",
         "/claim/tok",
         "/discover",
+        "/events",
+        "/organizers",
+        "/sponsors",
         "/feedback",
         "/privacy",
         "/data-privacy",
@@ -187,6 +190,7 @@ fn switch_shows_on_attendee_pages_only() {
         "/dashboard/live",
         "/events/e1/summary",
         "/events/e1/pr-pack",
+        "/events/e1",
     ] {
         assert!(!is_attendee_path(path), "{path} stays English");
     }

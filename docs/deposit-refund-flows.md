@@ -299,7 +299,10 @@ tooling: `/refund/mark` and `/refund/batch-thb` refuse a held deposit by design
      balance can go negative. `try_refund` is the only writer of `refund` rows;
      `record()` refuses that reason;
    - stores the optional slip (image, magic-byte checked, ≤ 3 MB) in R2 under
-     `credit-payouts/{org}/{owner-hash}/{request}` (served staff-only);
+     `credit-payouts/{org}/{owner-hash}/{request}`, served staff-only at
+     `/api/storage/credit-payouts/…` (payouts before 2026-10-09 recorded
+     `/api/credit-payouts/…`, which no route serves; the history below rewrites
+     those);
    - audits `credit_refund_paid_out` in the global audit log (actor = the staff
      email, amounts, slip path);
    - clears the flag and deletes the account (one batch). A second clear of the
@@ -328,6 +331,16 @@ for a request:
   against a zero balance and returns 409. No flag is opened, so a refusal
   leaves nothing behind.
 - After the payout, the account row is deleted.
+
+**Paid out (pull 177).** `GET /api/deposit/credit-payouts` lists the recorded
+payouts, newest first (100): date, person, THB/USDC, who recorded it, whether
+the attendee asked (`initiated_by`), and the slip link. It reads the global
+audit rows of `credit_refund_paid_out` (`crate::credit_payout_history`) and is
+org-scoped like the queue: entries since 2026-10-09 carry
+`metadata.organizations`; older ones fall back to the slip path's `{org}`;
+an entry with neither is super-admin only. On the page it is the "Paid out"
+list at the foot of the Held as Credit tab. The payout form starts at the
+payable amount, and the button says what is missing (amount, slip).
 
 Known gap: a payout while part of the credit is locked pays the payable part
 and closes the request; the locked part returns at the event's end with no open

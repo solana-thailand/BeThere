@@ -17,7 +17,6 @@
     "events": "Events",
     "how": "How",
     "sections": "Sections",
-    "how_header": "How it works",
     "story": "Who comes"
   },
   "hero": {
@@ -277,5 +276,32 @@
     "org_title": "Running events?",
     "org_body": "Know who **can really come** before you order food.\nSet your own deposit, or none at all.\nScan in with any phone · refunds from one queue.",
     "waitlist_cta": "Join the organizer waitlist →"
+  },
+  "site": {
+    "nav_label": "Main",
+    "nav_events": "Events & courses",
+    "nav_organizers": "For organizers",
+    "nav_sponsors": "Sponsors",
+    "doors_home": "Which one are you?",
+    "doors_other": "Where next",
+    "door_home_title": "What BeThere is",
+    "door_home_line": "Show up, get it back, and the evidence it works",
+    "door_home_cta": "Home →",
+    "door_events_title": "Coming to an event, or catching up",
+    "door_events_line": "Upcoming events, and courses from past ones",
+    "door_events_cta": "Events & courses →",
+    "door_organizers_title": "Running events",
+    "door_organizers_line": "Know who will really come before you order food; set your own deposit, or none",
+    "door_organizers_cta": "For organizers →",
+    "door_sponsors_title": "Backing free knowledge",
+    "door_sponsors_line": "Where your logo goes, and a headcount you can check",
+    "door_sponsors_cta": "Sponsors →",
+    "try_title": "Try it yourself in 2 minutes",
+    "try_line": "Deposit, show up, get it back on Solana devnet · not real money",
+    "try_cta": "Try on devnet →",
+    "try_usdc_line": "Try the USDC route yourself on devnet, 2 minutes →",
+    "title_organizers": "BeThere for organizers · know who will really come before you order food",
+    "title_sponsors": "BeThere for sponsors · where your logo goes",
+    "title_events": "Events & courses — BeThere"
   }
 }

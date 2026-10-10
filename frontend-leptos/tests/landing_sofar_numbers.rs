@@ -57,6 +57,7 @@ fn payers_line_hidden_when_nobody_paid() {
         deposit_payers_came: came,
         slip_check: None,
         refund_after_end: None,
+        payers_by_event: Vec::new(),
     };
     assert!(!payers_line_shown(&stats(0, 0)), "0 of 0 must not be drawn");
     assert!(payers_line_shown(&stats(54, 50)));

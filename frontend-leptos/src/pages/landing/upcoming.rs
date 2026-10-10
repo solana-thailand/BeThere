@@ -157,7 +157,7 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
                                 t_string!(i18n, landing.upcoming.see_all_n),
                                 &[("count", &total.to_string())],
                             );
-                            view! { <p class="lp-more"><a class="lp-btn" href="/discover">{label}</a></p> }
+                            view! { <p class="lp-more"><a class="lp-btn" href="/events">{label}</a></p> }
                         })}
                     }.into_any()
                 }}

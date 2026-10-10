@@ -2,7 +2,7 @@
 //! share/SEO copy that must not promise what the system does not do.
 
 use event_checkin_frontend::locale::shows_lang_bar;
-use event_checkin_frontend::pages::landing::header::{HEADER_SECTIONS, SIDE_SECTIONS};
+use event_checkin_frontend::pages::landing::header::SIDE_SECTIONS;
 
 const ROOT: &str = env!("CARGO_MANIFEST_DIR");
 
@@ -10,23 +10,21 @@ fn read(path: &str) -> String {
     std::fs::read_to_string(format!("{ROOT}/{path}")).unwrap_or_else(|e| panic!("{path}: {e}"))
 }
 
-/// Every jump target is an element id the landing renders, so no link or
-/// dot lands nowhere.
+/// Every side-index dot targets an element id the landing renders. The
+/// header links pages now (.plans/045 R4.0); `tests/site_pages.rs` pins them.
 #[test]
 fn every_section_link_has_a_target() {
     let sources: String = std::fs::read_dir(format!("{ROOT}/src/pages/landing"))
         .expect("landing dir")
         .filter_map(|e| std::fs::read_to_string(e.ok()?.path()).ok())
         .collect();
-    for s in HEADER_SECTIONS.iter().chain(SIDE_SECTIONS.iter()) {
+    for s in SIDE_SECTIONS.iter() {
         assert!(
             sources.contains(&format!("id=\"{}\"", s.id)),
             "no element with id=\"{}\" on the landing",
             s.id
         );
     }
-    let ids: Vec<_> = HEADER_SECTIONS.iter().map(|s| s.id).collect();
-    assert_eq!(ids, ["how", "goal", "sponsors", "join"]);
 }
 
 /// The landing's header carries the switch; the bar above the page stays
@@ -34,6 +32,10 @@ fn every_section_link_has_a_target() {
 #[test]
 fn lang_bar_is_off_on_the_landing_only() {
     assert!(!shows_lang_bar("/"));
+    assert!(!shows_lang_bar("/organizers"));
+    assert!(!shows_lang_bar("/sponsors"));
+    // `/events` is framed too (the Discover list inside `SiteFrame`).
+    assert!(!shows_lang_bar("/events"));
     assert!(shows_lang_bar("/discover"));
     assert!(shows_lang_bar("/e/rtm-6"));
     assert!(!shows_lang_bar("/admin"));

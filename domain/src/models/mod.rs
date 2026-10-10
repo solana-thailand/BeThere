@@ -8,6 +8,7 @@ pub mod deposit;
 pub mod error;
 pub mod event;
 pub mod event_summary;
+pub mod facts;
 pub mod landing_photo;
 pub mod next_step;
 pub mod org;
