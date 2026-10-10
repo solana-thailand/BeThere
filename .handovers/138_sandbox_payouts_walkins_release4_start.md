@@ -116,3 +116,16 @@ Each: staging first, parity gate passed with no `--force`, D1 backup, smoke.
 - Wrangler parses a SQL file's leading `--` comment as a flag: strip comments
   before `d1 execute --command`.
 - `sips -c` crops from the centre; it is no tool for "the top of a screenshot".
+
+## 7. Addendum (same day, later): freeze lifted, released
+
+The owner lifted the freeze. Merged PR 172 and the sandbox 429 retry (pull
+190); staging `406921ba` (develop `4db13660`): smoke, 20/20 page checks, the
+sandbox e2e, and the `.issues/163` rehearsal on staging D1 (hold +500, apply
+-500, return 500) all passed. A first sandbox run hit a public-devnet-RPC 429
+at the deposit (one test USDC stranded; the faucet holds 19); pull 190 makes
+the browser retry with backoff. Release pull 191 → prod `05db3a46` (main
+`14365976`), D1 backup `~/bethere-backups/backup-prod-20261010-1118.sql`,
+parity passed; prod: `payers_by_event` live (RTM #2 14/14, #4 16/14, #5
+14/13, #6 21/20), sandbox off, 20/20 page checks. §4 items 1 and 2 are done;
+real-wallet signing in the sandbox is still untested.
