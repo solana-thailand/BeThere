@@ -87,6 +87,12 @@ cargo test -p event-checkin-domain --locked --features wire,alloc_count \
 ```
 
 - Tests go in each crate's `tests/` folder.
+- **Pre-push hook:** `git config core.hooksPath scripts/hooks` once per clone. It runs
+  `cargo fmt --check` (CI's most common failure) on pushes that touch Rust;
+  `BETHERE_PREPUSH_CLIPPY=1` adds workspace clippy.
+- **CI skips the Rust, wasm, e2e and escrow jobs on docs-only PRs** (`.issues/`,
+  `.plans/`, `.handovers/`, `.benchmarks/`, `docs/`, `*.md`); the gates job and
+  every push to `develop`/`main` still run in full.
 - **Test-count floors:** CI checks every test binary against
   `scripts/verify/test_floors.json` (`test_count_floor.py`). A binary that
   drops to 0 turns CI red.
