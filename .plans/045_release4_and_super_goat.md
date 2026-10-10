@@ -1,8 +1,12 @@
 # 045 · Release 4 and Super GOAT
 
 Status: in progress. Owner approved the plan and the start on 2026-10-08
-(session `event-checkin-f0`), ahead of the 13 Oct date first written here.
-R4.0 with R4.5 and R4.6 is the first pull. Originally: plan, for the owner's review. Written 2026-10-08 by session
+(session `event-checkin-f0`), ahead of the 13 Oct date first written here;
+confirmed again 2026-10-10 (session `event-checkin-d3`). **On develop, not
+deployed** (prod frozen until after the 12 Oct hackathon, owner 2026-10-10):
+R4.0 + R4.5 + R4.6 (pull 184, review fixes, phone nav pull 187), R4.7
+(pull 185), SG3 own-wallet (pull 188). Next: deploy staging and check both
+themes, prod with an owner go, then R4.2 / R4.1. Originally: plan, for the owner's review. Written 2026-10-08 by session
 `event-checkin-90` (`.plans/044` item 6). Basis: the prototype
 `bethere-ux/site/` in the devrel-helper repo (index, events, course,
 organizers, sponsors, try, record; shared `site.js`/`site.css`/`room.js`/
@@ -60,6 +64,18 @@ and the owner's look; prod deploys are separate, owner-gated steps.
     client redirect to it (query and hash kept, history replaced). In-app
     links and the boot summary point at `/events`; the sitemap lists
     `/events`, `/organizers`, `/sponsors` and no longer `/discover`.
+- **Reviewed and merged (2026-10-10, `event-checkin-d3`, pull 184 → develop
+  `c8a05bf5`; phone nav pull 187):** replayed on develop with the staff
+  hand-off and `/sandbox`; `/events` is now `site::EventsPage` (the Discover
+  list inside `SiteFrame`, title "Events & courses"); one `h1` per page
+  (`page_title` prop on `HowItWorks` / `Sponsors`); the door section and the
+  `/events` list follow the site theme (`.lp-events-sec` maps the app colour
+  variables; date chips 4.69–6.12:1, axe green); Linux baselines re-taken on
+  CI and checked by eye. Phones get the page links as a second header row,
+  and the current page is an underline (the app's orange `nav a[aria-current]`
+  block is cancelled inside `.lp`). Size vs develop: attendee +1.8 KB,
+  staff +0.3 KB. Check every site page in light **and** dark (CI baselines
+  are light).
   - The staff shell hands the three pages to the attendee shell, as it does
     `/`, so none of them grows the staff wasm.
   - **Deviation:** no `/try` route yet. Its content is SG3; a flagged-off
@@ -81,7 +97,7 @@ and the owner's look; prod deploys are separate, owner-gated steps.
 
 | line | what | files / data | proof | est. |
 |---|---|---|---|---|
-| R4.7 | Facts: `/api/public/stats` plus the hand-recorded facts as one typed constant set in `domain` (the ladder table moves there; the frontend and any worker page read the same set); per-event payers for the hall | `domain/src/models/facts.rs`; `public_stats.sql` gains a per-event `paid` grouping (staff/comp/online out, same rule) | the hall's per-event rows equal the ladder rows for #4–#6 (test against fixtures) | 1 d |
+| R4.7 | **Done on develop 2026-10-10 (pull 185, `3fd1d524`):** `domain::models::facts` holds the ladder and room; `PublicStats.payers_by_event` (public events only, `public_stats_by_event.sql`). Checked on prod D1 read-only: RTM #4 16/14, #5 14/13, #6 21/20 = the System rows; RTM #2 14/14 vs the table's 15/15 is the owner's hand-recorded payer. Original: Facts: `/api/public/stats` plus the hand-recorded facts as one typed constant set in `domain` (the ladder table moves there; the frontend and any worker page read the same set); per-event payers for the hall | `domain/src/models/facts.rs`; `public_stats.sql` gains a per-event `paid` grouping (staff/comp/online out, same rule) | the hall's per-event rows equal the ladder rows for #4–#6 (test against fixtures) | 1 d |
 | R4.8 | Per-event OG image: the event poster resized for 1200×630 in the organizer's browser at upload (not in the worker: CPU cap), stored beside the poster; `og:*` per `/e/<slug>` via the worker's HTML response | `poster.rs` upload path, `frontend-leptos` uploader, worker HTML meta rewrite for `/e/*` | crawler fetch of `/e/<slug>` shows the event's own `og:image` and title | 1 d |
 | R4.9 | Static no-WASM home: worker-rendered HTML for `/` with the same numbers (first paint, crawlers, no-JS), the SPA hydrates over it | `worker/src/home.rs` (small template, numbers from R4.7), served by `crawl::route_kind` for `/` only | HTML < 20 KB; CPU < 5 ms (bench note in `.benchmarks/`); same numbers as the SPA (test) | 2 d |
 | R4.10 | Aggregate click counters without cookies: page × door × day, no ids, no IP | migration `door_clicks(day, page, door, n)`; `POST /api/public/click` (rate-limited, sendBeacon) | no personal data in the table (schema test); counts only | 0.5 d |
@@ -135,7 +151,7 @@ staging secrets.
 |---|---|---|
 | SG1 | `domain::record::door_history(person_id)` (the single definition: RTM meetups, door check-ins, staff/organizers and online excluded, merged emails once, smoke events out; 20 regulars today), `GET /api/me/record` (own record only), `/me/record`, per-event `events.regular_rule` JSON evaluated at registration (register form + ticket say why the seat costs ฿0), admin rule editor with the count of qualifying registrants | 4 d |
 | SG4 | "I showed up" card: `GET /api/me/showed/:slug.png` only if `door_history` says came (pre-rendered per event by ffilms, owner's call on cost), share button on the ticket and `/me/record`, public `/showed/:token` (random, revocable) with OG tags | 2 d |
-| SG3 | **Partly built 2026-10-09 as `/sandbox` (plan 042 0.4, pull 173; staging only):** the Worker-held devnet organizer key signs `create_event` and `mark_checked_in` (sandbox events only: the escrow is derived from that key), a Circle-USDC faucet the Worker signs for (one grant per wallet per day, 50 grants / 200 events per day, deposit rate limiter), browser burner wallet, Explorer links per step, return-to-faucet, 120 s events. **Left for SG3:** the standing daily event by cron, Turnstile, a per-IP faucet cap, the live tally, the `/try` route + `TryBand`, organizer-rent reclaim (close_event). Revised estimate ≈ 2 d. Original line: `/try` devnet sandbox: a standing daily sandbox event by cron, rolling `event_end` (60 s), a devnet USDC faucet the worker controls (Turnstile, 3 per hour per IP and per wallet), the worker signs `mark_checked_in` for sandbox events only (separate keypair, program-level event check), Explorer links per step, live tally; reuses `.plans/044` item 1's script and `docs/devnet-run-2026-10-08.md` | 4–5 d |
+| SG3 | **Own wallet added 2026-10-10 (pull 188):** "Which wallet?" before step 1 (test wallet or a detected wallet, checked to be on devnet), signing through `pages/sandbox/signer.rs` with a confirmation wait, faucet.solana.com / faucet.circle.com links for the visitor's own wallet. Real-wallet signing still to be tried on staging. **Partly built 2026-10-09 as `/sandbox` (plan 042 0.4, pull 173; staging only):** the Worker-held devnet organizer key signs `create_event` and `mark_checked_in` (sandbox events only: the escrow is derived from that key), a Circle-USDC faucet the Worker signs for (one grant per wallet per day, 50 grants / 200 events per day, deposit rate limiter), browser burner wallet, Explorer links per step, return-to-faucet, 120 s events. **Left for SG3:** the standing daily event by cron, Turnstile, a per-IP faucet cap, the live tally, the `/try` route + `TryBand`, organizer-rent reclaim (close_event). Revised estimate ≈ 2 d. Original line: `/try` devnet sandbox: a standing daily sandbox event by cron, rolling `event_end` (60 s), a devnet USDC faucet the worker controls (Turnstile, 3 per hour per IP and per wallet), the worker signs `mark_checked_in` for sandbox events only (separate keypair, program-level event check), Explorer links per step, live tally; reuses `.plans/044` item 1's script and `docs/devnet-run-2026-10-08.md` | 4–5 d |
 | SG2 | x402 design doc only. First the custody catch: x402 `exact` pays a `payTo` address, which would make BeThere custodial. Options: (a) a BeThere scheme whose payload is the signed escrow `deposit` transaction, verified (right event, right vault) then submitted; (b) `exact` to a vault PDA plus a server-side deposit record (the program cannot accept this today); (c) x402 only for non-refundable parts (none today). Plus the duplicate-settlement cache and the agent's 10 USDC cap. Recommendation, no build until the owner picks | 1 d |
 
 ## Totals and order
