@@ -129,3 +129,33 @@ the browser retry with backoff. Release pull 191 → prod `05db3a46` (main
 parity passed; prod: `payers_by_event` live (RTM #2 14/14, #4 16/14, #5
 14/13, #6 21/20), sandbox off, 20/20 page checks. §4 items 1 and 2 are done;
 real-wallet signing in the sandbox is still untested.
+
+## 8. Addendum (same day, later): R4.2 and R4.1 released
+
+- **R4.2, the payers' hall** (pull 193): the hall replaced the hero's ticket
+  loop (owner's pick, as in the prototype). Release pull 194 → prod
+  `ff8a1a24` (main `ddcced44`), backup `backup-prod-20261010-1246.sql`.
+- **R4.1, the lit room** (pull 195): `room/room.js` + `room/rtm6-room.webp`
+  (the prototype's data URI decoded, 14.6 KB) are copy-dir, off the first
+  load; `landing/room.rs` is the mount bridge and `utils/lazy_script.rs` the
+  shared loader (the globe uses it too). The hero is the night room in both
+  themes; the hall sits on a card. First load +1,797 B. The prototype's
+  lamps (one per watched episode) wait for courses (R4.4). Release pull 197
+  → prod `4a74bbc2` (main `bb986e18`), backup
+  `backup-prod-20261010-1425.sql`.
+- **A stale Worker reached staging** (fixed, gated): the develop and main
+  worktrees shared `~/.cargo/target`. After the R4.2 prod build, cargo reused
+  that wasm for the R4.1 staging deploy. The Worker compiles
+  `dist/index.html` in (`lib.rs` `INDEX_HTML`) for every non-file route, so
+  `/` booted while `/events`, `/organizers` and `/sponsors` loaded prod's JS
+  hash and 404'd. Every deploy check was green; a browser probe of `/events`
+  caught it. Pull 196: `deploy.sh` `check_worker_embeds_dist` refuses the
+  upload when the hashed JS `dist/index.html` names is not inside the bundled
+  wasm. **Deploy each worktree with its own `CARGO_TARGET_DIR`**, and probe a
+  non-`/` route after every deploy. Prod was never affected.
+- **First-load budget:** 98,282 B over the 6 Oct baseline; the fail line is
+  102,400. The next page (R4.3) will cross it. Reset the baseline at a
+  release (precedent: `1488706e` before release 3) or find savings first.
+- Probes used (scratch, not in git): `staging_site_probe.mjs` (20 page ×
+  theme × viewport checks), `events_probe.mjs` (boot time per route, 4xx),
+  `room_probe.mjs` (lit / quiet / reduced motion), `hall_probe*.mjs`.
