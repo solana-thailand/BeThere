@@ -151,6 +151,21 @@ export async function sendAndConfirm(rpcUrl, tx, fetchFn = globalThis.fetch.bind
   throw new Error(`not confirmed after ${CONFIRM_POLLS} s: ${signature}`);
 }
 
+/** Wait until `signature` (sent by a real wallet) is `confirmed`; returns it. */
+export async function confirmSignature(rpcUrl, signature, fetchFn = globalThis.fetch.bind(globalThis)) {
+  for (let i = 0; i < CONFIRM_POLLS; i++) {
+    await sleep(CONFIRM_POLL_MS);
+    const result = await rpc(rpcUrl, "getSignatureStatuses", [[signature]], fetchFn);
+    const status = result && result.value && result.value[0];
+    if (!status) continue;
+    if (status.err) throw new Error(`transaction failed: ${JSON.stringify(status.err)}`);
+    if (status.confirmationStatus === "confirmed" || status.confirmationStatus === "finalized") {
+      return signature;
+    }
+  }
+  throw new Error(`not confirmed after ${CONFIRM_POLLS} s: ${signature}`);
+}
+
 // ---- Bindings for the Leptos page (browser only) ----
 
 /** The burner's address, creating the burner on first use. */

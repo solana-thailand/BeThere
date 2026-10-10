@@ -649,3 +649,43 @@
     margin-top: 1rem;
     min-height: 44px;
 }
+
+/* /sandbox: which wallet signs (test wallet or the visitor's own, on devnet). */
+.sandbox-signer {
+    margin-top: 1.25rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.sandbox-signer-title {
+    width: 100%;
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+}
+
+.sandbox-signer-opt {
+    min-height: 44px;
+    padding: 0.5rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    cursor: pointer;
+}
+
+.sandbox-signer-opt--on {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+}
+
+.sandbox-signer .sandbox-note,
+.sandbox-signer .sandbox-fineprint {
+    width: 100%;
+    margin: 0.25rem 0 0;
+}
