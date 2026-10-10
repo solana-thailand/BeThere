@@ -75,8 +75,9 @@
 //!   `inner_html` in this crate carry no classes today; if that changes, the
 //!   raw-string scan in `used_broad()` covers the dead direction, but the
 //!   unstyled direction will not see them.
-//! - **Classes set by `globe/globe.js`.** The lazily loaded globe builds its
-//!   own country panel and toggles `lp-dragging`, outside `src/`. Its string
+//! - **Classes set by `globe/globe.js` and `room/room.js`.** The lazily loaded
+//!   globe builds its own country panel and toggles `lp-dragging`, and the
+//!   room adds `lp-room-on`, outside `src/`. Its string
 //!   literals are added to the dead direction's scan (`lazy_js_sources`); the
 //!   unstyled direction does not read JS.
 //! - **CSS-only classes referenced solely by other CSS** (e.g. a `.a .b` where
@@ -235,8 +236,14 @@ fn rust_sources() -> String {
 
 /// Lazily loaded JS that sets classes itself (see the module comment).
 fn lazy_js_sources() -> String {
-    let path = crate_root().join("globe").join("globe.js");
-    fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+    [["globe", "globe.js"], ["room", "room.js"]]
+        .iter()
+        .map(|[dir, file]| {
+            let path = crate_root().join(dir).join(file);
+            fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn is_class_start(c: char) -> bool {
