@@ -1,0 +1,118 @@
+# Handover 138 — Sandbox, credit payouts, walk-ins, staff shell, Release 4 start (2026-10-09 → 10)
+
+Written by sessions `event-checkin-ac` → `event-checkin-d3` (one conversation,
+renamed by the harness). Everything below was checked against GitHub,
+`wrangler deployments list` or a probe on the day; re-check before building on
+it (`issue_ledger.py`, the repro in each issue).
+
+## 0. TL;DR
+
+| Item | State |
+|---|---|
+| Prod | `07ea1885` at `main` `9c3ed7e4` (100 %): sandbox code (off), organizer credit payout, payout history + slip-link fix, walk-ins in-person, staff shell hand-off |
+| Staging | `5598ef51` at develop `2b8614aa`: the `/sandbox` the owner practises on; **do not redeploy before the 12 Oct hackathon** (owner) |
+| Prod freeze | owner, 2026-10-10: no prod (or staging) deploy until after 12 Oct |
+| On develop, not deployed | R4.0 site routes (pull 184), R4.7 facts + per-event payers (pull 185), CI docs-only skip + pre-push hook (pull 186), phone nav (pull 187), sandbox own wallet (pull 188) |
+| Draft, waiting | PR 172 (`.issues/163`, scoped credit release): after 12 Oct, with the admin-path rehearsal (§4) |
+| Prod D1 backups | `~/bethere-backups/backup-prod-20261009-1427.sql`, `…-20261009-1736.sql`, `…-20261010-0005.sql` (600, PII, outside git) |
+
+## 1. What shipped to prod (three owner-gated releases)
+
+1. **Release pull 174 (`f23284cd`, 2026-10-09):** organizer pays held credit
+   back to the deposit account without a request (`.issues/192`, pull 171 incl.
+   the attendee's "Credit Paid Back" card); devnet `/sandbox` (plan 042 0.4,
+   pull 173), which is **off on prod** by design (DEV_MODE 0, no keys).
+2. **Release pull 178 (`8064041f`):** "Paid out" list on the Held as Credit
+   tab (`GET /api/deposit/credit-payouts`), payout slip links fixed (they were
+   `/api/credit-payouts/…`, a 404; now `/api/storage/credit-payouts/…`), payout
+   amount prefilled, the button says what is missing (pull 177).
+3. **Release pull 182 (`07ea1885`):** walk-ins are in-person everywhere
+   (`.issues/162`, pull 180); the staff build hands every attendee page to the
+   attendee shell, staff first load 97 % → 63.5 % of 2 MiB (pull 181).
+
+Each: staging first, parity gate passed with no `--force`, D1 backup, smoke.
+**Prod write smoke is always "untested":** `post_deploy_smoke.sh` falls back to
+`dev-token`, which prod refuses (401) — `SMOKE_TOKEN` is the owner's item.
+
+## 2. The sandbox (`/sandbox`, staging only)
+
+- Owner decisions: Worker-held devnet organizer key, Circle-USDC faucet
+  wallet, no Turnstile. Secrets `SANDBOX_ORGANIZER_KEY` (pubkey `AULAURJ…qzxH`)
+  and `SANDBOX_FAUCET_KEY` (`Fh9m2…KLar`) are set on staging only; the value is
+  the whole `solana-keygen` JSON file (`cat file | wrangler secret put …`).
+- Off unless DEV_MODE + devnet + both keys parse; rolling 24 h caps on
+  `advisory_locks` (one grant per wallet, 50 grants, 200 events); empty faucet
+  → 429 with a plain message.
+- Recheck: `node scripts/e2e/sandbox_devnet.mjs <staging-url>` (~2.5 min,
+  returns the USDC). Passed on staging 2026-10-09 with the owner's keys.
+- Pull 188 (develop only): "Which wallet?" — the test wallet or the visitor's
+  own devnet wallet, plus faucet.solana.com / faucet.circle.com links.
+  **Real-wallet signing has not been tried** (headless has no Phantom): try it
+  on staging after 12 Oct with Phantom set to Solana Devnet.
+
+## 3. Release 4 (plan 045) — started early, owner-confirmed 2026-10-10
+
+- R4.0 (pull 184): `/events` (Discover list in the site frame until R4.3),
+  `/discover` → `/events`, `/organizers`, `/sponsors`, shared `SiteFrame` and
+  doors. Phone nav and the underline current page: pull 187.
+- R4.7 (pull 185): ladder + room in `domain::models::facts`;
+  `PublicStats.payers_by_event` (public events only). Prod D1 read-only check:
+  RTM #4–#6 equal the facts' System rows.
+- Next in the plan: R4.2 / R4.1 (landing hall and lit room), then R4.3.
+- **Check site pages in light and dark.** CI baselines are light; a dark-only
+  local check missed a dark-on-dark heading and an axe contrast failure.
+
+## 4. For the next session — follow-ups
+
+1. After 12 Oct: deploy staging from develop (R4.0, R4.7, pulls 187, 188),
+   look at `/`, `/events`, `/organizers`, `/sponsors`, `/sandbox` in both
+   themes and on a phone; try the sandbox with a real Phantom on devnet; then
+   prod with an owner go and a D1 backup.
+2. PR 172 (`.issues/163`): mark ready, merge, deploy staging, rehearse through
+   admin paths — walk-in X + `/deposit/thb/admin-upload` (auto-verify, bank
+   fields) + `/refund/hold/{id}` on event A; walk-in X on event B (ends in
+   ~150 s) + `POST /api/deposit/apply-credit/{id}`; after B ends, a per-person
+   read (re-POST apply-credit, payout candidates) and read X's ledger rows on
+   staging D1. `dev-token` and wallet sessions cannot spend credit at
+   registration by design (`signup.rs` `credit_identity_ok`). On develop
+   `.issues/163` still reads "open"; the newer status is on the PR branch.
+3. `SMOKE_TOKEN` (owner) so prod writes are smoke-tested.
+4. Plan 042 0.6: paste a link into X, Facebook and LINE (needs a signed-in
+   person).
+5. SG3 left: standing daily event by cron, Turnstile, per-IP faucet cap, live
+   tally, `/try` route + `TryBand`, organizer-rent reclaim.
+6. Docs that still name `/discover` (it redirects, so nothing breaks):
+   `docs/business_flows_event_page.md`, `docs/escrow_contract_surface.md`,
+   `docs/claude_tool_calling_brief.md`.
+
+## 5. How to dev / test what changed
+
+- Workspace: `cargo clippy --workspace --locked --all-targets -- -D warnings`,
+  `cargo test --workspace --locked`, then the floors
+  (`test_count_floor.py --suite workspace <log>`). Python security tests:
+  `cd worker/tests/security && python3 -m unittest discover -p 'test_*.py'`.
+- Frontend: from `frontend-leptos/`, clippy for wasm32 with and without
+  `--features staff`, `cargo test --locked`, `bash build.sh`,
+  `scripts/verify/frontend_size_budget.sh --shell attendee|staff`.
+- Local worker from a `/tmp` worktree: symlink `worker/node_modules` to the
+  main checkout's, use `--env-file` (no real credentials), own
+  `CARGO_TARGET_DIR`, apply migrations to the `--persist-to` dir. The public
+  devnet RPC blocks workerd (403); use Helius devnet for anything on-chain.
+- Visual baselines: delete the affected `-linux.png`, push, let CI write them
+  (`--update-snapshots=missing`), download the `visual-baselines` artifact,
+  check by eye, commit. Linux baselines only from CI.
+- New: `git config core.hooksPath scripts/hooks` (pre-push `cargo fmt
+  --check`); docs-only PRs skip the heavy CI jobs (pull 186).
+
+## 6. Gotchas hit
+
+- `gh pr merge` refuses a draft PR; a script that keeps going after that
+  deploys develop without the PR (happened: staging `5598ef51`).
+- In this shell `grep` is a function wrapping `rg` and zsh does not split an
+  unquoted variable: both made a correct CI filter look wrong in a local test.
+  Use `/usr/bin/grep` and real newlines.
+- `git reset --hard HEAD~N` after a throwaway test commit also drops the work
+  committed with it; recover from the reflog (`git checkout <sha> -- paths`).
+- Wrangler parses a SQL file's leading `--` comment as a flag: strip comments
+  before `d1 execute --command`.
+- `sips -c` crops from the centre; it is no tool for "the top of a screenshot".
