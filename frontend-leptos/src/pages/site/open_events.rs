@@ -186,9 +186,12 @@ fn NothingOpen(sample_slug: Option<String>) -> impl IntoView {
                     </a>
                 })}
                 {last}
-                <a class="lp-btn" href="#learn">
-                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.learn))}
-                </a>
+                // Only when there is a course to learn from (the section is hidden otherwise).
+                {move || courses.get().unwrap_or_default().iter().any(|c| c.held > 0).then(|| view! {
+                    <a class="lp-btn" href="#learn">
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.learn))}
+                    </a>
+                })}
             </div>
             <p class="lp-open-or">
                 {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.or))}
