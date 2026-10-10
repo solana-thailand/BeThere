@@ -89,9 +89,13 @@ pub async fn apply(db: &D1Database, input: &ApplyCredit<'_>) -> Result<ApplyCred
         ])
         .map_err(|e| format!("D1 atomic credit spend bind: {e:?}"))?;
 
-    // Release ended events' locks inside the same transaction, so the spend
-    // guard's balance counts credit returned after the event it was applied to.
-    let release = db.prepare(crate::db::credit_ledger::RELEASE_ENDED_APPLIES_SQL);
+    // Release this person's ended locks inside the same transaction, so the
+    // spend guard's balance counts credit returned after the event it was
+    // applied to. Same `?1` person set as the guard.
+    let release = db
+        .prepare(crate::db::credit_ledger::RELEASE_PERSON_ENDED_APPLIES_SQL)
+        .bind_refs(&[D1Type::Text(&email)])
+        .map_err(|e| format!("D1 atomic credit release bind: {e:?}"))?;
     let mut statements = vec![release, spend];
     if currency == "thb" {
         // thb_deposits predates its composite uniqueness invariant. The batch's

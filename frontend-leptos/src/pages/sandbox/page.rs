@@ -4,7 +4,8 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_meta::Title;
 
-use super::burner::{burner_address, burner_sign_and_send, burner_supported, forget_burner};
+use super::burner::{burner_address, burner_supported, forget_burner};
+use super::signer::{Signer, connect, sign_and_send};
 use super::steps::{STEPS, Step, countdown};
 use crate::api::{
     SandboxConfig, SandboxEvent, sandbox_check_in, sandbox_config, sandbox_create_event,
@@ -44,10 +45,11 @@ fn now_s() -> i64 {
     (js_sys::Date::now() / 1000.0) as i64
 }
 
-/// Run `step` against the API (and the burner for the visitor's own
+/// Run `step` against the API (and `signer` for the visitor's own
 /// transactions). Returns the transaction signature.
 async fn perform(
     step: Step,
+    signer: Signer,
     rpc: String,
     wallet: String,
     event: Option<SandboxEvent>,
@@ -64,16 +66,16 @@ async fn perform(
         Step::Faucet => Ok(sandbox_faucet(&wallet).await?.signature),
         Step::Deposit => {
             let tx = sandbox_deposit_tx(&event_id, &wallet).await?;
-            burner_sign_and_send(&rpc, &tx.transaction_b64).await
+            sign_and_send(&signer, &rpc, &tx.transaction_b64).await
         }
         Step::CheckIn => Ok(sandbox_check_in(&event_id, &wallet).await?.signature),
         Step::Refund => {
             let tx = sandbox_refund_tx(&event_id, &wallet).await?;
-            burner_sign_and_send(&rpc, &tx.transaction_b64).await
+            sign_and_send(&signer, &rpc, &tx.transaction_b64).await
         }
         Step::Return => {
             let tx = sandbox_return_tx(&wallet).await?;
-            burner_sign_and_send(&rpc, &tx.transaction_b64).await
+            sign_and_send(&signer, &rpc, &tx.transaction_b64).await
         }
         Step::Done => Err("nothing left to do".to_string()),
     }
@@ -89,6 +91,8 @@ pub fn Sandbox() -> impl IntoView {
     let (event, set_event) = signal(None::<SandboxEvent>);
     let signatures = RwSignal::new([const { None::<String> }; 6]);
     let now = RwSignal::new(now_s());
+    let signer = RwSignal::new(Signer::Burner);
+    let detected = RwSignal::new(Vec::<String>::new());
 
     spawn_local(async move {
         let config = match sandbox_config().await {
@@ -101,6 +105,7 @@ pub fn Sandbox() -> impl IntoView {
         match burner_address().await {
             Ok(address) => {
                 wallet.set(address);
+                detected.set(crate::pages::deposit::js_interop::get_detected_wallets());
                 load.set(Load::Ready(config));
             }
             Err(_) => load.set(Load::Unsupported),
@@ -125,8 +130,9 @@ pub fn Sandbox() -> impl IntoView {
         busy.set(true);
         error.set(None);
         let (rpc, wallet, event) = (rpc(), wallet.get(), event.get());
+        let who = signer.get();
         spawn_local(async move {
-            match perform(which, rpc, wallet, event, set_event).await {
+            match perform(which, who, rpc, wallet, event, set_event).await {
                 Ok(signature) => {
                     signatures.update(|s| s[which.index()] = Some(signature));
                     step.set(which.next());
@@ -137,13 +143,43 @@ pub fn Sandbox() -> impl IntoView {
         });
     };
 
-    let start_over = move |_| {
-        forget_burner();
+    // Before the first step only: which wallet signs.
+    let not_started = move || step.get() == Step::Event && signatures.with(|s| s[0].is_none());
+    let use_burner = move |_| {
+        signer.set(Signer::Burner);
+        error.set(None);
         spawn_local(async move {
             if let Ok(address) = burner_address().await {
                 wallet.set(address);
             }
         });
+    };
+    let use_wallet = move |name: String| {
+        busy.set(true);
+        error.set(None);
+        spawn_local(async move {
+            match connect(&name).await {
+                Ok(address) => {
+                    wallet.set(address);
+                    signer.set(Signer::Wallet(name));
+                }
+                Err(message) => error.set(Some(message)),
+            }
+            busy.set(false);
+        });
+    };
+
+    let start_over = move |_| {
+        // A fresh test wallet, so the faucet's one-grant-per-wallet allows
+        // another run; a real wallet stays the visitor's choice.
+        if signer.get_untracked() == Signer::Burner {
+            forget_burner();
+            spawn_local(async move {
+                if let Ok(address) = burner_address().await {
+                    wallet.set(address);
+                }
+            });
+        }
         set_event.set(None);
         signatures.set([const { None }; 6]);
         error.set(None);
@@ -218,9 +254,53 @@ pub fn Sandbox() -> impl IntoView {
                     <p class="sandbox-error" role="alert">{tr(|l| td_string!(l, sandbox.unsupported))}</p>
                 }.into_any(),
                 Load::Ready(_) => view! {
-                    <p class="sandbox-note">{tr(|l| td_string!(l, sandbox.notice))}</p>
+                    {move || not_started().then(|| view! {
+                        <div class="sandbox-signer" role="group" aria-label=tr(|l| td_string!(l, sandbox.signer_title))>
+                            <h2 class="sandbox-signer-title">{tr(|l| td_string!(l, sandbox.signer_title))}</h2>
+                            <button
+                                class="sandbox-signer-opt"
+                                class:sandbox-signer-opt--on=move || signer.get() == Signer::Burner
+                                aria-pressed=move || (signer.get() == Signer::Burner).to_string()
+                                disabled=move || busy.get()
+                                on:click=use_burner
+                            >
+                                {tr(|l| td_string!(l, sandbox.signer_burner))}
+                            </button>
+                            {move || detected.get().into_iter().map(|name| {
+                                let mine = name.clone();
+                                let on = move || signer.get() == Signer::Wallet(mine.clone());
+                                let pick = name.clone();
+                                view! {
+                                    <button
+                                        class="sandbox-signer-opt"
+                                        class:sandbox-signer-opt--on=on.clone()
+                                        aria-pressed=move || on().to_string()
+                                        disabled=move || busy.get()
+                                        on:click=move |_| use_wallet(pick.clone())
+                                    >
+                                        {tr(|l| td_string!(l, sandbox.signer_use))}
+                                        " "
+                                        {name}
+                                    </button>
+                                }
+                            }).collect::<Vec<_>>()}
+                            {move || detected.with(Vec::is_empty).then(|| view! {
+                                <p class="sandbox-note">{tr(|l| td_string!(l, sandbox.signer_none))}</p>
+                            })}
+                            <p class="sandbox-fineprint">{tr(|l| td_string!(l, sandbox.signer_why))}</p>
+                        </div>
+                    })}
+                    <p class="sandbox-note">
+                        {move || match signer.get() {
+                            Signer::Burner => tr(|l| td_string!(l, sandbox.notice)).into_any(),
+                            Signer::Wallet(_) => tr(|l| td_string!(l, sandbox.notice_own)).into_any(),
+                        }}
+                    </p>
                     <p class="sandbox-wallet">
-                        {tr(|l| td_string!(l, sandbox.wallet_label))}
+                        {move || match signer.get() {
+                            Signer::Burner => tr(|l| td_string!(l, sandbox.wallet_label)).into_any(),
+                            Signer::Wallet(_) => tr(|l| td_string!(l, sandbox.wallet_label_own)).into_any(),
+                        }}
                         ": "
                         <a href=move || explorer_address(&wallet.get()) target="_blank" rel="noopener">
                             <code>{move || short(&wallet.get())}</code>
@@ -242,6 +322,15 @@ pub fn Sandbox() -> impl IntoView {
                         <button class="btn btn-outline sandbox-restart" on:click=start_over>
                             {tr(|l| td_string!(l, sandbox.start_over))}
                         </button>
+                    })}
+                    {move || matches!(signer.get(), Signer::Wallet(_)).then(|| view! {
+                        <p class="sandbox-fineprint">
+                            {tr(|l| td_string!(l, sandbox.faucet_more))}
+                            " "
+                            <a href="https://faucet.solana.com" target="_blank" rel="noopener">{tr(|l| td_string!(l, sandbox.faucet_sol))}</a>
+                            " · "
+                            <a href="https://faucet.circle.com" target="_blank" rel="noopener">{tr(|l| td_string!(l, sandbox.faucet_usdc))}</a>
+                        </p>
                     })}
                     <p class="sandbox-fineprint">{tr(|l| td_string!(l, sandbox.guard_note))}</p>
                 }.into_any(),

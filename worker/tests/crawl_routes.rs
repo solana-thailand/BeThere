@@ -37,6 +37,9 @@ fn deep_links_are_pages() {
         "/",
         "/discover",
         "/discover/",
+        "/events",
+        "/organizers",
+        "/sponsors",
         "/feedback",
         "/e/rtm-6",
         "/e/event-a1b2c3",
@@ -101,7 +104,12 @@ fn sitemap_lists_pages_and_open_events_escaped() {
     let xml = sitemap_xml(CANONICAL_ORIGIN, &sample());
     assert!(xml.starts_with("<?xml"));
     assert!(xml.contains(&format!("<loc>{CANONICAL_ORIGIN}/</loc>")));
-    assert!(xml.contains(&format!("<loc>{CANONICAL_ORIGIN}/discover</loc>")));
+    assert!(xml.contains(&format!("<loc>{CANONICAL_ORIGIN}/events</loc>")));
+    assert!(xml.contains(&format!("<loc>{CANONICAL_ORIGIN}/organizers</loc>")));
+    assert!(
+        !xml.contains("/discover<"),
+        "the redirect is not a page to index"
+    );
     assert!(xml.contains(&format!("<loc>{CANONICAL_ORIGIN}/e/rtm-7</loc>")));
     let thai = OpenEvent {
         slug: "งาน".to_string(),

@@ -57,7 +57,7 @@ fn every_balance_read_releases_ended_applies_first() {
     let ledger = read("src/db/credit_ledger.rs");
     let readers: Vec<_> = pub_async_fns(&ledger)
         .into_iter()
-        .filter(|(name, body)| name != "release_ended_applies" && first_sum(body).is_some())
+        .filter(|(name, body)| !name.starts_with("release_") && first_sum(body).is_some())
         .collect();
     assert!(
         readers.len() >= 5,
@@ -65,27 +65,48 @@ fn every_balance_read_releases_ended_applies_first() {
         readers.iter().map(|(n, _)| n).collect::<Vec<_>>()
     );
     for (name, body) in readers {
-        let release = body
-            .find("release_ended_applies(db).await?")
-            .unwrap_or_else(|| {
-                panic!("{name} reads a balance without releasing ended events first")
-            });
+        let global = body.find("release_ended_applies(db).await?");
+        let person = body.find("release_person_ended_applies(db, &email_lc).await?");
+        let release = global.or(person).unwrap_or_else(|| {
+            panic!("{name} reads a balance without releasing ended events first")
+        });
         let sum = first_sum(&body).expect("filtered on a ledger sum");
         assert!(release < sum, "{name} must release before it sums");
+        // A scoped release only covers the person it was given, so the read
+        // must be over that same person (`?1` bound to `email_lc`).
+        if person.is_some() {
+            assert!(
+                body.contains("person_emails_of!(\"?1\")")
+                    || body.contains("unreturned_apply_of!(\"?1\")")
+                    // Reads `positive_buckets_of!("?1")`, pinned by
+                    // credit_payout_guards::try_refund_is_one_guarded_statement.
+                    || body.contains("TRY_REFUND_SQL"),
+                "{name} releases one person but does not read that person"
+            );
+            assert!(
+                body.contains("D1Type::Text(&email_lc)"),
+                "{name} must bind the same email it released"
+            );
+        }
     }
+}
+
+/// The release SQL template: the body of `release_ended_applies_sql!`.
+fn release_template(ledger: &str) -> &str {
+    let start = ledger
+        .find("macro_rules! release_ended_applies_sql")
+        .expect("release SQL is one shared template");
+    &ledger[start..start + ledger[start..].find("\n}\n").expect("macro ends")]
 }
 
 #[test]
 fn release_sql_returns_ended_applies_once_regardless_of_attendance() {
     let ledger = read("src/db/credit_ledger.rs");
-    let start = ledger
-        .find("RELEASE_ENDED_APPLIES_SQL: &str = ")
-        .expect("release SQL is a shared constant");
-    let sql = &ledger[start..start + ledger[start..].find("\";").expect("constant ends")];
+    let sql = release_template(&ledger);
     for needle in [
-        "a.reason = 'apply'",
         "-a.delta, 'return'",
         "'return:' || a.event_id || ':' || a.email",
+        "a.delta < 0",
         "e.event_end_ms > 0",
         "e.event_end_ms <= CAST(strftime('%s', 'now') AS INTEGER) * 1000",
         "ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING",
@@ -98,6 +119,21 @@ fn release_sql_returns_ended_applies_once_regardless_of_attendance() {
             "release must not depend on attendance (`{forbidden}`)"
         );
     }
+    // Both releases come from the template and pick only `apply` rows. The
+    // person one keeps the unary `+` (.issues/163): without it the planner walks
+    // every apply row on the reason index and the cost follows the whole ledger.
+    assert!(
+        ledger.contains(
+            "RELEASE_ENDED_APPLIES_SQL: &str = release_ended_applies_sql!(\"a.reason = 'apply'\");"
+        ),
+        "global release must come from the template"
+    );
+    assert!(
+        ledger.contains(
+            "RELEASE_PERSON_ENDED_APPLIES_SQL: &str = release_ended_applies_sql!(\n    \"+a.reason = 'apply' AND a.email IN \",\n    person_emails_of!(\"?1\")\n);"
+        ),
+        "person release must come from the template, scoped to person_emails_of!(\"?1\")"
+    );
     // The check-in writer must use the same key, or the two double-return.
     let checkin = read("src/handlers/checkin.rs");
     assert!(
@@ -110,7 +146,7 @@ fn release_sql_returns_ended_applies_once_regardless_of_attendance() {
 fn atomic_apply_releases_inside_its_batch() {
     let coverage = read("src/db/credit_coverage.rs");
     assert!(
-        coverage.contains("db.prepare(crate::db::credit_ledger::RELEASE_ENDED_APPLIES_SQL)")
+        coverage.contains(".prepare(crate::db::credit_ledger::RELEASE_PERSON_ENDED_APPLIES_SQL)")
             && coverage.contains("vec![release, spend]"),
         "the spend guard must see released credit in the same transaction"
     );

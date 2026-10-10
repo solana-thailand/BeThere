@@ -17,8 +17,39 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  # Docs-only pull requests (issues, plans, handovers, benchmarks, docs/, any
+  # *.md) skip the Rust, wasm, e2e and escrow jobs: 774 runs to 2026-10-09
+  # put a docs-only PR at the same ~11 min as a code one, and none of those
+  # jobs reads those files. `deploy-scripts` still runs (it holds the
+  # numbering, issue-ledger and bench-record gates), and every push to
+  # develop or main runs everything.
+  changes:
+    name: what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "origin/$BASE...HEAD")
+          printf '%s\n' "$files"
+          code=$(printf '%s\n' "$files" | grep -Ev '^(\.issues/|\.plans/|\.handovers/|\.benchmarks/|docs/)|\.md$' | grep -c . || true)
+          if [ "$code" -gt 0 ]; then echo "code=true"; else echo "code=false"; fi >> "$GITHUB_OUTPUT"
+
   build-test:
     name: check + clippy + test (domain, worker)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -107,6 +138,8 @@ jobs:
 
   wasm-build:
     name: worker wasm32 build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -190,6 +223,8 @@ jobs:
 
   frontend-clippy:
     name: frontend wasm32 clippy + native tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # `frontend-leptos` is EXCLUDED from the cargo workspace (see root Cargo.toml),
@@ -256,6 +291,8 @@ jobs:
 
   e2e:
     name: playwright e2e (SPA served by the worker)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # The five specs in `e2e/` were never wired into CI, so a frontend regression
@@ -441,6 +478,8 @@ jobs:
 
   native-tools:
     name: ${{ matrix.crate }} fmt + clippy + test
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # flow-harness and bethere-mcp are standalone cargo projects (their native
@@ -488,6 +527,8 @@ jobs:
 
   escrow-tests:
     name: escrow SVM tests (quasar)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

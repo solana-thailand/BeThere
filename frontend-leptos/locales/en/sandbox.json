@@ -36,5 +36,15 @@
   "start_over": "Start over with a new wallet",
   "working": "Working…",
   "view_tx": "View on explorer",
-  "back_home": "← Back to BeThere"
+  "back_home": "← Back to BeThere",
+  "signer_title": "Which wallet?",
+  "signer_burner": "Test wallet (made in this browser)",
+  "signer_use": "Use",
+  "signer_why": "Practising with your own wallet on devnet takes the same steps as a USDC deposit at a BeThere event.",
+  "signer_none": "No Solana wallet found in this browser. The test wallet works without one; to practise with your own, install Phantom or Solflare and set it to Devnet.",
+  "faucet_more": "More test tokens for your own wallet:",
+  "faucet_sol": "SOL: faucet.solana.com",
+  "faucet_usdc": "USDC: faucet.circle.com (choose Solana Devnet)",
+  "notice_own": "You are using your own wallet on Solana devnet: test tokens only, no real money moves.",
+  "wallet_label_own": "Your wallet"
 }

@@ -24,7 +24,7 @@ pub mod feedback;
 pub mod past_events;
 pub mod post_event_register;
 
-pub use discover::Discover;
+pub use discover::DiscoverList;
 pub use event_recap::EventRecap;
 pub use feedback::Feedback;
 pub use past_events::PastEvents;

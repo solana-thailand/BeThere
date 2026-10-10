@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Pre-push: the checks CI fails on most, in seconds, before the push.
+#
+# 774 CI runs to 2026-10-09: rustfmt was the most common failure, then
+# clippy. `cargo fmt --check` takes seconds, so it always runs; clippy takes
+# minutes, so it runs only with BETHERE_PREPUSH_CLIPPY=1. A push of docs
+# alone (.issues/ .plans/ .handovers/ .benchmarks/ docs/ *.md) checks nothing.
+#
+# Install once per clone:   git config core.hooksPath scripts/hooks
+# Skip once (not advised):  git push --no-verify
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+base=$(git rev-parse --verify -q '@{upstream}' 2>/dev/null || git rev-parse --verify -q origin/develop || true)
+if [ -n "$base" ]; then
+  changed=$(git diff --name-only "$base"...HEAD)
+else
+  changed=$(git diff --name-only HEAD~1...HEAD)
+fi
+code=$(printf '%s\n' "$changed" | /usr/bin/grep -Ev '^(\.issues/|\.plans/|\.handovers/|\.benchmarks/|docs/)|\.md$' | /usr/bin/grep -c . || true)
+if [ "${code:-0}" -eq 0 ]; then
+  exit 0
+fi
+
+fail() { echo "pre-push: $1 (fix it, or git push --no-verify)" >&2; exit 1; }
+
+if printf '%s\n' "$changed" | /usr/bin/grep -Eq '^(domain|worker|flow-harness|bethere-mcp)/.*\.rs$'; then
+  cargo fmt --all -- --check >/dev/null || fail "cargo fmt --all would change files"
+fi
+if printf '%s\n' "$changed" | /usr/bin/grep -Eq '^frontend-leptos/.*\.rs$'; then
+  (cd frontend-leptos && cargo fmt --check >/dev/null) || fail "frontend cargo fmt would change files"
+fi
+if [ "${BETHERE_PREPUSH_CLIPPY:-0}" = "1" ]; then
+  cargo clippy --workspace --locked --all-targets --quiet -- -D warnings || fail "workspace clippy"
+fi

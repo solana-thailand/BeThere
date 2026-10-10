@@ -24,6 +24,8 @@ fn field_names_are_the_landing_contract() {
             "measured_at",
             "online_registrations",
             "onsite_registrations",
+            // .plans/045 R4.7: the payers' hall, one entry per public event.
+            "payers_by_event",
             "refund_after_end",
             "slip_check",
         ]

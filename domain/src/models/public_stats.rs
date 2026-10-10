@@ -45,6 +45,68 @@ pub struct PublicStats {
     pub slip_check: Option<Timing>,
     #[serde(default)]
     pub refund_after_end: Option<Timing>,
+    /// `deposit_payers` / `deposit_payers_came` per public event, oldest
+    /// first (.plans/045 R4.7): the payers' hall. Private events count in the
+    /// totals but are not listed.
+    #[serde(default)]
+    pub payers_by_event: Vec<EventPayers>,
+}
+
+/// One public event's deposit payers and how many came, under the
+/// `deposit_payers` definition.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EventPayers {
+    pub name: String,
+    pub slug: String,
+    pub start_ms: i64,
+    pub paid: u32,
+    pub came: u32,
+}
+
+/// One `(event, stored participation_type, n, checked_in)` row of the
+/// per-event statement; staff payers are already out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventPayerRow {
+    pub event_id: String,
+    pub name: String,
+    pub slug: String,
+    pub start_ms: i64,
+    pub participation_type: String,
+    pub n: u64,
+    pub checked_in: u64,
+}
+
+/// Fold the per-event rows: an on-site participation type is a payer (the
+/// same rule as `fold_stats`); events with no payer are left out. Keeps the
+/// statement's order (oldest first).
+pub fn fold_event_payers(rows: &[EventPayerRow]) -> Vec<EventPayers> {
+    let small = |n: u64| u32::try_from(n).unwrap_or(u32::MAX);
+    let mut out: Vec<(String, EventPayers)> = Vec::new();
+    for r in rows {
+        if stats_track(&r.participation_type) != StatsTrack::OnSite {
+            continue;
+        }
+        let at = match out.iter().position(|(id, _)| id == &r.event_id) {
+            Some(at) => at,
+            None => {
+                out.push((
+                    r.event_id.clone(),
+                    EventPayers {
+                        name: r.name.clone(),
+                        slug: r.slug.clone(),
+                        start_ms: r.start_ms,
+                        paid: 0,
+                        came: 0,
+                    },
+                ));
+                out.len() - 1
+            }
+        };
+        let event = &mut out[at].1;
+        event.paid = event.paid.saturating_add(small(r.n));
+        event.came = event.came.saturating_add(small(r.checked_in));
+    }
+    out.into_iter().map(|(_, event)| event).collect()
 }
 
 /// A median duration and how many cases it is over.

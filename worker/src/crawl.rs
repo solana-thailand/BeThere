@@ -19,7 +19,7 @@ pub const CANONICAL_ORIGIN: &str = "https://bethere.solana-thailand.workers.dev"
 /// Every page the Leptos router knows (`frontend-leptos/src/lib.rs`), with
 /// `:name` for a path parameter. `tests/crawl_routes.rs` pins this list to the
 /// router in both directions.
-pub const APP_ROUTES: [&str; 24] = [
+pub const APP_ROUTES: [&str; 27] = [
     "/",
     "/login",
     "/claim/:token",
@@ -30,7 +30,10 @@ pub const APP_ROUTES: [&str; 24] = [
     "/events/:slug/recap",
     "/events/:slug/post-event-register",
     "/feedback",
+    "/events",
     "/discover",
+    "/organizers",
+    "/sponsors",
     "/privacy",
     "/faq",
     "/data-privacy",
@@ -52,9 +55,12 @@ pub const SITEMAP_PATH: &str = "/sitemap.xml";
 pub const LLMS_PATH: &str = "/llms.txt";
 
 /// Public pages listed in the sitemap and in `llms.txt`, besides the events.
-pub const PUBLIC_PAGES: [(&str, &str); 4] = [
+/// `/discover` is not listed: it redirects to `/events` (.plans/045 R4.0).
+pub const PUBLIC_PAGES: [(&str, &str); 6] = [
     ("/", "Home"),
-    ("/discover", "Discover events"),
+    ("/events", "Events and courses"),
+    ("/organizers", "For organizers"),
+    ("/sponsors", "For sponsors"),
     ("/faq", "FAQ"),
     ("/privacy", "Privacy notice"),
 ];
@@ -183,7 +189,7 @@ pub fn llms_txt(origin: &str, events: &[OpenEvent]) -> String {
     let listed: Vec<&OpenEvent> = linkable(events).collect();
     match listed.is_empty() {
         true => out.push_str(&format!(
-            "No open events right now. Check [Discover events]({origin}/discover).\n"
+            "No open events right now. Check [Events and courses]({origin}/events).\n"
         )),
         false => {
             for e in listed {

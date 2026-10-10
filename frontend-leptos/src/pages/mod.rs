@@ -48,9 +48,10 @@ pub mod public_event;
 pub mod quiz_editor;
 pub mod sandbox;
 pub mod scanner;
+pub mod site;
 pub mod ticket;
 
 pub use event_summary::EventSummary;
 pub use nfc_checkin::NfcCheckin;
 pub use pr_pack::PrPack;
-pub use public::{Discover, EventRecap, Feedback, PastEvents, PostEventRegister};
+pub use public::{DiscoverList, EventRecap, Feedback, PastEvents, PostEventRegister};
