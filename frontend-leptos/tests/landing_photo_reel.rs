@@ -37,6 +37,7 @@ fn take_down_line_in_both_languages_lands_on_the_contact() {
                 .is_empty()
         );
     }
-    assert!(read("src/pages/landing/photos.rs").contains("href=\"#contact\""));
+    // The contact card lives on /sponsors since the home trim (.plans/045).
+    assert!(read("src/pages/landing/photos.rs").contains("href=\"/sponsors#contact\""));
     assert!(read("src/pages/landing/sponsors.rs").contains("id=\"contact\""));
 }

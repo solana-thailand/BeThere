@@ -1,19 +1,17 @@
-//! The landing page component itself.
+//! The landing page component itself: the hero (the lit room and the
+//! payers' hall), the reader's own registrations, the doors, then so far and
+//! the goal. As in the prototype (.plans/045), the open events live on
+//! `/events`, the story, how it works and the organizer card on
+//! `/organizers`, the sponsor section on `/sponsors`.
 
 use leptos::prelude::*;
 
-use crate::pages::site::doors::SitePage;
+use crate::pages::site::doors::{Doors, SitePage};
 
 use super::frame::{SiteFrame, use_site_auth};
-use super::header::SideIndex;
 use super::hero::Hero;
-use super::how::HowItWorks;
-use super::join::Join;
 use super::registrations::MyRegistrations;
 use super::sofar::SoFar;
-use super::sponsors::Sponsors;
-use super::story::Story;
-use super::upcoming::UpcomingEvents;
 
 /// Landing page component.
 #[component]
@@ -21,32 +19,12 @@ pub fn Landing() -> impl IntoView {
     let (auth_state, user_role) = use_site_auth();
 
     view! {
-        <SiteFrame here=SitePage::Home auth_state=auth_state>
-            <SideIndex />
-
-            // ===== Hero (build plan 0.5, .plans/043 L2) =====
+        <SiteFrame here=SitePage::Home auth_state=auth_state own_doors=true>
             <Hero auth_state=auth_state user_role=user_role />
-
-            // ===== My Registrations (signed in) — straight under the hero =====
             <MyRegistrations />
-
-            // ===== Upcoming Events (two cards + see all) =====
-            <UpcomingEvents />
-
-            // ===== The commitment ladder: one room of chairs (.plans/043 L8) =====
-            <Story />
-
-            // ===== How it works: the swimlane (.plans/043 L4) =====
-            <HowItWorks />
-
-            // ===== So far: the numbers from the system (.plans/043 L5) =====
+            // The doors right under the opening, as in the prototype.
+            <Doors here=SitePage::Home />
             <SoFar />
-
-            // ===== Sponsors: where a logo goes (.plans/043 L6) =====
-            <Sponsors />
-
-            // ===== Join: share, and the organizer card (.plans/043 L7) =====
-            <Join auth_state=auth_state user_role=user_role />
         </SiteFrame>
     }
 }

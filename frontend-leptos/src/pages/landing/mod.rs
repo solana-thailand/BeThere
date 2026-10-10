@@ -14,10 +14,12 @@ pub mod goal;
 pub mod hall;
 /// The landing's header and side index; public for `tests/landing_header.rs`.
 pub mod header;
-mod hero;
+/// The hero; `Markup` is public for the site's page heads.
+pub mod hero;
 /// The swimlane; public for `tests/landing_how_routes.rs`.
 pub mod how;
-mod join;
+/// The organizer card; public for `pages::site::organizers`.
+pub mod join;
 /// The site header. Public because `/discover` uses it too — it was inline in
 /// `page.rs`, which is why that page had no chrome at all (`.issues/100`).
 pub mod nav;
@@ -36,7 +38,6 @@ pub mod stats;
 /// The commitment ladder; public for `tests/landing_story.rs`.
 pub mod story;
 pub mod theme;
-mod upcoming;
 mod waitlist;
 
 pub use auth::AuthState;

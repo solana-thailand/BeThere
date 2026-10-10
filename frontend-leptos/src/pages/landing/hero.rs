@@ -78,9 +78,9 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                                     </A>
                                 }.into_any(),
                                 _ => view! {
-                                    <a href="#events" class="lp-btn lp-btn-primary">
+                                    <A href="/events" attr:class="lp-btn lp-btn-primary">
                                         {tr(|l| crate::i18n::td_string!(l, landing.cta.find_events))}
-                                    </a>
+                                    </A>
                                 }.into_any(),
                             }
                         }}

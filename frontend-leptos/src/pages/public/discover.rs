@@ -7,8 +7,10 @@
 //! did I go to — and all three are below the fold behind an explanation they have
 //! already read.
 //!
-//! This page answers those and nothing else. Two lists, dates on the left, one
-//! tap per row.
+//! This page answers those and nothing else. Since .plans/045 R4.3 it is the
+//! signed-in half of `/events`: what I registered for and what I went to,
+//! dates on the left, one tap per row. The open events are the page head's
+//! (`pages/site/open_events.rs`).
 //!
 //! Splitting "mine" on `event_end_ms` rather than `event_start_ms` is deliberate:
 //! an event that is running right now belongs under the heading that says it is
@@ -19,29 +21,6 @@ use serde::Deserialize;
 
 use crate::i18n::{Locale, t_string, td_string, use_i18n};
 use crate::pages::landing::AuthState;
-
-#[derive(Clone, Deserialize)]
-struct PublicEventItem {
-    name: String,
-    slug: String,
-    event_start_ms: i64,
-    #[serde(default)]
-    time_tba: bool,
-    #[serde(default)]
-    location: String,
-    #[serde(default)]
-    nft_image_url: String,
-    #[serde(default)]
-    poster_url: String,
-    /// Non-empty = postponed (migration 0053).
-    #[serde(default)]
-    postponed_note: String,
-}
-
-#[derive(Clone, Deserialize, Default)]
-struct PublicEventsResponse {
-    events: Vec<PublicEventItem>,
-}
 
 #[derive(Clone, Deserialize)]
 struct MyRegistration {
@@ -113,7 +92,6 @@ fn pick_image(poster: &str, badge: &str, slug: &str) -> String {
 #[component]
 #[allow(non_snake_case)]
 pub fn DiscoverList(set_auth_state: WriteSignal<AuthState>) -> impl IntoView {
-    let (upcoming, set_upcoming) = signal(Vec::<Row>::new());
     let (mine_now, set_mine_now) = signal(Vec::<Row>::new());
     let (mine_past, set_mine_past) = signal(Vec::<Row>::new());
     let (loaded, set_loaded) = signal(false);
@@ -123,28 +101,6 @@ pub fn DiscoverList(set_auth_state: WriteSignal<AuthState>) -> impl IntoView {
 
     leptos::task::spawn_local(async move {
         let now_ms = js_sys::Date::now() as i64;
-
-        if let Ok(page) = crate::api::api_get_json::<PublicEventsResponse>("/public/events").await {
-            set_upcoming.set(
-                page.events
-                    .into_iter()
-                    .map(|e| Row {
-                        title: e.name,
-                        href: format!("/e/{}", e.slug),
-                        start_ms: e.event_start_ms,
-                        time_tba: e.time_tba,
-                        location: e.location,
-                        image: pick_image(&e.poster_url, &e.nft_image_url, &e.slug),
-                        has_poster: !e.poster_url.is_empty(),
-                        // Public rows have no registration status, so the
-                        // pill is free to flag a postponed event.
-                        status: (!e.postponed_note.trim().is_empty())
-                            .then(|| "postponed".to_string()),
-                        past: false,
-                    })
-                    .collect(),
-            );
-        }
 
         // Signed out is a normal state here, and the API layer disagrees:
         // every helper in `api/mod.rs` calls `redirect_to_login_expired()` on a
@@ -236,11 +192,7 @@ pub fn DiscoverList(set_auth_state: WriteSignal<AuthState>) -> impl IntoView {
     view! {
         <div class="container dv-page">
 
-            <header class="dv-head">
-                <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, discover.title))}</h1>
-                <p class="subtitle">{crate::locale::tr(|l| crate::i18n::td_string!(l, discover.subtitle))}</p>
-            </header>
-
+            // The page head (`pages/site/head.rs`) carries the title.
             <Show when=move || loaded.get() && !signed_in.get() fallback=|| ()>
                 <p class="dv-signin-hint">
                     {crate::locale::tr(|l| crate::i18n::td_string!(l, discover.signin_hint))}
@@ -248,11 +200,6 @@ pub fn DiscoverList(set_auth_state: WriteSignal<AuthState>) -> impl IntoView {
             </Show>
 
             <Show when=move || loaded.get() fallback=move || view! { <p class="page-loading">{crate::locale::tr(|l| crate::i18n::td_string!(l, common.loading))}</p> }>
-                <Section
-                    title=text(|l| td_string!(l, discover.upcoming))
-                    rows=upcoming
-                    empty=text(|l| td_string!(l, discover.upcoming_empty))
-                />
                 <Section title=text(|l| td_string!(l, discover.mine)) rows=mine_now empty=text(|_| "") />
                 <Section title=text(|l| td_string!(l, discover.past)) rows=mine_past empty=text(|_| "") />
             </Show>
