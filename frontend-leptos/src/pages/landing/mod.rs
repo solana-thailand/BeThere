@@ -38,7 +38,6 @@ pub mod stats;
 /// The commitment ladder; public for `tests/landing_story.rs`.
 pub mod story;
 pub mod theme;
-mod upcoming;
 mod waitlist;
 
 pub use auth::AuthState;

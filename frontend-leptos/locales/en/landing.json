@@ -25,7 +25,7 @@
   "cta": {
     "dashboard": "Go to Dashboard →",
     "scanner": "Open Scanner →",
-    "find_events": "See open events ↓"
+    "find_events": "See open events →"
   },
   "how": {
     "title": "How it works",
@@ -135,21 +135,24 @@
     "copyright": "© 2026 BeThere. All rights reserved."
   },
   "upcoming": {
-    "title": "Upcoming events",
     "loading": "Loading events...",
-    "none_title": "Nothing open right now",
+    "none_title": "Nothing open yet",
     "none_desc": "Join the Discord to hear about the next one first.",
     "date_tba": "Date TBA",
     "time_tba": "Time TBA",
     "poster_alt": "Event poster",
     "badge_alt": "Event badge",
     "sample_event": "View a sample event →",
-    "quote": "“Free events. Come on in.”",
     "rule_back": "฿{amount}, all back when you show up",
     "rule_online_free": "Online, free, no deposit",
     "rule_free": "Free, no deposit",
     "chip_online": "online, free",
-    "see_all_n": "See all {count} events (Discover) →"
+    "cadence": "Road to Mainnet has run {times} times, about every {weeks} weeks · last on {date}",
+    "watch_last": "Watch the last one: RTM #{ep}",
+    "learn": "Learn from past events ↓",
+    "or": "Or",
+    "or_try": "try a deposit on devnet",
+    "or_host": "host your own"
   },
   "story": {
     "title": "This seat goes to\nsomeone who can come.",
@@ -307,7 +310,26 @@
     "plan_note": "A deposit doesn't make people come. It tells you who will.",
     "plan_fine": "Our RTM #1 numbers ({conf} confirmed, {paid} paid, of {reg}): a planning guide, not a promise",
     "org_now": "On BeThere now: Solana Developer Thailand",
-    "head_org_cta": "Join the organizer waitlist ↓"
+    "head_org_cta": "Join the organizer waitlist ↓",
+    "learn_title": "Learn from past events",
+    "learn_lede": "Every event was recorded. Watch them episode by episode, like a course.",
+    "course_rtm_kind": "Bangkok meetups",
+    "course_rtm_about": "Solana and AI from people who build it, once a month",
+    "course_latent_kind": "Online workshops",
+    "course_latent_about": "Rust, Solana and AI, one step a week",
+    "course_eps": "{n} episodes",
+    "course_ep": "Episode {ep} · {date}",
+    "course_watch": "Watch the episodes",
+    "dep_title": "How the deposit works",
+    "dep_live": "LIVE",
+    "dep_1": "฿500 by PromptPay",
+    "dep_2": "Scan in at the door",
+    "dep_3": "All back after the event",
+    "dep_fine": "The organizer sends it back after the event",
+    "dep_median": "median {d}",
+    "proof_line": "who paid a deposit came",
+    "proof_why": "See why →",
+    "proof_fine": "RTM #1–#6 · staff not counted"
   },
   "hall": {
     "label": "Every deposit payer of RTM #1–#6, one chair each",

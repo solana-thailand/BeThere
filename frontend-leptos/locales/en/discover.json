@@ -1,7 +1,5 @@
 {
   "signin_hint": "Sign in to see the events you've registered for and past events",
-  "upcoming": "Coming soon",
-  "upcoming_empty": "No events are open for registration right now",
   "mine": "My events",
   "past": "Past events"
 }

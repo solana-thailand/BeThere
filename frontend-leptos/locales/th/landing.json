@@ -25,7 +25,7 @@
   "cta": {
     "dashboard": "ไปที่แดชบอร์ด →",
     "scanner": "เปิดสแกนเนอร์ →",
-    "find_events": "ดูงานที่เปิดรับ ↓"
+    "find_events": "ดูงานที่เปิดรับ →"
   },
   "how": {
     "title": "ทำงานยังไง",
@@ -135,21 +135,24 @@
     "copyright": "© 2026 BeThere สงวนลิขสิทธิ์"
   },
   "upcoming": {
-    "title": "งานที่กำลังจะมา",
     "loading": "กำลังโหลดอีเวนต์...",
-    "none_title": "ยังไม่มีงานเปิดตอนนี้",
+    "none_title": "ยังไม่มีงานเปิด",
     "none_desc": "เข้า Discord เพื่อรู้ก่อนใคร",
     "date_tba": "วันที่แจ้งภายหลัง",
     "time_tba": "เวลาแจ้งภายหลัง",
     "poster_alt": "โปสเตอร์งาน",
     "badge_alt": "badge ของงาน",
     "sample_event": "ดูตัวอย่างอีเวนต์ →",
-    "quote": "“งานฟรี มานี่มา”",
     "rule_back": "฿{amount} ได้คืนเต็มเมื่อมาถึงงาน",
     "rule_online_free": "ออนไลน์ฟรี ไม่ต้องมัดจำ",
     "rule_free": "ฟรี ไม่ต้องมัดจำ",
     "chip_online": "ออนไลน์ ฟรี",
-    "see_all_n": "ดูทั้งหมด {count} งาน (หน้า Discover) →"
+    "cadence": "Road to Mainnet จัดมาแล้ว {times} ครั้ง ราวทุก {weeks} สัปดาห์ · ล่าสุด {date}",
+    "watch_last": "ดูครั้งล่าสุด RTM #{ep}",
+    "learn": "เรียนย้อนหลัง ↓",
+    "or": "หรือ",
+    "or_try": "ลองมัดจำบน devnet",
+    "or_host": "จัดงานของคุณเอง"
   },
   "story": {
     "title": "ที่นั่งนี้\nมีคนมาได้จริง",
@@ -307,7 +310,26 @@
     "plan_note": "มัดจำไม่ได้ทำให้คนมา แต่บอกได้ว่าใครจะมา",
     "plan_fine": "ตัวเลข RTM #1 ของเรา (ยืนยัน {conf} · จ่าย {paid} จาก {reg}) ใช้วางแผน ไม่ใช่คำสัญญา",
     "org_now": "ชุมชนที่ใช้ BeThere ตอนนี้: Solana Developer Thailand",
-    "head_org_cta": "ลงชื่อรอเป็นผู้จัด ↓"
+    "head_org_cta": "ลงชื่อรอเป็นผู้จัด ↓",
+    "learn_title": "เรียนย้อนหลัง",
+    "learn_lede": "ทุกงานมีคลิป ดูทีละตอนเหมือนคอร์ส",
+    "course_rtm_kind": "มีตอัปที่กรุงเทพฯ",
+    "course_rtm_about": "Solana กับ AI จากคนที่สร้างจริง เดือนละครั้ง",
+    "course_latent_kind": "เวิร์กช็อปออนไลน์",
+    "course_latent_about": "Rust, Solana และ AI ทีละขั้น สัปดาห์ละตอน",
+    "course_eps": "{n} ตอน",
+    "course_ep": "ตอนที่ {ep} · {date}",
+    "course_watch": "ดูทุกตอน",
+    "dep_title": "มัดจำทำงานยังไง",
+    "dep_live": "LIVE",
+    "dep_1": "฿500 ผ่าน PromptPay",
+    "dep_2": "สแกนที่ประตู",
+    "dep_3": "คืนเต็มหลังงาน",
+    "dep_fine": "ผู้จัดโอนคืนหลังงาน",
+    "dep_median": "กลาง ๆ {d}",
+    "proof_line": "คนที่วางมัดจำ มาจริง",
+    "proof_why": "ดูว่าทำไม →",
+    "proof_fine": "RTM #1–#6 · ไม่นับทีมงาน"
   },
   "hall": {
     "label": "คนวางมัดจำทุกคนของ RTM #1–#6 คนละหนึ่งเก้าอี้",

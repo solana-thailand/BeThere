@@ -21,11 +21,17 @@ pub fn PageHead(
     title: Catalog,
     #[prop(optional)] title_2: Option<Catalog>,
     sub: Catalog,
+    /// A right-hand column (the open events on `/events`); the head is one
+    /// column without it.
+    #[prop(optional)]
+    aside: Option<AnyView>,
     #[prop(optional)] children: Option<Children>,
 ) -> impl IntoView {
+    let grid = aside.is_some();
     view! {
-        <header class="lp-head" id="top">
-            <div class="lp-wrap">
+        <header class="lp-head" class:lp-head-split=grid id="top">
+            <div class="lp-wrap lp-head-grid">
+                <div class="lp-head-text">
                 <p class="lp-kicker">{tr(kicker)}</p>
                 <h1 class="lp-head-h1">
                     <span>{tr(title)}</span>
@@ -33,6 +39,8 @@ pub fn PageHead(
                 </h1>
                 <p class="lp-head-sub"><Markup text=tr(sub) /></p>
                 {children.map(|c| c())}
+                </div>
+                {aside.map(|a| view! { <div class="lp-head-aside">{a}</div> })}
             </div>
         </header>
     }

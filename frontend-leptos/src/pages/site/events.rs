@@ -1,6 +1,8 @@
-//! `/events` (.plans/045 R4.0). Until R4.3 builds the events-and-courses
-//! page, `/events` shows the existing Discover list, and `/discover` (the old
-//! address, in shared links and the boot summary) moves there.
+//! `/events` (.plans/045 R4.3, the prototype's events page): the head with
+//! the open events beside it (or the empty state), the reader's own events
+//! when signed in (the Discover list), learn from past events, how the
+//! deposit works and the payers who came, then the doors. `/discover` (the
+//! old address, in shared links and the boot summary) moves here.
 
 use leptos::prelude::*;
 use leptos_meta::Title;
@@ -13,11 +15,13 @@ use crate::pages::DiscoverList;
 use crate::pages::landing::AuthState;
 use crate::pages::landing::frame::SiteFrame;
 
+use super::deposit_walk::DepositWalk;
 use super::doors::SitePage;
 use super::head::PageHead;
+use super::learn::Learn;
+use super::open_events::OpenEvents;
 
-/// `/events`: the Discover list in the site frame, so the header and doors
-/// match the other site pages until R4.3 replaces the list.
+/// `/events`.
 #[component]
 pub fn EventsPage() -> impl IntoView {
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
@@ -29,10 +33,13 @@ pub fn EventsPage() -> impl IntoView {
                 title=|l| td_string!(l, landing.site.head_events_1)
                 title_2=|l| td_string!(l, landing.site.head_events_2)
                 sub=|l| td_string!(l, landing.site.head_events_sub)
+                aside=view! { <OpenEvents /> }.into_any()
             />
             <section class="lp-events-sec">
                 <DiscoverList set_auth_state=set_auth_state />
             </section>
+            <Learn />
+            <DepositWalk />
         </SiteFrame>
     }
 }
