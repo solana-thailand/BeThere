@@ -37,8 +37,7 @@ pub fn Organizers() -> impl IntoView {
                 </div>
             </PageHead>
             <Story />
-            <HowItWorks />
-            <div class="lp-wrap">{try_line(TRY_LIVE)}</div>
+            <HowItWorks footer=try_line(TRY_LIVE).unwrap_or_else(|| ().into_any()) />
             <section id="join" class="lp-join">
                 <div class="lp-wrap lp-plan-bento">
                     <PlanTile />

@@ -19,7 +19,7 @@ meetups in Bangkok since spring 2026.
 | `bethere-mcp`: an AI agent registers a person and pays the escrow deposit from its own wallet | Staging + devnet | Verified with Claude as the client |
 | The site (`.plans/045` Release 4): home with the lit room and the payers' hall, `/events` (open events, else how often the series runs, past events by series), `/organizers` (the room narrowed in three steps, how it works, a planning calculator), `/sponsors` | **Production** | Live. `/` is also served by the Worker as static HTML for crawlers and no-JS readers |
 | "Email me when it opens": one mail per newly opened public event, from bethere.sol@gmail.com via the Gmail API, one-click unsubscribe | **Production** | Live (hourly cron) |
-| `/sandbox`: deposit, show up, get it back on devnet with a test wallet or your own | **Staging** | Live on staging only (Worker-held devnet keys) |
+| `/sandbox`: deposit, show up, get it back on devnet with a test wallet or your own | **Production** + staging | Live (`SANDBOX_ENABLED`, Worker-held devnet keys; devnet only, not real money) |
 
 What is new in the Colosseum window (14 Sep – 12 Oct) and what came before:
 [`docs/submission/built_in_window.md`](docs/submission/built_in_window.md).
@@ -346,7 +346,7 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | `/events` | Events and courses: open events in the head (else the empty state, subscribe, held credit), your events, past events by series, how the deposit works | Public |
 | `/organizers` | For organizers: the room narrowed in three steps, how it works, the planning calculator, the organizer waitlist | Public |
 | `/sponsors` | For sponsors: where a logo goes, the contact card (`#contact`) | Public |
-| `/sandbox` | Devnet sandbox (on where the Worker has the sandbox keys: staging) | Public |
+| `/sandbox` | Devnet sandbox: try the deposit with a test wallet or your own (`SANDBOX_ENABLED` + devnet keys) | Public |
 | `/unsubscribe/{token}` | One-click unsubscribe from event announcements | Token |
 | `/login` | Login: Google OAuth sign-in (staff/organizer entry point) | Public |
 | `/e/{slug}` | Public event: details, countdown, registration | Public |

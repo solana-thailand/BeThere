@@ -216,7 +216,12 @@ fn route_tab(route: Route) -> Catalog {
 }
 
 #[component]
-pub fn HowItWorks() -> impl IntoView {
+pub fn HowItWorks(
+    /// Rendered at the foot of the section (the try line on /organizers), so
+    /// it sits on the section's own background.
+    #[prop(optional)]
+    footer: Option<AnyView>,
+) -> impl IntoView {
     let i18n = use_i18n();
     let stats = use_landing_stats();
     let track = web_sys::window()
@@ -362,6 +367,7 @@ pub fn HowItWorks() -> impl IntoView {
                 </div>
                 <p class="lp-fineprint">{footnote}</p>
                 <UsdcPanel />
+                {footer}
             </div>
         </section>
     }

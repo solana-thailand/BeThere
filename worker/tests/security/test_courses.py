@@ -14,6 +14,9 @@ ENROL = plain_after(SRC, "pub const ENROL_SQL")
 WATCHED = plain_after(SRC, "pub const WATCHED_SQL")
 ENROLLED = plain_after(SRC, "pub const ENROLLED_SQL")
 PROGRESS = plain_after(SRC, "pub const PROGRESS_SQL")
+COURSES = plain_after(SRC, "pub const COURSES_SQL")
+COURSE = plain_after(SRC, "pub const COURSE_SQL")
+OPEN = plain_after(SRC, "pub const COURSE_OPEN_SQL")
 _src = (WORKER / "src" / SRC).read_text()
 ERASE = [
     line.strip().strip('",')
@@ -29,6 +32,15 @@ class CourseTests(unittest.TestCase):
     def setUp(self):
         self.db = sqlite3.connect(":memory:")
         for migration in sorted((WORKER / "migrations").glob("*.sql")):
+            if migration.name.startswith("0062"):
+                # the seed links events found by slug: make two exist first
+                for i, (slug, status, vis) in enumerate(
+                    [(EP1, "completed", "public"), (EP2, "completed", "public")]
+                ):
+                    self.db.execute(
+                        "INSERT INTO events (id, name, slug, status, visibility, event_start_ms, event_end_ms, video_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (f"id-{i}", f"RTM #{i + 1}", slug, status, vis, 1000 + i, 2000 + i, "https://youtu.be/gzFU1NvC3aw"),
+                    )
             self.db.executescript(migration.read_text())
 
     def tearDown(self):
@@ -62,6 +74,28 @@ class CourseTests(unittest.TestCase):
             n = self.db.execute(f"SELECT COUNT(*) FROM {table} WHERE email = 'a@example.com'").fetchone()[0]
             self.assertEqual(n, 0, table)
         self.assertEqual(self.db.execute(ENROLLED, ("b@example.com", RTM)).fetchall(), [(1,)])
+
+    def test_seed_and_reads(self):
+        # 0062 made the two courses and linked the events that exist, by slug
+        self.assertEqual(self.db.execute(OPEN, (RTM,)).fetchall(), [(1,)])
+        self.assertEqual(self.db.execute(OPEN, ("nope",)).fetchall(), [])
+        rows = self.db.execute(COURSE, (RTM,)).fetchall()
+        self.assertEqual([r[3] for r in rows], [EP1, EP2], "oldest first")
+        self.assertEqual(rows[0][7], "https://youtu.be/gzFU1NvC3aw")
+        # a private or draft event never shows, and the next one appears by date
+        self.db.execute("INSERT INTO events (id, name, slug, status, visibility, event_start_ms, event_end_ms) VALUES ('p', 'P', 'priv', 'completed', 'private', 5, 6)")
+        self.db.execute("INSERT INTO events (id, name, slug, status, visibility, event_start_ms, event_end_ms) VALUES ('n', 'RTM #7', 'rtm-7', 'active', 'public', 9000, 9999)")
+        self.db.execute("INSERT INTO campaign_events (campaign_id, event_id) VALUES (?, 'p'), (?, 'n')", (RTM, RTM))
+        self.assertEqual([r[3] for r in self.db.execute(COURSE, (RTM,))], [EP1, EP2, "rtm-7"])
+        ids = {r[0] for r in self.db.execute(COURSES)}
+        self.assertEqual(ids, {RTM}, "a course with no public episode is not listed")
+
+    def test_watched_only_for_an_episode_of_the_course(self):
+        self.db.execute(ENROL, ("a@example.com", RTM, "2026-10-10T10:00:00Z"))
+        n = self.db.execute(WATCHED, ("a@example.com", RTM, "not-an-episode", "2026-10-10T10:01:00Z")).rowcount
+        self.assertEqual(n, 0)
+        n = self.db.execute(WATCHED, ("a@example.com", RTM, EP1, "2026-10-10T10:02:00Z")).rowcount
+        self.assertEqual(n, 1)
 
 
 if __name__ == "__main__":

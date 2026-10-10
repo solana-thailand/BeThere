@@ -3,6 +3,7 @@
 //! the cadence line, stays under 20 KB, escapes what organizers typed, and
 //! keeps the block the app removes when it mounts.
 
+use event_checkin_domain::models::course::cadence;
 use event_checkin_domain::models::facts::ladder_total;
 use event_checkin_worker::home::{
     HOME_HTML_BUDGET, HomeEvent, home_events, keep_open_public, splice_summary, summary_html,
@@ -29,10 +30,15 @@ fn event(i: i64) -> HomeEvent {
 #[test]
 fn same_numbers_as_the_hall_and_the_promise() {
     let (paid, came) = ladder_total();
-    let html = summary_html(&[]);
+    let starts: Vec<i64> = [0i64, 28, 55, 84, 119, 161]
+        .iter()
+        .map(|d| 1_777_170_600_000 + d * 86_400_000)
+        .collect();
+    let quiet = cadence(&starts).map(|c| ("Road to Mainnet", c));
+    let html = summary_html(&[], quiet);
     assert!(html.contains(&format!("<strong>{came}/{paid}</strong>")));
     assert!(html.contains("Show up. Get it all back."));
-    // nothing open: the cadence line from the catalogue
+    // nothing open: the busiest course's cadence line
     assert!(
         html.contains("Road to Mainnet has run 6 times, about every 4 weeks"),
         "{html}"
@@ -43,7 +49,7 @@ fn same_numbers_as_the_hall_and_the_promise() {
 fn open_events_are_links_and_what_organizers_typed_is_escaped() {
     let mut evil = event(1);
     evil.name = "<script>alert(1)</script> & \"x\"".into();
-    let html = summary_html(&[evil, event(2)]);
+    let html = summary_html(&[evil, event(2)], None);
     assert!(html.contains(
         "<a href=\"/e/rtm-1\">&lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;x&quot;</a>"
     ));
@@ -62,7 +68,7 @@ fn spliced_page_keeps_the_block_and_the_budget() {
         "boot-summary must not nest a div"
     );
     let events: Vec<HomeEvent> = (1..=8).map(event).collect();
-    let page = splice_summary(&stock, &summary_html(&events)).unwrap();
+    let page = splice_summary(&stock, &summary_html(&events, None)).unwrap();
     assert_eq!(page.matches("id=\"boot-summary\"").count(), 1);
     assert!(
         page.contains("rtm-5") && !page.contains("rtm-6"),
