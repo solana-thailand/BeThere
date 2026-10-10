@@ -112,3 +112,26 @@ pub const ROOM: [RoomGroup; 3] = [
     RoomGroup { n: 14, came: 9 },
     RoomGroup { n: 15, came: 0 },
 ];
+
+/// `(n, came)` summed over [`ROOM`]: RTM #1's registrants and who came.
+pub const fn room_total() -> (u32, u32) {
+    let mut n = 0;
+    let mut came = 0;
+    let mut i = 0;
+    while i < ROOM.len() {
+        n += ROOM[i].n;
+        came += ROOM[i].came;
+        i += 1;
+    }
+    (n, came)
+}
+
+/// The organizers' planning guide (.plans/045, prototype organizers
+/// `plan-tile`): how many of `registered` would come if it went like RTM #1
+/// (came of registered), rounded half up. One meetup's rate, not a promise;
+/// how many would pay is not something the data can say, so it is not
+/// projected.
+pub const fn expected_came(registered: u32) -> u32 {
+    let (n, came) = room_total();
+    (2 * registered * came + n) / (2 * n)
+}

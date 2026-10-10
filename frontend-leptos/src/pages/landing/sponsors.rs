@@ -206,10 +206,10 @@ pub fn vcard_href() -> String {
 
 #[component]
 pub fn Sponsors(
-    /// On `/sponsors` the section is the page, so its title is the page's one
-    /// `h1`; on the landing it is a section (`h2`).
+    /// On `/sponsors` the page head carries the kicker, title and lede, so
+    /// the section starts at the categories.
     #[prop(optional)]
-    page_title: bool,
+    headless: bool,
 ) -> impl IntoView {
     let picked = RwSignal::new(Category::All);
     let tr = crate::locale::tr;
@@ -233,12 +233,11 @@ pub fn Sponsors(
     view! {
         <section id="sponsors" class="lp-sponsors">
             <div class="lp-wrap">
-                <p class="lp-kicker">{tr(|l| td_string!(l, landing.sponsors.kicker))}</p>
-                {match page_title {
-                    true => view! { <h1 class="lp-h2">{tr(|l| td_string!(l, landing.sponsors.title))}</h1> }.into_any(),
-                    false => view! { <h2 class="lp-h2">{tr(|l| td_string!(l, landing.sponsors.title))}</h2> }.into_any(),
-                }}
-                <p class="lp-lede"><Markup text=tr(|l| td_string!(l, landing.sponsors.lede)) /></p>
+                {(!headless).then(|| view! {
+                    <p class="lp-kicker">{tr(|l| td_string!(l, landing.sponsors.kicker))}</p>
+                    <h2 class="lp-h2">{tr(|l| td_string!(l, landing.sponsors.title))}</h2>
+                    <p class="lp-lede"><Markup text=tr(|l| td_string!(l, landing.sponsors.lede)) /></p>
+                })}
                 <div class="lp-cats" role="group" aria-label=tr(|l| td_string!(l, landing.sponsors.cats_label))>
                     {Category::ALL.into_iter().map(|cat| view! {
                         <button

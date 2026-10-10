@@ -6,7 +6,7 @@
    site's navy (ASKS-4 §17). One ease; reduced motion settles everything.
    The hero is the exception: it is always the night room (R4.1), so it
    takes the dark tokens in both themes and the hall's card takes the
-   page's back. */
+   page's back. So does every site page's head (`.lp-head`, the still room). */
 
 .lp,
 .lp:not([data-theme="dark"]) .lp-hall-box {
@@ -27,7 +27,8 @@
 }
 
 .lp[data-theme="dark"],
-.lp-hero {
+.lp-hero,
+.lp-head {
     --lp-paper: #12152a;
     --lp-paper-2: #171b33;
     --lp-ink: #e9e4d3;
@@ -222,60 +223,6 @@ mark.lp-hl {
     cursor: pointer;
     padding: 0;
     flex: none;
-}
-
-/* side index: dots on the right, wide screens only; a label on hover */
-.lp-side {
-    position: fixed;
-    right: 18px;
-    top: 50%;
-    transform: translateY(-50%);
-    z-index: 4;
-    display: none;
-    flex-direction: column;
-    gap: 12px;
-}
-.lp-side a {
-    position: relative;
-    width: 10px;
-    height: 10px;
-    border: 2px solid var(--lp-ink);
-    border-radius: 50%;
-    background: var(--lp-paper);
-    font-size: 0;
-    text-decoration: none;
-}
-.lp-side a.on {
-    background: var(--lp-ink);
-    box-shadow: 0 0 0 2px var(--lp-paper);
-}
-.lp-side a::after {
-    content: attr(data-label);
-    position: absolute;
-    right: 18px;
-    top: 50%;
-    transform: translateY(-50%);
-    white-space: nowrap;
-    font: 600 12px/1 var(--lp-sans);
-    background: var(--lp-ink);
-    color: var(--lp-paper);
-    padding: 5px 7px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--lp-micro) var(--lp-ease);
-}
-.lp-side a:hover::after,
-.lp-side a:focus-visible::after {
-    opacity: 1;
-}
-.lp-side a:focus-visible {
-    outline: 3px solid var(--lp-field);
-    outline-offset: 3px;
-}
-@media (min-width: 1240px) {
-    .lp-side {
-        display: flex;
-    }
 }
 
 /* the "why a deposit" film */
@@ -498,6 +445,237 @@ mark.lp-hl {
     }
 }
 
+/* A site page's head in the still room (pages/site/head.rs; the prototype's
+   .dark-head). The image is site_room.py's dim dither, fetched only when a
+   page head renders; until then, the night colour. */
+.lp-head {
+    position: relative;
+    isolation: isolate;
+    padding: 56px 0 44px;
+    border-bottom: 2px solid var(--lp-ink);
+    background: #0e1020 url("/room/rtm6-room-still.webp?v=1") center 40% / cover;
+    image-rendering: pixelated;
+    color: var(--lp-ink);
+    font: 400 17px/1.6 var(--lp-sans);
+}
+.lp-head::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(
+        90deg,
+        rgba(14, 16, 32, 0.82) 0%,
+        rgba(14, 16, 32, 0.55) 60%,
+        rgba(14, 16, 32, 0.35) 100%
+    );
+}
+.lp-head .lp-kicker {
+    color: var(--lp-t-field);
+}
+.lp-head-h1 {
+    margin: 0;
+    font-weight: 700;
+    font-size: clamp(44px, 5.6vw, 72px);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    color: var(--lp-ink);
+}
+:lang(th) .lp-head-h1 {
+    line-height: 1.18;
+    letter-spacing: -0.01em;
+}
+.lp-head-h1-2 {
+    color: var(--lp-h-field);
+}
+.lp-head-sub {
+    margin: 16px 0 0;
+    max-width: 34em;
+    font-size: 19px;
+    color: var(--lp-ink-2);
+}
+.lp-head .lp-actions {
+    margin-top: 24px;
+}
+/* /events: the open events beside the title (prototype events hero4) */
+.lp-head-split .lp-head-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: center;
+}
+.lp-head-text,
+.lp-head-aside {
+    min-width: 0;
+}
+.lp-head-aside .lp-event-list.lp-one {
+    grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 767px) {
+    .lp-head-split .lp-head-grid {
+        grid-template-columns: 1fr;
+        gap: 24px;
+    }
+}
+
+/* /events: learn from past events (pages/site/learn.rs) */
+.lp-learn {
+    background: var(--lp-paper-2);
+    color: var(--lp-ink);
+    font: 400 17px/1.6 var(--lp-sans);
+    border-top: 2px solid var(--lp-ink);
+    border-bottom: 2px solid var(--lp-ink);
+    padding: 48px 0;
+}
+.lp-learn .lp-lede {
+    margin: 8px 0 20px;
+}
+.lp-courses {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+@media (max-width: 767px) {
+    .lp-courses {
+        grid-template-columns: 1fr;
+    }
+}
+.lp-course {
+    padding: 20px;
+    display: grid;
+    gap: 6px;
+    align-content: start;
+}
+.lp-course h3 {
+    margin: 0;
+    font-size: 21px;
+    color: var(--lp-ink);
+}
+.lp-course-kind {
+    margin: 0;
+    font: 600 13px/1.3 var(--lp-sans);
+    color: var(--lp-t-field);
+}
+.lp-course-about {
+    margin: 0;
+    color: var(--lp-ink-2);
+}
+.lp-course summary {
+    cursor: pointer;
+    font-size: 15px;
+    color: var(--lp-ink);
+}
+.lp-course summary:focus-visible {
+    outline: 3px solid var(--lp-field);
+    outline-offset: 3px;
+}
+.lp-course-eps {
+    margin: 10px 0 0;
+    padding-left: 22px;
+    display: grid;
+    gap: 4px;
+    font-size: 15px;
+}
+.lp-course-eps a {
+    color: var(--lp-ink);
+    text-underline-offset: 3px;
+}
+
+/* /events: how the deposit works, and the payers who came (deposit_walk.rs) */
+.lp-walk {
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+    font: 400 17px/1.6 var(--lp-sans);
+    border-bottom: 2px solid var(--lp-ink);
+    padding: 44px 0 48px;
+}
+.lp-walk-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 0 0 18px;
+}
+.lp-walk-head .lp-h2 {
+    margin: 0;
+}
+.lp-walk-steps {
+    list-style: none;
+    margin: 0 0 10px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+}
+@media (max-width: 767px) {
+    .lp-walk-steps {
+        grid-template-columns: 1fr;
+    }
+}
+.lp-walk-steps li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 2px solid var(--lp-ink);
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+}
+.lp-walk-steps svg {
+    width: 40px;
+    height: 40px;
+    flex: none;
+}
+.lp-walk-qr {
+    fill: var(--lp-paper);
+}
+.lp-walk-ok {
+    color: var(--lp-t-ok);
+}
+.lp-walk-ok b {
+    color: var(--lp-t-ok);
+}
+.lp-walk-tick {
+    fill: none;
+    stroke: var(--lp-paper);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.lp-proof {
+    margin: 28px 0 4px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    font: 600 17px/1.3 var(--lp-sans);
+}
+.lp-proof b {
+    font: 800 64px/0.95 var(--lp-sans);
+    letter-spacing: -0.04em;
+    color: var(--lp-t-warm);
+}
+.lp-proof a {
+    color: var(--lp-t-field);
+}
+@media (max-width: 480px) {
+    .lp-head {
+        padding: 32px 0 28px;
+    }
+    .lp-head-h1 {
+        font-size: 44px;
+    }
+    .lp-head-sub {
+        font-size: 17px;
+    }
+}
+
+/* A section reached by its #id (the hero's keyword links, /sponsors#contact)
+   stops below the sticky header, not under it. */
+.lp [id] {
+    scroll-margin-top: 80px;
+}
+
 /* Shared section pieces */
 .lp-h2 {
     margin: 0 0 24px;
@@ -535,14 +713,7 @@ mark.lp-hl {
     color: var(--lp-ink-2);
 }
 
-/* 2 · upcoming events */
-.lp-events {
-    background: var(--lp-paper-2);
-    color: var(--lp-ink);
-    font: 400 17px/1.6 var(--lp-sans);
-    border-bottom: 2px solid var(--lp-ink);
-    padding: 48px 0;
-}
+/* the open events: cards in the /events head (pages/site/open_events.rs) */
 .lp-event-list {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -596,8 +767,21 @@ a.lp-event:focus-visible {
 .lp-event-empty {
     gap: 10px;
 }
-.lp-more {
-    margin: 20px 0 0;
+/* Room for the card before /api/public/events answers, so the head does
+   not jump when it does. */
+.lp-open {
+    min-height: 12rem;
+}
+/* "Or try a deposit on devnet · Discord · host your own" */
+.lp-open-or {
+    margin: 2px 0 0;
+    font-size: 14px;
+    color: var(--lp-ink-2);
+}
+.lp-open-or a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 3px;
 }
 @media (prefers-reduced-motion: reduce) {
     .lp-event {
@@ -1280,7 +1464,7 @@ a.lp-event:focus-visible {
     }
 }
 
-/* 6 · join: share, and the organizer card */
+/* /organizers #join: the planning tile and the organizer card */
 .lp-join {
     background: var(--lp-paper-2);
     color: var(--lp-ink);
@@ -1288,14 +1472,93 @@ a.lp-event:focus-visible {
     border-bottom: 2px solid var(--lp-ink);
     padding: 72px 0;
 }
-.lp-join-lede {
+/* /organizers: the planning tile beside the organizer card (prototype
+   organizers `join-bento`), one column on a phone. */
+.lp-plan-bento {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 20px;
+    align-items: start;
+}
+@media (max-width: 767px) {
+    .lp-plan-bento {
+        grid-template-columns: 1fr;
+    }
+}
+.lp-plan {
+    padding: 22px;
+    min-width: 0;
+}
+.lp-plan-in {
     display: flex;
-    gap: 14px;
     align-items: center;
+    gap: 12px;
     flex-wrap: wrap;
+    font: 600 15px/1.3 var(--lp-sans);
+}
+.lp-plan-in input {
+    width: 100px;
+    font: 700 24px/1 var(--lp-sans);
+    padding: 8px 10px;
+    border: 2px solid var(--lp-ink);
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+}
+.lp-plan-in input:focus-visible {
+    outline: 3px solid var(--lp-t-field);
+    outline-offset: 2px;
+}
+.lp-plan-big {
+    margin: 14px 0 6px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    font: 600 17px/1.3 var(--lp-sans);
+}
+.lp-plan-big b {
+    font: 800 64px/0.95 var(--lp-sans);
+    letter-spacing: -0.04em;
+    color: var(--lp-t-warm);
+    font-variant-numeric: tabular-nums;
+}
+.lp-plan-over {
+    margin: 4px 0 6px;
+    min-height: 1.4em;
+    font: 700 15px/1.4 var(--lp-sans);
+    color: var(--lp-t-warm);
+}
+.lp-plan-room {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin: 8px 0 10px;
+}
+.lp-plan-legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    font: 600 13px/1 var(--lp-sans);
+    color: var(--lp-ink-2);
+}
+.lp-plan-legend svg {
+    width: 16px;
+    height: 20px;
+}
+.lp-plan-legend span + svg {
+    margin-left: 14px;
+}
+.lp-plan-note {
+    margin: 0 0 6px;
+    font-weight: 600;
+}
+.lp-plan-fine {
+    margin: 0;
+    font-size: 13px;
+    color: var(--lp-ink-2);
 }
 .lp-join-card {
-    max-width: 560px;
     padding: 26px;
     display: grid;
     gap: 14px;

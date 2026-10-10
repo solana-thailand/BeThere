@@ -83,3 +83,29 @@ fn nested_brace_takes_the_inner_link() {
         ]
     );
 }
+
+/// Since the landing's sections moved to their own pages (.plans/045), a
+/// keyword may link to a section of another site page, but never off it.
+#[test]
+fn links_stay_on_the_site() {
+    assert_eq!(
+        parse("{deposit|/organizers#how}"),
+        vec![Segment::Link {
+            text: "deposit",
+            href: "/organizers#how"
+        }]
+    );
+    for off_site in [
+        "{x|//evil.example}",
+        "{x|https://evil.example}",
+        "{x|javascript:alert(1)}",
+        "{x|/a:b}",
+        "{x|mailto:a@b.c}",
+    ] {
+        let got = parse(off_site);
+        assert!(
+            got.iter().all(|seg| matches!(seg, Segment::Text(_))),
+            "{off_site}: {got:?}"
+        );
+    }
+}

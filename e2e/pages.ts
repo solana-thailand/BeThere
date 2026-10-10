@@ -31,13 +31,14 @@ export interface AppPage {
 const EVENT_LOADED = `text=${EVENT_NAME}`;
 
 export const PAGES: AppPage[] = [
-  // The photo reel (L9) and the goal globe (L10) load on first sight; the
-  // ladder (L8) narrows on its own unless motion is reduced.
+  // The photo reel (L9) and the goal globe (L10) load on first sight. The
+  // open events moved to /events (.plans/045), so the home is ready when the
+  // payers' hall has its total.
   {
     name: "landing",
     path: "/",
     authed: false,
-    ready: EVENT_LOADED,
+    ready: ".lp-hall-big",
     reveal: [
       { at: ".lp-reel", ready: ".lp-moment" },
       { at: ".lp-goal-grid", ready: "#lp-countries option" },

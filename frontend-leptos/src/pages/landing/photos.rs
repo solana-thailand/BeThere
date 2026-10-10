@@ -117,7 +117,7 @@ pub fn PhotoReel() -> impl IntoView {
                 <p class="lp-reel-remove">
                     {tr(|l| td_string!(l, landing.sofar.photo_remove))}
                     " "
-                    <a href="#contact">{tr(|l| td_string!(l, landing.sofar.photo_remove_link))}</a>
+                    <a href="/sponsors#contact">{tr(|l| td_string!(l, landing.sofar.photo_remove_link))}</a>
                 </p>
             })}
         </div>

@@ -1,5 +1,9 @@
-//! Upcoming public events (.plans/043 L3): the nearest three, a poster, the
-//! event's own deposit rule in one line, and an honest empty state.
+//! The open events, in the `/events` head (.plans/045 R4.3, prototype
+//! events `h4-side`; the landing's upcoming cards of .plans/043 L3 moved
+//! here): each with a poster, when, where and the event's own deposit rule
+//! in one line. With nothing open, the empty state says how often the series
+//! runs and when it last did (`domain::models::catalogue::cadence`), points
+//! at the last recording, and offers what there is to do meanwhile.
 
 use leptos::prelude::*;
 use serde::Deserialize;
@@ -7,7 +11,10 @@ use serde::Deserialize;
 use crate::api::ApiResponse;
 use crate::i18n::{t_string, use_i18n};
 
-use super::event_card::{DepositRule, nearest_first};
+use crate::pages::landing::event_card::{DepositRule, nearest_first};
+use event_checkin_domain::models::catalogue::{CATALOGUE, Series, cadence};
+
+use super::doors::TRY_LIVE;
 
 /// Lightweight event item from the public events API.
 #[derive(Clone, Deserialize)]
@@ -48,15 +55,12 @@ struct PublicEventsResponse {
     sample_event_slug: Option<String>,
 }
 
-/// Event cards the landing shows before "See all" (ASKS-4 §17: nearest 3).
-const LANDING_EVENT_CARDS: usize = 3;
-
 /// The community Discord, for the empty state (prototype, ASKS-4 §6).
 const DISCORD_URL: &str = "https://discord.gg/PGbUgNmsns";
 
-/// Upcoming Events section — fetches active events and displays them.
+/// The head's side panel: the open events, nearest first, or the empty state.
 #[component]
-pub(super) fn UpcomingEvents() -> impl IntoView {
+pub fn OpenEvents() -> impl IntoView {
     let i18n = use_i18n();
     let (events, set_events) = signal(Vec::<PublicEventItem>::new());
     let (sample_slug, set_sample_slug) = signal(None::<String>);
@@ -103,66 +107,99 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
     });
 
     view! {
-        <section id="events" class="lp-events">
-            <div class="lp-wrap">
-                <p class="lp-quote">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.quote))}</p>
-                <h2 class="lp-h2">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.title))}</h2>
-                {move || {
-                    let mut evts = events.get();
-                    if !loaded.get() {
-                        return view! {
-                            <p class="lp-rule" role="status">
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.loading))}
-                            </p>
-                        }.into_any();
-                    }
-                    if evts.is_empty() {
-                        return view! {
-                            <div class="lp-event-list lp-one">
-                                <div class="lp-card lp-event lp-event-empty">
-                                    <h3>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_title))}</h3>
-                                    <p class="lp-rule">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_desc))}</p>
-                                    <div class="lp-row">
-                                        {sample_slug.get().map(|slug| view! {
-                                            <a href=format!("/e/{slug}") class="lp-btn lp-btn-primary">
-                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.sample_event))}
-                                            </a>
-                                        })}
-                                        <a class="lp-btn" href=DISCORD_URL target="_blank" rel="noopener noreferrer">"Discord"</a>
-                                    </div>
-                                </div>
-                            </div>
-                        }.into_any();
-                    }
-                    let total = evts.len();
-                    let mut order: Vec<(i64, usize)> =
-                        evts.iter().enumerate().map(|(i, e)| (e.event_start_ms, i)).collect();
-                    nearest_first(&mut order);
-                    let mut slots: Vec<Option<PublicEventItem>> = evts.drain(..).map(Some).collect();
-                    let shown: Vec<PublicEventItem> = order
-                        .into_iter()
-                        .take(LANDING_EVENT_CARDS)
-                        .filter_map(|(_, i)| slots[i].take())
-                        .collect();
-                    let list_class = match shown.len() {
-                        1 => "lp-event-list lp-one",
-                        _ => "lp-event-list",
-                    };
-                    view! {
-                        <div class=list_class>
-                            {shown.into_iter().map(|evt| event_card(i18n, evt)).collect::<Vec<_>>()}
-                        </div>
-                        {(total > LANDING_EVENT_CARDS).then(|| {
-                            let label = move || crate::locale::fill(
-                                t_string!(i18n, landing.upcoming.see_all_n),
-                                &[("count", &total.to_string())],
-                            );
-                            view! { <p class="lp-more"><a class="lp-btn" href="/events">{label}</a></p> }
-                        })}
-                    }.into_any()
-                }}
+        <div class="lp-open" id="events">
+            {move || {
+                let mut evts = events.get();
+                if !loaded.get() {
+                    return view! {
+                        <p class="lp-rule" role="status">
+                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.loading))}
+                        </p>
+                    }.into_any();
+                }
+                if evts.is_empty() {
+                    return view! { <NothingOpen sample_slug=sample_slug.get() /> }.into_any();
+                }
+                let mut order: Vec<(i64, usize)> =
+                    evts.iter().enumerate().map(|(i, e)| (e.event_start_ms, i)).collect();
+                nearest_first(&mut order);
+                let mut slots: Vec<Option<PublicEventItem>> = evts.drain(..).map(Some).collect();
+                let shown: Vec<PublicEventItem> =
+                    order.into_iter().filter_map(|(_, i)| slots[i].take()).collect();
+                view! {
+                    <div class="lp-event-list lp-one">
+                        {shown.into_iter().map(|evt| event_card(i18n, evt)).collect::<Vec<_>>()}
+                    </div>
+                }.into_any()
+            }}
+        </div>
+    }
+}
+
+/// Nothing open: how often Road to Mainnet runs and when it last did, the
+/// last recording, then Discord and hosting your own (and the devnet
+/// sandbox once it is live on this site).
+#[component]
+fn NothingOpen(sample_slug: Option<String>) -> impl IntoView {
+    let i18n = use_i18n();
+    let rtm = cadence(&CATALOGUE, Series::RoadToMainnet);
+    let line = move || match rtm {
+        Some(c) => crate::locale::fill(
+            t_string!(i18n, landing.upcoming.cadence),
+            &[
+                ("times", &c.times.to_string()),
+                ("weeks", &c.every_weeks.to_string()),
+                ("date", &crate::utils::format_event_day(c.last.start_ms)),
+            ],
+        ),
+        None => t_string!(i18n, landing.upcoming.none_desc).to_string(),
+    };
+    let last = rtm.filter(|c| !c.last.video.is_empty()).map(|c| {
+        let ep = c.last.ep;
+        let label = move || {
+            crate::locale::fill(
+                t_string!(i18n, landing.upcoming.watch_last),
+                &[("ep", &ep.to_string())],
+            )
+        };
+        view! {
+            <a
+                class="lp-btn"
+                href=format!("https://www.youtube.com/watch?v={}", c.last.video)
+                target="_blank"
+                rel="noopener noreferrer"
+            >
+                {label}
+            </a>
+        }
+    });
+    view! {
+        <div class="lp-card lp-event lp-event-empty">
+            <h3>{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.none_title))}</h3>
+            <p class="lp-rule">{line}</p>
+            <div class="lp-row">
+                {sample_slug.map(|slug| view! {
+                    <a href=format!("/e/{slug}") class="lp-btn lp-btn-primary">
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.sample_event))}
+                    </a>
+                })}
+                {last}
+                <a class="lp-btn" href="#learn">
+                    {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.learn))}
+                </a>
             </div>
-        </section>
+            <p class="lp-open-or">
+                {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.or))}
+                " "
+                {TRY_LIVE.then(|| view! {
+                    <a href="/try">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.or_try))}</a>
+                    " · "
+                })}
+                <a href=DISCORD_URL target="_blank" rel="noopener noreferrer">"Discord"</a>
+                " · "
+                <a href="/organizers">{crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.or_host))}</a>
+            </p>
+        </div>
     }
 }
 

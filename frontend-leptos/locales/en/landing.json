@@ -9,21 +9,13 @@
     "developer_profile": "Developer Profile",
     "menu_open": "Open menu",
     "menu_close": "Close menu",
-    "theme": "Light or dark",
-    "so_far_goal": "So far · Goal",
-    "sponsors": "Sponsors",
-    "join": "Join",
-    "top": "Top",
-    "events": "Events",
-    "how": "How",
-    "sections": "Sections",
-    "story": "Who comes"
+    "theme": "Light or dark"
   },
   "hero": {
     "kicker": "Knowledge should be free for everyone.",
     "headline_1": "Show up.",
     "headline_2": "Get it all back.",
-    "sub": "{Free|#sponsors} events. Hold your seat with a {deposit|#how}.\n{Show up|#story}, {get it all back|#how}, plus a {badge on Solana|#usdc}.\nEvery event is also {online|#goal}, free.",
+    "sub": "{Free|/sponsors} events. Hold your seat with a {deposit|/organizers#how}.\n{Show up|/organizers#story}, {get it all back|/organizers#how}, plus a {badge on Solana|/organizers#usdc}.\nEvery event is also {online|#goal}, free.",
     "now": "Today: ฿500 by PromptPay\nComing: USDC on Solana, claimed back by you",
     "quote": "“Let's go, everyone.”",
     "why": "Why a deposit · 1 min",
@@ -33,7 +25,7 @@
   "cta": {
     "dashboard": "Go to Dashboard →",
     "scanner": "Open Scanner →",
-    "find_events": "See open events ↓"
+    "find_events": "See open events →"
   },
   "how": {
     "title": "How it works",
@@ -143,21 +135,24 @@
     "copyright": "© 2026 BeThere. All rights reserved."
   },
   "upcoming": {
-    "title": "Upcoming events",
     "loading": "Loading events...",
-    "none_title": "Nothing open right now",
+    "none_title": "Nothing open yet",
     "none_desc": "Join the Discord to hear about the next one first.",
     "date_tba": "Date TBA",
     "time_tba": "Time TBA",
     "poster_alt": "Event poster",
     "badge_alt": "Event badge",
     "sample_event": "View a sample event →",
-    "quote": "“Free events. Come on in.”",
     "rule_back": "฿{amount}, all back when you show up",
     "rule_online_free": "Online, free, no deposit",
     "rule_free": "Free, no deposit",
     "chip_online": "online, free",
-    "see_all_n": "See all {count} events (Discover) →"
+    "cadence": "Road to Mainnet has run {times} times, about every {weeks} weeks · last on {date}",
+    "watch_last": "Watch the last one: RTM #{ep}",
+    "learn": "Learn from past events ↓",
+    "or": "Or",
+    "or_try": "try a deposit on devnet",
+    "or_host": "host your own"
   },
   "story": {
     "title": "This seat goes to\nsomeone who can come.",
@@ -268,10 +263,6 @@
     "pricing": "Pricing by conversation, contact above · PROPOSED = not built yet"
   },
   "join": {
-    "title": "Build it with us",
-    "lede": "Tell everyone, then use it for your own events :)",
-    "share": "Share this page",
-    "copied": "Link copied",
     "org_title": "Running events?",
     "org_body": "Know who **can really come** before you order food.\nSet your own deposit, or none at all.\nScan in with any phone · refunds from one queue.",
     "waitlist_cta": "Join the organizer waitlist →"
@@ -301,7 +292,44 @@
     "try_usdc_line": "Try the USDC route yourself on devnet, 2 minutes →",
     "title_organizers": "BeThere for organizers · know who will really come before you order food",
     "title_sponsors": "BeThere for sponsors · where your logo goes",
-    "title_events": "Events & courses — BeThere"
+    "title_events": "Events & courses — BeThere",
+    "head_events_1": "Events",
+    "head_events_2": "and courses",
+    "head_events_sub": "Free events · hold your seat with a deposit · past events become courses",
+    "head_org_kicker": "For organizers",
+    "head_org_1": "Know who's coming",
+    "head_org_2": "before you order food.",
+    "head_org_sub": "Empty chairs and wasted food come from people who book and don't come.",
+    "plan_kicker": "Try it on your event",
+    "plan_registered": "Registered",
+    "plan_big": "would come, if it goes like our first meetup",
+    "plan_over": "Ordering for all {v} registered = about {over} too many",
+    "plan_aria": "{v} chairs: about {came} would come if it went like our first meetup",
+    "plan_came": "came",
+    "plan_gone": "did not",
+    "plan_note": "A deposit doesn't make people come. It tells you who will.",
+    "plan_fine": "Our RTM #1 numbers ({conf} confirmed, {paid} paid, of {reg}): a planning guide, not a promise",
+    "org_now": "On BeThere now: Solana Developer Thailand",
+    "head_org_cta": "Join the organizer waitlist ↓",
+    "learn_title": "Learn from past events",
+    "learn_lede": "Every event was recorded. Watch them episode by episode, like a course.",
+    "course_rtm_kind": "Bangkok meetups",
+    "course_rtm_about": "Solana and AI from people who build it, once a month",
+    "course_latent_kind": "Online workshops",
+    "course_latent_about": "Rust, Solana and AI, one step a week",
+    "course_eps": "{n} episodes",
+    "course_ep": "Episode {ep} · {date}",
+    "course_watch": "Watch the episodes",
+    "dep_title": "How the deposit works",
+    "dep_live": "LIVE",
+    "dep_1": "฿500 by PromptPay",
+    "dep_2": "Scan in at the door",
+    "dep_3": "All back after the event",
+    "dep_fine": "The organizer sends it back after the event",
+    "dep_median": "median {d}",
+    "proof_line": "who paid a deposit came",
+    "proof_why": "See why →",
+    "proof_fine": "RTM #1–#6 · staff not counted"
   },
   "hall": {
     "label": "Every deposit payer of RTM #1–#6, one chair each",
