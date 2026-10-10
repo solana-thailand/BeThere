@@ -271,6 +271,11 @@ resolve_python() {
 # This check curls the just-deployed origin and FAILS the deploy if the HTML
 # shell or the hashed JS bundle is served as octet-stream, so it can never ship
 # silently again.
+# Edge-propagation window for the post-deploy checks: EDGE_RETRIES tries,
+# EDGE_RETRY_SECS apart (about a minute).
+EDGE_RETRIES=12
+EDGE_RETRY_SECS=5
+
 verify_content_types() {
   local base="https://${WORKER_NAME}.solana-thailand.workers.dev"
   local index="${DIST_DIR}/index.html"
@@ -292,11 +297,13 @@ verify_content_types() {
       *.wasm) expected="application/wasm" ;;
       *) expected="text/javascript" ;;
     esac
-    # Retry a few times to ride out edge propagation right after deploy.
-    for _ in 1 2 3 4 5; do
+    # Ride out edge propagation right after deploy: up to ~60 s. 20 s was not
+    # enough twice on 2026-10-10 (prod and staging, wrangler 4.149): the new
+    # JS glue answered text/html for a while, then text/javascript.
+    for _ in $(seq 1 "$EDGE_RETRIES"); do
       ct=$(curl -s -D - -o /dev/null "${base}${path}" | tr -d '\r' | grep -i '^content-type:' | sed 's/[Cc]ontent-[Tt]ype: *//')
       echo "$ct" | grep -qi "^${expected}" && break
-      sleep 4
+      sleep "$EDGE_RETRY_SECS"
     done
     if ! echo "$ct" | grep -qi "^${expected}"; then
       echo "   ❌ ${path} → ${ct:-<missing>} (expected ${expected})"
@@ -326,10 +333,10 @@ verify_content_types() {
     staff_js=$(grep -o 'event-checkin-frontend-[a-z0-9]*\.js' "$staff_html" | head -1)
     # Same edge-propagation retry as above: right after a deploy the edge can
     # still hold the previous staff-app.html (2026-09-30, a false red on prod).
-    for _ in 1 2 3 4 5; do
+    for _ in $(seq 1 "$EDGE_RETRIES"); do
       served_js=$(curl -s "${base}/admin" | grep -o 'event-checkin-frontend-[a-z0-9]*\.js' | head -1)
       [ -n "$staff_js" ] && [ "$served_js" = "$staff_js" ] && break
-      sleep 4
+      sleep "$EDGE_RETRY_SECS"
     done
     if [ -n "$staff_js" ] && [ "$served_js" = "$staff_js" ]; then
       echo "   ✅ /admin → staff shell (${staff_js})"
@@ -363,12 +370,13 @@ verify_security_headers() {
   local base="https://${WORKER_NAME}.solana-thailand.workers.dev"
   local bad=0 hdrs path name missing
   echo "🔎 Verifying security headers..."
-  # `/` is an asset, `/ticket/_smoke` exercises the SPA fallback, `/api/health` the Worker.
+  # `/` is the Worker's static home (.plans/045 R4.9), `/ticket/_smoke` the
+  # SPA fallback, `/api/health` the API.
   for path in "/" "/ticket/_smoke" "/api/health"; do
-    for _ in 1 2 3 4 5; do
+    for _ in $(seq 1 "$EDGE_RETRIES"); do
       hdrs=$(curl -s -D - -o /dev/null "${base}${path}" | tr -d '\r' | tr '[:upper:]' '[:lower:]')
       echo "$hdrs" | grep -q '^content-security-policy:' && echo "$hdrs" | grep -q '^x-frame-options:' && break
-      sleep 4
+      sleep "$EDGE_RETRY_SECS"
     done
     missing=""
     for name in content-security-policy x-frame-options strict-transport-security; do
