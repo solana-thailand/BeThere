@@ -772,6 +772,14 @@ a.lp-event:focus-visible {
 .lp-open {
     min-height: 12rem;
 }
+/* R4.13: the reader's held credit, in the empty state */
+.lp-credit-held {
+    margin: 0;
+    padding: 8px 12px;
+    border-left: 3px solid var(--lp-t-ok);
+    font-weight: 600;
+    color: var(--lp-ink);
+}
 /* "Email me when it opens" (pages/site/subscribe.rs, R4.12) */
 .lp-sub {
     display: grid;
