@@ -13,8 +13,7 @@
 use leptos::html::Div;
 use leptos::prelude::*;
 use serde::Deserialize;
-use wasm_bindgen::closure::Closure;
-use wasm_bindgen::{JsCast, JsValue};
+use wasm_bindgen::JsValue;
 
 use crate::i18n::{Locale, td_string};
 use crate::locale::tr;
@@ -48,47 +47,13 @@ pub fn goal_bar_percent(ours: u32, all: u32) -> f64 {
     }
 }
 
-/// `window.bethereGlobe.mount`, once globe.js has run.
-fn globe_mount_fn() -> Option<js_sys::Function> {
-    let window = web_sys::window()?;
-    let globe = js_sys::Reflect::get(&window, &"bethereGlobe".into()).ok()?;
-    js_sys::Reflect::get(&globe, &"mount".into())
-        .ok()?
-        .dyn_into()
-        .ok()
-}
-
-fn call_mount(mount: &js_sys::Function, root: &web_sys::HtmlElement, data: &str) {
-    if let Err(e) = mount.call2(&JsValue::NULL, root, &JsValue::from_str(data)) {
-        log::warn!("[landing] globe mount: {e:?}");
-    }
-}
-
 /// Load globe.js if it is not already loaded, then mount it on `root`.
 fn mount_globe(root: web_sys::HtmlElement, data: String) {
-    if let Some(mount) = globe_mount_fn() {
-        call_mount(&mount, &root, &data);
-        return;
-    }
-    let Some(doc) = web_sys::window().and_then(|w| w.document()) else {
-        return;
-    };
-    let Some(script) = doc
-        .create_element("script")
-        .ok()
-        .and_then(|e| e.dyn_into::<web_sys::HtmlElement>().ok())
-    else {
-        return;
-    };
-    let _ = script.set_attribute("src", GLOBE_JS_URL);
-    let onload = Closure::once_into_js(move || match globe_mount_fn() {
-        Some(mount) => call_mount(&mount, &root, &data),
-        None => log::warn!("[landing] globe.js loaded without bethereGlobe"),
+    crate::utils::lazy_script::with_mount(GLOBE_JS_URL, "bethereGlobe", move |mount| {
+        if let Err(e) = mount.call2(&JsValue::NULL, &root, &JsValue::from_str(&data)) {
+            log::warn!("[landing] globe mount: {e:?}");
+        }
     });
-    script.set_onload(Some(onload.unchecked_ref()));
-    if let Some(head) = doc.head() {
-        let _ = head.append_child(&script);
-    }
 }
 
 async fn fetch_globe_data() -> Option<String> {

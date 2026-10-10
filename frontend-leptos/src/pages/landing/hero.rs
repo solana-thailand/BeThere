@@ -1,7 +1,7 @@
 //! The landing hero (build plan 0.5, ASKS-4 §11, §14, §17): the promise, the
 //! sub-line whose keywords link to where each is explained, today's rail and
-//! the coming one, and the 6 s loop that tells the whole story without words.
-//! Reduced motion shows the loop's end state, still (`style-23-landing.css`).
+//! the coming one, beside the payers' hall (R4.2), all over the lit room
+//! (R4.1, `room.rs`): reduced motion keeps the room dim and still.
 
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -43,10 +43,15 @@ pub fn MarkupText(text: Signal<String>) -> impl IntoView {
 #[component]
 pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) -> impl IntoView {
     let tr = crate::locale::tr;
+    let area = NodeRef::<leptos::html::Header>::new();
+    let canvas = NodeRef::<leptos::html::Canvas>::new();
+    super::room::use_lit_room(area, canvas);
     view! {
-        <header class="lp-hero" id="top">
+        <header class="lp-hero" id="top" node_ref=area>
+            // The lit room (.plans/045 R4.1), drawn by room/room.js.
+            <canvas class="lp-room" width="320" height="180" aria-hidden="true" node_ref=canvas></canvas>
             <div class="lp-wrap lp-hero-grid">
-                <div>
+                <div class="lp-hero-text">
                     <p class="lp-kicker">{tr(|l| crate::i18n::td_string!(l, landing.hero.kicker))}</p>
                     <h1 class="lp-hero-h1">
                         <span>{tr(|l| crate::i18n::td_string!(l, landing.hero.headline_1))}</span>

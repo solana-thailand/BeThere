@@ -211,6 +211,37 @@ check_worker_wasm_fresh() {
   echo "✅ Worker wasm is fresh ($artifact)"
 }
 
+# ── Embedded index.html guard ───────────────────────────────────────────────
+# The Worker compiles dist/index.html in (src/lib.rs INDEX_HTML) and serves it
+# for every app route that is not a file (/events, /ticket/..., /admin/...),
+# while / comes from the uploaded assets. On 2026-10-10 two worktrees shared
+# one cargo target dir: cargo reused the other checkout's wasm, staging served
+# that build's index.html on /events, its hashed JS and wasm were not in the
+# upload, and only / booted. The mtime guard above cannot see this (the
+# sources were older); the content can. The JS file index.html names must be
+# in the bundled Worker wasm.
+check_worker_embeds_dist() {
+  local wasm="build/worker/event_checkin_worker_bg.wasm"
+  local html="${DIST_DIR}/index.html"
+  local js
+
+  js=$(grep -oE 'event-checkin-frontend-[0-9a-f]+\.js' "$html" 2>/dev/null | head -n 1 || true)
+  if [ -z "$js" ]; then
+    echo "❌ No hashed frontend JS in $html" >&2
+    return 1
+  fi
+  if [ ! -f "$wasm" ]; then
+    echo "❌ Bundled Worker wasm not found: $wasm" >&2
+    return 1
+  fi
+  if ! LC_ALL=C grep -aqF "$js" "$wasm"; then
+    echo "❌ The Worker embeds another build's index.html: $js (from $html) is not in $wasm." >&2
+    echo "   cargo reused a wasm built from a different dist/. Give this checkout its own CARGO_TARGET_DIR." >&2
+    return 1
+  fi
+  echo "✅ Worker embeds the index.html being uploaded ($js)"
+}
+
 # ── Post-deploy content-type verification ───────────────────────────────────
 # Find a Python interpreter able to run the PUT-fallback generators.
 # Sets PYTHON_BIN. Requires 3.11+ (tomllib) and the blake3 package.
@@ -491,6 +522,11 @@ else
   fi
   if ! check_worker_wasm_fresh; then
     echo "❌ Worker wasm is stale — deploy aborted (nothing uploaded)." >&2
+    restore_pnp
+    exit 1
+  fi
+  if ! check_worker_embeds_dist; then
+    echo "❌ Worker and assets disagree — deploy aborted (nothing uploaded)." >&2
     restore_pnp
     exit 1
   fi

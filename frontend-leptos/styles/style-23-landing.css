@@ -3,9 +3,13 @@
    Tokens live on `.lp` (the landing root, which carries `data-theme`). Each
    ported section paints its own paper/navy, so the sections not yet ported
    keep the app palette until their slice lands. Light = paper, dark = the
-   site's navy (ASKS-4 §17). One ease; reduced motion settles everything. */
+   site's navy (ASKS-4 §17). One ease; reduced motion settles everything.
+   The hero is the exception: it is always the night room (R4.1), so it
+   takes the dark tokens in both themes and the hall's card takes the
+   page's back. */
 
-.lp {
+.lp,
+.lp:not([data-theme="dark"]) .lp-hall-box {
     --lp-paper: #f4f0e6;
     --lp-paper-2: #ebe5d6;
     --lp-ink: #121212;
@@ -22,7 +26,8 @@
     --lp-micro: 200ms;
 }
 
-.lp[data-theme="dark"] {
+.lp[data-theme="dark"],
+.lp-hero {
     --lp-paper: #12152a;
     --lp-paper-2: #171b33;
     --lp-ink: #e9e4d3;
@@ -317,19 +322,57 @@ mark.lp-hl {
     height: 18px;
 }
 
-/* 1 · hero */
+/* 1 · hero, over the lit room (.plans/045 R4.1, room/room.js). Until the
+   room's image is in, and if it never comes, the hero is its night colour. */
 .lp-hero {
-    background: var(--lp-paper);
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background: #0e1020;
     color: var(--lp-ink);
     font: 400 17px/1.6 var(--lp-sans);
     padding: 72px 0 64px;
     border-bottom: 2px solid var(--lp-ink);
+}
+.lp-room {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 40%;
+    image-rendering: pixelated;
+    opacity: 0;
+    transition: opacity 600ms var(--lp-ease);
+}
+.lp-room.lp-room-on {
+    opacity: 1;
+}
+/* After the canvas in paint order, under the copy: the left, where the
+   words are, stays darker. */
+.lp-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(
+        90deg,
+        rgba(14, 16, 32, 0.65) 0%,
+        rgba(14, 16, 32, 0.25) 55%,
+        rgba(14, 16, 32, 0.1) 100%
+    );
 }
 .lp-hero-grid {
     display: grid;
     grid-template-columns: 1.05fr 0.95fr;
     gap: 48px;
     align-items: center;
+}
+/* room.js keeps its light off each child of this column (the quiet boxes) */
+.lp-hero-text {
+    min-width: 0;
 }
 .lp-hero .lp-kicker {
     color: var(--lp-t-field);
@@ -374,6 +417,10 @@ mark.lp-hl {
 .lp-hall-box {
     display: grid;
     gap: 6px;
+    padding: 20px;
+    background: var(--lp-paper);
+    color: var(--lp-ink);
+    border: 2px solid var(--lp-ink);
 }
 .lp-hall {
     width: 100%;
@@ -427,7 +474,8 @@ mark.lp-hl {
     color: var(--lp-ink-2);
 }
 @media (prefers-reduced-motion: reduce) {
-    .lp-hall path {
+    .lp-hall path,
+    .lp-room {
         transition: none;
     }
     .lp-btn {

@@ -7,3 +7,9 @@
 video {
     visibility: hidden !important;
 }
+
+/* The landing's lit room (.plans/045 R4.1) sits behind the whole hero; a
+   mask would paint over the copy too. The hero keeps its night colour. */
+.lp-room {
+    visibility: hidden !important;
+}
