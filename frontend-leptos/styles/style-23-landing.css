@@ -370,94 +370,65 @@ mark.lp-hl {
     gap: 10px;
     flex-wrap: wrap;
 }
-/* The art keeps the paper card in both themes: its colours are drawn in. */
-.lp-loopcard {
-    background: #f4f0e6;
-    border: 2px solid var(--lp-ink);
-    padding: 18px 20px 10px;
-    box-shadow: 10px 10px 0 var(--lp-field);
+/* The payers' hall (.plans/045 R4.2): one chair per payer, solid = came. */
+.lp-hall-box {
+    display: grid;
+    gap: 6px;
 }
-.lp-loop {
+.lp-hall {
     width: 100%;
     height: auto;
     display: block;
 }
-
-/* The 6 s loop: deposit, scan, after the event, back, badge */
-.lp-loop .lp-h-chip,
-.lp-loop .lp-h-scan,
-.lp-loop .lp-h-tick,
-.lp-loop .lp-h-clock,
-.lp-loop .lp-h-badge {
-    animation: 6s var(--lp-ease) infinite both;
-    transform-box: fill-box;
-    transform-origin: center;
+.lp-hall g {
+    cursor: pointer;
+    outline: none;
 }
-.lp-loop .lp-h-chip {
-    animation-name: lp-h-chip;
+.lp-hall-hit {
+    fill: transparent;
 }
-.lp-loop .lp-h-scan {
-    animation-name: lp-h-scan;
+.lp-hall-came {
+    fill: var(--lp-ink);
 }
-.lp-loop .lp-h-tick {
-    animation-name: lp-h-tick;
-    stroke-dasharray: 60;
+.lp-hall-gone {
+    fill: none;
+    stroke: var(--lp-ink-3);
+    stroke-width: 1.6;
 }
-.lp-loop .lp-h-clock {
-    animation-name: lp-h-clock;
+.lp-hall path {
+    transition: opacity var(--lp-micro) var(--lp-ease);
 }
-.lp-loop .lp-h-badge {
-    animation-name: lp-h-badge;
+.lp-hall-picking g:not(.lp-hall-on) path {
+    opacity: 0.18;
 }
-@keyframes lp-h-chip {
-    0% { opacity: 0; transform: translateY(-60px); }
-    10%, 52% { opacity: 1; transform: none; }
-    66%, 90% { opacity: 1; transform: translate(261px, 24px) scale(0.55); }
-    97%, 100% { opacity: 0; transform: translate(261px, 24px) scale(0.55); }
+.lp-hall g:focus-visible .lp-hall-came {
+    fill: var(--lp-t-field);
 }
-@keyframes lp-h-scan {
-    0%, 16% { opacity: 0; transform: none; }
-    19% { opacity: 1; }
-    30% { opacity: 1; transform: translateY(50px); }
-    33%, 100% { opacity: 0; transform: translateY(50px); }
+.lp-hall-big {
+    margin: 4px 0 0;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
 }
-@keyframes lp-h-tick {
-    0%, 30% { stroke-dashoffset: 60; opacity: 1; }
-    38%, 90% { stroke-dashoffset: 0; opacity: 1; }
-    97%, 100% { stroke-dashoffset: 0; opacity: 0; }
+.lp-hall-big b {
+    font: 800 44px/1 var(--lp-sans);
+    letter-spacing: -0.03em;
 }
-@keyframes lp-h-clock {
-    0%, 40% { opacity: 0; transform: scale(0.8); }
-    48%, 90% { opacity: 1; transform: none; }
-    97%, 100% { opacity: 0; }
+.lp-hall-say {
+    min-height: 1.4em;
+    margin: 0;
+    font: 600 13px/1.4 var(--lp-sans);
+    color: var(--lp-ink-3);
 }
-@keyframes lp-h-badge {
-    0%, 70% { opacity: 0; transform: scale(0.6); }
-    78%, 90% { opacity: 1; transform: none; }
-    97%, 100% { opacity: 0; }
+.lp-hall-fine {
+    margin: 0;
+    font-size: 13px;
+    color: var(--lp-ink-2);
 }
 @media (prefers-reduced-motion: reduce) {
-    .lp-loop .lp-h-chip,
-    .lp-loop .lp-h-scan,
-    .lp-loop .lp-h-tick,
-    .lp-loop .lp-h-clock,
-    .lp-loop .lp-h-badge {
-        animation: none !important;
-    }
-    .lp-loop .lp-h-chip {
-        opacity: 1;
-        transform: translate(261px, 24px) scale(0.55);
-    }
-    .lp-loop .lp-h-scan {
-        opacity: 0;
-    }
-    .lp-loop .lp-h-tick {
-        stroke-dashoffset: 0;
-    }
-    .lp-loop .lp-h-clock,
-    .lp-loop .lp-h-badge {
-        opacity: 1;
-        transform: none;
+    .lp-hall path {
+        transition: none;
     }
     .lp-btn {
         transition: none;

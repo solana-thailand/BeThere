@@ -2,11 +2,11 @@
 
 Status: in progress. Owner approved the plan and the start on 2026-10-08
 (session `event-checkin-f0`), ahead of the 13 Oct date first written here;
-confirmed again 2026-10-10 (session `event-checkin-d3`). **On develop, not
-deployed** (prod frozen until after the 12 Oct hackathon, owner 2026-10-10):
+confirmed again 2026-10-10 (session `event-checkin-d3`). **Deployed to prod
+`05db3a46` 2026-10-10** (owner lifted the freeze; release pull 191, staging `406921ba` first, 20/20 page × theme × viewport checks on both):
 R4.0 + R4.5 + R4.6 (pull 184, review fixes, phone nav pull 187), R4.7
-(pull 185), SG3 own-wallet (pull 188). Next: deploy staging and check both
-themes, prod with an owner go, then R4.2 / R4.1. Originally: plan, for the owner's review. Written 2026-10-08 by session
+(pull 185), SG3 own-wallet (pull 188) and the sandbox RPC 429 retry (pull 190;
+sandbox stays off on prod). Next: R4.2 / R4.1. Originally: plan, for the owner's review. Written 2026-10-08 by session
 `event-checkin-90` (`.plans/044` item 6). Basis: the prototype
 `bethere-ux/site/` in the devrel-helper repo (index, events, course,
 organizers, sponsors, try, record; shared `site.js`/`site.css`/`room.js`/

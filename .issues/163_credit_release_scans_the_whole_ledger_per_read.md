@@ -1,6 +1,6 @@
 # 163: Every balance read releases ended credit across the whole ledger
 
-**Status:** in progress (2026-10-09, session `event-checkin-9c`): option 1 is rebased onto `develop` and has a PR. The PR also covers `try_refund`, which was added later. RTM #6 (4 Oct) has passed; the merge still waits on a staging credit-registration rehearsal, the same gate plan 028 set for W5. Built 2026-09-30 by session `event-checkin-dd`. No migration is needed. Found 2026-09-28 by session `event-checkin-fa` during the `/simplify` altitude review of `feature/028-w5-credit-release`.
+**Status:** deployed (2026-10-10, session `event-checkin-d3`, owner go): prod `05db3a46` at main `14365976` (release pull 191; pull 172 merged into develop as `22e9081e`), staging `406921ba` ran the same tree first. Staging rehearsal on real D1 through admin paths (dev-token and wallet sessions cannot spend credit at registration by design): event A walk-in + admin slip upload + admin hold wrote `hold +500`; event B (ended ~150 s later) admin apply wrote `apply -500`; after B ended a per-person read wrote `return 500` and the balance came back to 500 (payout candidate: 500 payable, 0 locked). Built 2026-09-30 by session `event-checkin-dd`, PR by `event-checkin-9c`. Found 2026-09-28 by session `event-checkin-fa`.
 
 ## What happens
 
