@@ -111,6 +111,18 @@ def const_sql(name):
     return unescape(re.search(LITERAL, rest).group(1))
 
 
+
+def release_sql(const):
+    """A release constant from `release_ended_applies_sql!` in credit_ledger.rs:
+    the call's `$apply` argument expanded into the template (issue 163)."""
+    source = (SRC / "db/credit_ledger.rs").read_text()
+    body = source[source.index("macro_rules! release_ended_applies_sql") :]
+    template = body[body.index("concat!(") + len("concat!(") : body.index("\n    };")]
+    apply = concat_after(
+        "db/credit_ledger.rs", f"const {const}: &str =", opener="release_ended_applies_sql!("
+    )
+    return expand_concat(template.replace("$($apply)+", "$apply"), apply)
+
 LINK_SQL = [
     const_sql("LINK_FIRST_JOINS_SECOND_SQL"),
     const_sql("LINK_NEW_PERSON_SQL"),

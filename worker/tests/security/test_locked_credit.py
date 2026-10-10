@@ -18,12 +18,13 @@ from test_person_emails import (
     CreditFixture,
     concat_after,
     plain_after,
+    release_sql,
 )
 
 LOCKED_SQL = concat_after("db/credit_ledger.rs", "pub async fn locked_applies(")
 POSITIVE_SQL = concat_after("db/credit_ledger.rs", "pub async fn positive_balances(")
 QUEUE_SQL = concat_after("db/contacts.rs", "pub async fn credit_refund_requests(")
-RELEASE_SQL = plain_after("db/credit_ledger.rs", "const RELEASE_ENDED_APPLIES_SQL")
+RELEASE_SQL = release_sql("RELEASE_ENDED_APPLIES_SQL")
 
 PAST = 1_600_000_000_000
 FUTURE = 4_100_000_000_000
