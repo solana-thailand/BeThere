@@ -13,8 +13,9 @@ pub struct OpenEvent {
     pub location: String,
 }
 
-/// Bangkok time, where every event so far has been: the mail names the zone.
-fn when(start_ms: i64, thai: bool) -> String {
+/// Bangkok time, where every event so far has been: the text names the zone.
+/// Shared with the static home (`home.rs`).
+pub fn when(start_ms: i64, thai: bool) -> String {
     let tz = FixedOffset::east_opt(7 * 3600).expect("UTC+7 is a valid offset");
     let Some(t) = tz.timestamp_millis_opt(start_ms).single() else {
         return String::new();

@@ -73,6 +73,9 @@ fn the_vendored_jsqr_is_routed_as_javascript() {
 /// `/media/*` is routed to the Worker for byte ranges, not compression
 /// (`src/media.rs`); `tests/media_path.rs` pins it.
 const MEDIA_GLOB: &str = "/media/*";
+/// The static home (.plans/045 R4.9, `src/home.rs`): routed to the Worker,
+/// not a precompressed file.
+const HOME_PATH: &str = "/";
 
 #[test]
 fn table_routes_and_build_list_agree() {
@@ -86,7 +89,7 @@ fn table_routes_and_build_list_agree() {
         .split('"')
         .skip(1)
         .step_by(2)
-        .filter(|g| *g != "/api/*" && *g != MEDIA_GLOB)
+        .filter(|g| *g != "/api/*" && *g != MEDIA_GLOB && *g != HOME_PATH)
         .collect();
     let expected: Vec<String> = PRECOMPRESSED_ASSETS
         .iter()

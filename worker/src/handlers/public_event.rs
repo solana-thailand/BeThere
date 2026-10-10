@@ -96,20 +96,9 @@ pub(crate) async fn upcoming_public_events(state: &AppState) -> Result<Vec<Value
         return Err(AppError::Internal("no data store configured".into()));
     };
 
-    // Filter to Active events with future end time and Public visibility
-    public_events.retain(|e| {
-        let status = e.get("status").and_then(|v| v.as_str()).unwrap_or("");
-        let end_ms = e.get("event_end_ms").and_then(|v| v.as_i64()).unwrap_or(0);
-        let vis = e.get("visibility").and_then(|v| v.as_str()).unwrap_or("");
-        status == "active" && end_ms > now_ms && vis == "public"
-    });
-
-    // Sort by event_start_ms ascending (nearest first)
-    public_events.sort_by_key(|e| {
-        e.get("event_start_ms")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(i64::MAX)
-    });
+    // Active, public, not ended; nearest first. One rule with the static
+    // home (`home.rs`), so the two never list different events.
+    crate::home::keep_open_public(&mut public_events, now_ms);
 
     Ok(public_events)
 }
