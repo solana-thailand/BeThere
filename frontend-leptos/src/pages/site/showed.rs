@@ -1,4 +1,4 @@
-//! `/showed/:token` (Super GOAT SG4): what a shared "I showed up" link opens.
+//! `/showed/:showed` (Super GOAT SG4): what a shared "I showed up" link opens.
 //! The event, its card and the promise; nothing about the person who shared
 //! it. A revoked or unknown link (the worker already answered 404) says so.
 
@@ -29,7 +29,7 @@ async fn fetch_page(token: String) -> Option<ShowedPage> {
 #[component]
 pub fn ShowedPageView() -> impl IntoView {
     let (auth_state, _) = use_site_auth();
-    let token = use_params_map().with_untracked(|p| p.get("token").unwrap_or_default());
+    let token = use_params_map().with_untracked(|p| p.get("showed").unwrap_or_default());
     let page = LocalResource::new(move || fetch_page(token.clone()));
     view! {
         <Title text=tr(|l| td_string!(l, landing.site.showed_title_page)) />

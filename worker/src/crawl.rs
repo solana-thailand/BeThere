@@ -33,7 +33,7 @@ pub const APP_ROUTES: [&str; 31] = [
     "/events",
     "/events/:series",
     "/me/record",
-    "/showed/:token",
+    "/showed/:showed",
     "/discover",
     "/organizers",
     "/sponsors",
@@ -91,7 +91,8 @@ pub fn route_kind(path: &str) -> RouteKind {
 }
 
 /// Whether `path` is one of [`APP_ROUTES`]. A trailing slash is ignored, a
-/// parameter matches one non-empty segment (`:series` only a course-id shape).
+/// parameter matches one non-empty segment (`:series` only a course-id shape,
+/// `:showed` only a share-token shape).
 pub fn is_app_route(path: &str) -> bool {
     let trimmed = match path {
         "/" => "/",
@@ -109,6 +110,9 @@ pub fn is_app_route(path: &str) -> bool {
                     // courses exist is D1's to say, so an unknown one gets the
                     // page's "no such course"; a non-slug stays a real 404.
                     Some("series") => event_checkin_domain::models::course::is_course_id(got),
+                    // A share token's shape (Super GOAT SG4); whether it is
+                    // live is D1's to say (`showed_page.rs` 404s otherwise).
+                    Some("showed") => event_checkin_domain::models::record::is_showed_token(got),
                     Some(_) => !got.is_empty(),
                     None => want == got,
                 })
