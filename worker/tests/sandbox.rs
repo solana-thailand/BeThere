@@ -210,14 +210,14 @@ fn signature_states_read_from_rpc() {
 }
 
 #[test]
-fn sandbox_is_off_unless_staging_devnet_and_two_distinct_keys() {
+fn sandbox_is_off_unless_enabled_devnet_and_two_distinct_keys() {
     let organizer = keypair_json(1);
     let faucet = keypair_json(2);
     let on = |dev, cluster: &str, o: Option<&str>, f: Option<&str>| decide(dev, cluster, o, f);
     assert_eq!(
         on(false, "devnet", Some(&organizer), Some(&faucet)).unwrap_err(),
-        Off::NotStaging,
-        "prod (DEV_MODE off) never runs the sandbox, keys or not"
+        Off::Disabled,
+        "SANDBOX_ENABLED off: no sandbox, keys or not"
     );
     assert_eq!(
         on(true, "mainnet-beta", Some(&organizer), Some(&faucet)).unwrap_err(),

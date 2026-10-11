@@ -3,6 +3,8 @@
 
 /// The course page; public for `tests/site_course.rs`.
 pub mod course;
+/// The courses from the worker.
+pub mod courses_data;
 mod deposit_walk;
 /// Pages, doors and the try band; public for `tests/site_pages.rs`.
 pub mod doors;

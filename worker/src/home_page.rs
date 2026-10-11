@@ -3,6 +3,7 @@
 //! `home.rs`. Any miss serves the stock shell: the static home must never
 //! cost the page itself.
 
+use event_checkin_domain::models::course::{busiest, cadence};
 use worker::Env;
 
 use crate::home::{HOME_HTML_BUDGET, home_events, keep_open_public, splice_summary, summary_html};
@@ -21,7 +22,16 @@ pub async fn render(env: &Env, stock: &str) -> Option<String> {
         Err(_) => Vec::new(),
     };
     keep_open_public(&mut events, now_ms);
-    let page = splice_summary(stock, &summary_html(&home_events(&events)))?;
+    // Nothing open: say how often the busiest course runs. Only read then.
+    let courses = match (events.is_empty(), env.d1("DB")) {
+        (true, Ok(d1)) => crate::courses::courses(&d1, now_ms)
+            .await
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    };
+    let quiet =
+        busiest(&courses).and_then(|c| cadence(&c.held_starts_ms).map(|k| (c.title.as_str(), k)));
+    let page = splice_summary(stock, &summary_html(&home_events(&events), quiet))?;
     match page.len() <= HOME_HTML_BUDGET {
         true => Some(page),
         false => {

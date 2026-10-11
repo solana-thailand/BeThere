@@ -59,6 +59,13 @@ fn course_routes_need_a_signed_in_identity() {
 fn erasure_and_the_input_check_cover_courses() {
     assert!(read("src/handlers/privacy.rs").contains("crate::courses::erase(db, &email)"));
     let handler = read("src/handlers/courses.rs");
-    assert!(handler.contains("is_course_episode(&slug, &body.episode)"));
-    assert!(handler.contains("Series::from_course_slug(slug)"));
+    // shape before D1; registration needs an active campaign; a watched mark
+    // needs an episode of it, in SQL
+    assert!(handler.contains("is_course_id(slug)"));
+    assert!(handler.contains("crate::courses::is_open(db, &slug)"));
+    let sql = read("src/courses.rs");
+    let watched = &sql[sql.find("pub const WATCHED_SQL").unwrap()..];
+    let watched = &watched[..watched.find(";\n").unwrap()];
+    assert!(watched.contains("FROM course_enrolments WHERE email = ?1 AND course = ?2"));
+    assert!(watched.contains("ce.campaign_id = ?2 AND e.slug = ?3 AND e.visibility = 'public'"));
 }

@@ -38,8 +38,8 @@ pub struct SandboxKeys {
 /// that would help anyone but us.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Off {
-    /// Not a DEV_MODE (staging or local) deploy.
-    NotStaging,
+    /// `SANDBOX_ENABLED` is not "1" on this deploy.
+    Disabled,
     /// The escrow cluster is not devnet.
     NotDevnet,
     /// A key secret is unset.
@@ -50,15 +50,15 @@ pub enum Off {
 
 static SANDBOX: OnceLock<Result<SandboxKeys, Off>> = OnceLock::new();
 
-/// The pure on/off rule, for tests: staging, devnet, and both secrets parse.
+/// The pure on/off rule, for tests: switched on, devnet, and both secrets parse.
 pub fn decide(
-    dev_mode: bool,
+    enabled: bool,
     cluster: &str,
     organizer_json: Option<&str>,
     faucet_json: Option<&str>,
 ) -> Result<SandboxKeys, Off> {
-    if !dev_mode {
-        return Err(Off::NotStaging);
+    if !enabled {
+        return Err(Off::Disabled);
     }
     if cluster != "devnet" {
         return Err(Off::NotDevnet);
@@ -75,15 +75,18 @@ pub fn decide(
 }
 
 /// Seed once per isolate, after the escrow cluster is seeded.
-pub(crate) fn seed_from_env(env: &worker::Env, dev_mode: bool) {
+pub(crate) fn seed_from_env(env: &worker::Env) {
     if SANDBOX.get().is_some() {
         return;
     }
     let secret = |name: &str| env.secret(name).ok().map(|s| s.to_string());
     let organizer = secret("SANDBOX_ORGANIZER_KEY");
     let faucet = secret("SANDBOX_FAUCET_KEY");
+    let enabled = env
+        .var("SANDBOX_ENABLED")
+        .is_ok_and(|v| v.to_string() == "1");
     let decided = decide(
-        dev_mode,
+        enabled,
         crate::solana_escrow::cluster(),
         organizer.as_deref(),
         faucet.as_deref(),

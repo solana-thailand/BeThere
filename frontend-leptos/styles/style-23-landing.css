@@ -560,27 +560,6 @@ mark.lp-hl {
     margin: 0;
     color: var(--lp-ink-2);
 }
-.lp-course summary {
-    cursor: pointer;
-    font-size: 15px;
-    color: var(--lp-ink);
-}
-.lp-course summary:focus-visible {
-    outline: 3px solid var(--lp-field);
-    outline-offset: 3px;
-}
-.lp-course-eps {
-    margin: 10px 0 0;
-    padding-left: 22px;
-    display: grid;
-    gap: 4px;
-    font-size: 15px;
-}
-.lp-course-eps a {
-    color: var(--lp-ink);
-    text-underline-offset: 3px;
-}
-
 /* /events/:series, a course (pages/site/course.rs, R4.4) */
 .lp-course-open {
     margin-top: 4px;

@@ -89,7 +89,7 @@ pub fn route_kind(path: &str) -> RouteKind {
 }
 
 /// Whether `path` is one of [`APP_ROUTES`]. A trailing slash is ignored, a
-/// parameter matches one non-empty segment (`:series` only a course slug).
+/// parameter matches one non-empty segment (`:series` only a course-id shape).
 pub fn is_app_route(path: &str) -> bool {
     let trimmed = match path {
         "/" => "/",
@@ -103,12 +103,10 @@ pub fn is_app_route(path: &str) -> bool {
                 .iter()
                 .zip(&segments)
                 .all(|(want, got)| match want.strip_prefix(':') {
-                    // A course is one of the catalogue's (.plans/045 R4.4), so a
-                    // made-up `/events/x` stays a real 404.
-                    Some("series") => {
-                        event_checkin_domain::models::catalogue::Series::from_course_slug(got)
-                            .is_some()
-                    }
+                    // A course id (a campaign slug, .plans/045 R4.4). Which
+                    // courses exist is D1's to say, so an unknown one gets the
+                    // page's "no such course"; a non-slug stays a real 404.
+                    Some("series") => event_checkin_domain::models::course::is_course_id(got),
                     Some(_) => !got.is_empty(),
                     None => want == got,
                 })
