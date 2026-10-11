@@ -216,7 +216,7 @@
     "photo_remove": "In a photo and want it removed?",
     "photo_remove_link": "Tell us",
     "payers_total": "{came} of {paid} including RTM #1 (paid by hand) and RTM #3 (rows recovered from a backup)",
-    "meals": "Meals, where the organizer entered a count ({events} events): {ordered} ordered for {registered} registered on site, {came} came. {not_ordered} meals not ordered."
+    "meals": "Meals: {ordered} ordered for {registered} registered on site, {came} came, so {not_ordered} meals were not ordered. Counted at the events whose organizer entered a count: {events}."
   },
   "goal": {
     "kicker": "The goal",
