@@ -303,6 +303,19 @@ async fn scheduled(event: worker::ScheduledEvent, env: Env, _ctx: worker::Schedu
             }
             Err(_) => tracing::warn!("announce: DB not bound, skipping"),
         }
+        // Give finished sandbox events' rent back to the organizer key (SG3).
+        sandbox::config::seed_from_env(&env);
+        if let (Ok(keys), Ok(d1)) = (sandbox::config::sandbox(), env.d1("DB")) {
+            let rpc = sandbox::reclaim::devnet_rpc_from_env(&env);
+            let s = sandbox::reclaim::sweep(&d1, &rpc, keys, sandbox::reclaim::SWEEP_MAX).await;
+            tracing::info!(
+                due = s.due,
+                closed = s.closed,
+                holding = s.holding,
+                failed = s.failed,
+                "sandbox reclaim"
+            );
+        }
         return;
     }
 

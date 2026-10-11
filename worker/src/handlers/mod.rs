@@ -351,6 +351,8 @@ pub fn routes(state: AppState) -> Router<()> {
         // Your record (Super GOAT SG1): own door history and badges only.
         .route("/me/record", get(me_record::my_record))
         .route("/me/regular/{slug}", get(me_regular::my_regular))
+        // Sandbox rent reclaim on demand (super admin, SG3).
+        .route("/sandbox/reclaim", post(sandbox::reclaim_now))
         .route(
             "/me/showed/{key}",
             post(showed::share).delete(showed::revoke),
