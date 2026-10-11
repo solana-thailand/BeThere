@@ -6,6 +6,7 @@
 //! does — deposit, refund, returning the test USDC — comes back unsigned
 //! for the browser burner wallet to sign and send.
 
+use axum::http::HeaderMap;
 use axum::{Json, extract::State};
 use base64::Engine;
 use event_checkin_domain::models::error::AppError;
@@ -14,7 +15,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{ApiOk, WorkerError};
 use crate::sandbox::config::{
     BROWSER_RPC, DEPOSIT_AMOUNT, EVENT_SECONDS, EVENTS_PER_DAY, FAUCET_GRANTS_PER_DAY,
-    FAUCET_LAMPORTS, FAUCET_USDC, REFUND_WINDOW_SECONDS, SandboxKeys, sandbox,
+    FAUCET_LAMPORTS, FAUCET_USDC, IP_EVENTS_PER_DAY, IP_FAUCET_GRANTS_PER_DAY,
+    REFUND_WINDOW_SECONDS, SandboxKeys, sandbox,
 };
 use crate::sandbox::keys::SandboxSigner;
 use crate::sandbox::quota::{self, Slot};
@@ -31,6 +33,34 @@ use crate::state::AppState;
 
 const EVENT_PREFIX: &str = "sandbox:event:";
 const FAUCET_PREFIX: &str = "sandbox:faucet:";
+
+/// The per-connection quota prefix (SG3): a keyed fingerprint of the client
+/// IP, never the IP. `sandbox:ip-…` sorts outside both global ranges, so these
+/// keys never count toward the day's totals.
+fn ip_prefix(state: &AppState, headers: &HeaderMap, kind: &str) -> String {
+    let ip = crate::middleware::rate_limit::extract_client_ip(headers);
+    format!("sandbox:ip-{kind}:{}:", state.log_fingerprint(&ip))
+}
+
+/// Claim the connection's slot for `item`. `Ok(true)`: a new slot was taken
+/// (release it if the work then fails); `Ok(false)`: this item already held
+/// one; `Err`: the connection's day is used up.
+async fn claim_ip_slot(
+    db: &worker::D1Database,
+    prefix: &str,
+    item: &str,
+    cap: u32,
+    refusal: &str,
+) -> Result<bool, WorkerError> {
+    match quota::claim(db, prefix, item, cap)
+        .await
+        .map_err(AppError::Internal)?
+    {
+        Slot::Granted => Ok(true),
+        Slot::AlreadyHeld => Ok(false),
+        Slot::CapReached => Err(AppError::RateLimited(refusal.to_string()).into()),
+    }
+}
 
 #[derive(Serialize)]
 pub struct SandboxConfigResponse {
@@ -174,17 +204,30 @@ pub async fn config() -> Json<SandboxConfigResponse> {
 #[worker::send]
 pub async fn create_event(
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<ApiOk<SandboxEventResponse>, WorkerError> {
     let keys = keys()?;
     let db = d1(&state)?;
     let id = new_event_id();
     let item = id.to_string();
+    let ip = ip_prefix(&state, &headers, "event");
+    let ip_taken = claim_ip_slot(
+        db,
+        &ip,
+        &item,
+        IP_EVENTS_PER_DAY,
+        "this connection has made its sandbox events for today; try again tomorrow",
+    )
+    .await?;
     match quota::claim(db, EVENT_PREFIX, &item, EVENTS_PER_DAY)
         .await
         .map_err(AppError::Internal)?
     {
         Slot::Granted => {}
         Slot::AlreadyHeld | Slot::CapReached => {
+            if ip_taken {
+                quota::release(db, &ip, &item).await;
+            }
             return Err(AppError::RateLimited(
                 "the sandbox has made all its events for today; try again tomorrow".to_string(),
             )
@@ -223,6 +266,9 @@ pub async fn create_event(
         })),
         Err(error) => {
             quota::release(db, EVENT_PREFIX, &item).await;
+            if ip_taken {
+                quota::release(db, &ip, &item).await;
+            }
             Err(error.into())
         }
     }
@@ -233,24 +279,41 @@ pub async fn create_event(
 #[worker::send]
 pub async fn faucet(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<WalletRequest>,
 ) -> Result<ApiOk<SandboxSignatureResponse>, WorkerError> {
     let keys = keys()?;
     let recipient = visitor_wallet(keys, &body.wallet)?;
     let db = d1(&state)?;
     let item = body.wallet.trim().to_string();
+    let ip = ip_prefix(&state, &headers, "faucet");
+    let ip_taken = claim_ip_slot(
+        db,
+        &ip,
+        &item,
+        IP_FAUCET_GRANTS_PER_DAY,
+        "this connection has had its test USDC for today; try again tomorrow",
+    )
+    .await?;
+    let release_ip = || async {
+        if ip_taken {
+            quota::release(db, &ip, &item).await;
+        }
+    };
     match quota::claim(db, FAUCET_PREFIX, &item, FAUCET_GRANTS_PER_DAY)
         .await
         .map_err(AppError::Internal)?
     {
         Slot::Granted => {}
         Slot::AlreadyHeld => {
+            release_ip().await;
             return Err(AppError::Conflict(
                 "this wallet already got its test USDC today".to_string(),
             )
             .into());
         }
         Slot::CapReached => {
+            release_ip().await;
             return Err(AppError::RateLimited(
                 "the faucet has given out today's test USDC; try again tomorrow".to_string(),
             )
@@ -294,6 +357,7 @@ pub async fn faucet(
         Ok(signature) => Ok(ApiOk::new(SandboxSignatureResponse { signature })),
         Err(error) => {
             quota::release(db, FAUCET_PREFIX, &item).await;
+            release_ip().await;
             Err(error.into())
         }
     }

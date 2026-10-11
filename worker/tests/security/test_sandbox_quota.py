@@ -77,5 +77,22 @@ class SandboxQuotaTests(unittest.TestCase):
         self.assertEqual(self.claim("sandbox:faucet:", "w1", 2), "granted")
 
 
+    def test_per_connection_cap_is_separate_from_the_day_total(self):
+        """SG3: three grants per connection; its keys never count toward the
+        faucet's day total, and a second connection is not affected."""
+        ip_a = "sandbox:ip-faucet:0123456789abcdef:"
+        ip_b = "sandbox:ip-faucet:fedcba9876543210:"
+        for wallet in ("w1", "w2", "w3"):
+            self.assertEqual(self.claim(ip_a, wallet, 3), "granted")
+            self.assertEqual(self.claim("sandbox:faucet:", wallet, 50), "granted")
+        self.assertEqual(self.claim(ip_a, "w4", 3), "cap")
+        self.assertEqual(self.claim(ip_b, "w4", 3), "granted")
+        live = self.db.execute(
+            "SELECT COUNT(*) FROM advisory_locks WHERE lock_key >= ? AND lock_key < ?",
+            ("sandbox:faucet:", prefix_end("sandbox:faucet:")),
+        ).fetchone()[0]
+        self.assertEqual(live, 3, "per-connection keys must not count toward the day total")
+
+
 if __name__ == "__main__":
     unittest.main()
