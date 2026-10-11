@@ -14,4 +14,5 @@ pub mod landing_photo;
 pub mod next_step;
 pub mod org;
 pub mod public_stats;
+pub mod record;
 pub mod rundown;

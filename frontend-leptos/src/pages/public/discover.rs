@@ -202,6 +202,12 @@ pub fn DiscoverList(set_auth_state: WriteSignal<AuthState>) -> impl IntoView {
             <Show when=move || loaded.get() fallback=move || view! { <p class="page-loading">{crate::locale::tr(|l| crate::i18n::td_string!(l, common.loading))}</p> }>
                 <Section title=text(|l| td_string!(l, discover.mine)) rows=mine_now empty=text(|_| "") />
                 <Section title=text(|l| td_string!(l, discover.past)) rows=mine_past empty=text(|_| "") />
+                // Super GOAT SG1: the door record behind the past events.
+                <Show when=move || signed_in.get() && !mine_past.with(Vec::is_empty) fallback=|| ()>
+                    <p class="dv-signin-hint">
+                        <a href="/me/record">{crate::locale::tr(|l| crate::i18n::td_string!(l, discover.record_link))}</a>
+                    </p>
+                </Show>
             </Show>
         </div>
     }
