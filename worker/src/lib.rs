@@ -9,6 +9,7 @@ pub mod courses;
 mod crypto;
 pub mod door_clicks;
 pub mod record;
+pub mod regular;
 pub mod showed;
 pub mod showed_page;
 // Public for the same reason as `event_store` below — the worker compiles to a

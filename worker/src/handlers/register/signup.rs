@@ -186,7 +186,7 @@ pub async fn register_attendee(
     // deposit entirely (they run the event, won't no-show). This replaces the old
     // workaround of uploading a fake slip to get past the deposit step, and marks
     // the record as a comp so it is never treated as a cash deposit to refund.
-    let deposit_waived = crate::event_store::has_event_access(&config, &email)
+    let staff_waived = crate::event_store::has_event_access(&config, &email)
         || state.is_staff(&email)
         || state
             .config
@@ -200,6 +200,24 @@ pub async fn register_attendee(
         // The list is stored already lowercased and trimmed by `apply_update`,
         // so this is a plain membership test.
         || config.comp_emails.contains(&email.to_lowercase());
+
+    // A regular (Super GOAT SG1b): the event's opt-in rule, evaluated with the
+    // person's door record (`door_history`). Only for an email the caller has
+    // proven (the same gate as credit: a typed email must not ride someone
+    // else's record). No rule, a read failure, or an unproven email: no waiver.
+    // A qualifying seat is recorded exactly as a comp below.
+    let regular_waived = !staff_waived
+        && config.deposit_enabled
+        && !is_online_participation(&participation_type)
+        && credit_identity_ok
+        && match state.d1.as_deref() {
+            Some(db) => crate::regular::waives(db, &event_id, &email.to_lowercase()).await,
+            None => false,
+        };
+    if regular_waived {
+        tracing::info!(%event_id, "deposit waived by the event's regular rule");
+    }
+    let deposit_waived = staff_waived || regular_waived;
 
     // 3e. Validate deposit agreement if deposit is enabled — skip for Online
     // attendees and for waived staff/organizers.

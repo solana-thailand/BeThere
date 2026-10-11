@@ -122,3 +122,39 @@ fn share_only_where_came_and_token_shape() {
         assert!(!is_showed_token(bad), "{bad}");
     }
 }
+
+/// Super GOAT SG1b: a rule needs at least one check-in and, today, a ฿0 seat;
+/// 2 check-ins against a rule of 3 pay the normal deposit, 3 do not.
+#[test]
+fn regular_rule_validates_and_qualifies() {
+    use event_checkin_domain::models::record::RegularRule;
+    let three = RegularRule {
+        min_door_checkins: 3,
+        deposit_thb: 0,
+    };
+    assert_eq!(three.problem(), None);
+    assert!(!three.qualifies(2));
+    assert!(three.qualifies(3) && three.qualifies(9));
+    let zero = RegularRule {
+        min_door_checkins: 0,
+        deposit_thb: 0,
+    };
+    assert!(zero.problem().is_some() && !zero.qualifies(5));
+    let reduced = RegularRule {
+        min_door_checkins: 2,
+        deposit_thb: 100,
+    };
+    assert!(
+        reduced.problem().is_some(),
+        "reduced amounts are refused until the deposit path carries them"
+    );
+    assert!(!reduced.qualifies(5));
+    assert!(
+        RegularRule {
+            min_door_checkins: 101,
+            deposit_thb: 0
+        }
+        .problem()
+        .is_some()
+    );
+}
