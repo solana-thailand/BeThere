@@ -17,5 +17,6 @@ fn record_route_is_authed_and_unparameterised() {
     assert!(!HANDLERS[authed.min(route)..authed.max(route)].contains("Router::new()"));
     assert!(HANDLER.contains("Extension(claims): Extension<Claims>"));
     assert!(!HANDLER.contains("Path(") && !HANDLER.contains("Query("));
-    assert!(HANDLER.contains("my_record(db, &claims.email.to_lowercase())"));
+    assert!(HANDLER.contains("let email = claims.email.to_lowercase();"));
+    assert!(HANDLER.contains("my_record(db, &email)"));
 }

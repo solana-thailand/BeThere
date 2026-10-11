@@ -158,6 +158,19 @@ pub async fn upload_og_card(event_id: &str, png: &web_sys::Blob) -> Result<OgCar
     .await
 }
 
+/// Upload the event's "I showed up" card (Super GOAT SG4).
+pub async fn upload_og_showed_card(
+    event_id: &str,
+    png: &web_sys::Blob,
+) -> Result<OgCardData, ApiError> {
+    post_image(
+        &format!("/events/{event_id}/poster?kind=og_showed"),
+        png,
+        "image/png",
+    )
+    .await
+}
+
 /// POST raw image bytes and unwrap the `ApiResponse` envelope.
 async fn post_image<T: serde::de::DeserializeOwned + Default>(
     path: &str,

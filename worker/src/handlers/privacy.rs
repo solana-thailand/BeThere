@@ -247,6 +247,12 @@ pub async fn delete_request(
             tracing::warn!(subject_fingerprint = %subject_fingerprint, error = %e, "D1 subscriber erase failed");
             summary.record_failure("erase_subscriber");
         }
+
+        // 7. "I showed up" links (Super GOAT SG4)
+        if let Err(e) = crate::showed::erase(db, &email).await {
+            tracing::warn!(subject_fingerprint = %subject_fingerprint, error = %e, "D1 showed erase failed");
+            summary.record_failure("erase_showed");
+        }
     }
 
     // Audit log
