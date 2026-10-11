@@ -2,7 +2,7 @@
 //! same key, even where `rpc_url` is the mainnet host prod mints with. A
 //! mainnet URL here sent devnet transactions to mainnet (prod, 2026-10-11).
 
-use event_checkin_domain::config::{DEVNET_RPC, SolanaConfig};
+use event_checkin_domain::config::{DEVNET_RPC, MAINNET_RPC, SolanaConfig};
 
 fn config(rpc_url: &str, api_key: &str) -> SolanaConfig {
     SolanaConfig {
@@ -54,4 +54,33 @@ fn sandbox_handler_never_uses_the_cluster_rpc() {
         "sandbox must use devnet_rpc_url"
     );
     assert!(src.contains("devnet_rpc_url()"));
+}
+
+/// The escrow's RPC follows its cluster, whatever `HELIUS_RPC_URL` names
+/// (prod: mainnet badges, devnet escrow; a mainnet escrow later).
+#[test]
+fn escrow_rpc_follows_the_cluster() {
+    let mainnet_badges = config("https://mainnet.helius-rpc.com", "k");
+    assert_eq!(
+        mainnet_badges.cluster_rpc_url("devnet"),
+        format!("{DEVNET_RPC}?api-key=k")
+    );
+    assert_eq!(
+        mainnet_badges.cluster_rpc_url("mainnet-beta"),
+        "https://mainnet.helius-rpc.com?api-key=k"
+    );
+    let devnet_host = config("https://devnet.helius-rpc.com", "k");
+    assert_eq!(
+        devnet_host.cluster_rpc_url("mainnet-beta"),
+        format!("{MAINNET_RPC}?api-key=k")
+    );
+    assert_eq!(
+        devnet_host.cluster_rpc_url("devnet"),
+        devnet_host.full_rpc_url()
+    );
+    // an unknown cluster name is devnet, like solana_escrow::cluster()'s default
+    assert_eq!(
+        mainnet_badges.cluster_rpc_url("testnet"),
+        format!("{DEVNET_RPC}?api-key=k")
+    );
 }

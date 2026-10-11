@@ -104,7 +104,7 @@ pub async fn init_escrow_tx_handler(
         event_end + 86400 * 7
     };
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     // Collision detection: verify the escrow PDA doesn't already exist on-chain
     // before building the transaction to avoid AccountAlreadyInitialized errors.
@@ -264,7 +264,7 @@ pub async fn refund_and_close_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     let tx = crate::solana_escrow::build_refund_and_close_transaction(
         &rpc_url,
@@ -374,7 +374,7 @@ pub async fn mark_checked_in_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     let tx = crate::solana_escrow::build_mark_checked_in_transaction(
         &rpc_url,
@@ -414,7 +414,7 @@ pub async fn backfill_wallets_handler(
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?
         .clone();
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     let event_ids: Vec<String> = match &body.event_id {
         Some(id) => vec![id.clone()],
@@ -489,7 +489,7 @@ pub async fn deactivate_event_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     crate::solana_escrow::verify_escrow_account_exists(
         &rpc_url,
@@ -586,7 +586,7 @@ pub async fn close_event_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     crate::solana_escrow::verify_escrow_account_exists(
         &rpc_url,
@@ -688,7 +688,7 @@ pub async fn claim_forfeited_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     crate::solana_escrow::verify_escrow_account_exists(
         &rpc_url,
@@ -913,7 +913,7 @@ pub async fn close_deposit_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     let tx = crate::solana_escrow::build_close_deposit_transaction(
         &rpc_url,

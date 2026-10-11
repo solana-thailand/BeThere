@@ -415,7 +415,7 @@ pub async fn escrow_sync_handler(
         .into());
     }
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     tracing::info!(
         event_id = %event.id,

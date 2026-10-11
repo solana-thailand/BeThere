@@ -8,8 +8,11 @@ use crate::state::AppState;
 /// Returns service status, explicit Solana network roles, and D1 connectivity.
 #[worker::send]
 pub async fn health_check(State(state): State<AppState>) -> Json<Value> {
+    // The escrow's own RPC (by cluster), not HELIUS_RPC_URL: badges may read
+    // another cluster, and that is not a mismatch.
+    let escrow_rpc = crate::solana_escrow::rpc_url(&state.config.solana);
     let networks = network_readiness(
-        &state.config.solana.rpc_url,
+        &escrow_rpc,
         &state.config.solana.crossmint_host,
         crate::solana_escrow::cluster(),
         !state.config.solana.api_key.is_empty(),

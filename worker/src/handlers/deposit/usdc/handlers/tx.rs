@@ -95,7 +95,7 @@ pub async fn deposit_usdc_tx_handler(
         crate::handlers::deposit::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     // Build the deposit transaction
     let tx = crate::solana_escrow::build_deposit_transaction(

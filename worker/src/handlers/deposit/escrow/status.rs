@@ -175,7 +175,7 @@ pub async fn confirm_escrow_init_handler(
             .map_err(|e| AppError::Internal(format!("failed to derive escrow address: {e}")))?;
 
     // 5. Verify escrow exists on-chain
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
     crate::solana_escrow::verify_escrow_account_exists(
         &rpc_url,
         organizer_pubkey,
@@ -384,7 +384,7 @@ pub async fn escrow_health_handler(
             Ok(addr) => {
                 derived_address = Some(addr.clone());
                 // Check on-chain existence
-                let rpc_url = state.config.solana.full_rpc_url();
+                let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
                 match crate::solana_escrow::verify_escrow_account_exists(
                     &rpc_url,
                     &kv_wallet,
@@ -632,7 +632,7 @@ pub async fn rollover_deposit_tx_handler(
         &source_event.organizer_wallet
     };
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
     let tx = crate::solana_escrow::build_rollover_deposit_transaction(
         &rpc_url,
