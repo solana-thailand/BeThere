@@ -23,6 +23,13 @@ pub const FAUCET_GRANTS_PER_DAY: u32 = 50;
 /// Events created per rolling 24 h. Each locks about 0.0043 SOL of organizer
 /// rent (escrow PDA + vault), so this bounds a day at under 1 SOL.
 pub const EVENTS_PER_DAY: u32 = 200;
+/// Faucet grants per connection (a keyed fingerprint of the IP, never the IP)
+/// per rolling 24 h (SG3): one visitor cycling burner wallets cannot use up the
+/// day's grants. A run needs one; three leaves room for a retry or a second
+/// person behind the same network.
+pub const IP_FAUCET_GRANTS_PER_DAY: u32 = 3;
+/// Events per connection per rolling 24 h (SG3), for the same reason.
+pub const IP_EVENTS_PER_DAY: u32 = 6;
 /// The public devnet RPC the visitor's browser sends its own transactions to.
 pub const BROWSER_RPC: &str = "https://api.devnet.solana.com";
 

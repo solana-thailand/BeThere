@@ -80,7 +80,7 @@ const RATE_LIMIT_SHEETS_FALLBACK: RateLimitConfig = RateLimitConfig {
 ///
 /// Cloudflare sets `cf-connecting-ip` on every request.
 /// Do not trust caller-controlled forwarding headers when the edge header is absent.
-fn extract_client_ip(headers: &HeaderMap) -> String {
+pub(crate) fn extract_client_ip(headers: &HeaderMap) -> String {
     headers
         .get("cf-connecting-ip")
         .and_then(|v| v.to_str().ok())
