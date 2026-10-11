@@ -60,3 +60,13 @@ fn routes_are_authed_and_uncached() {
         .expect("came check");
     assert!(check < src.find("crate::showed::link(").expect("link"));
 }
+
+#[test]
+fn only_a_token_shape_is_a_page_route() {
+    use event_checkin_worker::crawl::is_app_route;
+    assert!(is_app_route(&format!("/showed/{TOKEN}")));
+    assert!(!is_app_route("/showed/xyz"), "a non-token is a real 404");
+    assert!(!is_app_route("/showed/0123456789ABCDEF0123456789ABCDEF"));
+    // the other :token routes keep matching any segment
+    assert!(is_app_route("/claim/anything") && is_app_route("/unsubscribe/anything"));
+}

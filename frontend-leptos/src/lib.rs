@@ -154,7 +154,7 @@ pub fn App() -> impl IntoView {
                     // Your record (Super GOAT SG1): own door history, signed in.
                     <Route path=path!("/me/record") view=RecordRoute />
                     // A shared "I showed up" link (Super GOAT SG4), public.
-                    <Route path=path!("/showed/:token") view=ShowedRoute />
+                    <Route path=path!("/showed/:showed") view=ShowedRoute />
                     <Route path=path!("/organizers") view=OrganizersRoute />
                     <Route path=path!("/sponsors") view=SponsorsRoute />
                     <Route path=path!("/privacy") view=Privacy />
