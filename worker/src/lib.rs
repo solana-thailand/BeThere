@@ -8,6 +8,7 @@ mod cleanup;
 pub mod courses;
 mod crypto;
 pub mod door_clicks;
+pub mod record;
 // Public for the same reason as `event_store` below — the worker compiles to a
 // cdylib with no downstream Rust consumer, and
 // `worker/tests/event_enum_column_fallbacks.rs` drives

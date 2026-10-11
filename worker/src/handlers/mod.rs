@@ -21,6 +21,7 @@ pub mod events;
 pub mod ext;
 pub mod feedback;
 pub mod health;
+pub mod me_record;
 pub mod metadata;
 pub mod notifications;
 pub mod orgs;
@@ -339,6 +340,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/courses/{course}/progress", get(courses::progress))
         .route("/courses/{course}/enrol", post(courses::enrol))
         .route("/courses/{course}/watched", post(courses::watched))
+        // Your record (Super GOAT SG1): own door history and badges only.
+        .route("/me/record", get(me_record::my_record))
         // Developer profile (attendee-authed — read/update own profile)
         .route(
             "/my-profile",

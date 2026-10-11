@@ -17,6 +17,7 @@ pub mod open_events;
 mod organizers;
 /// The planning tile; public for `tests/site_plan.rs`.
 pub mod plan;
+mod record;
 mod sponsors;
 /// The "email me when it opens" form.
 pub mod subscribe;
@@ -25,5 +26,6 @@ mod unsubscribe;
 pub use course::CoursePage;
 pub use events::{DiscoverRedirect, EventsPage};
 pub use organizers::Organizers;
+pub use record::RecordPage;
 pub use sponsors::SponsorsPage;
 pub use unsubscribe::UnsubscribePage;
