@@ -134,6 +134,10 @@ pub(super) fn SettingsSection(ctx: FormCtx) -> impl IntoView {
                         event_id=editing_id
                         status=Signal::derive(move || form.get().status)
                     />
+                    <crate::pages::meals_panel::MealsOrderedPanel
+                        set_toast=set_toast
+                        event_id=editing_id
+                    />
                 </Show>
             </div>
         </FormSection>

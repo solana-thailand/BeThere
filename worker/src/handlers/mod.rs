@@ -494,6 +494,11 @@ pub fn routes(state: AppState) -> Router<()> {
             "/events/{id}/post-event-registration",
             put(events::put_post_event_registration),
         )
+        // Meals ordered (.plans/045 R4.11): feeds the public stats' aggregate.
+        .route(
+            "/events/{id}/meals",
+            get(events::get_meals).put(events::put_meals),
+        )
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
         // Registration form config (protected — organizer configures per-event form fields)

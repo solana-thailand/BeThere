@@ -58,8 +58,34 @@ fn payers_line_hidden_when_nobody_paid() {
         slip_check: None,
         refund_after_end: None,
         payers_by_event: Vec::new(),
+        meals: None,
     };
     assert!(!payers_line_shown(&stats(0, 0)), "0 of 0 must not be drawn");
     assert!(payers_line_shown(&stats(54, 50)));
     assert!(payers_line_shown(&stats(1, 0)), "0 of 1 is a real count");
+}
+
+/// .plans/045 R4.11: the meals line fills every placeholder in both languages
+/// and is drawn only from `stats.meals` (absent until an organizer enters a
+/// count).
+#[test]
+fn meals_line_fills_every_placeholder_and_waits_for_a_count() {
+    let root = env!("CARGO_MANIFEST_DIR");
+    for lang in ["en", "th"] {
+        let text = std::fs::read_to_string(format!("{root}/locales/{lang}/landing.json")).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let line = json["sofar"]["meals"].as_str().unwrap();
+        for key in [
+            "{events}",
+            "{ordered}",
+            "{registered}",
+            "{came}",
+            "{not_ordered}",
+        ] {
+            assert!(line.contains(key), "{lang}: {key} missing from {line}");
+        }
+    }
+    let src = std::fs::read_to_string(format!("{root}/src/pages/landing/sofar.rs")).unwrap();
+    assert!(src.contains("stats.get().and_then(|s| s.meals)"));
+    assert!(src.contains("landing.sofar.meals"));
 }

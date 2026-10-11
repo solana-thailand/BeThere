@@ -21,6 +21,8 @@ fn field_names_are_the_landing_contract() {
             "deposits_handled_thb",
             "door_scans",
             "events_held",
+            // .plans/045 R4.11: meals ordered against registrations, or null.
+            "meals",
             "measured_at",
             "online_registrations",
             "onsite_registrations",

@@ -26,6 +26,11 @@
 //!   carry a time. Many older refunds carry none, so the sample is small; it
 //!   is published with its size, and not at all under
 //!   [`MIN_TIMING_SAMPLES`].
+//! - `meals`: over the events whose organizer entered how many meals they
+//!   ordered (`event_meals`, .plans/045 R4.11), the on-site registrations
+//!   under the same rule as `onsite_registrations`, how many came, what was
+//!   ordered, and the meals not ordered (registered minus ordered, per event,
+//!   never below 0). `None` until an organizer enters a count.
 
 use serde::{Deserialize, Serialize};
 
@@ -50,6 +55,71 @@ pub struct PublicStats {
     /// totals but are not listed.
     #[serde(default)]
     pub payers_by_event: Vec<EventPayers>,
+    #[serde(default)]
+    pub meals: Option<Meals>,
+}
+
+/// Meals ordered against the on-site registrations, over the events with a
+/// count (see the module docs).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Meals {
+    pub events: u32,
+    pub registered: u32,
+    pub came: u32,
+    pub ordered: u32,
+    pub not_ordered: u32,
+}
+
+/// One `(event, meals ordered, stored participation_type, n, checked_in)` row
+/// of the meals statement; an event with no registrations has one row with an
+/// empty type and `n = 0`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MealRow {
+    pub event_id: String,
+    pub ordered: u64,
+    pub participation_type: String,
+    pub n: u64,
+    pub checked_in: u64,
+}
+
+/// Fold the meals rows: on-site registrations per event (the `stats_track`
+/// rule), then sum. `None` when no event has a count above 0.
+pub fn fold_meals(rows: &[MealRow]) -> Option<Meals> {
+    let small = |n: u64| u32::try_from(n).unwrap_or(u32::MAX);
+    // (event_id, ordered, registered, came), in the statement's order
+    let mut events: Vec<(&str, u32, u32, u32)> = Vec::new();
+    for r in rows.iter().filter(|r| r.ordered > 0) {
+        let at = match events.iter().position(|(id, ..)| *id == r.event_id) {
+            Some(at) => at,
+            None => {
+                events.push((&r.event_id, small(r.ordered), 0, 0));
+                events.len() - 1
+            }
+        };
+        if stats_track(&r.participation_type) == StatsTrack::OnSite {
+            let (_, _, registered, came) = &mut events[at];
+            *registered = registered.saturating_add(small(r.n));
+            *came = came.saturating_add(small(r.checked_in));
+        }
+    }
+    if events.is_empty() {
+        return None;
+    }
+    Some(
+        events
+            .iter()
+            .fold(Meals::default(), |m, &(_, ordered, registered, came)| {
+                Meals {
+                    events: m.events.saturating_add(1),
+                    registered: m.registered.saturating_add(registered),
+                    came: m.came.saturating_add(came),
+                    ordered: m.ordered.saturating_add(ordered),
+                    not_ordered: m
+                        .not_ordered
+                        .saturating_add(registered.saturating_sub(ordered)),
+                }
+            }),
+    )
 }
 
 /// One public event's deposit payers and how many came, under the

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::api::types::ApiError;
-use crate::api::{api_post_json, api_put_json};
+use crate::api::{api_get_json, api_post_json, api_put_json};
 
 // ===== Post-Event Registration (Plan 008 — Phase 3) =====
 
@@ -77,4 +77,19 @@ pub async fn put_post_event_registration(
 ) -> Result<PostEventRegistrationState, ApiError> {
     let path = format!("/events/{id}/post-event-registration");
     api_put_json(&path, body).await
+}
+
+/// Body and response of `GET` / `PUT /api/events/{id}/meals` (.plans/045
+/// R4.11): meals the organizer ordered, `None` for none entered.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MealsOrdered {
+    pub ordered: Option<u32>,
+}
+
+pub async fn get_meals_ordered(id: &str) -> Result<MealsOrdered, ApiError> {
+    api_get_json(&format!("/events/{id}/meals")).await
+}
+
+pub async fn put_meals_ordered(id: &str, body: &MealsOrdered) -> Result<MealsOrdered, ApiError> {
+    api_put_json(&format!("/events/{id}/meals"), body).await
 }
