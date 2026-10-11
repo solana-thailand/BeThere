@@ -165,6 +165,23 @@ pub fn SoFar() -> impl IntoView {
             &[("came", &came.to_string()), ("paid", &paid.to_string())],
         )
     };
+    // Meals ordered against registrations (.plans/045 R4.11): only once an
+    // organizer has entered a count.
+    let meals = move || {
+        stats.get().and_then(|s| s.meals).map(|m| {
+            let n = |v: u32| group_thousands(u64::from(v));
+            crate::locale::fill(
+                td_string!(i18n.get_locale(), landing.sofar.meals),
+                &[
+                    ("events", &n(m.events)),
+                    ("ordered", &n(m.ordered)),
+                    ("registered", &n(m.registered)),
+                    ("came", &n(m.came)),
+                    ("not_ordered", &n(m.not_ordered)),
+                ],
+            )
+        })
+    };
     let done = Signal::derive(move || done_at(progress.get()));
     let payers = Signal::derive(move || payers_at(progress.get()));
     let read_out = move || {
@@ -204,6 +221,7 @@ pub fn SoFar() -> impl IntoView {
                     // the system-only figure above: both true, both labelled.
                     <p class="lp-fineprint lp-center">{payers_total}</p>
                 })}
+                {move || meals().map(|line| view! { <p class="lp-fineprint lp-center">{line}</p> })}
             </div>
             <div class="lp-tape lp-t2" aria-hidden="true"><div class="lp-tape-run">{tape()}</div></div>
             <Goal />

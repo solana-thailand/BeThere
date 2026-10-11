@@ -36,6 +36,7 @@ pub mod form_builder;
 pub mod landing;
 pub mod login;
 pub mod marketing_preference;
+pub mod meals_panel;
 pub mod nfc_checkin;
 pub mod notifications;
 pub mod onchain_events_panel;

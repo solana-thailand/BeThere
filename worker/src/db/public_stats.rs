@@ -6,7 +6,7 @@
 //! `event_checkin_domain::models::public_stats`.
 
 use event_checkin_domain::models::public_stats::{
-    EventPayerRow, PublicStats, StatsRow, fold_event_payers, fold_stats,
+    EventPayerRow, MealRow, PublicStats, StatsRow, fold_event_payers, fold_meals, fold_stats,
 };
 use worker::D1Database;
 
@@ -44,7 +44,39 @@ pub(crate) async fn read_public_stats(
     rows.extend(read_timing_rows(db).await?);
     let mut stats = fold_stats(&rows, measured_at);
     stats.payers_by_event = fold_event_payers(&read_event_payer_rows(db).await?);
+    stats.meals = fold_meals(&read_meal_rows(db).await?);
     Ok(stats)
+}
+
+/// The meals statement (.plans/045 R4.11): a fourth round trip, for the same
+/// compound-SELECT cap.
+async fn read_meal_rows(db: &D1Database) -> Result<Vec<MealRow>, String> {
+    let stmt = db.prepare(include_str!("sql/public_stats_meals.sql"));
+    let rows = crate::db::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| format!("D1 public stats meals: {e}"))?;
+    rows.iter()
+        .map(|row| {
+            let count = |key: &str| {
+                row.get(key)
+                    .and_then(serde_json::Value::as_u64)
+                    .ok_or_else(|| format!("D1 public stats meals: '{key}' not a count"))
+            };
+            let text = |key: &str| {
+                row.get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            Ok(MealRow {
+                event_id: text("event_id"),
+                ordered: count("ordered")?,
+                participation_type: text("pt"),
+                n: count("n")?,
+                checked_in: count("came")?,
+            })
+        })
+        .collect()
 }
 
 /// The per-event payers statement (.plans/045 R4.7): a third round trip, for
