@@ -475,3 +475,27 @@ pub async fn return_tx(
         transaction_b64: b64(&tx),
     }))
 }
+
+/// `POST /api/sandbox/reclaim` (super admin): run the hourly rent reclaim
+/// now (SG3, `sandbox::reclaim`). For checking it after a deploy.
+#[worker::send]
+pub async fn reclaim_now(
+    State(state): State<AppState>,
+    axum::Extension(claims): axum::Extension<event_checkin_domain::models::auth::Claims>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    if !state
+        .config
+        .super_admin_emails
+        .contains(&claims.email.to_lowercase())
+    {
+        return Err(AppError::Forbidden("super admins only".to_string()).into());
+    }
+    let keys = keys()?;
+    let db = d1(&state)?;
+    let rpc_url = state.config.solana.devnet_rpc_url();
+    let s = crate::sandbox::reclaim::sweep(db, &rpc_url, keys, crate::sandbox::reclaim::SWEEP_MAX)
+        .await;
+    Ok(ApiOk::new(serde_json::json!({
+        "due": s.due, "closed": s.closed, "holding": s.holding, "failed": s.failed,
+    })))
+}

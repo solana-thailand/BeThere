@@ -53,3 +53,32 @@ fn caps_are_small_and_below_the_day() {
         assert!(IP_EVENTS_PER_DAY >= 1 && IP_EVENTS_PER_DAY * 10 <= EVENTS_PER_DAY);
     }
 }
+
+/// Rent reclaim (SG3): the vault must be empty before anything is signed,
+/// a closed event is marked only after the close went through, and the
+/// on-demand trigger is super-admin only.
+#[test]
+fn reclaim_touches_no_deposit_and_is_admin_only() {
+    let src = include_str!("../src/sandbox/reclaim.rs");
+    let balance = src.find("let held = token_balance(").expect("vault read");
+    let empty = src
+        .find("if held > 0 {\n        return Ok(false);")
+        .expect("holding check");
+    let deactivate = src
+        .find("build_deactivate_event_transaction(rpc_url")
+        .expect("deactivate");
+    assert!(
+        balance < empty && empty < deactivate,
+        "check the vault before signing"
+    );
+    let closed = src
+        .find("Ok(true) => {\n                out.closed += 1;")
+        .expect("closed arm");
+    assert!(
+        src[closed..].find("MARK_SQL").is_some_and(|i| i < 200),
+        "mark only after a close"
+    );
+    let handler = include_str!("../src/handlers/sandbox.rs");
+    let at = handler.find("pub async fn reclaim_now(").expect("trigger");
+    assert!(handler[at..at + 600].contains("super_admin_emails"));
+}

@@ -14,5 +14,6 @@
 pub mod config;
 pub mod keys;
 pub mod quota;
+pub mod reclaim;
 pub mod send;
 pub mod tx;
