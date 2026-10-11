@@ -151,9 +151,15 @@ correlation id → rate limit → the router. One cron trigger, hourly at :17
 Before the router, `fetch` (`lib.rs`) serves a few paths itself: the
 pre-compressed wasm and jsQR, the landing film, `/` as the static home
 (`home.rs` splices the opening into the embedded shell), `/e/{slug}` with the
-event's social tags (`og_page.rs`), the SPA shell for any other page
+event's social tags (`og_page.rs`), `/showed/{token}` with the "I showed up"
+tags while the link is live and a 404 once revoked (`showed_page.rs`), the
+SPA shell for any other page
 `crawl::route_kind` knows, and a real 404 otherwise. Public subscribe routes:
 `POST /api/subscribe`, `POST /api/unsubscribe/{token}` (`handlers/subscribe.rs`).
+Your record: `domain::models::record::door_history` is the one definition of a
+door record (campaign events, no staff/organizers/invited, on-site track, no
+virtual check-ins, linked emails once); `GET /api/me/record` (`record.rs`) and
+the share links (`showed.rs`, `handlers/showed.rs`) both decide with it.
 
 ---
 

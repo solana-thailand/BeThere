@@ -23,6 +23,8 @@ pub const STORED_POSTER_PREFIX: &str = "/api/storage/posters/";
 
 /// Served path of the browser-made card (`storage::serve_og_card`).
 pub const OG_CARD_PREFIX: &str = "/api/storage/og/";
+/// Where the "I showed up" card of an event is served (Super GOAT SG4).
+pub const OG_SHOWED_PREFIX: &str = "/api/storage/og-showed/";
 
 /// Longest `og:description` we send; platforms cut near 200 anyway.
 pub const MAX_DESCRIPTION_CHARS: usize = 200;

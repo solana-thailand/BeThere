@@ -42,4 +42,8 @@ DELETE FROM event_announcements WHERE event_id = ?1
 ;
 DELETE FROM announced_events WHERE event_id = ?1
 ;
+DELETE FROM event_meals WHERE event_id = ?1
+;
+DELETE FROM showed_links WHERE event_id = ?1
+;
 DELETE FROM attendees WHERE event_id = ?1

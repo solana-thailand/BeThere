@@ -276,7 +276,7 @@ fn event_card(
 /// next deposit. Nothing renders when signed out, at zero, or if the read
 /// fails (`get_credit_balance` never redirects to /login).
 #[component]
-fn CreditHeld() -> impl IntoView {
+pub(super) fn CreditHeld() -> impl IntoView {
     let i18n = use_i18n();
     let thb = LocalResource::new(|| async {
         crate::api::get_credit_balance()

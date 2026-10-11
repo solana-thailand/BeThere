@@ -59,6 +59,16 @@ pub const BAR: Rect = Rect {
     h: 10.0,
 };
 
+/// The "I showed up" stamp (Super GOAT SG4): over the lower art, tilted,
+/// on the second card the editor draws (`og/showed/{id}.png`). No name: the
+/// card is the event's, shared by everyone who came.
+pub const STAMP_TEXT: &str = "I SHOWED UP";
+pub const STAMP_FONT: &str = "800 44px Inter, Anuphan, sans-serif";
+pub const STAMP_CENTER: (f64, f64) = (ART.x + ART.w / 2.0, ART.y + ART.h - 72.0);
+pub const STAMP_SIZE: (f64, f64) = (300.0, 84.0);
+/// Radians; a hand-stamped tilt.
+pub const STAMP_TILT: f64 = -0.14;
+
 /// What the editor knows about the event when it saves.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct CardEvent {

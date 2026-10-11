@@ -46,6 +46,8 @@ pub enum AuditAction {
     EventRecapUnpublished,
     /// Post-event registration (lead capture) was toggled open/closed (Plan 008 — Phase 3).
     PostEventRegistrationToggled,
+    /// The organizer set or cleared the meals ordered count (.plans/045 R4.11).
+    MealsOrderedSet,
 
     // Escrow lifecycle
     EscrowInitialized,

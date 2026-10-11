@@ -113,6 +113,9 @@ pub fn InPersonView(
         && !is_checked_in
         && !escrow_closed
         && !deadline_expired;
+    // A door check-in (not the claim flow's virtual one) can be shared from
+    // the record (Super GOAT SG4); the worker decides again when asked.
+    let door_checkin = is_checked_in && checked_in_by.as_deref() != Some("virtual");
     let hero_kind = if is_checked_in {
         HeroKind::CheckedIn
     } else if !is_approved {
@@ -320,6 +323,13 @@ pub fn InPersonView(
             } else {
                 view! { <div></div> }.into_any()
             }}
+            {door_checkin.then(|| view! {
+                <p>
+                    <a class="btn btn-outline btn-sm" href="/me/record">
+                        {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.site.showed_share_link))}
+                    </a>
+                </p>
+            })}
             // Deposit status
             {if let Some(ref dep) = deposit_info {
                 view! {

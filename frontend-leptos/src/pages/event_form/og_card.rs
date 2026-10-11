@@ -16,12 +16,20 @@ use crate::utils::og_card::CardEvent;
 #[cfg(feature = "staff")]
 pub(super) fn refresh(event_id: String, event: CardEvent) {
     leptos::task::spawn_local(async move {
-        match draw::render_png(&event).await {
+        match draw::render_png(&event, false).await {
             Ok(png) => match crate::api::upload_og_card(&event_id, &png).await {
                 Ok(_) => log::info!("[event-form] share card uploaded for {event_id}"),
                 Err(e) => log::warn!("[event-form] share card upload failed: {e}"),
             },
             Err(e) => log::warn!("[event-form] share card not drawn: {e:?}"),
+        }
+        // The same card with the "I showed up" stamp (Super GOAT SG4).
+        match draw::render_png(&event, true).await {
+            Ok(png) => match crate::api::upload_og_showed_card(&event_id, &png).await {
+                Ok(_) => log::info!("[event-form] showed card uploaded for {event_id}"),
+                Err(e) => log::warn!("[event-form] showed card upload failed: {e}"),
+            },
+            Err(e) => log::warn!("[event-form] showed card not drawn: {e:?}"),
         }
     });
 }
@@ -39,12 +47,16 @@ mod draw {
 
     use crate::utils::og_card::{
         ART, ArtSource, BAR, CardEvent, FIELD, INK, INK_2, LINE_FONT, LOGO_FONT, LOGO_Y, OG_HEIGHT,
-        OG_WIDTH, PAPER, PLACE_Y, TEXT_MAX_W, TEXT_X, TITLE_FONT, TITLE_LINE_H, TITLE_Y, WHEN_Y,
-        art_source, card_text, cover_crop,
+        OG_WIDTH, PAPER, PLACE_Y, STAMP_CENTER, STAMP_FONT, STAMP_SIZE, STAMP_TEXT, STAMP_TILT,
+        TEXT_MAX_W, TEXT_X, TITLE_FONT, TITLE_LINE_H, TITLE_Y, WHEN_Y, art_source, card_text,
+        cover_crop,
     };
 
-    /// The finished card as a PNG blob.
-    pub(super) async fn render_png(event: &CardEvent) -> Result<web_sys::Blob, JsValue> {
+    /// The finished card as a PNG blob; `stamp` adds "I showed up" (SG4).
+    pub(super) async fn render_png(
+        event: &CardEvent,
+        stamp: bool,
+    ) -> Result<web_sys::Blob, JsValue> {
         let document = web_sys::window()
             .and_then(|w| w.document())
             .ok_or("no document")?;
@@ -58,9 +70,9 @@ mod draw {
 
         // Load the faces for the glyphs this card uses: Google Fonts serves
         // Anuphan per script, so the Thai subset loads only if asked for.
-        let all_text = format!("BeThere {} {}", event.name, event.location);
+        let all_text = format!("BeThere {STAMP_TEXT} {} {}", event.name, event.location);
         let loads = js_sys::Array::new();
-        for font in [LOGO_FONT, TITLE_FONT, LINE_FONT] {
+        for font in [LOGO_FONT, TITLE_FONT, LINE_FONT, STAMP_FONT] {
             loads.push(&document.fonts().load_with_text(font, &all_text));
         }
         // A face that will not load still draws in a fallback font, and one
@@ -79,8 +91,33 @@ mod draw {
         draw_text(&ctx, event)?;
         ctx.set_fill_style_str(FIELD);
         ctx.fill_rect(BAR.x, BAR.y, BAR.w, BAR.h);
+        if stamp {
+            draw_stamp(&ctx)?;
+        }
 
         to_png(&canvas).await
+    }
+
+    /// A tilted ink stamp over the lower art: paper ground, violet frame and
+    /// letters.
+    fn draw_stamp(ctx: &CanvasRenderingContext2d) -> Result<(), JsValue> {
+        let (cx, cy) = STAMP_CENTER;
+        let (w, h) = STAMP_SIZE;
+        ctx.save();
+        ctx.translate(cx, cy)?;
+        ctx.rotate(STAMP_TILT)?;
+        ctx.set_fill_style_str(PAPER);
+        ctx.fill_rect(-w / 2.0, -h / 2.0, w, h);
+        ctx.set_stroke_style_str(FIELD);
+        ctx.set_line_width(6.0);
+        ctx.stroke_rect(-w / 2.0, -h / 2.0, w, h);
+        ctx.set_fill_style_str(FIELD);
+        ctx.set_font(STAMP_FONT);
+        ctx.set_text_align("center");
+        ctx.set_text_baseline("middle");
+        ctx.fill_text(STAMP_TEXT, 0.0, 2.0)?;
+        ctx.restore();
+        Ok(())
     }
 
     fn draw_text(ctx: &CanvasRenderingContext2d, event: &CardEvent) -> Result<(), JsValue> {

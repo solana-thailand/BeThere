@@ -1,7 +1,7 @@
 /**
  * Clipboard utility.
  *
- * Only export: `copyToClipboard()`, used by Rust modules via
+ * Exports: `copyToClipboard()` and `shareOrCopy()`, used by Rust modules via
  * `#[wasm_bindgen(module = "/js/clipboard.js")]`. QR codes are drawn in Rust
  * (`src/utils/qr_gen.rs`), so the old QRious helpers are gone.
  *
@@ -50,4 +50,27 @@ export function copyToClipboard(text) {
     console.error("[clipboard] fallback copy failed:", e);
     return false;
   }
+}
+
+/**
+ * Share a link with the system share sheet where there is one (phones), else
+ * copy it (Super GOAT SG4, the "I showed up" link).
+ *
+ * @param {string} url - The link.
+ * @param {string} title - The share sheet's title.
+ * @returns {Promise<string>} "shared", "copied", or "failed". A share the
+ *   reader dismisses counts as "shared": nothing is left to tell them.
+ */
+export function shareOrCopy(url, title) {
+  if (navigator.share) {
+    return navigator.share({ url: url, title: title }).then(
+      function () {
+        return "shared";
+      },
+      function (err) {
+        return err && err.name === "AbortError" ? "shared" : (copyToClipboard(url) ? "copied" : "failed");
+      },
+    );
+  }
+  return Promise.resolve(copyToClipboard(url) ? "copied" : "failed");
 }

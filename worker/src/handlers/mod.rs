@@ -21,6 +21,7 @@ pub mod events;
 pub mod ext;
 pub mod feedback;
 pub mod health;
+pub mod me_record;
 pub mod metadata;
 pub mod notifications;
 pub mod orgs;
@@ -32,6 +33,7 @@ pub mod qr;
 pub mod quiz;
 pub mod register;
 pub mod sandbox;
+pub mod showed;
 pub mod social_link;
 pub mod subscribe;
 pub mod user_log;
@@ -148,6 +150,8 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // Sandbox on/off flips with a secret, so it must not be cached.
         .route("/sandbox/config", get(sandbox::config))
+        // "I showed up" page data (Super GOAT SG4): no-store, so a revoke is final at once.
+        .route("/public/showed/{token}", get(showed::public_page))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     let public = Router::new()
@@ -227,6 +231,10 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // R2 share-card serving (public — og:image of /e/{slug}, .issues/183)
         .route("/storage/og/{event_id}", get(crate::storage::serve_og_card))
+        .route(
+            "/storage/og-showed/{event_id}",
+            get(crate::storage::serve_og_showed),
+        )
         // Landing photos (public — only names on landing-photos.jsonl)
         .route(
             "/storage/landing-photos/{name}",
@@ -339,6 +347,12 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/courses/{course}/progress", get(courses::progress))
         .route("/courses/{course}/enrol", post(courses::enrol))
         .route("/courses/{course}/watched", post(courses::watched))
+        // Your record (Super GOAT SG1): own door history and badges only.
+        .route("/me/record", get(me_record::my_record))
+        .route(
+            "/me/showed/{key}",
+            post(showed::share).delete(showed::revoke),
+        )
         // Developer profile (attendee-authed — read/update own profile)
         .route(
             "/my-profile",
@@ -493,6 +507,11 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/events/{id}/post-event-registration",
             put(events::put_post_event_registration),
+        )
+        // Meals ordered (.plans/045 R4.11): feeds the public stats' aggregate.
+        .route(
+            "/events/{id}/meals",
+            get(events::get_meals).put(events::put_meals),
         )
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))

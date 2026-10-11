@@ -45,6 +45,9 @@ pub enum UploadKind {
     Poster,
     /// The browser-made share card (`og/{id}.png`).
     Og,
+    /// The browser-made "I showed up" card (`og/showed/{id}.png`, SG4).
+    #[serde(rename = "og_showed")]
+    OgShowed,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -91,8 +94,8 @@ pub async fn upload_poster(
     let headers = req.headers().clone();
     let bytes = collect_body_bytes(req).await?;
 
-    if query.kind == UploadKind::Og {
-        return store_og_card(&state, &claims, &event.id, &headers, bytes).await;
+    if matches!(query.kind, UploadKind::Og | UploadKind::OgShowed) {
+        return store_og_card(&state, &claims, &event.id, query.kind, &headers, bytes).await;
     }
 
     if bytes.len() > MAX_POSTER_BYTES {
@@ -250,6 +253,7 @@ async fn store_og_card(
     state: &AppState,
     claims: &Claims,
     event_id: &str,
+    kind: UploadKind,
     headers: &axum::http::HeaderMap,
     bytes: Bytes,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
@@ -271,7 +275,16 @@ async fn store_og_card(
     let Some(bucket) = state.r2.as_ref() else {
         return Err(AppError::Internal("R2 storage not configured".into()).into());
     };
-    let key = storage::og_card_key(event_id);
+    let (key, prefix) = match kind {
+        UploadKind::OgShowed => (
+            storage::og_showed_key(event_id),
+            crate::og_meta::OG_SHOWED_PREFIX,
+        ),
+        _ => (
+            storage::og_card_key(event_id),
+            crate::og_meta::OG_CARD_PREFIX,
+        ),
+    };
     let size = bytes.len();
     storage::put_bytes(bucket, &key, bytes.into(), "image/png")
         .await
@@ -287,7 +300,7 @@ async fn store_og_card(
 
     Ok(ApiOk::new(json!({
         "id": event_id,
-        "og_image_url": format!("{}{event_id}", crate::og_meta::OG_CARD_PREFIX),
+        "og_image_url": format!("{prefix}{event_id}"),
     })))
 }
 
