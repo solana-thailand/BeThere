@@ -22,6 +22,7 @@ pub mod ext;
 pub mod feedback;
 pub mod health;
 pub mod me_record;
+pub mod me_regular;
 pub mod metadata;
 pub mod notifications;
 pub mod orgs;
@@ -349,6 +350,7 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/courses/{course}/watched", post(courses::watched))
         // Your record (Super GOAT SG1): own door history and badges only.
         .route("/me/record", get(me_record::my_record))
+        .route("/me/regular/{slug}", get(me_regular::my_regular))
         .route(
             "/me/showed/{key}",
             post(showed::share).delete(showed::revoke),
@@ -512,6 +514,11 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/events/{id}/meals",
             get(events::get_meals).put(events::put_meals),
+        )
+        // Regular rule (Super GOAT SG1b): opt-in, organizer-gated.
+        .route(
+            "/events/{id}/regular-rule",
+            get(events::get_regular_rule).put(events::put_regular_rule),
         )
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))

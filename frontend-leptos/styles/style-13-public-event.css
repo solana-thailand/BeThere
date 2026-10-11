@@ -263,6 +263,14 @@
     font-size: 0.8rem;
 }
 
+/* Super GOAT SG1b: the person's standing against the event's regular rule */
+.pe-regular-line {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--success, #2e7d32);
+    font-weight: 600;
+}
+
 .pe-checkbox-label {
     display: flex;
     align-items: flex-start;
