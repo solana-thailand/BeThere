@@ -15,6 +15,7 @@ use crate::pages::landing::frame::{SiteFrame, use_site_auth};
 
 use super::doors::SitePage;
 use super::open_events::CreditHeld;
+use super::share_showed::ShareShowed;
 
 #[component]
 pub fn RecordPage() -> impl IntoView {
@@ -78,11 +79,21 @@ fn RecordBody() -> impl IntoView {
                     view! { <li class=class title=e.event_name.clone()></li> }
                 })
                 .collect::<Vec<_>>();
+            let shared = r.shared.clone();
             let rows = r
                 .events
                 .iter()
                 .rev()
                 .map(|e| {
+                    let share = e.came.then(|| {
+                        let token = shared
+                            .iter()
+                            .find(|s| s.event_slug == e.event_slug)
+                            .map(|s| s.token.clone());
+                        view! {
+                            <ShareShowed slug=e.event_slug.clone() event_name=e.event_name.clone() token=token />
+                        }
+                    });
                     let mark = match (e.came, e.upcoming) {
                         (true, _) => view! {
                             <span class="lp-record-came"><Icon icon=IconName::Check class="icon-sm" />
@@ -103,6 +114,7 @@ fn RecordBody() -> impl IntoView {
                             <a href=format!("/e/{}", e.event_slug)>{e.event_name.clone()}</a>
                             <small>{crate::utils::format_event_day(e.start_ms)}</small>
                             {mark}
+                            {share}
                         </li>
                     }
                 })

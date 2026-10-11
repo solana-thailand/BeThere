@@ -60,7 +60,7 @@ use crate::staff_routes::{
     DiscoverRedirect, EventRecap, EventsRoute, Faq, Feedback, HomeRoute, NfcCheckin,
     OrganizersRoute, PastEvents, PostEventRegister, Privacy, ProtectedAdmin, ProtectedEventSummary,
     ProtectedLiveDashboard, ProtectedPrPack, ProtectedScanner, PublicEvent, RecordRoute,
-    SandboxRoute, SponsorsRoute, Ticket, UnsubscribeRoute,
+    SandboxRoute, ShowedRoute, SponsorsRoute, Ticket, UnsubscribeRoute,
 };
 
 /// Main application component.
@@ -153,6 +153,8 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/discover") view=DiscoverRedirect />
                     // Your record (Super GOAT SG1): own door history, signed in.
                     <Route path=path!("/me/record") view=RecordRoute />
+                    // A shared "I showed up" link (Super GOAT SG4), public.
+                    <Route path=path!("/showed/:token") view=ShowedRoute />
                     <Route path=path!("/organizers") view=OrganizersRoute />
                     <Route path=path!("/sponsors") view=SponsorsRoute />
                     <Route path=path!("/privacy") view=Privacy />

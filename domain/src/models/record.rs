@@ -107,4 +107,44 @@ pub struct MyRecord {
     /// for the explorer links.
     #[serde(default)]
     pub badge_cluster: String,
+    /// The person's live "I showed up" links (SG4), one per event at most.
+    #[serde(default)]
+    pub shared: Vec<SharedLink>,
+}
+
+/// A live "I showed up" link (Super GOAT SG4): `/showed/{token}`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SharedLink {
+    pub event_slug: String,
+    pub token: String,
+}
+
+/// What `/showed/{token}` shows: the event, never the person.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShowedPage {
+    pub event_name: String,
+    pub event_slug: String,
+    pub start_ms: i64,
+    /// The card image path (the "I showed up" card, else the event card), or
+    /// empty for none.
+    #[serde(default)]
+    pub card: String,
+}
+
+/// Length of a share token: 16 random bytes as hex.
+pub const SHOWED_TOKEN_LEN: usize = 32;
+
+/// Whether `token` has a share token's shape (lowercase hex, exact length).
+/// A shape check only: whether it is live is D1's answer.
+pub fn is_showed_token(token: &str) -> bool {
+    token.len() == SHOWED_TOKEN_LEN
+        && token
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// The share decision: a link only for an event the history says the
+/// person came to.
+pub fn may_share(history: &[Attended], event_slug: &str) -> bool {
+    history.iter().any(|a| a.came && a.event_slug == event_slug)
 }

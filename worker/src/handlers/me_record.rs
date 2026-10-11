@@ -21,7 +21,11 @@ pub async fn my_record(
         .d1
         .as_deref()
         .ok_or_else(|| AppError::Internal("D1 not configured".into()))?;
-    let mut record = crate::record::my_record(db, &claims.email.to_lowercase())
+    let email = claims.email.to_lowercase();
+    let mut record = crate::record::my_record(db, &email)
+        .await
+        .map_err(AppError::Internal)?;
+    record.shared = crate::showed::mine(db, &email)
         .await
         .map_err(AppError::Internal)?;
     // the mint cluster follows the Crossmint host (state.rs)

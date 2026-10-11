@@ -9,6 +9,8 @@ pub mod courses;
 mod crypto;
 pub mod door_clicks;
 pub mod record;
+pub mod showed;
+pub mod showed_page;
 // Public for the same reason as `event_store` below — the worker compiles to a
 // cdylib with no downstream Rust consumer, and
 // `worker/tests/event_enum_column_fallbacks.rs` drives
@@ -202,6 +204,16 @@ async fn fetch(
         && let Some(body) = home_page::render(&env, INDEX_HTML).await
     {
         return Ok(spa_shell(body));
+    }
+    // An "I showed up" link (Super GOAT SG4): its tags while live, else 404.
+    if route == crawl::RouteKind::App
+        && req.method() == axum::http::Method::GET
+        && let Some(token) = showed_page::page_token(path)
+    {
+        return Ok(match showed_page::render(&env, &token, INDEX_HTML).await {
+            Some(body) => spa_shell(body),
+            None => not_found(),
+        });
     }
     // An event page carries that event's social tags (`.issues/183`); any
     // miss serves the stock shell below.

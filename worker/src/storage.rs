@@ -136,6 +136,11 @@ pub fn og_card_key(event_id: &str) -> String {
     format!("{PREFIX_OG}{event_id}.png")
 }
 
+/// Build the R2 key for an event's "I showed up" card (Super GOAT SG4).
+pub fn og_showed_key(event_id: &str) -> String {
+    format!("{PREFIX_OG}showed/{event_id}.png")
+}
+
 /// Build an R2 key for an NFT metadata JSON file.
 pub fn metadata_key(event_id: &str) -> String {
     format!("{PREFIX_METADATA}{event_id}.json")
@@ -447,6 +452,26 @@ pub async fn serve_og_card(
     serve_r2_object(
         &state,
         &og_card_key(&event_id),
+        Visibility::Regenerated,
+        if_none_match(&headers),
+    )
+    .await
+}
+
+/// GET /api/storage/og-showed/{event_id}: the event's "I showed up" card
+/// (Super GOAT SG4). Public, like the event card: it names the event only.
+#[worker::send]
+pub async fn serve_og_showed(
+    State(state): State<AppState>,
+    Path(event_id): Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if !crate::og_meta::is_safe_id(&event_id) {
+        return (StatusCode::NOT_FOUND, "not found").into_response();
+    }
+    serve_r2_object(
+        &state,
+        &og_showed_key(&event_id),
         Visibility::Regenerated,
         if_none_match(&headers),
     )

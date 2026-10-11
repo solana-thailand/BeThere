@@ -102,5 +102,6 @@ pub async fn my_record(db: &D1Database, email: &str) -> Result<MyRecord, String>
         events,
         badges,
         badge_cluster: String::new(),
+        shared: Vec::new(),
     })
 }

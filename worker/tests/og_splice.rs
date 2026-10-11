@@ -369,7 +369,9 @@ fn card_route_and_upload_check_are_wired() {
     }
     // The role check runs before the card branch.
     let role_at = upload.find("resolve_user_role").expect("role check");
-    let card_at = upload.find("UploadKind::Og {").expect("card branch");
+    let card_at = upload
+        .find("UploadKind::Og | UploadKind::OgShowed)")
+        .expect("card branch");
     assert!(
         role_at < card_at,
         "the share card branch must sit after the role check"

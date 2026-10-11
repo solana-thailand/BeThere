@@ -102,3 +102,23 @@ fn not_ended_without_a_checkin_is_upcoming_not_missed() {
     let h = door_history(&[row("rtm3", 2_000, true)], NOW);
     assert!(h[0].came && !h[0].upcoming);
 }
+
+/// Super GOAT SG4: a share link only for an event the person came to, and a
+/// token is exactly 32 lowercase hex characters.
+#[test]
+fn share_only_where_came_and_token_shape() {
+    use event_checkin_domain::models::record::{is_showed_token, may_share};
+    let h = door_history(&[row("rtm1", 10, true), row("rtm2", 20, false)], NOW);
+    assert!(may_share(&h, "rtm1"));
+    assert!(!may_share(&h, "rtm2"), "registered, did not come");
+    assert!(!may_share(&h, "rtm9"), "not registered");
+    assert!(is_showed_token("0123456789abcdef0123456789abcdef"));
+    for bad in [
+        "",
+        "0123456789ABCDEF0123456789abcdef",
+        "0123456789abcdef",
+        "../../etc/passwd0123456789abcdef",
+    ] {
+        assert!(!is_showed_token(bad), "{bad}");
+    }
+}
