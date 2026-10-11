@@ -21,6 +21,8 @@ meetups in Bangkok since spring 2026.
 | "Email me when it opens": one mail per newly opened public event, from bethere.sol@gmail.com via the Gmail API, one-click unsubscribe | **Production** | Live (hourly cron) |
 | `/sandbox`: deposit, show up, get it back on devnet with a test wallet or your own | **Production** + staging | Live (`SANDBOX_ENABLED`, Worker-held devnet keys; devnet only, not real money) |
 | Your record (`/me/record`) and "I showed up" share links (`/showed/{token}`), meals ordered vs. registered in the public stats | **Production** | Live since 2026-10-11 (release pull 229, version `3d9fbebb`) |
+| Regular rule: an organizer can let people with N door check-ins hold a seat without a deposit (opt-in per event, off everywhere today) | **Production** | Shipped off 2026-10-11 (release pull 234); no event has a rule |
+| Escrow and USDC calls use the RPC of `SOLANA_CLUSTER`, badge reads `HELIUS_RPC_URL` | **Production** | Since 2026-10-11 (release pull 232); `/api/health` `solana.rpc_cluster` is the drift check |
 
 What is new in the Colosseum window (14 Sep – 12 Oct) and what came before:
 [`docs/submission/built_in_window.md`](docs/submission/built_in_window.md).
