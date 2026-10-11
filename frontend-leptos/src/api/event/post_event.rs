@@ -93,3 +93,25 @@ pub async fn get_meals_ordered(id: &str) -> Result<MealsOrdered, ApiError> {
 pub async fn put_meals_ordered(id: &str, body: &MealsOrdered) -> Result<MealsOrdered, ApiError> {
     api_put_json(&format!("/events/{id}/meals"), body).await
 }
+
+/// `GET /api/events/{id}/regular-rule[?min=N]` (Super GOAT SG1b): the rule and
+/// how many registrants qualify (for `min`, a preview, else the saved rule).
+pub async fn get_regular_rule(
+    id: &str,
+    min: Option<u32>,
+) -> Result<event_checkin_domain::models::record::RegularRuleAdmin, ApiError> {
+    let query = min.map(|n| format!("?min={n}")).unwrap_or_default();
+    api_get_json(&format!("/events/{id}/regular-rule{query}")).await
+}
+
+/// `PUT /api/events/{id}/regular-rule`: save the rule, or `None` to remove it.
+pub async fn put_regular_rule(
+    id: &str,
+    rule: Option<event_checkin_domain::models::record::RegularRule>,
+) -> Result<event_checkin_domain::models::record::RegularRuleAdmin, ApiError> {
+    api_put_json(
+        &format!("/events/{id}/regular-rule"),
+        &serde_json::json!({ "rule": rule }),
+    )
+    .await
+}

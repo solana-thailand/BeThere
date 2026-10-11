@@ -47,6 +47,7 @@ pub mod profile_link_result;
 pub mod public;
 pub mod public_event;
 pub mod quiz_editor;
+pub mod regular_rule_panel;
 pub mod sandbox;
 pub mod scanner;
 pub mod site;

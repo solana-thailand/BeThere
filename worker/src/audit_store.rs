@@ -48,6 +48,8 @@ pub enum AuditAction {
     PostEventRegistrationToggled,
     /// The organizer set or cleared the meals ordered count (.plans/045 R4.11).
     MealsOrderedSet,
+    /// The organizer set or removed the event's regular rule (Super GOAT SG1b).
+    RegularRuleSet,
 
     // Escrow lifecycle
     EscrowInitialized,

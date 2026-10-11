@@ -148,3 +148,56 @@ pub fn is_showed_token(token: &str) -> bool {
 pub fn may_share(history: &[Attended], event_slug: &str) -> bool {
     history.iter().any(|a| a.came && a.event_slug == event_slug)
 }
+
+/// An event's regular rule (Super GOAT SG1b): a person whose record shows at
+/// least `min_door_checkins` door check-ins (`door_checkins`) holds a seat
+/// for `deposit_thb`. Opt-in per event; an event without a rule registers
+/// exactly as before. Only `deposit_thb = 0` is accepted today (the seat is
+/// recorded as a comp); a reduced amount needs the deposit and refund paths
+/// to carry it, and is refused until they do.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegularRule {
+    pub min_door_checkins: u32,
+    pub deposit_thb: u64,
+}
+
+/// The most door check-ins a rule may ask for.
+pub const MAX_RULE_CHECKINS: u32 = 100;
+
+impl RegularRule {
+    /// Why this rule cannot be saved, if it cannot.
+    pub fn problem(&self) -> Option<&'static str> {
+        match (self.min_door_checkins, self.deposit_thb) {
+            (0, _) => Some("the rule needs at least one door check-in"),
+            (n, _) if n > MAX_RULE_CHECKINS => Some("the rule asks for too many check-ins"),
+            (_, d) if d > 0 => {
+                Some("only a seat without a deposit is supported for regulars today")
+            }
+            _ => None,
+        }
+    }
+
+    /// Whether a person with `door_checkins` qualifies.
+    pub fn qualifies(&self, door_checkins: u32) -> bool {
+        self.problem().is_none() && door_checkins >= self.min_door_checkins
+    }
+}
+
+/// `GET /api/me/regular/{slug}`: the event's rule, if any, and where the
+/// signed-in person stands against it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegularStanding {
+    #[serde(default)]
+    pub rule: Option<RegularRule>,
+    pub door_checkins: u32,
+    pub qualifies: bool,
+}
+
+/// `GET /api/events/{id}/regular-rule`: the rule and how many of the event's
+/// registrants qualify under it now (or would, for a rule not yet saved).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegularRuleAdmin {
+    #[serde(default)]
+    pub rule: Option<RegularRule>,
+    pub qualifying_registrants: u32,
+}

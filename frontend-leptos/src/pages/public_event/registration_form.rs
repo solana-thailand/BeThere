@@ -75,6 +75,40 @@ pub fn registration_form(
     }
 
     let i18n = use_i18n();
+    // Super GOAT SG1b: the event's regular rule and where this person stands
+    // (what the form says; the worker decides again at registration).
+    let regular = RwSignal::new(None::<event_checkin_domain::models::record::RegularStanding>);
+    if has_deposit && !wallet_only {
+        let path = format!("/me/regular/{slug_for_reg}");
+        leptos::task::spawn_local(async move {
+            if let Some(standing) = crate::api::api_get_json_if_signed_in::<
+                event_checkin_domain::models::record::RegularStanding,
+            >(&path)
+            .await
+            {
+                regular.set(Some(standing));
+            }
+        });
+    }
+    let regular_ok = move || regular.with(|s| s.as_ref().is_some_and(|s| s.qualifies));
+    let regular_line = move || {
+        regular.with(|s| {
+            let s = s.as_ref()?;
+            let rule = s.rule?;
+            let n = s.door_checkins.to_string();
+            let text = match s.qualifies {
+                true => crate::locale::fill(
+                    td_string!(i18n.get_locale(), landing.site.regular_yes),
+                    &[("n", &n)],
+                ),
+                false => crate::locale::fill(
+                    td_string!(i18n.get_locale(), landing.site.regular_rule),
+                    &[("min", &rule.min_door_checkins.to_string()), ("n", &n)],
+                ),
+            };
+            Some(view! { <p class="pe-regular-line">{text}</p> })
+        })
+    };
     let (field_errors, set_field_errors) = signal(FieldErrors::default());
     // One field's inline error, in the current language.
     let field_error = move |pick: fn(&FieldErrors) -> Option<FieldMsg>, class: &'static str| {
@@ -414,9 +448,10 @@ pub fn registration_form(
                                 // marketing consent are separate boxes below (.issues/161).
                                 {move || {
                                     let is_online_track = is_hybrid && reg_participation.get().to_lowercase().contains("online");
-                                    let show_deposit = has_deposit && !is_online_track;
+                                    let show_deposit = has_deposit && !is_online_track && !regular_ok();
                                     let dep_label = dep_label.clone();
                                     view! {
+                                        {(!is_online_track).then(regular_line)}
                                         <div id="pe-field-consent">
                                             <label class="pe-checkbox-label">
                                                 <input
@@ -523,7 +558,7 @@ pub fn registration_form(
                                                     errors.photo_consent_given = Some(|l| td_string!(l, event.err_photo_consent_required));
                                                 }
                                                 let is_online_track = is_hybrid && part_val.to_lowercase().contains("online");
-                                                if has_deposit && !is_online_track && !deposit_val {
+                                                if has_deposit && !is_online_track && !deposit_val && !regular_ok() {
                                                     errors.deposit_agreed = Some(|l| td_string!(l, event.err_deposit_required));
                                                 }
 

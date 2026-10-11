@@ -352,6 +352,8 @@
     "showed_event": "See the event",
     "showed_next": "Find the next event →",
     "showed_gone": "This link was turned off, or never existed.",
+    "regular_yes": "Your record: {n} door check-ins. This event holds your seat without a deposit.",
+    "regular_rule": "Regulars with {min} door check-ins hold a seat here without a deposit. You have {n}.",
     "record_title_page": "Your record · BeThere",
     "record_title": "Your record",
     "record_signin": "Sign in to see the events you registered for and the ones you came to. Only you can see it.",

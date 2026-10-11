@@ -138,6 +138,10 @@ pub(super) fn SettingsSection(ctx: FormCtx) -> impl IntoView {
                         set_toast=set_toast
                         event_id=editing_id
                     />
+                    <crate::pages::regular_rule_panel::RegularRulePanel
+                        set_toast=set_toast
+                        event_id=editing_id
+                    />
                 </Show>
             </div>
         </FormSection>
