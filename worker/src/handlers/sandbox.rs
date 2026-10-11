@@ -192,7 +192,7 @@ pub async fn create_event(
         }
     }
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = state.config.solana.devnet_rpc_url();
     let now = (js_sys::Date::now() / 1000.0) as i64;
     let event_end = now + EVENT_SECONDS;
     let created = async {
@@ -258,7 +258,7 @@ pub async fn faucet(
         }
     }
 
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = state.config.solana.devnet_rpc_url();
     let granted = async {
         let mint = pubkey_from_base58(usdc_mint()).map_err(|e| chain_error("the faucet", e))?;
         let faucet_ata = get_associated_token_address(keys.faucet.pubkey(), &mint)
@@ -308,7 +308,7 @@ pub async fn deposit_tx(
     let keys = keys()?;
     visitor_wallet(keys, &body.wallet)?;
     let id = event_id(&body.event_id)?;
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = state.config.solana.devnet_rpc_url();
     let built = build_deposit_transaction(
         &rpc_url,
         keys.organizer.address(),
@@ -335,7 +335,7 @@ pub async fn check_in(
     visitor_wallet(keys, &body.wallet)?;
     let id = event_id(&body.event_id)?;
     let wallet = body.wallet.trim();
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = state.config.solana.devnet_rpc_url();
     let deposited = verify_attendee_deposit_onchain(
         &rpc_url,
         keys.organizer.address(),
@@ -374,7 +374,7 @@ pub async fn refund_tx(
     let keys = keys()?;
     visitor_wallet(keys, &body.wallet)?;
     let id = event_id(&body.event_id)?;
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = state.config.solana.devnet_rpc_url();
     let built = build_refund_and_close_transaction(
         &rpc_url,
         keys.organizer.address(),
@@ -397,7 +397,7 @@ pub async fn return_tx(
 ) -> Result<ApiOk<SandboxTxResponse>, WorkerError> {
     let keys = keys()?;
     let owner = visitor_wallet(keys, &body.wallet)?;
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = state.config.solana.devnet_rpc_url();
     let blockhash = get_latest_blockhash(&rpc_url)
         .await
         .and_then(|bh| pubkey_from_base58(&bh.value))

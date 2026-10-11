@@ -70,23 +70,24 @@ pub struct SolanaConfig {
     pub crossmint_collection_id: String,
 }
 
+/// The Helius devnet host. The sandbox always runs on devnet, even where
+/// `rpc_url` is a mainnet host (prod reads mainnet for minting).
+pub const DEVNET_RPC: &str = "https://devnet.helius-rpc.com";
+
 impl SolanaConfig {
     /// Pre-computed RPC URL with API key appended.
     /// Handles both `?key=val` and `?api-key=KEY` URL patterns.
     pub fn full_rpc_url(&self) -> String {
-        if self.api_key.is_empty() {
-            return self.rpc_url.clone();
+        with_key(&self.rpc_url, &self.api_key)
+    }
+
+    /// A devnet RPC URL with the same API key: `rpc_url` when it is already
+    /// a devnet host, else [`DEVNET_RPC`].
+    pub fn devnet_rpc_url(&self) -> String {
+        match self.rpc_url.contains("devnet") {
+            true => self.full_rpc_url(),
+            false => with_key(DEVNET_RPC, &self.api_key),
         }
-        format!(
-            "{}{}{}",
-            self.rpc_url,
-            if self.rpc_url.contains('?') {
-                "&"
-            } else {
-                "?api-key="
-            },
-            self.api_key
-        )
     }
 
     /// Whether the hosted Crossmint mint path can accept a claim.
@@ -101,6 +102,20 @@ impl SolanaConfig {
         ) && !self.crossmint_api_key.trim().is_empty()
             && !self.crossmint_collection_id.trim().is_empty()
     }
+}
+
+fn with_key(rpc_url: &str, api_key: &str) -> String {
+    if api_key.is_empty() {
+        return rpc_url.to_string();
+    }
+    format!(
+        "{rpc_url}{}{api_key}",
+        if rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        }
+    )
 }
 
 impl fmt::Debug for SolanaConfig {
