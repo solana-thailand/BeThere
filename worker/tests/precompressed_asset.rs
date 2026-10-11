@@ -104,3 +104,17 @@ fn table_routes_and_build_list_agree() {
         );
     }
 }
+
+/// The frontend size gate judges these assets at the size of their `.br`
+/// sibling (what the Worker serves). Its patterns must name every asset in
+/// `PRECOMPRESSED_ASSETS`, or the gate would judge a served-br11 file at q4.
+#[test]
+fn size_gate_knows_every_precompressed_asset() {
+    let gate = include_str!("../../scripts/verify/frontend_size_budget.sh");
+    for asset in event_checkin_worker::precompressed::PRECOMPRESSED_ASSETS {
+        let prefix = asset.prefix.trim_start_matches('/');
+        let suffix = asset.suffix.replace('.', "\\.");
+        let pattern = format!("/^{prefix}.+{suffix}$/");
+        assert!(gate.contains(&pattern), "gate lacks {pattern}");
+    }
+}

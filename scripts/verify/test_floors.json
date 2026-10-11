@@ -175,7 +175,7 @@
     "pod tests/pod.rs": 9,
     "possible_duplicates tests/possible_duplicates.rs": 7,
     "postponed_note tests/postponed_note.rs": 8,
-    "precompressed_asset tests/precompressed_asset.rs": 4,
+    "precompressed_asset tests/precompressed_asset.rs": 5,
     "public_cache_policy tests/public_cache_policy.rs": 5,
     "public_health_no_counts tests/public_health_no_counts.rs": 2,
     "public_meals tests/public_meals.rs": 4,
