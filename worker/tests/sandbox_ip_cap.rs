@@ -45,8 +45,11 @@ fn caps_are_small_and_below_the_day() {
     use event_checkin_worker::sandbox::config::{
         EVENTS_PER_DAY, FAUCET_GRANTS_PER_DAY, IP_EVENTS_PER_DAY, IP_FAUCET_GRANTS_PER_DAY,
     };
-    assert!(
-        IP_FAUCET_GRANTS_PER_DAY >= 1 && IP_FAUCET_GRANTS_PER_DAY * 10 <= FAUCET_GRANTS_PER_DAY
-    );
-    assert!(IP_EVENTS_PER_DAY >= 1 && IP_EVENTS_PER_DAY * 10 <= EVENTS_PER_DAY);
+    // checked at compile time: a cap change that breaks this does not build
+    const {
+        assert!(
+            IP_FAUCET_GRANTS_PER_DAY >= 1 && IP_FAUCET_GRANTS_PER_DAY * 10 <= FAUCET_GRANTS_PER_DAY
+        );
+        assert!(IP_EVENTS_PER_DAY >= 1 && IP_EVENTS_PER_DAY * 10 <= EVENTS_PER_DAY);
+    }
 }
