@@ -82,7 +82,7 @@ pub async fn update_event(
             crate::handlers::deposit::derive_on_chain_event_id(&existing_event.id)
         };
 
-        let rpc_url = state.config.solana.full_rpc_url();
+        let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
 
         match crate::solana_escrow::check_escrow_pda_available(
             &rpc_url,

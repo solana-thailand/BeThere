@@ -73,6 +73,8 @@ pub struct SolanaConfig {
 /// The Helius devnet host. The sandbox always runs on devnet, even where
 /// `rpc_url` is a mainnet host (prod reads mainnet for minting).
 pub const DEVNET_RPC: &str = "https://devnet.helius-rpc.com";
+/// The Helius mainnet host, for an escrow on `mainnet-beta`.
+pub const MAINNET_RPC: &str = "https://mainnet.helius-rpc.com";
 
 impl SolanaConfig {
     /// Pre-computed RPC URL with API key appended.
@@ -87,6 +89,20 @@ impl SolanaConfig {
         match self.rpc_url.contains("devnet") {
             true => self.full_rpc_url(),
             false => with_key(DEVNET_RPC, &self.api_key),
+        }
+    }
+
+    /// The RPC URL for `cluster` (the escrow's `SOLANA_CLUSTER`), with the
+    /// same key. `rpc_url` (`HELIUS_RPC_URL`) serves badge reads and may point
+    /// at another cluster (prod: mainnet badges, devnet escrow), so the escrow
+    /// never uses it unless it already names the escrow's cluster.
+    pub fn cluster_rpc_url(&self, cluster: &str) -> String {
+        match cluster {
+            "mainnet-beta" => match self.rpc_url.contains("mainnet") {
+                true => self.full_rpc_url(),
+                false => with_key(MAINNET_RPC, &self.api_key),
+            },
+            _ => self.devnet_rpc_url(),
         }
     }
 

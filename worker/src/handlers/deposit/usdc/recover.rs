@@ -46,7 +46,7 @@ pub(crate) async fn recover_and_verify_deposit(
 
     let kv = state.events_kv.as_ref();
     let d1 = state.d1.as_deref();
-    let rpc_url = state.config.solana.full_rpc_url();
+    let rpc_url = crate::solana_escrow::rpc_url(&state.config.solana);
     let attendee_id = status.attendee_id.clone();
     // Issue 070: `attendee_id` is an internal identifier and stays readable;
     // wallet addresses and TX signatures are durable person-linking values and

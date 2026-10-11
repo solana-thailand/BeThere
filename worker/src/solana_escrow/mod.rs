@@ -97,6 +97,14 @@ pub(crate) fn cluster() -> &'static str {
     SOLANA_CLUSTER.get().map(String::as_str).unwrap_or("devnet")
 }
 
+/// The escrow's RPC URL: the escrow cluster's Helius host with the configured
+/// key, never `HELIUS_RPC_URL` when that names another cluster (badges read
+/// mainnet on prod while the escrow is on devnet). Every escrow and USDC call
+/// uses this; `tests/escrow_rpc_guard.rs` pins it.
+pub fn rpc_url(config: &event_checkin_domain::config::SolanaConfig) -> String {
+    config.cluster_rpc_url(cluster())
+}
+
 /// Pure cluster→mint mapping (unit-testable without the process-global cluster).
 fn usdc_mint_for(cluster: &str) -> &'static str {
     match cluster {
