@@ -20,6 +20,11 @@ ignore = [
   { id = "RUSTSEC-2024-0436", reason = "paste: unmaintained, build-time proc-macro only; moves with leptos/solana" },
   # frontend-leptos: proc-macro helper, via leptos.
   { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2: unmaintained, build-time only; moves with leptos" },
+  # frontend-leptos: serde_yaml's parser, via leptos_i18n_parser (the
+  # load_locales! proc-macro). Build time only: our locales are JSON, no YAML is
+  # parsed and none of it ships in the wasm. Latest leptos_i18n (0.6.2) still
+  # pulls it; reopen when leptos_i18n drops serde_yaml (checked 2026-10-13).
+  { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml: unmaintained, build-time only via leptos_i18n_parser; locales are JSON" },
   # bethere-escrow: Solana toolchain transitive deps — move only with the SBPF
   # toolchain decision (scripts/check_sbpf_v3_gate.sh).
   { id = "RUSTSEC-2025-0141", reason = "bincode: unmaintained, Solana toolchain transitive" },
