@@ -318,4 +318,30 @@
     border-top-color: var(--lp-ink);
     border-right-color: var(--lp-ink);
     border-bottom-color: var(--lp-ink);
+/* ---- /claim/{token}: the gradient panels (dark glass on the old page)
+   become the site's flat 2px ink boxes; their decorative gradient borders
+   and shimmer go; the mint button is the ink primary ---- */
+.lp-att .claim-welcome-card,
+.lp-att .nft-preview-card,
+.lp-att .claim-nft-soon-card,
+.lp-att .claim-adventure-gate,
+.lp-att .claim-success {
+    background: var(--lp-paper-2);
+    border: 2px solid var(--lp-ink);
+    border-radius: 0;
+    box-shadow: none;
+}
+.lp-att .nft-preview-card::before,
+.lp-att .claim-nft-soon-card::after,
+.lp-att .claim-success::before {
+    display: none;
+}
+.lp-att .claim-btn-mint,
+.lp-att .claim-btn-mint:hover:not(:disabled),
+.lp-att .claim-btn-mint:active:not(:disabled) {
+    background: var(--lp-ink);
+    color: var(--lp-paper);
+    border: 2px solid var(--lp-ink);
+    border-radius: 0;
+    box-shadow: none;
 }

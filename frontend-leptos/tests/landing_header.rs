@@ -71,14 +71,12 @@ fn lang_bar_is_off_on_the_landing_only() {
     // `/events` is framed too (the Discover list inside `SiteFrame`).
     assert!(!shows_lang_bar("/events"));
     assert!(shows_lang_bar("/discover"));
-    assert!(shows_lang_bar(
-        "/claim/0190e2e0-0000-7000-8000-000000000001"
-    ));
+    assert!(shows_lang_bar("/past-events"));
     assert!(!shows_lang_bar("/admin"));
-    // `/deposit/`, `/e/` and `/ticket/` moved into the frame (.plans/046 Phase 1).
-    assert!(!shows_lang_bar("/deposit/e2e-att-01"));
-    assert!(!shows_lang_bar("/e/rtm-6"));
-    assert!(!shows_lang_bar("/ticket/e2e-att-01"));
+    // Moved into the frame (.plans/046 Phase 1).
+    for framed in ["/deposit/a", "/e/rtm-6", "/ticket/a", "/claim/t"] {
+        assert!(!shows_lang_bar(framed), "{framed}");
+    }
 }
 
 /// Refunds are paid by hand and deposits are THB by PromptPay: the search
