@@ -347,3 +347,8 @@
     border-radius: 0;
     box-shadow: none;
 }
+
+/* ---- /sandbox: the site gutter (the frame adds the top space) ---- */
+.lp-att .sandbox-page {
+    padding: 0 24px 2rem;
+}
