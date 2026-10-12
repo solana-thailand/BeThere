@@ -352,3 +352,9 @@
 .lp-att .sandbox-page {
     padding: 0 24px 2rem;
 }
+
+/* inline code (wallet addresses, tx ids): the AA indigo; the global code
+   colour #9e9eff is 2.10:1 on paper */
+.lp-att code {
+    color: var(--lp-t-field);
+}
