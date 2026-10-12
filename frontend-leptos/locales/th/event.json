@@ -1,13 +1,11 @@
 {
   "page_title": "อีเวนต์ — BeThere",
-  "back_home": "← กลับไปที่ BeThere",
   "loading_aria": "กำลังโหลดข้อมูลงาน",
   "not_found_title": "ไม่พบงานนี้",
   "not_found_body": "งานนี้ไม่มีอยู่ หรือไม่ได้เปิดให้ดูแบบสาธารณะ",
   "go_home": "กลับหน้าแรก",
   "error_title": "เกิดข้อผิดพลาด",
   "try_again": "ลองอีกครั้ง",
-  "powered_by": "ขับเคลื่อนด้วย",
   "err_no_event_data": "ไม่ได้รับข้อมูลงาน",
   "err_unknown": "เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ",
   "err_parse_response": "แปลงข้อมูลตอบกลับไม่สำเร็จ",

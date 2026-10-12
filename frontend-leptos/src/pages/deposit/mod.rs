@@ -167,7 +167,7 @@ pub fn Deposit() -> impl IntoView {
     view! {
         <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.page_title)) />
         <SiteFrame here=SitePage::Events auth_state=auth_state own_doors=true>
-        <main class="lp-dep">
+        <main class="lp-att">
             <div class="lp-wrap lp-dep-wrap layout-col-center">
                 <h1 class="claim-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.title))}</h1>
 

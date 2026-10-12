@@ -1,13 +1,11 @@
 {
   "page_title": "Event — BeThere",
-  "back_home": "← Back to BeThere",
   "loading_aria": "Loading event",
   "not_found_title": "Event Not Found",
   "not_found_body": "This event doesn't exist or is not publicly available.",
   "go_home": "Go Home",
   "error_title": "Something went wrong",
   "try_again": "Try Again",
-  "powered_by": "Powered by",
   "err_no_event_data": "No event data returned",
   "err_unknown": "Unknown error",
   "err_parse_response": "Failed to parse response",

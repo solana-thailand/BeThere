@@ -83,8 +83,8 @@ const ATTENDEE_EVENT_SUFFIXES: [&str; 2] = ["/recap", "/post-event-register"];
 pub const FRAMED_PATHS: [&str; 4] = ["/", "/events", "/organizers", "/sponsors"];
 
 /// Attendee pages moved into the site frame (.plans/046 Phase 1), matched by
-/// prefix because they carry an id: `/deposit/{attendee}`.
-pub const FRAMED_PREFIXES: [&str; 1] = ["/deposit/"];
+/// prefix because they carry an id: `/deposit/{attendee}`, `/e/{slug}`.
+pub const FRAMED_PREFIXES: [&str; 2] = ["/deposit/", "/e/"];
 
 /// Whether `path` is a bilingual attendee page (`/` and `/login` included).
 /// `/events` is matched exactly: deeper `/events/…` pages are staff-only

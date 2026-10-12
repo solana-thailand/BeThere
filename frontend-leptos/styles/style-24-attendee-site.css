@@ -2,7 +2,8 @@
 
    The attendee path was built on the old dark shell (style-01 tokens:
    --bg-*, --text-*, --accent, rounded corners). Inside the site frame each
-   page gets a scope class (`.lp-dep` for /deposit). The scope maps the old
+   page's <main> carries `.lp-att`, and its wrap a page class
+   (`.lp-dep-wrap` /deposit, `.lp-ev-wrap` /e/{slug}). `.lp-att` maps the old
    tokens onto the landing ones (style-23: --lp-paper, --lp-ink, --lp-field)
    so the shared components (buttons, inputs, badges, stepper) follow the
    site's light and dark themes without being rewritten. Below the map are
@@ -10,9 +11,10 @@
 
    Colour roles stay the site's: indigo = brand and what you can click,
    ink = text and borders, orange = people. Status colours get darker values
-   on paper so text in them passes AA. */
+   on paper so text in them passes AA. Fills that carry paper text use
+   #5a54cb (5.18:1), not --lp-field (#6b63f0 is under 4.5:1). */
 
-.lp-dep {
+.lp-att {
     --bg-primary: var(--lp-paper);
     --bg-secondary: var(--lp-paper-2);
     --bg-tertiary: var(--lp-paper-2);
@@ -22,6 +24,7 @@
     --text-heading: var(--lp-ink);
     --text-secondary: var(--lp-ink-2);
     --text-muted: var(--lp-ink-3);
+    --text-primary-inverse: var(--lp-paper);
     --border: var(--lp-ink);
     --border-hover: var(--lp-ink);
     --accent: var(--lp-t-field);
@@ -43,7 +46,7 @@
     font-family: var(--lp-sans);
     padding: 48px 0 72px;
 }
-.lp[data-theme="dark"] .lp-dep {
+.lp[data-theme="dark"] .lp-att {
     --success: #4fd68a;
     --warning: #f5b544;
     --danger: #f0666b;
@@ -51,58 +54,61 @@
 .lp-dep-wrap {
     max-width: 560px;
 }
+.lp-ev-wrap {
+    max-width: 720px;
+}
 /* a short flow page still fills the window: the footer sits at the bottom,
    not above a band of the old body background */
-.landing-page.lp:has(> .lp-dep) {
+.landing-page.lp:has(> .lp-att) {
     display: flex;
     flex-direction: column;
 }
-.lp-dep {
+.lp-att {
     flex: 1 0 auto;
 }
 /* one payment method: one full-width card, not the left half of two */
-.lp-dep .dep2-method-grid--single {
+.lp-att .dep2-method-grid--single {
     grid-template-columns: 1fr;
     max-width: none;
 }
 
 /* the page title and the event it is for */
-.lp-dep .claim-title {
+.lp-att .claim-title {
     font: 700 36px/1.1 var(--lp-sans);
     letter-spacing: -0.03em;
     color: var(--lp-ink);
     margin: 0 0 12px;
 }
-.lp-dep .event-context-header {
+.lp-att .event-context-header {
     border-width: 2px;
 }
-.lp-dep .event-context-name {
+.lp-att .event-context-name {
     color: var(--lp-ink);
 }
 
 /* cards: the site's 2px ink box, square, no glow */
-.lp-dep .dep2-card,
-.lp-dep .dep2-method-card {
+.lp-att .dep2-card,
+.lp-att .dep2-method-card {
     border: 2px solid var(--lp-ink);
     box-shadow: none;
 }
-.lp-dep .dep2-method-card:hover {
+.lp-att .dep2-method-card:hover {
     border-color: var(--lp-ink);
     box-shadow: none;
 }
-.lp-dep .dep2-method-card--recommended {
+.lp-att .dep2-method-card--recommended {
     border-color: var(--lp-field);
     background: var(--lp-paper);
 }
-.lp-dep .dep2-method-card--recommended::before {
-    background: var(--lp-field);
+.lp-att .dep2-method-card--recommended::before {
+    background: #5a54cb;
     color: #f4f0e6;
     border-radius: 0;
 }
-.lp-dep .dep2-receipt-row {
+.lp-att .dep2-receipt-row {
     border-bottom-color: var(--lp-line);
 }
-.lp-dep .dep2-amount-hero {
+.lp-att .dep2-amount-hero {
     background: none;
     -webkit-text-fill-color: currentColor;
     color: var(--lp-ink);
@@ -110,88 +116,88 @@
 }
 
 /* buttons: .lp-btn and .lp-btn-primary */
-.lp-dep .btn,
-.lp-dep .dep2-method-cta {
+.lp-att .btn,
+.lp-att .dep2-method-cta {
     border-radius: 0;
     font-family: var(--lp-sans);
     font-weight: 600;
     box-shadow: none;
 }
-.lp-dep .btn-primary,
-.lp-dep .btn-success,
-.lp-dep .dep2-method-cta {
+.lp-att .btn-primary,
+.lp-att .btn-success,
+.lp-att .dep2-method-cta {
     background: var(--lp-ink);
     color: var(--lp-paper);
     border: 2px solid var(--lp-ink);
 }
-.lp-dep .btn-primary:hover:not(:disabled),
-.lp-dep .btn-success:hover:not(:disabled),
-.lp-dep .dep2-method-cta:hover {
+.lp-att .btn-primary:hover:not(:disabled),
+.lp-att .btn-success:hover:not(:disabled),
+.lp-att .dep2-method-cta:hover {
     background: var(--lp-ink);
     opacity: 1;
     transform: translateY(-2px);
 }
-.lp-dep .btn-outline {
+.lp-att .btn-outline {
     border: 2px solid var(--lp-ink);
     color: var(--lp-ink);
 }
-.lp-dep .btn:focus-visible,
-.lp-dep .dep2-method-cta:focus-visible {
+.lp-att .btn:focus-visible,
+.lp-att .dep2-method-cta:focus-visible {
     outline: 3px solid var(--lp-field);
     outline-offset: 3px;
 }
 
 /* inputs */
-.lp-dep .form-input {
+.lp-att .form-input {
     border: 2px solid var(--lp-ink);
     background: var(--lp-paper);
 }
-.lp-dep .form-input:focus {
+.lp-att .form-input:focus {
     border-color: var(--lp-field);
     box-shadow: none;
 }
 
 /* the stepper: square steps, ink and indigo, no pulse */
-.lp-dep .claim-step-circle {
+.lp-att .claim-step-circle {
     border-radius: 0;
     box-shadow: none;
     animation: none;
 }
-.lp-dep .claim-step-circle.completed {
+.lp-att .claim-step-circle.completed {
     background: var(--lp-ink);
     color: var(--lp-paper);
 }
-.lp-dep .claim-step-circle.current {
-    background: var(--lp-field);
+.lp-att .claim-step-circle.current {
+    background: #5a54cb;
     color: #f4f0e6;
 }
-.lp-dep .claim-step-circle.upcoming {
+.lp-att .claim-step-circle.upcoming {
     background: transparent;
     border: 2px solid var(--lp-line);
 }
-.lp-dep .claim-step:not(:last-child)::after {
+.lp-att .claim-step:not(:last-child)::after {
     background: var(--lp-line);
 }
-.lp-dep .claim-step:not(:last-child)::before {
+.lp-att .claim-step:not(:last-child)::before {
     background: var(--lp-ink);
 }
 
 /* waiting dots and the success mark */
-.lp-dep .dep2-confirming-dot {
+.lp-att .dep2-confirming-dot {
     border-radius: 0;
     background: var(--lp-field);
 }
-.lp-dep .dep2-success-icon {
+.lp-att .dep2-success-icon {
     border-radius: 0;
 }
 
 /* the site has one primary button; disabled reads as faded ink, not grey-green */
-.lp-dep .btn:disabled {
+.lp-att .btn:disabled {
     opacity: 0.45;
 }
 
 /* "← Change method" is a <button>: no browser chip behind the link */
-.lp-dep button.dep2-back {
+.lp-att button.dep2-back {
     background: none;
     border: 0;
     padding: 0;
@@ -200,10 +206,78 @@
     color: var(--lp-ink-2);
     cursor: pointer;
 }
-.lp-dep .dep2-back:hover {
+.lp-att .dep2-back:hover {
     color: var(--lp-ink);
 }
 
-.lp-dep .badge {
+.lp-att .badge {
+    border-radius: 0;
+}
+
+/* ---- /e/{slug}: the rules below beat hard-coded whites and the
+   glassy deposit card, several of which are !important in style-19 ---- */
+.lp-att .pe-name,
+.lp-att .pe-section-title {
+    color: var(--lp-ink);
+}
+.lp-att .pe-name {
+    font: 700 40px/1.08 var(--lp-sans);
+    letter-spacing: -0.03em;
+}
+.lp-att .pe-check {
+    color: var(--success);
+}
+.lp-att .pe-deposit-card {
+    background: var(--lp-paper) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border: 2px solid var(--lp-ink) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+}
+.lp-att .pe-method-card,
+.lp-att .pe-method-card:hover,
+.lp-att .pe-method-card--promptpay,
+.lp-att .pe-method-card--solana {
+    background: var(--lp-paper-2) !important;
+    border: 2px solid var(--lp-ink) !important;
+    border-radius: 0 !important;
+    transform: none !important;
+}
+.lp-att .pe-method-badge,
+.lp-att .pe-method-badge--promptpay,
+.lp-att .pe-method-badge--solana {
+    background: #5a54cb !important;
+    color: #f4f0e6 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+}
+.lp-att .pe-method-amount-val {
+    color: var(--lp-ink) !important;
+}
+.lp-att .pe-method-subtext {
+    color: var(--lp-ink-2) !important;
+}
+.lp-att .btn-google {
+    border: 2px solid var(--lp-ink);
+}
+.lp-att .btn-solana-wallet {
+    background: transparent !important;
+    border: 2px solid var(--lp-ink) !important;
+    color: var(--lp-ink) !important;
+    box-shadow: none !important;
+}
+
+/* the register form: required marks and errors in the danger colour that
+   passes on paper, and the submit is the site's ink primary */
+.lp-att .pe-required,
+.lp-att .pe-field-error {
+    color: var(--danger);
+}
+.lp-att .pe-submit-btn,
+.lp-att .pe-submit-btn:hover:not(:disabled) {
+    background: var(--lp-ink);
+    color: var(--lp-paper);
+    border: 2px solid var(--lp-ink);
     border-radius: 0;
 }
