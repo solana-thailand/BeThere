@@ -1,6 +1,6 @@
 # 046 — Attendee path onto the site design (UX)
 
-Status: Phase 0 in review (pull 247); Phases 1–2 not started.
+Status: Phase 0 deployed (pull 247, prod `6cda00ee`, 2026-10-13: /events and the static home quote Road to Mainnet); Phases 1–2 not started.
 
 Owner, 2026-10-12, after the hackathon submission: "better UI/UX", after
 the critical fixes (191 → 160 → 165). Audit screenshots (390 px, dark):
@@ -23,7 +23,7 @@ dark-blue and orange "Proof of Attendance" shell (`brand-logo` +
 | login | `pages/login.rs:153` | style-01-core.css |
 | `/sandbox` | `pages/sandbox/` | mixed |
 
-## Phase 0 — quick fixes (pull 247)
+## Phase 0 — quick fixes (pull 247, deployed)
 
 - [x] `/events` "about every 1 weeks" → "about every week" (`Cadence::weekly`, en/th, static home).
 - [x] Cadence quoted the online Latent Space series: a 6–6 tie with RTM, and `max_by_key` kept the last. A tie now keeps the first listed.
