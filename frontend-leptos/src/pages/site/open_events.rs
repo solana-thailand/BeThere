@@ -154,7 +154,10 @@ fn NothingOpen(sample_slug: Option<String>) -> impl IntoView {
     };
     let line = move || match quiet() {
         Some((title, _, c)) => crate::locale::fill(
-            t_string!(i18n, landing.upcoming.cadence),
+            match c.weekly() {
+                true => t_string!(i18n, landing.upcoming.cadence_weekly),
+                false => t_string!(i18n, landing.upcoming.cadence),
+            },
             &[
                 ("course", &title),
                 ("times", &c.times.to_string()),

@@ -369,24 +369,28 @@ async fn scheduled(event: worker::ScheduledEvent, env: Env, _ctx: worker::Schedu
                     double_settled = report.double_settled,
                     phantom_holds = report.phantom_holds,
                     incomplete_applies = report.incomplete_applies,
+                    deleted_returns = report.deleted_returns,
+                    stranded_applies = report.stranded_applies,
                     "credit ledger reconcile FAILED"
                 );
                 if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
                     && !webhook.is_empty()
                 {
                     let msg = format!(
-                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s), {} double-settled deposit(s) (cash refunded AND held as credit), {} phantom hold(s) (ledger credit with no held deposit), {} incomplete credit application(s). Check credit_ledger vs deposit projections.",
+                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s), {} double-settled deposit(s) (cash refunded AND held as credit), {} phantom hold(s) (ledger credit with no held deposit), {} incomplete credit application(s), {} applied credit(s) stranded on an event row that is gone. Check credit_ledger vs deposit projections.",
                         report.orphan_holds,
                         report.negative_balances,
                         report.double_settled,
                         report.phantom_holds,
-                        report.incomplete_applies
+                        report.incomplete_applies,
+                        report.stranded_applies
                     );
                     let _ = middleware::alert::post_slack(&webhook, &msg).await;
                 }
             }
             Ok(report) => tracing::info!(
                 applies_repaired = report.applies_repaired,
+                deleted_returns = report.deleted_returns,
                 "credit ledger reconcile clean"
             ),
             Err(e) => tracing::warn!(error = %e, "credit ledger reconcile query failed"),

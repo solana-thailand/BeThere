@@ -148,6 +148,7 @@
     "rule_free": "Free, no deposit",
     "chip_online": "online, free",
     "cadence": "{course} has run {times} times, about every {weeks} weeks · last on {date}",
+    "cadence_weekly": "{course} has run {times} times, about every week · last on {date}",
     "watch_last": "Watch the last one",
     "learn": "Learn from past events ↓",
     "or": "Or",

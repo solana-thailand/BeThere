@@ -1,10 +1,16 @@
 # 191 · Credit applied to a hard-deleted event stays locked forever
 
-**Status:** open. Found 2026-10-08 (session `event-checkin-8a`) while building
-`.issues/190`; read from the code on `develop` `4d9cf386` and reproduced on
-the migrated SQLite schema with the worker's own release SQL (the repro
-below: 0 rows released, balance 0, the lock still listed). Not checked
-against prod data.
+**Status:** fixed on develop (2026-10-13, session `event-checkin-d3`). The repro
+below was re-run first on the current migrations and still left the credit
+locked. Fix: the hard-delete purge batch now returns the credit as its first
+statement (`RETURN_DELETED_EVENT_APPLIES_SQL`); the nightly reconcile returns
+credit stranded by earlier deletes when the audit log records the hard delete
+(`RETURN_HARD_DELETED_APPLIES_SQL`; a missing row alone is not proof, since a
+KV-only event has none) and alarms on any unreturned apply whose event row is
+gone (`stranded_applies`). Tests: `worker/tests/security/test_credit_deleted_event.py`,
+`worker/tests/event_purge_statements.rs`. Not checked against prod data (remote
+D1 reads are blocked in auto mode); the first nightly run after deploy repairs
+and reports it. Originally: open, found 2026-10-08 (session `event-checkin-8a`).
 
 ## What is wrong
 

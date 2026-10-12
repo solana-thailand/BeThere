@@ -39,6 +39,21 @@ pub fn loading_view() -> AnyView {
 /// Error view.
 pub fn error_view(error: DepositError) -> AnyView {
     let i18n = use_i18n();
+    // An ended event with nothing on file is a normal state, not an error:
+    // say so, and point at what is coming up instead of home.
+    type Text = fn(crate::i18n::Locale) -> &'static str;
+    let (title, href, action): (Text, &str, Text) = match error {
+        DepositError::EndedNoDeposit => (
+            |l| crate::i18n::td_string!(l, deposit.error.ended_title),
+            "/events",
+            |l| crate::i18n::td_string!(l, deposit.error.see_events),
+        ),
+        _ => (
+            |l| crate::i18n::td_string!(l, deposit.error.title),
+            "/",
+            |l| crate::i18n::td_string!(l, deposit.error.go_home),
+        ),
+    };
     let message = match error {
         DepositError::InvalidLink => view! { {crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.error.invalid_link))} }.into_any(),
         DepositError::EndedNoDeposit => {
@@ -52,10 +67,10 @@ pub fn error_view(error: DepositError) -> AnyView {
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <span class="dep2-card-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.error.title))}</span>
+                <span class="dep2-card-title">{crate::locale::tr(title)}</span>
             </div>
             <p>{message}</p>
-            <a href="/" class="btn btn-primary">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.error.go_home))}</a>
+            <a href=href class="btn btn-primary">{crate::locale::tr(action)}</a>
         </div>
     }
     .into_any()

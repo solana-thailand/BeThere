@@ -10,17 +10,19 @@
 #
 # Two deliberate differences from the worker gate:
 #
-#   1. It measures BROTLI AT QUALITY 4, not gzip and not brotli -11.
-#      Cloudflare serves these assets `content-encoding: br`, so brotli is what
-#      an attendee waits for — but it compresses them on the fly at a low
-#      quality, not at 11. Measured against the deployed site on 2026-09-22:
-#      the wasm arrives as 1,675,993 bytes, and the same artifact compresses
-#      locally to 1,646,742 at q4 and 1,288,797 at q11. q4 is within 2% of what
-#      is served; q11 would have understated every number here by ~28% and
-#      called it a measurement. q11 is printed anyway, as `br11`, because the
-#      gap between the two columns is worth something concrete: it is what
-#      precompressing the assets at build time would save, per first load, for
-#      no code change at all.
+#   1. It measures WHAT IS SERVED, in brotli.
+#      Cloudflare compresses most assets on the fly at a low quality (~q4):
+#      measured on 2026-09-22, the wasm arrived as 1,675,993 bytes against
+#      1,646,742 at q4 and 1,288,797 at q11 locally, so those files are judged
+#      at q4. Since .issues/135 the Worker serves the wasm and jsQR from a
+#      brotli-11 sibling the build writes (worker/src/precompressed.rs,
+#      PRECOMPRESSED_ASSETS; frontend-leptos/build.sh precompress_assets), so
+#      those two are judged at the size of that `.br` file, which is exactly
+#      what an attendee downloads (prod 2026-10-11: the wasm arrived as
+#      1,072,987 bytes, br). Judging them at q4 overstated the first load by
+#      ~300 KB. A precompressed asset whose `.br` is missing falls back to q4,
+#      as the Worker falls back to the plain file. `br11` is printed for every
+#      file, so the column still shows what precompressing the rest would save.
 #      The worker gate measures gzip because Cloudflare defines the WORKER SIZE
 #      LIMIT on gzip — different question, different artifact, different
 #      compressor. gzip is printed here for continuity, not judged.
@@ -204,40 +206,48 @@ const br = (b, q) => z.brotliCompressSync(b, {
             [z.constants.BROTLI_PARAM_SIZE_HINT]: b.length },
 }).length;
 let out = [];
+// Served by the Worker from the brotli-11 sibling the build writes; keep in step with
+// PRECOMPRESSED_ASSETS (worker/src/precompressed.rs) and build.sh.
+const precompressed = (name) =>
+  /^event-checkin-frontend-.+_bg\.wasm$/.test(name) || /^jsqr-.+\.js$/.test(name);
 for (const p of process.argv.slice(1)) {
   const b = fs.readFileSync(p);
-  // q4 is judged (what Cloudflare serves); q11 is shown (what precompressing
-  // at build time would get instead).
-  out.push([p, b.length, z.gzipSync(b, { level: 9 }).length, br(b, 4), br(b, 11)].join("\t"));
+  const q4 = br(b, 4);
+  const name = p.split("/").pop();
+  // served: the size of the .br sibling for a precompressed asset, else q4 (what
+  // Cloudflare compresses on the fly); q11 is shown for every file.
+  const served = precompressed(name) && fs.existsSync(p + ".br") ? fs.statSync(p + ".br").size : q4;
+  out.push([p, b.length, z.gzipSync(b, { level: 9 }).length, q4, br(b, 11), served].join("\t"));
 }
 process.stdout.write(out.join("\n"));
 ' "${files[@]}")
 
-total_raw=0; total_gzip=0; total_br=0; total_br11=0
+total_raw=0; total_gzip=0; total_br4=0; total_br11=0; total_br=0
 echo ""
-printf '  %-44s %10s %10s %10s %10s\n' "file" "raw" "gzip" "br4" "br11"
-printf '  %-44s %10s %10s %10s %10s\n' "----" "---" "----" "---" "----"
-while IFS=$'\t' read -r path raw gz br br11; do
+printf '  %-44s %10s %10s %10s %10s %10s\n' "file" "raw" "gzip" "br4" "br11" "served"
+printf '  %-44s %10s %10s %10s %10s %10s\n' "----" "---" "----" "---" "----" "------"
+while IFS=$'\t' read -r path raw gz br4 br11 served; do
   [ -n "$path" ] || continue
   total_raw=$(( total_raw + raw ))
   total_gzip=$(( total_gzip + gz ))
-  total_br=$(( total_br + br ))
+  total_br4=$(( total_br4 + br4 ))
   total_br11=$(( total_br11 + br11 ))
-  printf '  %-44s %10s %10s %10s %10s\n' "$(basename "$path" | cut -c1-44)" "$raw" "$gz" "$br" "$br11"
+  total_br=$(( total_br + served ))
+  printf '  %-44s %10s %10s %10s %10s %10s\n' "$(basename "$path" | cut -c1-44)" "$raw" "$gz" "$br4" "$br11" "$served"
 done <<< "$measured"
-printf '  %-44s %10s %10s %10s %10s\n' \
-  "TOTAL (${#files[@]} files)" "$total_raw" "$total_gzip" "$total_br" "$total_br11"
+printf '  %-44s %10s %10s %10s %10s %10s\n' \
+  "TOTAL (${#files[@]} files)" "$total_raw" "$total_gzip" "$total_br4" "$total_br11" "$total_br"
 echo ""
 
 pct_x100=$(( total_br * 10000 / CEILING_BYTES ))
 delta=$(( total_br - BASELINE_BYTES ))
 
 printf '  shell      : %s (%s)\n' "$SHELL_NAME" "$SHELL_HTML"
-printf '  first load : %s bytes br4 (%d.%02d%% of the %s-byte product budget)\n' \
+printf '  first load : %s bytes as served (%d.%02d%% of the %s-byte product budget)\n' \
   "$total_br" "$(( pct_x100 / 100 ))" "$(( pct_x100 % 100 ))" "$CEILING_BYTES"
-printf '  precompress: %s bytes at br11 — %s bytes an attendee pays for nothing,\n' \
+printf '  precompress: %s bytes if every file were served at br11 — %s more\n' \
   "$total_br11" "$(( total_br - total_br11 ))"
-printf '               because Cloudflare compresses on the fly at ~q4.\n'
+printf '               could be saved by precompressing the rest (served at ~q4).\n'
 printf '  baseline   : %s bytes (recorded %s), delta %+d bytes\n' \
   "$BASELINE_BYTES" "$BASELINE_DATE" "$delta"
 printf '  growth     : warn %+d / fail %+d bytes\n' \
@@ -253,7 +263,7 @@ if [ "$UPDATE_BASELINE" = true ]; then
       -e "s/^${KEY_PREFIX}BASELINE_DATE=.*/${KEY_PREFIX}BASELINE_DATE=${today}/" \
       "$BUDGET_FILE" > "$tmp_budget"
   mv "$tmp_budget" "$BUDGET_FILE"
-  echo "📝 Baseline updated to ${total_br} bytes br4 (${today}) in ${BUDGET_FILE}."
+  echo "📝 Baseline updated to ${total_br} bytes as served (${today}) in ${BUDGET_FILE}."
   echo "   Commit this in the SAME commit as the change that grew the bundle,"
   echo "   with a line saying what grew. An unexplained baseline bump in a diff"
   echo "   is the thing this line exists to make visible."
@@ -263,13 +273,13 @@ fi
 fail=false
 
 if [ "$total_br" -gt "$FAIL_BYTES" ]; then
-  echo "❌ First load is over the product budget: ${total_br} > ${FAIL_BYTES} bytes br4."
+  echo "❌ First load is over the product budget: ${total_br} > ${FAIL_BYTES} bytes as served."
   echo "   There is no Cloudflare limit here — the limit is an attendee on venue"
   echo "   mobile data who cannot see their ticket. ${CEILING_BYTES} bytes is"
   echo "   roughly 5.6 s of download on a 3 Mbps connection before anything renders."
   fail=true
 elif [ "$total_br" -gt "$WARN_BYTES" ]; then
-  echo "⚠️  First load is past the warn line: ${total_br} > ${WARN_BYTES} bytes br4."
+  echo "⚠️  First load is past the warn line: ${total_br} > ${WARN_BYTES} bytes as served."
   echo "   Still shippable. Stop adding to the frontend and start asking what can"
   case "$SHELL_NAME" in
     staff)
@@ -305,7 +315,7 @@ fi
 
 if [ "$delta" -le "$WARN_GROWTH_BYTES" ] && [ "$total_br" -le "$WARN_BYTES" ]; then
   echo "✅ Frontend first load is within budget."
-  printf '   Headroom to the product budget: %s bytes br4.\n' \
+  printf '   Headroom to the product budget: %s bytes as served.\n' \
     "$(( CEILING_BYTES - total_br ))"
 fi
 exit 0

@@ -19,6 +19,8 @@
   "error": {
     "title": "Something went wrong",
     "go_home": "Go Home",
+    "ended_title": "This event has ended",
+    "see_events": "See upcoming events",
     "invalid_link": "Invalid deposit link — missing attendee ID.",
     "ended_no_deposit": "This event has ended and no deposit is on file for you — there's nothing to pay or refund.",
     "load_failed": "Failed to load deposit info: {{ error }}",
