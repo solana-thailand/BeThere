@@ -586,15 +586,31 @@ h3 {
     text-align: center;
 }
 
-/* Brand gradient text for the BeThere logo */
+/* The logo (A2, owner 8 Oct 2026; bethere-ux/brand/logo): the wordmark, then
+   a chair with a person on its seat, as tall as an x, 0.06em after the "e".
+   The chair is the site's CHAIR path. The person is #e04a22 on light grounds
+   (3.57:1 on paper) and #ff5c39 on dark (6.10:1). */
+:root {
+    --bt-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 30'%3E%3Cpath d='M2 0h4v14h14v4H8v12H4V18H2z M18 18h4v12h-4z' fill='%236b63f0'/%3E%3Ccircle cx='13.5' cy='9' r='4.6' fill='%23e04a22'/%3E%3C/svg%3E");
+    --bt-mark-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 30'%3E%3Cpath d='M2 0h4v14h14v4H8v12H4V18H2z M18 18h4v12h-4z' fill='%236b63f0'/%3E%3Ccircle cx='13.5' cy='9' r='4.6' fill='%23ff5c39'/%3E%3C/svg%3E");
+}
+.brand-logo::after,
+.lp-logo::after,
+.lp-flogo::after {
+    content: "";
+    display: inline-block;
+    width: 0.437em;
+    height: 0.546em;
+    margin-left: 0.06em;
+    background: var(--bt-mark-dark) center / contain no-repeat;
+}
+
+/* The attendee shell's logo: the A2 lockup on the dark ground */
 .brand-logo {
     font-size: 1.5rem;
     font-weight: 800;
-    letter-spacing: 0.08em;
-    background: linear-gradient(135deg, #ff7b5c 0%, #ff5c39 40%, #ffab4d 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    letter-spacing: -0.04em;
+    color: #f4f0e6;
     text-align: center;
     margin-bottom: 0.5rem;
 }

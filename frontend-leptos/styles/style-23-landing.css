@@ -121,13 +121,9 @@ mark.lp-hl {
     text-decoration: none;
     color: var(--lp-ink);
 }
-.lp-logo::after {
-    content: "";
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    background: var(--lp-field);
-    margin-left: 3px;
+/* the A2 mark (style-01-core.css): the light-ground person on the paper bar */
+.lp:not([data-theme="dark"]) .lp-logo::after {
+    background-image: var(--bt-mark);
 }
 .lp-nav-links {
     display: flex;
@@ -1962,14 +1958,6 @@ a.lp-event:focus-visible {
     letter-spacing: -0.04em;
     text-decoration: none;
     color: #f4f0e6;
-}
-.lp-flogo::after {
-    content: "";
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    background: #6b63f0;
-    margin-left: 3px;
 }
 .lp-flinks {
     display: flex;
