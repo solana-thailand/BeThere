@@ -382,27 +382,6 @@
     margin-bottom: 0.5rem;
 }
 
-/* Footer */
-.pe-footer {
-    width: 100%;
-    margin-top: 2rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--border);
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-}
-
-/* Misc */
-.pe-back-link {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-
 .pe-description {
     color: var(--text-secondary);
     font-size: 0.9rem;
@@ -421,12 +400,6 @@
     text-decoration: none;
     font-size: 0.9rem;
     font-weight: 500;
-}
-
-/* Back link wrapper */
-.pe-back-wrap {
-    width: 100%;
-    margin-bottom: 1rem;
 }
 
 /* Container with no gap */
@@ -549,12 +522,6 @@
 /* Left margin indent for field errors */
 .pe-field-error-indent {
     margin-left: 1.5rem;
-}
-
-/* Footer accent link */
-.pe-footer-link {
-    color: var(--accent);
-    text-decoration: none;
 }
 
 /* ── Landing Page Layout ─────────────────────────────────────────── */
