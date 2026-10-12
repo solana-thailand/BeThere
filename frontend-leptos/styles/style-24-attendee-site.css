@@ -307,3 +307,15 @@
 .lp-att .ticket-hero--online {
     border-top-color: #ff5c39;
 }
+
+/* the action cards under a ticket (pay, refund, claim, hold…): flat, square,
+   ink on three sides; the left edge keeps each card's state colour */
+.lp-att .ticket-action-card {
+    background: var(--lp-paper-2);
+    border-radius: 0;
+    border-style: solid;
+    border-width: 2px 2px 2px 6px;
+    border-top-color: var(--lp-ink);
+    border-right-color: var(--lp-ink);
+    border-bottom-color: var(--lp-ink);
+}
