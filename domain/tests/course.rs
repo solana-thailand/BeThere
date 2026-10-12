@@ -25,6 +25,19 @@ fn road_to_mainnet_dates_give_about_every_four_weeks() {
     shuffled.reverse();
     assert_eq!(cadence(&shuffled), Some(c));
     assert_eq!(cadence(&starts[..2]), None);
+    assert!(!c.weekly());
+}
+
+#[test]
+fn a_weekly_series_reads_every_week_not_every_1_weeks() {
+    let weekly = |gap_days: i64| {
+        cadence(&[0, gap_days * DAY, 2 * gap_days * DAY])
+            .unwrap()
+            .weekly()
+    };
+    assert!(weekly(7)); // every_weeks 1
+    assert!(weekly(2)); // every_weeks 0
+    assert!(!weekly(14)); // every_weeks 2
 }
 
 #[test]
@@ -59,6 +72,12 @@ fn course_ids_and_the_busiest_course() {
         busiest(&[c("a", 2), c("b", 6), c("c", 3)]).map(|x| x.id.as_str()),
         Some("b")
     );
+    // a tie goes to the first listed (prod: Road to Mainnet 6, Latent Space 6)
+    assert_eq!(
+        busiest(&[c("a", 6), c("b", 6), c("c", 3)]).map(|x| x.id.as_str()),
+        Some("a")
+    );
+    assert_eq!(busiest(&[]), None);
     let ep = CourseEpisode {
         end_ms: 10,
         ..Default::default()

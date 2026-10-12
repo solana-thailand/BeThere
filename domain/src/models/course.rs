@@ -97,6 +97,14 @@ pub struct Cadence {
     pub last_ms: i64,
 }
 
+impl Cadence {
+    /// Once a week or more often: "about every week", never "every 1 weeks"
+    /// (or "every 0 weeks" when the median gap is under half a week).
+    pub fn weekly(&self) -> bool {
+        self.every_weeks <= 1
+    }
+}
+
 /// The empty state's line, from the held episodes' start times: `None` under
 /// three, where a median gap says nothing. The median of an even count of
 /// gaps is the upper middle one.
@@ -117,6 +125,13 @@ pub fn cadence(starts_ms: &[i64]) -> Option<Cadence> {
 }
 
 /// The course whose cadence the empty state quotes: the one held most often.
+/// A tie goes to the first in list order (`max_by_key` would pick the last),
+/// so two series with the same count don't flip on a reorder.
 pub fn busiest(courses: &[CourseSummary]) -> Option<&CourseSummary> {
-    courses.iter().max_by_key(|c| c.held)
+    courses
+        .iter()
+        .fold(None, |best: Option<&CourseSummary>, c| match best {
+            Some(b) if b.held >= c.held => Some(b),
+            _ => Some(c),
+        })
 }
