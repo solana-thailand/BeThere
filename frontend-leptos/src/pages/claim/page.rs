@@ -7,6 +7,8 @@ use leptos_router::hooks::use_params;
 use crate::api::{self, AdventureStatusType, QuizStatus};
 use crate::i18n::{t, t_string, use_i18n};
 use crate::icons::{Icon, IconName, wallet_icon_name};
+use crate::pages::landing::frame::{SiteFrame, use_site_auth};
+use crate::pages::site::doors::SitePage;
 use crate::utils::escape_html;
 
 use super::helpers::*;
@@ -300,14 +302,13 @@ pub fn Claim() -> impl IntoView {
     let set_cw_for_connect = set_connected_wallet;
 
     let i18n = use_i18n();
+    // The site's header, theme and footer (.plans/046 Phase 1).
+    let (auth_state, _) = use_site_auth();
     view! {
-        <div class="center-page">
-            <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, claim.page_title)) />
-            <div class="container claim-container">
-                // Brand header
-                <div class="brand-logo">"BeThere"</div>
-                <div class="brand-logo-sub">{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.proof_of_attendance))}</div>
-
+        <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, claim.page_title)) />
+        <SiteFrame here=SitePage::Events auth_state=auth_state own_doors=true>
+        <main class="lp-att">
+            <div class="lp-wrap lp-dep-wrap claim-container">
                 // Title
                 <h1 class="claim-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, claim.title))}</h1>
 
@@ -975,14 +976,8 @@ pub fn Claim() -> impl IntoView {
                     }
                 }}
 
-                // Footer
-                <div class="claim-footer">
-                    <div class="brand-line">
-                        <span class="accent">"BeThere"</span>
-                        " x Solana Thailand"
-                    </div>
-                </div>
             </div>
-        </div>
+        </main>
+        </SiteFrame>
     }
 }
