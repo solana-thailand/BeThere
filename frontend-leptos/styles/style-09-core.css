@@ -543,12 +543,6 @@
 
 /* ---------- Loading / Spinner States ---------- */
 
-/* Loading wrapper with top margin
- * Replaces: style="margin-top:2rem;" on .loading.visible */
-.loading-top {
-    margin-top: 2rem;
-}
-
 /* Spinner centered wrapper
  * Replaces: style="margin:1.5rem 0;" */
 .spinner-wrap {
