@@ -18,6 +18,8 @@ use wasm_bindgen::prelude::*;
 use crate::api::{self, cache_invalidate};
 use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
+use crate::pages::landing::frame::{SiteFrame, use_site_auth};
+use crate::pages::site::doors::SitePage;
 use crate::utils;
 
 use super::in_person_view::InPersonView;
@@ -383,9 +385,13 @@ pub fn Ticket() -> impl IntoView {
     });
 
     let i18n = use_i18n();
+    // The site's header, theme and footer (.plans/046 Phase 1).
+    let (auth_state, _) = use_site_auth();
     view! {
         <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.page_title)) />
 
+        <SiteFrame here=SitePage::Events auth_state=auth_state own_doors=true>
+        <main class="lp-att">
         <div class="ticket-page">
             <div class="ticket-page-inner">
 
@@ -424,8 +430,8 @@ pub fn Ticket() -> impl IntoView {
                     },
 
                     TicketState::NotFound => view! {
-                        <div class="center-page">
-                            <div class="container layout-col-center">
+                        <div class="lp-wrap lp-dep-wrap">
+                            <div class="layout-col-center">
                                 <Icon icon=IconName::Search class="icon-xl" />
                                 <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.not_found_title))}</h1>
                                 <p class="subtitle">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.not_found_body))}</p>
@@ -435,8 +441,8 @@ pub fn Ticket() -> impl IntoView {
                     }.into_any(),
 
                     TicketState::Error(err) => view! {
-                        <div class="center-page">
-                            <div class="container layout-col-center">
+                        <div class="lp-wrap lp-dep-wrap">
+                            <div class="layout-col-center">
                                 <Icon icon=IconName::AlertTriangle class="icon-xl" />
                                 <h1>{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.error_title))}</h1>
                                 <p class="subtitle">{match err {
@@ -496,6 +502,8 @@ pub fn Ticket() -> impl IntoView {
                 </Show>
             </div>
         </div>
+        </main>
+        </SiteFrame>
 
         // Fullscreen QR overlay — rendered outside main layout
         <FullscreenQrOverlay

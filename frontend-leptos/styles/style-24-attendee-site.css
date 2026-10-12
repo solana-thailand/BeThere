@@ -281,3 +281,41 @@
     border: 2px solid var(--lp-ink);
     border-radius: 0;
 }
+
+/* ---- /ticket/{attendee}: the site's 24px gutter, and the state banner as
+   a 2px ink box whose thick top edge carries the state (it was a gradient
+   fading into the old dark page) ---- */
+.lp-att .ticket-page {
+    padding: 0 24px 2rem;
+}
+.lp-att .ticket-hero {
+    max-width: 420px; /* the ticket card's width (style-11) */
+    background: var(--lp-paper);
+    border: 2px solid var(--lp-ink);
+    border-top-width: 8px;
+    border-radius: 0;
+}
+.lp-att .ticket-hero--checked-in {
+    border-top-color: var(--success);
+}
+.lp-att .ticket-hero--pending {
+    border-top-color: var(--warning);
+}
+.lp-att .ticket-hero--ready {
+    border-top-color: var(--lp-field);
+}
+.lp-att .ticket-hero--online {
+    border-top-color: #ff5c39;
+}
+
+/* the action cards under a ticket (pay, refund, claim, hold…): flat, square,
+   ink on three sides; the left edge keeps each card's state colour */
+.lp-att .ticket-action-card {
+    background: var(--lp-paper-2);
+    border-radius: 0;
+    border-style: solid;
+    border-width: 2px 2px 2px 6px;
+    border-top-color: var(--lp-ink);
+    border-right-color: var(--lp-ink);
+    border-bottom-color: var(--lp-ink);
+}
