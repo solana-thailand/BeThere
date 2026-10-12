@@ -74,7 +74,14 @@ fn lang_bar_is_off_on_the_landing_only() {
     assert!(shows_lang_bar("/past-events"));
     assert!(!shows_lang_bar("/admin"));
     // Moved into the frame (.plans/046 Phase 1).
-    for framed in ["/deposit/a", "/e/rtm-6", "/ticket/a", "/claim/t", "/login"] {
+    for framed in [
+        "/deposit/a",
+        "/e/rtm-6",
+        "/ticket/a",
+        "/claim/t",
+        "/login",
+        "/sandbox",
+    ] {
         assert!(!shows_lang_bar(framed), "{framed}");
     }
 }

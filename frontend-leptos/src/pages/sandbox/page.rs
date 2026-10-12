@@ -13,6 +13,8 @@ use crate::api::{
 };
 use crate::i18n::td_string;
 use crate::locale::tr;
+use crate::pages::landing::frame::{SiteFrame, use_site_auth};
+use crate::pages::site::doors::SitePage;
 
 /// Seconds past `event_end` before the refund button opens: the cluster clock
 /// can trail the browser's by a few seconds.
@@ -235,10 +237,14 @@ pub fn Sandbox() -> impl IntoView {
         }
     };
 
+    // The site's header, theme and footer (.plans/046 Phase 1). No doors:
+    // one of them is "Try it on devnet", which is this page.
+    let (auth_state, _) = use_site_auth();
     view! {
         <Title text=tr(|l| td_string!(l, sandbox.page_title)) />
+        <SiteFrame here=SitePage::Events auth_state=auth_state own_doors=true>
+        <main class="lp-att">
         <div class="sandbox-page">
-            <a href="/" class="faq-back">{tr(|l| td_string!(l, sandbox.back_home))}</a>
             <span class="sandbox-badge">{tr(|l| td_string!(l, sandbox.devnet_badge))}</span>
             <h1 class="sandbox-title">{tr(|l| td_string!(l, sandbox.title))}</h1>
             <p class="sandbox-subtitle">{tr(|l| td_string!(l, sandbox.subtitle))}</p>
@@ -336,5 +342,7 @@ pub fn Sandbox() -> impl IntoView {
                 }.into_any(),
             }}
         </div>
+        </main>
+        </SiteFrame>
     }
 }
