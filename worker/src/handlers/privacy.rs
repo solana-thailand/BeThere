@@ -170,26 +170,30 @@ pub async fn delete_request(
                 }
             }
 
-            // R2: Delete THB slips and refund receipts
+            // R2: Delete THB slips and refund receipts. A failed check or
+            // delete is a failure of the request, never a quiet success
+            // (.issues/160): the image holds a bank slip.
             if let Some(bucket) = state.r2.as_ref() {
                 for ext in &["", ".jpg", ".png", ".webp"] {
-                    let slip_key =
-                        crate::storage::slip_key(event_id, &format!("{attendee_id}{ext}"));
-                    if crate::storage::exists(bucket, &slip_key)
-                        .await
-                        .unwrap_or(false)
-                    {
-                        let _ = crate::storage::delete(bucket, &slip_key).await;
-                        summary.r2_objects_deleted += 1;
-                    }
-                    let refund_key =
-                        crate::storage::refund_key(event_id, &format!("{attendee_id}{ext}"));
-                    if crate::storage::exists(bucket, &refund_key)
-                        .await
-                        .unwrap_or(false)
-                    {
-                        let _ = crate::storage::delete(bucket, &refund_key).await;
-                        summary.r2_objects_deleted += 1;
+                    let name = format!("{attendee_id}{ext}");
+                    for (key, what) in [
+                        (
+                            crate::storage::slip_key(event_id, &name),
+                            "delete_slip_image",
+                        ),
+                        (
+                            crate::storage::refund_key(event_id, &name),
+                            "delete_refund_image",
+                        ),
+                    ] {
+                        match erase_r2_object(bucket, &key).await {
+                            R2Erase::Deleted => summary.r2_objects_deleted += 1,
+                            R2Erase::Absent => {}
+                            R2Erase::Failed(e) => {
+                                tracing::warn!(subject_fingerprint = %subject_fingerprint, error = %e, what, "R2 erase failed");
+                                summary.record_failure(what);
+                            }
+                        }
                     }
                 }
             }
@@ -516,5 +520,27 @@ async fn clear_sheet_pii(state: &AppState, event_id: &str, row: SheetRow) {
             error = %e,
             "failed to clear sheet PII cells"
         );
+    }
+}
+
+/// What erasing one R2 object did.
+#[derive(Debug)]
+enum R2Erase {
+    Deleted,
+    Absent,
+    Failed(String),
+}
+
+/// Delete `key` if it exists. A failed existence check or delete is
+/// `Failed`, never `Absent`: the caller must not report the image erased
+/// (.issues/160).
+async fn erase_r2_object(bucket: &worker::Bucket, key: &str) -> R2Erase {
+    match crate::storage::exists(bucket, key).await {
+        Ok(false) => R2Erase::Absent,
+        Ok(true) => match crate::storage::delete(bucket, key).await {
+            Ok(()) => R2Erase::Deleted,
+            Err(e) => R2Erase::Failed(format!("{e:?}")),
+        },
+        Err(e) => R2Erase::Failed(format!("{e:?}")),
     }
 }
