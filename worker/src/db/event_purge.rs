@@ -46,8 +46,8 @@ pub fn purge_statements() -> Vec<String> {
         .collect()
 }
 
-/// Archive the event's deposits, then delete everything that belongs to it
-/// except the events row itself. Returns how many deposits the archive holds
+/// Archive the event's deposits, return any credit applied to it, then
+/// delete everything that belongs to it except the events row itself. Returns how many deposits the archive holds
 /// for the event.
 pub async fn purge_event_rows(db: &D1Database, event_id: &str) -> Result<i64, String> {
     let coverage = super::thb_deposits::archive_thb_deposits_for_event(db, event_id).await?;
@@ -57,14 +57,18 @@ pub async fn purge_event_rows(db: &D1Database, event_id: &str) -> Result<i64, St
             coverage.unarchived
         ));
     }
-    let statements = purge_statements()
-        .into_iter()
-        .map(|sql| {
-            db.prepare(sql)
-                .bind_refs(&[D1Type::Text(event_id)])
-                .map_err(|e| format!("D1 event purge bind: {e:?}"))
-        })
-        .collect::<Result<Vec<_>, String>>()?;
+    // .issues/191: return the credit applied to this event first, in the same
+    // batch (all or nothing), because the ended-event release joins `events`
+    // and the row is about to go.
+    let statements =
+        std::iter::once(super::credit_ledger::RETURN_DELETED_EVENT_APPLIES_SQL.to_string())
+            .chain(purge_statements())
+            .map(|sql| {
+                db.prepare(sql)
+                    .bind_refs(&[D1Type::Text(event_id)])
+                    .map_err(|e| format!("D1 event purge bind: {e:?}"))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
     db.batch(statements)
         .await
         .map_err(|e| format!("D1 event purge batch: {e:?}"))?;
