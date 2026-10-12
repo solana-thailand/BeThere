@@ -1,6 +1,6 @@
 # 160: A deletion request leaves personal data behind
 
-**Status:** in progress (2026-10-13, session `event-checkin-d3`): the silent R2 failures are fixed on develop (below); the per-table decisions are proposed below and wait on the owner. Opened 2026-09-28. Found while writing `docs/pdpa_ropa.md` (§15–16); the list comes from that review of `worker/src/handlers/privacy.rs`.
+**Status:** in progress (2026-10-13, session `event-checkin-d3`): the silent R2 failures are fixed and deployed (pull 245, prod `6cda00ee`, 2026-10-13); the per-table decisions are proposed below and wait on the owner. Opened 2026-09-28. Found while writing `docs/pdpa_ropa.md` (§15–16); the list comes from that review of `worker/src/handlers/privacy.rs`.
 
 ## What happens
 

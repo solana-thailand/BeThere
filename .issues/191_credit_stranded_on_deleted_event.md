@@ -1,6 +1,6 @@
 # 191 · Credit applied to a hard-deleted event stays locked forever
 
-**Status:** fixed on develop (2026-10-13, session `event-checkin-d3`). The repro
+**Status:** deployed (prod `6cda00ee`, version `ce8c75e4`, 2026-10-13, pull 244 via release pull 249; fixed in session `event-checkin-d3`). The repro
 below was re-run first on the current migrations and still left the credit
 locked. Fix: the hard-delete purge batch now returns the credit as its first
 statement (`RETURN_DELETED_EVENT_APPLIES_SQL`); the nightly reconcile returns
