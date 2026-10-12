@@ -318,6 +318,8 @@
     border-top-color: var(--lp-ink);
     border-right-color: var(--lp-ink);
     border-bottom-color: var(--lp-ink);
+}
+
 /* ---- /claim/{token}: the gradient panels (dark glass on the old page)
    become the site's flat 2px ink boxes; their decorative gradient borders
    and shimmer go; the mint button is the ink primary ---- */
