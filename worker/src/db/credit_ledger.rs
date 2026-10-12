@@ -91,6 +91,52 @@ macro_rules! release_ended_applies_sql {
     };
 }
 
+/// A `return` for every unreturned `apply` that `$where` picks (alias `a`),
+/// noted `event_deleted` (.issues/191). Same key as the other two writers
+/// (`return:{event_id}:{email}`), so the three can never double-return.
+macro_rules! return_deleted_applies_sql {
+    ($($where:tt)+) => {
+        concat!(
+            "INSERT INTO credit_ledger \
+             (email, organization_id, currency, delta, reason, event_id, deposit_id, note) \
+             SELECT a.email, a.organization_id, a.currency, -a.delta, 'return', a.event_id, \
+                    'return:' || a.event_id || ':' || a.email, 'event_deleted' \
+             FROM credit_ledger a \
+             WHERE a.reason = 'apply' AND a.delta < 0 AND ",
+            $($where)+,
+            " AND NOT EXISTS (SELECT 1 FROM credit_ledger r WHERE r.reason = 'return' \
+                               AND r.event_id = a.event_id AND r.email = a.email) \
+             ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING"
+        )
+    };
+}
+
+/// Return the credit applied to `?1`, the event being hard-deleted, in the
+/// same batch as its purge (`db::event_purge`): the ended-event release joins
+/// `events`, so once the row is gone nothing else would ever return it.
+pub(crate) const RETURN_DELETED_EVENT_APPLIES_SQL: &str =
+    return_deleted_applies_sql!("a.event_id = ?1");
+
+/// The nightly repair for applies stranded before that batch existed: the
+/// event row is gone AND the audit log records its hard delete. Both, because
+/// a missing row alone is not proof (an event whose D1 write failed lives in
+/// KV only, and returning its credit early would let it be spent twice).
+pub(crate) const RETURN_HARD_DELETED_APPLIES_SQL: &str = return_deleted_applies_sql!(
+    "NOT EXISTS (SELECT 1 FROM events e WHERE e.id = a.event_id) \
+     AND EXISTS (SELECT 1 FROM audit_log l \
+                 WHERE l.action IN ('event_hard_deleted', 'force_delete_used') \
+                   AND l.target = a.event_id)"
+);
+
+/// Unreturned applies whose event row is gone after the repair: credit no
+/// release can reach. Nonzero means some path dropped an `events` row without
+/// returning its credit (the reconcile alarm).
+pub(crate) const STRANDED_APPLIES_SQL: &str = "SELECT COUNT(*) AS n FROM credit_ledger a \
+     WHERE a.reason = 'apply' AND a.delta < 0 \
+       AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = a.event_id) \
+       AND NOT EXISTS (SELECT 1 FROM credit_ledger r WHERE r.reason = 'return' \
+                       AND r.event_id = a.event_id AND r.email = a.email)";
+
 /// Release across the whole ledger. For the readers that sum over everyone
 /// (liability, the admin roster, the payout queue, the daily reconcile).
 pub(crate) const RELEASE_ENDED_APPLIES_SQL: &str = release_ended_applies_sql!("a.reason = 'apply'");
@@ -699,6 +745,12 @@ pub struct ReconcileReport {
     /// Applied credit whose verified attendee-facing deposit projection is
     /// missing or inconsistent.
     pub incomplete_applies: i64,
+    /// Credit returned this run for events whose hard delete stranded it
+    /// (.issues/191). Informational: the repair worked.
+    pub deleted_returns: usize,
+    /// Applied credit still unreturned whose event row is gone: no release can
+    /// reach it. Nonzero is an alarm (.issues/191).
+    pub stranded_applies: i64,
 }
 
 impl ReconcileReport {
@@ -708,6 +760,7 @@ impl ReconcileReport {
             && self.double_settled == 0
             && self.phantom_holds == 0
             && self.incomplete_applies == 0
+            && self.stranded_applies == 0
     }
 }
 
@@ -733,6 +786,14 @@ pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
     // Materialise releases first so `negative_balances` and the daily run (the
     // backstop for balances nobody has read yet) both see ended events returned.
     release_ended_applies(db).await?;
+    // .issues/191: credit applied to an event that was hard-deleted before the
+    // purge batch returned it.
+    let deleted = db
+        .prepare(RETURN_HARD_DELETED_APPLIES_SQL)
+        .run()
+        .await
+        .map_err(|e| format!("D1 credit return for deleted events: {e:?}"))?;
+    let deleted_returns = rows_written(&deleted);
     // Before the atomic coverage workflow, credit-backed THB registrations were
     // written with method='thb'. Repair only an exact ledger + marker + amount
     // match, and refuse any attendee/event that also has a cash deposit row.
@@ -809,8 +870,11 @@ pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
                AND d.amount_thb=-l.delta AND d.verified=1)))",
     )
     .await?;
+    let stranded_applies = count_query(db, STRANDED_APPLIES_SQL).await?;
     Ok(ReconcileReport {
         applies_repaired,
+        deleted_returns,
+        stranded_applies,
         orphan_holds,
         negative_balances,
         double_settled,
