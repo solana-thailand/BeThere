@@ -10,7 +10,8 @@ test.describe("Login page", () => {
 
   test("has back to home link", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.locator('a[href="/"]')).toBeVisible();
+    // The site header and footer link home too (.plans/046): pin the page's own link.
+    await expect(page.locator('a.login-back-link[href="/"]')).toBeVisible();
   });
 
   test("shows powered by Solana badge", async ({ page }) => {
