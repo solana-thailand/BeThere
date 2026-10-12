@@ -72,13 +72,18 @@ pub fn summary_html(events: &[HomeEvent], quiet: Option<(&str, Cadence)>) -> Str
     let (paid, came) = ladder_total();
     let open = match events.is_empty() {
         true => match quiet {
-            Some((title, c)) => format!(
-                "<p>Nothing open yet. {} has run {} times, about every {} weeks, last on {}.</p>",
-                html_escape(title),
-                c.times,
-                c.every_weeks,
-                html_escape(&when(c.last_ms, false))
-            ),
+            Some((title, c)) => {
+                let every = match c.weekly() {
+                    true => "week".to_string(),
+                    false => format!("{} weeks", c.every_weeks),
+                };
+                format!(
+                    "<p>Nothing open yet. {} has run {} times, about every {every}, last on {}.</p>",
+                    html_escape(title),
+                    c.times,
+                    html_escape(&when(c.last_ms, false))
+                )
+            }
             None => "<p>Nothing open yet.</p>".to_string(),
         },
         false => {

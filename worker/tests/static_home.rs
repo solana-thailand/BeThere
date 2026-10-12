@@ -46,6 +46,14 @@ fn same_numbers_as_the_hall_and_the_promise() {
 }
 
 #[test]
+fn a_weekly_series_says_every_week() {
+    let starts = [0i64, 7, 14].map(|d| 1_777_170_600_000 + d * 86_400_000);
+    let html = summary_html(&[], cadence(&starts).map(|c| ("Latent Space", c)));
+    assert!(html.contains("about every week, last on"), "{html}");
+    assert!(!html.contains("1 weeks"), "{html}");
+}
+
+#[test]
 fn open_events_are_links_and_what_organizers_typed_is_escaped() {
     let mut evil = event(1);
     evil.name = "<script>alert(1)</script> & \"x\"".into();

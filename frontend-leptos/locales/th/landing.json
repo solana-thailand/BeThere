@@ -148,6 +148,7 @@
     "rule_free": "ฟรี ไม่ต้องมัดจำ",
     "chip_online": "ออนไลน์ ฟรี",
     "cadence": "{course} จัดมาแล้ว {times} ครั้ง ราวทุก {weeks} สัปดาห์ · ล่าสุด {date}",
+    "cadence_weekly": "{course} จัดมาแล้ว {times} ครั้ง ราวทุกสัปดาห์ · ล่าสุด {date}",
     "watch_last": "ดูครั้งล่าสุด",
     "learn": "เรียนย้อนหลัง ↓",
     "or": "หรือ",
