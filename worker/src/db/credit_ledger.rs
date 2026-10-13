@@ -547,6 +547,34 @@ macro_rules! unreturned_apply_of {
 }
 pub(crate) use unreturned_apply_of;
 
+/// A JSON array of the THB deposits a person's credit was held from (one per
+/// `hold` row): event, its sheet, amount and slip. `$email` is the SQL for the
+/// person's email; every linked email counts. A `hold` is keyed
+/// `deposit_id = event_id || ':' || attendee_id`, so the deposit is found on
+/// its `(event_id, attendee_id)` index. `+l.reason` keeps the planner on the
+/// email index (see `sqlite-planner-picks-reason-index`).
+macro_rules! credit_sources_of {
+    ($email:literal) => {
+        concat!(
+            "(SELECT json_group_array(json_object(\
+               'event_id', l.event_id, \
+               'event_name', COALESCE(e.name, ''), \
+               'sheet_id', COALESCE(e.sheet_id, ''), \
+               'amount_thb', l.delta, \
+               'slip_url', COALESCE(d.slip_url, ''))) \
+             FROM credit_ledger l \
+             LEFT JOIN events e ON e.id = l.event_id \
+             LEFT JOIN thb_deposits d ON d.event_id = l.event_id \
+               AND d.attendee_id = substr(l.deposit_id, length(l.event_id) + 2) \
+             WHERE +l.reason = 'hold' AND l.currency = 'thb' AND l.delta > 0 \
+               AND l.email IN ",
+            $crate::db::person::person_emails_of!($email),
+            ")"
+        )
+    };
+}
+pub(crate) use credit_sources_of;
+
 /// One event's worth of a person's credit that is currently locked — applied to
 /// a deposit and not yet returned.
 ///

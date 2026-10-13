@@ -328,7 +328,9 @@ pub(crate) const DEPOSIT_ACCOUNT_HOLDERS_SQL: &str = concat!(
        (SELECT json_group_array(DISTINCT l.organization_id) FROM credit_ledger l \
          WHERE l.email IN ",
     crate::db::person::person_emails_of!("a.email"),
-    ") AS org_ids, \
+    ") AS org_ids, ",
+    crate::db::credit_ledger::credit_sources_of!("a.email"),
+    " AS sources_json, \
        a.method AS account_method, a.promptpay_id AS promptpay_id, \
        a.bank_name AS bank_name, a.bank_account AS bank_account, \
        a.account_name AS account_name, \
