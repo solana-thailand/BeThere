@@ -1,6 +1,6 @@
 # 165: Public registration stays open after the event starts (and after it ends)
 
-**Status:** fixed on develop (2026-10-13, session `event-checkin-11`; owner decision below). In-person seats already closed at the end server-side (`in_person_registration_closed`); the page now agrees (pull 262, deployed) and, after the end, registering is how people watch the recording (this PR). Originally opened 2026-09-29 by session `event-checkin-83` during the `.issues/164` gap-2 rehearsal on staging.
+**Status:** deployed (prod `f17b97db`, 2026-10-13: pulls 262, 264, 267 via releases 263 and 269; session `event-checkin-11`). In-person seats close at the end (server and page share `domain::models::event::ended`); after the end, registering is how people watch the recording; a registrant follows their normal flow to the ticket.
 
 ## What happens
 

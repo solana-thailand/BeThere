@@ -1,6 +1,6 @@
 # 193 — The ticket still says "Deposit Required" after the event
 
-**Status:** fixed on develop (2026-10-13, session `event-checkin-11`): the ticket API sends `event_over` (`EventConfig::is_over`); the hero reads "This event has ended", and the deposit, reclaim and moved-online cards (in-person and online views) and the check-in polling stop once it is over.
+**Status:** deployed (prod `cdd8be9a`, version `15532abb`, 2026-10-13, pull 270 via release pull 271; session `event-checkin-11`): the ticket API sends `event_over` (`EventConfig::is_over`); the hero reads "This event has ended", and the deposit, reclaim and moved-online cards (in-person and online views) and the check-in polling stop once it is over.
 
 ## What happens
 
