@@ -70,6 +70,7 @@
     "scanner_scan_wakeup tests/scanner_scan_wakeup.rs": 3,
     "scanner_single_detail_fetch tests/scanner_single_detail_fetch.rs": 2,
     "serde_contract tests/serde_contract.rs": 55,
+    "self_hosted_fonts tests/self_hosted_fonts.rs": 3,
     "site_course tests/site_course.rs": 3,
     "site_events tests/site_events.rs": 3,
     "site_heads tests/site_heads.rs": 3,
