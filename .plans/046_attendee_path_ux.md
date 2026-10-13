@@ -1,6 +1,6 @@
 # 046 — Attendee path onto the site design (UX)
 
-Status: in progress. Phase 0 deployed (pull 247, prod `6cda00ee`). Logo A2 + Phase 1 (all six pages) deployed to prod `cf7cb753`, version `47919bfe` (2026-10-13; pulls 251–258, release pull 260; owner go; smoke writes ok). Phase 2 not started.
+Status: Phases 0–2 deployed. Phase 0 (pull 247), logo A2 + Phase 1 (pulls 251–258, prod `cf7cb753`), Phase 2 (skeletons pull 273, prod `ff92ac71`; share card A2 pull 275, live check-in stamp pull 276, self-hosted fonts pull 277, prod `bac05c1a` version `46703f18`, 2026-10-13).
 
 Owner, 2026-10-12, after the hackathon submission: "better UI/UX", after
 the critical fixes (191 → 160 → 165). Audit screenshots (390 px, dark):
@@ -72,10 +72,14 @@ Not seen yet: the claim page's checked-in, quiz and success states (the
 fixture has no check-in); the live sandbox flow past its first screen; Thai
 on every page except `/deposit`.
 
-## Phase 2
+## Phase 2 — done (2026-10-13)
 
-Fonts, the stamp animation, loading skeletons. These were deferred since
-the Night Edition redesign.
+- Loading skeletons (pull 273): `src/skeleton.rs`, one builder with a layout per page (event, ticket, deposit, form, list); site-styled bones. The event page's own skeleton had been invisible on paper since Phase 1.
+- Share card with the A2 logo (pull 275): `og-image.png` is the last frame of "The Hall" in devrel-helper ffilms (`card.rs` now draws `logo::lockup()`), `?v=a2` on og:image.
+- Check-in stamp (pull 276): lands, and the person drops onto the seat, only when a poll sees the check-in happen while the ticket is open; still otherwise and under reduced motion.
+- Self-hosted fonts (pull 277): Google's OFL WOFF2 slices served from `fonts/`, no Google origins in the CSP; macOS pixel-identical, 20 Linux e2e baselines re-recorded (Google sends Linux hinted files).
+
+Maps: RustGIS (opengeos) was tried for the site and declined (its realistic globe clashes with the dot-matrix globe); it renders Solana-event maps for DevRel media instead (`devrel-helper/scripts/render_event_maps.py`).
 
 ## Out of scope
 
