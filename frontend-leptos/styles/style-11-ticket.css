@@ -38,6 +38,9 @@
 .ticket-hero--ready {
     background: linear-gradient(180deg, var(--info-bg) 0%, transparent 100%);
 }
+.ticket-hero--ended {
+    background: linear-gradient(180deg, var(--bg-secondary) 0%, transparent 100%);
+}
 .ticket-hero--online {
     background: linear-gradient(
         180deg,

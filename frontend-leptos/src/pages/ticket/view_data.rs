@@ -42,6 +42,8 @@ pub struct TicketViewData {
     pub deposit_amount_thb: u64,
     pub deposit_amount_usdc: u64,
     pub deadline_expired: bool,
+    /// The event is over: no deposit asks, no check-in polling (.issues/193).
+    pub event_over: bool,
     pub in_person_available: Option<bool>,
     pub refund_link: Option<String>,
     pub deposit_info: Option<api::DepositInfo>,
@@ -139,6 +141,7 @@ impl TicketViewData {
             deposit_amount_thb: data.deposit_amount_thb,
             deposit_amount_usdc: data.deposit_amount_usdc,
             deadline_expired: data.deadline_expired,
+            event_over: data.event_over,
             in_person_available: data.in_person_available,
             refund_link: data.refund_link.clone(),
             deposit_info: data.deposit_info.clone(),

@@ -436,6 +436,9 @@ pub struct AttendeeData {
     /// Whether the deposit deadline has expired for this attendee.
     #[serde(default)]
     pub deadline_expired: bool,
+    /// The event is over (status or end time): no deposit can be paid now.
+    #[serde(default)]
+    pub event_over: bool,
     /// Whether in-person spots are still available (for reclaim flow).
     #[serde(default)]
     pub in_person_available: Option<bool>,

@@ -38,6 +38,7 @@ pub fn OnlineView(
         deposit_enabled,
         deposit_info,
         deadline_expired,
+        event_over,
         in_person_available,
         deposit_href,
         event_end_ms,
@@ -181,8 +182,9 @@ pub fn OnlineView(
                 }}
             </div>
 
-            // Deposit notice slot — exactly one for online
-            {if deposit_enabled && deposit_info.is_none() {
+            // Deposit notice slot — exactly one for online; none once the
+            // event is over (no seat to reclaim, .issues/193)
+            {if deposit_enabled && deposit_info.is_none() && !event_over {
                 if deadline_expired && in_person_available.unwrap_or(false) {
                     view! {
                         <ReclaimActionCard reclaim_href=deposit_href.clone() />
