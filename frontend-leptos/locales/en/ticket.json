@@ -26,6 +26,8 @@
     "checked_in_by": " by {{ name }}",
     "pending_approval": "Pending Approval",
     "awaiting_deposit": "Awaiting Deposit Verification",
+    "ended": "This event has ended",
+    "ended_desc": "Nothing to pay. The recording, if there is one, is below.",
     "ready": "Ready for Check-In",
     "online_title": "Online Registration",
     "online_badge": "Online Track"

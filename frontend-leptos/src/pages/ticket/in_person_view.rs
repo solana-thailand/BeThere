@@ -34,6 +34,8 @@ enum HeroKind {
     DepositDue,
     AwaitingDeposit,
     Ready,
+    /// The event is over and they never came through the door.
+    Ended,
 }
 
 /// In-person attendee view component.
@@ -72,6 +74,7 @@ pub fn InPersonView(
         deposit_amount_thb,
         deposit_amount_usdc,
         deadline_expired,
+        event_over,
         in_person_available,
         refund_link,
         deposit_info,
@@ -112,12 +115,16 @@ pub fn InPersonView(
         && deposit_info.is_none()
         && !is_checked_in
         && !escrow_closed
-        && !deadline_expired;
+        && !deadline_expired
+        && !event_over;
     // A door check-in (not the claim flow's virtual one) can be shared from
     // the record (Super GOAT SG4); the worker decides again when asked.
     let door_checkin = is_checked_in && checked_in_by.as_deref() != Some("virtual");
     let hero_kind = if is_checked_in {
         HeroKind::CheckedIn
+    } else if event_over {
+        // A deposit, an approval or a check-in can no longer happen.
+        HeroKind::Ended
     } else if !is_approved {
         HeroKind::PendingApproval
     } else if deposit_due {
@@ -133,6 +140,7 @@ pub fn InPersonView(
         HeroKind::DepositDue => ("ticket-hero--pending", IconName::Coin),
         HeroKind::AwaitingDeposit => ("ticket-hero--pending", IconName::Hourglass),
         HeroKind::Ready => ("ticket-hero--ready", IconName::QrCode),
+        HeroKind::Ended => ("ticket-hero--ended", IconName::Calendar),
     };
     let hero_title = move || match hero_kind {
         HeroKind::CheckedIn => t_string!(i18n, ticket.hero.checked_in),
@@ -140,6 +148,7 @@ pub fn InPersonView(
         HeroKind::DepositDue => t_string!(i18n, ticket.action.deposit_required),
         HeroKind::AwaitingDeposit => t_string!(i18n, ticket.hero.awaiting_deposit),
         HeroKind::Ready => t_string!(i18n, ticket.hero.ready),
+        HeroKind::Ended => t_string!(i18n, ticket.hero.ended),
     };
     // Checked-in detail: "<time> by <staff>", either part may be missing.
     let check_in_time = checked_in_at.filter(|ts| !ts.is_empty());
@@ -154,6 +163,9 @@ pub fn InPersonView(
             })),
             HeroKind::Ready => Some(ViewFn::from(move || {
                 crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.ready_desc))
+            })),
+            HeroKind::Ended => Some(ViewFn::from(move || {
+                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.ended_desc))
             })),
             _ => None,
         },
@@ -443,6 +455,9 @@ pub fn InPersonView(
                         view! { <div></div> }.into_any()
                     }}
                 }.into_any()
+            } else if event_over {
+                // Over: nothing left to pay or reclaim (.issues/193).
+                view! { <div></div> }.into_any()
             } else if deposit_enabled && deadline_expired && in_person_available.unwrap_or(false) && !escrow_closed {
                 view! {
                     <ReclaimActionCard reclaim_href=deposit_href.clone() />
@@ -535,7 +550,10 @@ pub fn InPersonView(
                         {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.footer_ready))}
                     </p>
                 }),
-                HeroKind::PendingApproval | HeroKind::DepositDue | HeroKind::AwaitingDeposit => None,
+                HeroKind::PendingApproval
+                | HeroKind::DepositDue
+                | HeroKind::AwaitingDeposit
+                | HeroKind::Ended => None,
             }}
         </div>
     }

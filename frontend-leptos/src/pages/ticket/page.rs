@@ -118,8 +118,8 @@ pub fn Ticket() -> impl IntoView {
         if !data.is_in_person {
             return None;
         }
-        // Checked in — no further polling needed
-        if data.is_checked_in {
+        // Checked in, or the event is over — no further polling needed
+        if data.is_checked_in || data.event_over {
             return None;
         }
         // No QR yet — waiting for deposit verification or QR generation

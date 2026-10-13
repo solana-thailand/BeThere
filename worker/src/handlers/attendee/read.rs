@@ -336,6 +336,9 @@ pub async fn get_public_ticket(
         "participation_type": attendee.participation_type,
         "deposit_info": deposit_info,
         "event_end_ms": event.event_end_ms,
+        // Over by status or end time (`EventConfig::is_over`, the rule the
+        // event page uses): the ticket stops asking for a deposit (.issues/193).
+        "event_over": event.is_over(chrono::Utc::now().timestamp_millis()),
         "event_name": event.name,
         "event_start_ms": event.event_start_ms,
         "event_format": event.event_format.as_str(),
