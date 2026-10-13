@@ -1,6 +1,6 @@
 # 046 — Attendee path onto the site design (UX)
 
-Status: in progress. Phase 0 deployed (pull 247, prod `6cda00ee`). Logo A2 + Phase 1 (all six pages) on develop and staging `9d1665ae` (2026-10-13; pulls 251–258); prod waits on the owner's go. Phase 2 not started.
+Status: in progress. Phase 0 deployed (pull 247, prod `6cda00ee`). Logo A2 + Phase 1 (all six pages) deployed to prod `cf7cb753`, version `47919bfe` (2026-10-13; pulls 251–258, release pull 260; owner go; smoke writes ok). Phase 2 not started.
 
 Owner, 2026-10-12, after the hackathon submission: "better UI/UX", after
 the critical fixes (191 → 160 → 165). Audit screenshots (390 px, dark):
