@@ -256,8 +256,8 @@ fn both_uploads_propose_after_saving_and_cannot_fail_on_it() {
     );
 }
 
-/// The reference's uniqueness is held by the schema, and the table's rows go
-/// with the deposits they describe.
+/// The reference's uniqueness is held by the schema, and a proposal goes with
+/// the deposit it describes.
 #[test]
 fn proposals_have_a_unique_ref_and_share_the_deposit_retention() {
     let migration = src("migrations/0054_slip_proposals.sql");
@@ -265,8 +265,9 @@ fn proposals_have_a_unique_ref_and_share_the_deposit_retention() {
     assert!(migration.contains("CHECK (verdict IN ('accepted', 'needs_review', 'rejected'))"));
     assert!(migration.contains("CHECK (source IN ('qr', 'vision'))"));
 
+    // Proposals go with the one deposit they describe; past events keep both
+    // (payment history is kept for audit since 2026-10-13, cleanup_guards.rs).
     let deposits = strip_comments(&src("src/db/thb_deposits.rs"));
-    assert!(deposits.contains("slip_proposals::delete_for_event(db, event_id)"));
     assert!(deposits.contains("slip_proposals::delete_one(db, event_id, attendee_id)"));
 }
 

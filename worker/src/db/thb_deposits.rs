@@ -583,18 +583,6 @@ pub async fn archive_thb_deposits_for_event(
     })
 }
 
-pub async fn delete_thb_deposits_for_event(db: &D1Database, event_id: &str) -> Result<(), String> {
-    let stmt = db.prepare("DELETE FROM thb_deposits WHERE event_id = ?1");
-    stmt.bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 delete_thb_deposits bind: {e:?}"))?
-        .run()
-        .await
-        .map_err(|e| format!("D1 delete_thb_deposits run: {e:?}"))?;
-
-    // The slip agent's proposals share the deposits' retention (0054).
-    super::slip_proposals::delete_for_event(db, event_id).await
-}
-
 /// Delete a single THB deposit by event + attendee (attendee deletion).
 pub async fn delete_thb_deposit(
     db: &D1Database,

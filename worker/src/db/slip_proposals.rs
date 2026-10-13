@@ -152,17 +152,6 @@ fn row_to_proposal(row: &serde_json::Value) -> Option<(String, SlipProposal)> {
     Some((attendee_id, proposal))
 }
 
-/// Delete every proposal on `event_id` (runs with the deposit purge).
-pub async fn delete_for_event(db: &D1Database, event_id: &str) -> Result<(), String> {
-    db.prepare("DELETE FROM slip_proposals WHERE event_id = ?1")
-        .bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 slip_proposals delete_for_event bind: {e:?}"))?
-        .run()
-        .await
-        .map_err(|e| format!("D1 slip_proposals delete_for_event: {e:?}"))?;
-    Ok(())
-}
-
 /// Delete one attendee's proposal (runs with the deposit delete).
 pub async fn delete_one(db: &D1Database, event_id: &str, attendee_id: &str) -> Result<(), String> {
     db.prepare("DELETE FROM slip_proposals WHERE event_id = ?1 AND attendee_id = ?2")
