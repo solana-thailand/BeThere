@@ -77,6 +77,15 @@ pub struct MyRegistrationResponse {
     pub claim_token: String,
     pub participation_type: String,
     pub next_step: NextStep,
+    /// Came through the door (checked in).
+    pub checked_in: bool,
+    /// Once the event is over: its recording. Someone already registered
+    /// watches straight away, without the post-event form (.issues/165).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_url: Option<String>,
+    /// The active course the event belongs to, alongside `video_url`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub course_id: Option<String>,
 }
 
 /// A single registration summary returned by `my_registrations`.

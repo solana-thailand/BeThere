@@ -164,6 +164,15 @@ pub struct MyRegistrationData {
     pub claim_token: String,
     pub participation_type: Option<String>,
     pub next_step: NextStep,
+    /// Came through the door.
+    #[serde(default)]
+    pub checked_in: bool,
+    /// After the event: its recording, for someone already registered.
+    #[serde(default)]
+    pub video_url: Option<String>,
+    /// The active course the event belongs to.
+    #[serde(default)]
+    pub course_id: Option<String>,
 }
 
 #[derive(Clone, Debug)]
