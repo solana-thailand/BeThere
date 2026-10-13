@@ -1,9 +1,12 @@
 # 194 — Payment history of past events is deleted by the nightly cleanup
 
-**Status:** in progress (2026-10-13, session `event-checkin-11`). Owner
+**Status:** in progress (2026-10-13, session `event-checkin-11`). Fixes 1 and
+2 are deployed to prod (pull 280 + pull 281, release pull 282, `028fa748`,
+version `3f20edad`, 2026-10-13 16:48 UTC, after backup
+`backup-prod-20261013-2342.sql`); RTM #4 is safe. Still open: the RTM #3
+restore (fix 3, owner go) and the retention decision (fix 4). Owner
 2026-10-13: "the payment history of every past event should stay, for audit,
-but it is gone now; is it the cron?" It is. Fixed on a branch (pull below);
-prod and the recovery of RTM #3 wait on the owner's go.
+but it is gone now; is it the cron?" It is.
 
 ## What happened
 
@@ -47,19 +50,27 @@ visible through their deposit account.
 
 ## Fix
 
-1. **Keep payment rows** (this branch): the cleanup no longer deletes
+1. **Keep payment rows** (pull 280, deployed): the cleanup no longer deletes
    `thb_deposits`, `deposit_statuses` or `slip_proposals` from D1; it still
    writes the archive and clears the KV mirrors (the read paths are D1-first).
    The event-wide delete functions are removed so nothing can call them again.
    Guard: `worker/tests/cleanup_guards.rs::cleanup_never_deletes_payment_rows`.
    Must reach prod before 2026-10-17 10:00 UTC or RTM #4 goes.
-2. **Show every credit holder** (follow-up PR): the payout list should include
-   anyone with a positive balance, account or not ("No account on file — ask
-   the attendee"), so nobody depends on someone remembering them.
+2. **Show every credit holder** (pull 281, deployed): the payout page also
+   lists anyone with a positive balance and no refund account on file ("No
+   account on file"), so nobody depends on someone remembering them. Prod
+   check after deploy: `no_account` = Chanthawat Kiriyadee and Pond Bangna.
 3. **Recover RTM #3** (owner go, prod write): the 14 rows are in
    `~/bethere-backups/bethere-db-pre-0029-0032-20260910T142846Z.sql`
    (14 verified, 11 refunded, 2 held as credit, ฿7,000). Re-insert them into
-   `thb_deposits` with their original ids, after a fresh backup.
+   `thb_deposits` with their original ids, after a fresh backup and only with
+   pull 280 on prod (RTM #3 is past its 90 days; the old cron would delete
+   them again). Trial on the 2026-10-13 20:45 prod copy: credit_ledger,
+   credit_refund_accounts, contacts, audit_log, event_summaries and every
+   other event's rows unchanged; both held rows match their ledger hold key;
+   no automatic writer acts on them except the nightly archive copy (14
+   amount-only rows). One row comes back verified and not refunded: the
+   owner's own ฿500 (checked in 20 Jun).
 4. **Retention policy** (owner decision, with `.issues/160`): rows now stay
    indefinitely, bank fields and slip URLs included. If personal data should
    still go after a period, scrub those fields on settled rows instead of
