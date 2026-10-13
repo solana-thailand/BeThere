@@ -1,6 +1,6 @@
-//! The page of an event that is over (.issues/165): its details, the
-//! archive, and the recording — straight away for someone already
-//! registered, by registering to watch for everyone else.
+//! The page of an event that is over (.issues/165): its details and the
+//! archive. Someone already registered goes on to their ticket (NFT claim,
+//! recording); everyone else registers to watch the recording.
 
 use super::attribution::{organizer_line, sponsor_row};
 use super::details_card::details_card;
@@ -53,7 +53,7 @@ pub(super) fn completed_event_gateway(
             // Already registered: straight to the recording, no form
             // (.issues/165). Everyone else: the archive and "register to watch".
             {move || match reg_lookup.get() {
-                RegistrationLookup::Registered(reg) => registered_ended(reg, &event_id, &archive_url),
+                RegistrationLookup::Registered(reg) => registered_ended(reg, &slug, &event_id),
                 _ => guest_ended(to_watch, enrollment_open, &slug, &archive_url),
             }}
         </div>
@@ -79,38 +79,17 @@ pub(super) fn completed_event_gateway(
     .into_any()
 }
 
-/// The ended card for someone already registered: the recording when there
-/// is one (with its course), and their ticket.
-fn registered_ended(reg: MyRegistrationData, event_id: &str, archive_url: &str) -> AnyView {
-    let ticket = super::registered_state::ticket_url(&reg.attendee_id, event_id);
-    let line = match (reg.video_url.is_some(), reg.checked_in) {
-        (true, true) => crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_you_came)),
-        (true, false) => {
-            crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_you_registered))
-        }
-        (false, _) => crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_body)),
-    };
-    let archive = (!archive_url.is_empty()).then(|| archive_link(archive_url));
-    view! {
-        <p class="pe-detail-secondary pe-mb-075">{line}</p>
-        <div class="pe-btn-row-center">
-            {reg.video_url.map(|href| view! {
-                <a href=href target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
-                    {crate::locale::tr(|l| crate::i18n::td_string!(l, event.watch_now))}
-                </a>
-            })}
-            {reg.course_id.map(|id| view! {
-                <a href=format!("/events/{id}") class="btn btn-outline btn-sm">
-                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.continue_course))}
-                </a>
-            })}
-            <a href=ticket class="btn btn-outline btn-sm">
-                {crate::locale::tr(|l| crate::i18n::td_string!(l, event.cta_view_ticket))}
-            </a>
-            {archive}
-        </div>
+/// Someone already registered follows their normal flow (owner 2026-10-13):
+/// on to their ticket, which carries the NFT claim once they checked in and
+/// the recording when there is one. A deposit can no longer be paid once the
+/// event is over, so that step goes to the ticket too.
+fn registered_ended(mut reg: MyRegistrationData, slug: &str, event_id: &str) -> AnyView {
+    if reg.next_step._step_type == "deposit" {
+        reg.next_step._step_type = "ticket".to_string();
+        reg.next_step.url = super::registered_state::ticket_url(&reg.attendee_id, event_id);
     }
-    .into_any()
+    let email = reg.email.clone();
+    super::registered_state::registered_state(&reg, &email, slug, event_id)
 }
 
 /// The ended card for everyone else: the archive, and registering to watch
