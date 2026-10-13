@@ -127,84 +127,26 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
             let prefix = format!("event:{event_id}:deposit:status:");
             summary.deposit_status_deleted += delete_keys_by_prefix(kv, &prefix).await;
 
-            // Also delete deposit statuses from D1
-            if let Some(db) = d1
-                && let Err(e) =
-                    crate::db::deposit_statuses::delete_deposit_statuses_for_event(db, event_id)
-                        .await
-            {
-                tracing::warn!(
-                    event_id = %event_id,
-                    error = %e,
-                    "D1 deposit statuses cleanup failed"
-                );
-            }
-
+            // D1 `deposit_statuses` and `thb_deposits` are KEPT (owner 2026-10-13):
+            // payment history is the audit record of every past event. This
+            // phase used to delete both 90 days after the refund window; it took
+            // RTM#3's 14 deposits on 2026-09-19 and left two people's held
+            // credit with no deposit behind it, so they vanished from the
+            // admin's payout lists. Only the KV mirrors above and below go; D1
+            // is the source the read paths fall back to.
             let prefix = format!("event:{event_id}:deposit:thb:");
             summary.thb_deposits_deleted += delete_keys_by_prefix(kv, &prefix).await;
 
-            // Also delete THB deposits from D1 — but ARCHIVE FIRST, and only
-            // delete if the archive succeeded.
-            //
-            // The delete is correct for what this table holds that is personal:
-            // `attendee_name`, `bank_account`, `bank_name`, `account_name`, and
-            // a URL to an image of a bank slip. It was never correct for the
-            // amounts. Before this gate existed the cron took RTM#3's 14
-            // deposits (7,000 THB) on 2026-09-19, one of them neither refunded
-            // nor held as credit, leaving no record in D1 that the money had
-            // ever come in (`.issues/126`). `credit_ledger` survives cleanup but
-            // only sees the credit path — 2 rows against those 14.
-            //
-            // A failed archive must therefore stop the delete, the same way a
-            // failed ledger reversal stops the payout clear: the data is gone
-            // for good either way, so the only recoverable choice is to leave
-            // the rows for tomorrow's run and say so loudly.
+            // The PII-free archive is still written (a second, minimal copy of
+            // the amounts), but nothing is deleted after it any more.
             if let Some(db) = d1 {
                 match crate::db::thb_deposits::archive_thb_deposits_for_event(db, event_id).await {
-                    // The archive must cover every live row before any of them
-                    // go. A successful write is not enough on its own: 0044
-                    // keyed the archive on (event_id, attendee_id) while
-                    // `thb_deposits` has no such constraint, so an event with
-                    // two rows for one attendee archived one and deleted both —
-                    // 700 THB in the reproduction, reported as success
-                    // (`.issues/127`). The key is per row now, and this checks
-                    // that no live deposit is missing an archive row carrying
-                    // its id — matched, not counted, so it cannot be satisfied
-                    // by an archive that is merely large.
-                    Ok(coverage) if coverage.is_complete() => {
-                        summary.deposits_archived += coverage.archived as usize;
-                        if let Err(e) =
-                            crate::db::thb_deposits::delete_thb_deposits_for_event(db, event_id)
-                                .await
-                        {
-                            tracing::warn!(
-                                event_id = %event_id,
-                                error = %e,
-                                "D1 THB deposits cleanup failed"
-                            );
-                        }
-                    }
-                    Ok(coverage) => {
-                        tracing::error!(
-                            event_id = %event_id,
-                            archived = coverage.archived,
-                            unarchived = coverage.unarchived,
-                            "D1 THB deposit archive does not cover every live deposit — \
-                             deposits NOT deleted, will retry tomorrow"
-                        );
-                        summary
-                            .failures
-                            .push(CleanupFailure::DepositArchiveIncomplete {
-                                event_id: event_id.clone(),
-                                archived: coverage.archived,
-                                unarchived: coverage.unarchived,
-                            });
-                    }
+                    Ok(coverage) => summary.deposits_archived += coverage.archived as usize,
                     Err(e) => {
                         tracing::error!(
                             event_id = %event_id,
                             error = %e,
-                            "D1 THB deposit archive failed — deposits NOT deleted, will retry tomorrow"
+                            "D1 THB deposit archive failed (deposits are kept regardless)"
                         );
                         summary.failures.push(CleanupFailure::DepositArchiveFailed {
                             event_id: event_id.clone(),
@@ -529,15 +471,8 @@ pub enum CleanupFailure {
     EventIndexUnreadable,
     /// The pruned index could not be written back; removals retry tomorrow.
     EventIndexUnsaveable,
-    /// The archive query failed for one event; its deposits were not deleted.
+    /// The archive query failed for one event (its deposits are kept regardless).
     DepositArchiveFailed { event_id: String },
-    /// The archive does not carry every live deposit id, so the delete was
-    /// refused (`.issues/127`). Nothing was lost — but it will repeat nightly.
-    DepositArchiveIncomplete {
-        event_id: String,
-        archived: i64,
-        unarchived: i64,
-    },
     /// The credit payout account purge failed; account numbers past their
     /// retention (or of closed requests) were not deleted. Retries tomorrow.
     CreditRefundAccountPurgeFailed,
@@ -555,15 +490,6 @@ impl std::fmt::Display for CleanupFailure {
             Self::DepositArchiveFailed { event_id } => {
                 write!(f, "deposit archive query failed for event {event_id}")
             }
-            Self::DepositArchiveIncomplete {
-                event_id,
-                archived,
-                unarchived,
-            } => write!(
-                f,
-                "deposit archive incomplete for event {event_id} — {archived} archived, \
-                 {unarchived} live deposit(s) unmatched, delete refused"
-            ),
             Self::CreditRefundAccountPurgeFailed => {
                 write!(
                     f,

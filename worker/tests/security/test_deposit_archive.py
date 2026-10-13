@@ -17,9 +17,10 @@ from test_person_emails import LITERAL, WORKER, plain_after, unescape
 ARCHIVE_SQL = plain_after(
     "db/thb_deposits.rs", "pub async fn archive_thb_deposits_for_event("
 )
-DELETE_SQL = plain_after(
-    "db/thb_deposits.rs", "pub async fn delete_thb_deposits_for_event("
-)
+# The nightly cleanup no longer deletes deposits (owner 2026-10-13). The
+# archive's coverage still has to hold when rows go another way (an erasure, a
+# hard-deleted event), so the tests remove them with a plain DELETE.
+DELETE_SQL = "DELETE FROM thb_deposits WHERE event_id = ?1"
 
 
 def coverage_sql():
