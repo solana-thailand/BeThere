@@ -8,6 +8,7 @@ pub mod icons;
 pub mod locale;
 pub mod pages;
 pub mod privacy_notice;
+pub mod skeleton;
 pub mod staff_routes;
 pub mod utils;
 pub mod wallet;

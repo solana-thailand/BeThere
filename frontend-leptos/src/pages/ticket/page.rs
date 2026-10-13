@@ -396,12 +396,11 @@ pub fn Ticket() -> impl IntoView {
             <div class="ticket-page-inner">
 
                 {move || match state.get() {
-                    TicketState::Loading => view! {
-                        <div class="page-loading">
-                            <span class="spinner spinner-lg"></span>
-                            " "{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.loading))}
-                        </div>
-                    }.into_any(),
+                    TicketState::Loading => crate::skeleton::skeleton(
+                        crate::skeleton::TICKET,
+                        |l| crate::i18n::td_string!(l, ticket.loading),
+                        true,
+                    ),
 
                     TicketState::Found(data) => {
                         let eid = query.get().get("event_id").map(|s| s.to_string());
