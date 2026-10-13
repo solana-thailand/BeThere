@@ -456,7 +456,7 @@ fn render_loaded_event(
 ) -> AnyView {
     // Over by status or by its end time (`event_completed`, set on load).
     if event_completed.get_untracked() {
-        return completed_event_gateway(data, countdown, event_completed);
+        return super::ended::completed_event_gateway(data, countdown, event_completed, reg_lookup);
     }
     let i18n = use_i18n();
 
@@ -893,104 +893,4 @@ fn render_loaded_event(
         // Sponsors — last, directly above the footer.
         {sponsor_row(&data.sponsors)}
     }.into_any()
-}
-
-/// Completed events deliberately use a different action surface from live
-/// events. Retrospective enrollment is a learning/community lead: it must not
-/// expose reservation, deposit, check-in, quiz, or NFT-claim controls.
-fn completed_event_gateway(
-    data: PublicEventData,
-    countdown: ReadSignal<String>,
-    event_completed: ReadSignal<bool>,
-) -> AnyView {
-    let name = data.name.clone();
-    let tagline = data.tagline.clone();
-    let description = data.description.clone();
-    let slug = data.slug.clone();
-    let archive_url = data.archive_url.clone();
-    let enrollment_open = data.post_event_registration_accepting;
-    // With a recording, registering is how people watch it (owner 2026-10-13).
-    let to_watch = enrollment_open && data.has_recording;
-    let poster_url = data.poster_url.clone();
-    let nft_image_url = data.nft_image_url.clone();
-    let community_links = data.community_links.clone();
-
-    view! {
-        {event_hero(&poster_url, &nft_image_url, &data.slug)}
-
-        <div class="pe-name-block">
-            <h1 class="pe-name">{name}</h1>
-            {organizer_line(&data.organizer_name)}
-            {if !tagline.is_empty() {
-                view! { <p class="pe-tagline">{tagline}</p> }.into_any()
-            } else {
-                ().into_any()
-            }}
-        </div>
-
-        {details_card(&data, countdown, event_completed)}
-
-        <div class="pe-card">
-            <h2 class="pe-section-title">
-                <Icon icon=IconName::Party class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_title))}
-            </h2>
-            <p class="pe-detail-secondary pe-mb-075">
-                {match to_watch {
-                    true => crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_body_recording)),
-                    false => crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_body)),
-                }}
-            </p>
-
-            <div class="pe-btn-row-center">
-                {if !archive_url.is_empty() {
-                    let href = archive_url.clone();
-                    view! {
-                        <a href=href target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-sm">
-                            <Icon icon=IconName::Link class="icon-sm" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.view_archive))}
-                        </a>
-                    }.into_any()
-                } else {
-                    view! {
-                        <span class="pe-detail-secondary">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.archive_soon))}</span>
-                    }.into_any()
-                }}
-
-                {if enrollment_open {
-                    let href = match to_watch {
-                        true => format!("/events/{slug}/post-event-register?watch=1"),
-                        false => format!("/events/{slug}/post-event-register"),
-                    };
-                    view! {
-                        <a href=href class="btn btn-primary btn-sm">
-                            {match to_watch {
-                                true => crate::locale::tr(|l| crate::i18n::td_string!(l, event.watch_recording)),
-                                false => crate::locale::tr(|l| crate::i18n::td_string!(l, event.join_community)),
-                            }}
-                        </a>
-                    }.into_any()
-                } else {
-                    ().into_any()
-                }}
-            </div>
-        </div>
-
-        {if !description.is_empty() {
-            view! {
-                <div class="pe-card">
-                    <h2 class="pe-section-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.about_title))}</h2>
-                    <p class="pe-description">{description}</p>
-                </div>
-            }.into_any()
-        } else {
-            ().into_any()
-        }}
-
-        {crate::pages::ticket::community_links::community_links_section(
-            community_links,
-            crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent,
-        )}
-
-        {sponsor_row(&data.sponsors)}
-    }
-    .into_any()
 }

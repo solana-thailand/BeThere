@@ -97,6 +97,22 @@ pub async fn my_registration(
         is_claimed,
     );
 
+    // After the event, a registrant gets the recording (and its course)
+    // directly: registering is how people watch it, and they already have.
+    let video_url = config
+        .is_over(chrono::Utc::now().timestamp_millis())
+        .then(|| config.recording_url())
+        .flatten();
+    let course_id = match (&video_url, state.d1.as_deref()) {
+        (Some(_), Some(d1)) => crate::courses::course_of_event(d1, &config.id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(event_id = %config.id, error = %e, "my-registration course lookup failed (non-fatal)");
+                None
+            }),
+        _ => None,
+    };
+
     tracing::info!(
         identity_fingerprint = %state.log_fingerprint(&claims.email),
         slug = %slug,
@@ -111,6 +127,9 @@ pub async fn my_registration(
         claim_token,
         participation_type: attendee.participation_type.clone(),
         next_step,
+        checked_in: is_checked_in,
+        video_url,
+        course_id,
     }))
 }
 
