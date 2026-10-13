@@ -364,20 +364,13 @@ pub fn PublicEvent() -> impl IntoView {
                     let s = state.get();
                     match s {
                         PublicEventState::Loading => {
-                            // Skeleton mirrors the real layout (hero → name → CTA →
-                            // cards) so the page reads as "loading content" rather
-                            // than a blank/spinner — better perceived speed on
-                            // venue wifi.
-                            view! {
-                                <div class="pe-skeleton" aria-busy="true" aria-label=crate::locale::tr(|l| crate::i18n::td_string!(l, event.loading_aria))>
-                                    <div class="pe-skel pe-skel-hero"></div>
-                                    <div class="pe-skel pe-skel-title"></div>
-                                    <div class="pe-skel pe-skel-sub"></div>
-                                    <div class="pe-skel pe-skel-cta"></div>
-                                    <div class="pe-skel pe-skel-card"></div>
-                                    <div class="pe-skel pe-skel-card"></div>
-                                </div>
-                            }.into_any()
+                            // The page's shape while it loads (hero → name → CTA →
+                            // cards): content arriving, not a spinner, on venue wifi.
+                            crate::skeleton::skeleton(
+                                crate::skeleton::EVENT,
+                                |l| crate::i18n::td_string!(l, event.loading_aria),
+                                true,
+                            )
                         }
                         PublicEventState::NotFound => {
                             view! {

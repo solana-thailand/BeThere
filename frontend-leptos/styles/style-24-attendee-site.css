@@ -361,3 +361,35 @@
 .lp-att code {
     color: var(--lp-t-field);
 }
+
+/* ---- Loading skeletons (Phase 2, src/skeleton.rs): square blocks in the
+   site's line colour with a soft sweep. The old shell's blocks were the card
+   colour, which is the page colour on paper, so they did not show at all.
+   Claim keeps its own detailed shimmer layout, drawn the same way. ---- */
+.lp .pe-skel,
+.lp-att .shimmer {
+    border-radius: 0;
+    background: linear-gradient(
+        100deg,
+        var(--lp-line) 30%,
+        transparent 50%,
+        var(--lp-line) 70%
+    );
+    background-size: 200% 100%;
+}
+.lp-att .shimmer-card {
+    background: var(--lp-paper);
+    border: 2px solid var(--lp-line);
+    border-radius: 0;
+}
+.lp-att .shimmer-avatar {
+    border-radius: 0;
+}
+.pe-skeleton--inline {
+    min-height: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+    .lp-att .shimmer {
+        animation: none;
+    }
+}
