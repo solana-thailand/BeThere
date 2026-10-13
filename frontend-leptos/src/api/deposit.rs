@@ -765,6 +765,10 @@ pub async fn clear_credit_refund_request(
 pub struct CreditPayoutCandidatesResponse {
     #[serde(default)]
     pub candidates: Vec<CreditRefundRequest>,
+    /// Credit holders with no account on file and no request: contact them
+    /// (.issues/194).
+    #[serde(default)]
+    pub no_account: Vec<CreditRefundRequest>,
 }
 
 /// GET /api/deposit/credit-payout-candidates — organizer, org-scoped.

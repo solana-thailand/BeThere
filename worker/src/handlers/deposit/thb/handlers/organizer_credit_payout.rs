@@ -44,6 +44,9 @@ use crate::state::AppState;
 #[derive(Debug, Clone, Serialize)]
 pub struct CreditPayoutCandidatesResponse {
     pub candidates: Vec<CreditRefundRequest>,
+    /// Credit holders with no account on file and no open request: they can
+    /// only be contacted (`.issues/194`). Same row shape, account empty.
+    pub no_account: Vec<CreditRefundRequest>,
 }
 
 /// Lists people the caller may pay out without a request: payable credit,
@@ -62,18 +65,31 @@ pub async fn credit_payout_candidates_handler(
         .d1
         .as_deref()
         .ok_or_else(|| AppError::Internal("D1 not configured".to_string()))?;
+    // A row is shown only when every organization the person's credit belongs
+    // to is in the caller's scope.
+    let in_scope = |row: &CreditRefundRequest| {
+        scope == PayoutScope::All
+            || row
+                .organization_ids()
+                .is_some_and(|orgs| scope.covers(orgs.iter().map(String::as_str)))
+    };
     let candidates = crate::db::credit_refund_accounts::deposit_account_holders(db)
         .await
         .map_err(AppError::Internal)?
         .into_iter()
-        .filter(|row| {
-            scope == PayoutScope::All
-                || row
-                    .organization_ids()
-                    .is_some_and(|orgs| scope.covers(orgs.iter().map(String::as_str)))
-        })
+        .filter(in_scope)
         .collect();
-    Ok(ApiOk::new(CreditPayoutCandidatesResponse { candidates }))
+    // After the call above, which released ended events' credit.
+    let no_account = crate::db::credit_refund_accounts::no_account_holders(db)
+        .await
+        .map_err(AppError::Internal)?
+        .into_iter()
+        .filter(in_scope)
+        .collect();
+    Ok(ApiOk::new(CreditPayoutCandidatesResponse {
+        candidates,
+        no_account,
+    }))
 }
 
 /// Body of an organizer-initiated payout.

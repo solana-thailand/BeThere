@@ -50,6 +50,9 @@ DELETE_FOR_PERSON_SQL = concat_after(
     "db/credit_refund_accounts.rs", "pub(crate) const DELETE_FOR_PERSON_SQL"
 )
 PURGE_SQL = concat_after("db/credit_refund_accounts.rs", "pub(crate) const PURGE_SQL")
+NO_ACCOUNT_SQL = concat_after(
+    "db/credit_refund_accounts.rs", "pub(crate) const NO_ACCOUNT_HOLDERS_SQL"
+)
 HOLDERS_SQL = concat_after(
     "db/credit_refund_accounts.rs", "pub(crate) const DEPOSIT_ACCOUNT_HOLDERS_SQL"
 )
@@ -750,6 +753,43 @@ class CreditPayoutTests(CreditFixture):
         self.assertEqual([r["name"] for r in self.holders()], ["Gmail Name"])
         name(WORK, "Work Name")
         self.assertEqual([r["name"] for r in self.holders()], ["Work Name"])
+
+    # -- credit holders nobody can see (.issues/194) ------------------------
+
+    def no_account(self):
+        return [dict(r) for r in self.db.execute(NO_ACCOUNT_SQL)]
+
+    def test_a_holder_whose_deposit_is_gone_is_listed_to_contact(self):
+        # RTM #3: the hold survives in the ledger, the deposit row was purged,
+        # so no account was ever copied and nobody asked for a refund.
+        self.contact(GMAIL)
+        self.db.execute("UPDATE contacts SET name = 'Pond Bangna' WHERE email = ?", (GMAIL,))
+        self.hold(GMAIL, 500, "rtm-3:a1")
+        [row] = self.no_account()
+        self.assertEqual((row["email"], row["name"], row["credit_thb"]), (GMAIL, "Pond Bangna", 500))
+        self.assertIsNone(row["account_method"] if "account_method" in row else None)
+        self.assertEqual(self.holders(), [], "no account, so not payable unasked")
+
+    def test_a_holder_with_an_account_or_a_request_is_not_listed_here(self):
+        self.held_deposit(GMAIL)  # the deposit account was copied
+        self.assertEqual(self.no_account(), [])
+        self.contact(WORK)
+        self.hold(WORK, 500, "e9:a9")
+        self.request(WORK, PROMPTPAY)  # asked: the request queue shows them
+        self.assertEqual(self.no_account(), [])
+
+    def test_no_balance_is_not_listed_and_linked_emails_are_one_person(self):
+        self.contact(GMAIL)
+        self.hold(GMAIL, 500, "e1:a1")
+        self.assertEqual(self.spend(GMAIL, 500, "e2"), 1)
+        self.assertEqual(self.no_account(), [], "spent credit is not owed")
+        self.contact(WORK)
+        self.contact(OTHER)
+        self.hold(WORK, 300, "e3:a3")
+        self.hold(OTHER, 200, "e4:a4")
+        self.link(WORK, OTHER)
+        [row] = self.no_account()
+        self.assertEqual(row["credit_thb"], 500, "the person's total, once")
 
     def test_an_organizer_payout_pays_once(self):
         self.held_deposit(GMAIL)
