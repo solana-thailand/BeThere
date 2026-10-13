@@ -94,6 +94,10 @@ pub const FRAMED_PREFIXES: [&str; 6] = [
     "/sandbox",
 ];
 
+/// Framed attendee pages under `/events/{slug}/…`, matched by suffix:
+/// registering to watch a past event's recording.
+pub const FRAMED_SUFFIXES: [&str; 1] = ["/post-event-register"];
+
 /// Whether `path` is a bilingual attendee page (`/` and `/login` included).
 /// `/events` is matched exactly: deeper `/events/…` pages are staff-only
 /// unless they end in an attendee suffix.
@@ -108,8 +112,9 @@ pub fn is_attendee_path(path: &str) -> bool {
 /// Whether the language bar above the page is drawn: on attendee pages,
 /// except the framed ones, whose header carries the switch inline.
 pub fn shows_lang_bar(path: &str) -> bool {
-    let framed =
-        FRAMED_PATHS.contains(&path) || FRAMED_PREFIXES.iter().any(|p| path.starts_with(p));
+    let framed = FRAMED_PATHS.contains(&path)
+        || FRAMED_PREFIXES.iter().any(|p| path.starts_with(p))
+        || FRAMED_SUFFIXES.iter().any(|s| path.ends_with(s));
     !framed && is_attendee_path(path)
 }
 

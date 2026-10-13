@@ -15,7 +15,6 @@ use uuid::Uuid;
 use event_checkin_domain::models::attendee::ParticipationType;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
-use event_checkin_domain::models::event::EventStatus;
 
 use crate::error::ApiOk;
 use crate::state::AppState;
@@ -26,9 +25,11 @@ use super::types::{DeveloperData, PostEventRegisterRequest};
 /// `POST /api/public/event/{slug}/register-post-event` — public lead capture.
 ///
 /// JWT-required (same `require_identity` middleware as normal registration) so
-/// every lead has a verified Google email. Validates the event is Completed with
-/// post-event registration open and the deadline (if any) not expired, then
-/// writes a `post_event_registered` attendee row + contact + developer profile.
+/// every lead has a verified Google email. Validates the event is over (status
+/// or end time) with post-event registration open (toggle or a recording) and
+/// the deadline (if any) not expired, then writes a `post_event_registered`
+/// attendee row + contact + developer profile, and answers with the recording
+/// link and its course.
 #[worker::send]
 pub async fn register_post_event(
     State(state): State<AppState>,
@@ -64,17 +65,21 @@ pub async fn register_post_event(
         .map_err(AppError::from)?;
     let event_id = config.id.clone();
 
-    // 3. Validate lifecycle: must be Completed (active events use normal reg).
-    if config.status != EventStatus::Completed {
+    // 3. Validate lifecycle: the event must be over, by status or by its end
+    //    time (active events use normal registration). The page decides "over"
+    //    with the same domain rule, so the two cannot disagree (.issues/165).
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    if !config.is_over(now_ms) {
         return Err(AppError::Conflict(format!(
-            "post-event registration is only available for completed events (current: {})",
+            "post-event registration opens when the event has ended (current: {})",
             config.status.as_str()
         ))
         .into());
     }
 
-    // 4. Validate the organizer has opened post-event registration.
-    if !config.post_event_registration_open {
+    // 4. Validate post-event registration is open: the organizer's toggle, or
+    //    the event has a recording (registering is how people watch it).
+    if !config.post_event_registration_open && config.recording_url().is_none() {
         return Err(AppError::Conflict(
             "post-event registration is not open for this event".to_string(),
         )
@@ -87,7 +92,7 @@ pub async fn register_post_event(
     //    cannot disappear while this endpoint still accepts, or vice versa.
     //    The two branches stay separate because the codes differ: never opened
     //    is a 409, opened-then-lapsed is a 410.
-    if config.post_event_registration_deadline_passed(chrono::Utc::now().timestamp_millis()) {
+    if config.post_event_registration_deadline_passed(now_ms) {
         return Err(AppError::Gone(
             "post-event registration for this event has closed".to_string(),
         )
@@ -193,9 +198,21 @@ pub async fn register_post_event(
             "post-event registration captured"
         );
 
+        // The recording, for the person who just registered to watch it, and
+        // the course it belongs to ("continue the course"). A failed course
+        // lookup only drops that link.
+        let course_id = crate::courses::course_of_event(d1, &event_id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(%event_id, error = %e, "post-event course lookup failed (non-fatal)");
+                None
+            });
+
         return Ok(ApiOk::new(serde_json::json!({
             "attendee_id": attendee_id,
             "message": "Thanks! We'll notify you about future events.",
+            "video_url": config.recording_url(),
+            "course_id": course_id,
         })));
     }
 

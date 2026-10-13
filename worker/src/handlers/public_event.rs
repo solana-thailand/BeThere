@@ -280,6 +280,13 @@ pub async fn get_public_event(
         "post_event_registration_accepting".to_string(),
         serde_json::Value::Bool(post_event_registration_accepting),
     );
+    // Whether the event has a public recording, never the link itself: after
+    // the event, registering is how people watch it (.issues/165, owner
+    // 2026-10-13), so the page offers "register to watch" from this flag.
+    response_fields.insert(
+        "has_recording".to_string(),
+        serde_json::Value::Bool(config.recording_url().is_some()),
+    );
     // The organization's display name only — never its id, sheets or owners.
     // Empty = no org, or it could not be read; the page then omits the line.
     response_fields.insert(
@@ -497,10 +504,7 @@ pub async fn get_public_recap(
 /// Return an organizer URL only when it is safe to place in a public link or
 /// embed. This intentionally rejects HTTP, relative, and active-content URLs.
 fn https_public_url(url: &str) -> String {
-    url.strip_prefix("https://")
-        .filter(|rest| !rest.trim().is_empty())
-        .map(|rest| format!("https://{rest}"))
-        .unwrap_or_default()
+    event_checkin_domain::models::event::https_public_url(url).unwrap_or_default()
 }
 
 /// Return the canonical Genesis archive URL only for a trusted event-page path.
