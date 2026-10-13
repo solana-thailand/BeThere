@@ -1,4 +1,6 @@
-// Renders share/og-card.html to share/og-image.png at 1200x630 (plan 042, 0.6).
+// Renders share/og-card.html to share/og-card-stock.png at 1200x630 (plan 042, 0.6).
+// The site's og-image.png is not this card: it is the last frame of "The Hall"
+// (devrel-helper ffilms, see index.html), so this no longer writes over it.
 // Usage, from frontend-leptos/:
 //   FONTS_DIR=~/solana-thailand-devrel-helper/assets/fonts-active \
 //   PUPPETEER=~/.npm/_npx/<hash>/node_modules/puppeteer-core \
@@ -44,8 +46,8 @@ try {
         ["Inter", "Anuphan"].filter((f) => !document.fonts.check(`700 40px ${f}`)),
     );
     if (loaded.length) throw new Error(`fonts not loaded: ${loaded.join(", ")}`);
-    await page.screenshot({ path: join(here, "og-image.png"), type: "png" });
-    console.log(`wrote ${join(here, "og-image.png")}`);
+    await page.screenshot({ path: join(here, "og-card-stock.png"), type: "png" });
+    console.log(`wrote ${join(here, "og-card-stock.png")}`);
 } finally {
     await browser.close();
     (await import("node:fs")).rmSync(tmp, { force: true });

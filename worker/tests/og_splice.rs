@@ -61,10 +61,11 @@ fn stock_head_carries_every_target_once() {
             "frontend-leptos/index.html lost (or duplicated) the {key} tag the /e/{{slug}} splice rewrites"
         );
     }
-    // The stock image is the 1200×630 card (plan 042 0.6).
+    // The stock image is the 1200×630 card (plan 042 0.6). `?v=` changes with
+    // the image, because X, Facebook and LINE cache a preview by its URL.
     assert_eq!(
         tag_value(&html, TagAttr::Property, "og:image").as_deref(),
-        Some("https://bethere.solana-thailand.workers.dev/og-image.png")
+        Some("https://bethere.solana-thailand.workers.dev/og-image.png?v=a2")
     );
 }
 
