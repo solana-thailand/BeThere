@@ -259,6 +259,26 @@ pub struct CreditPayoutReceipt {
     pub paid_at: String,
 }
 
+/// One deposit a person's held credit came from, so the organizer can check
+/// the slip against that event's sheet before paying the credit back (owner
+/// 2026-10-13). Amounts are whole THB.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CreditSource {
+    #[serde(default)]
+    pub event_id: String,
+    /// Empty when the event row is gone.
+    #[serde(default)]
+    pub event_name: String,
+    /// The event's Google Sheet id; empty when it has none.
+    #[serde(default)]
+    pub sheet_id: String,
+    #[serde(default)]
+    pub amount_thb: i64,
+    /// The deposit's slip serving path; empty when the deposit row is gone.
+    #[serde(default)]
+    pub slip_url: String,
+}
+
 /// The last four digits of `raw`, ignoring separators; empty when there are
 /// four or fewer, so the preview never carries a whole number.
 pub fn last4_digits(raw: &str) -> String {

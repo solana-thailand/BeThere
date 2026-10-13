@@ -139,6 +139,7 @@ fn CreditRefundRow(
         account_source,
         account_captured_at,
         account_replaced_deposit,
+        sources,
     } = req;
     // Start from what is payable: the organizer confirms it by attaching the
     // slip, and edits it only if they sent something else (the worker refuses
@@ -311,6 +312,7 @@ fn CreditRefundRow(
                             <div class="panel-hint"><span class=class>{text}</span></div>
                         })}
                     </div>
+                    {credit_sources_view(sources)}
                 </div>
                 <div class="admin-dep-payout-status">
                     {match kind {
@@ -405,4 +407,53 @@ fn CreditRefundRow(
             }}
         </div>
     }
+}
+
+/// Where the credit came from: each held deposit's event, with its Google
+/// Sheet and the slip, so the organizer can check the slip against the sheet
+/// before paying it back (owner 2026-10-13).
+fn credit_sources_view(
+    sources: Vec<event_checkin_domain::models::credit_payout::CreditSource>,
+) -> AnyView {
+    if sources.is_empty() {
+        return view! {
+            <div class="admin-dep-bank-section">
+                <div class="panel-hint admin-dep-bank-label">"Credit from"</div>
+                <div class="panel-hint">"No deposit on record (adjusted or carried over) — check the ledger before paying"</div>
+            </div>
+        }
+        .into_any();
+    }
+    let rows = sources
+        .into_iter()
+        .map(|source| {
+            let event = match source.event_name.is_empty() {
+                true => source.event_id.clone(),
+                false => source.event_name.clone(),
+            };
+            let sheet = utils::google_sheet_url(&source.sheet_id);
+            let slip = crate::pages::admin_deposit_slip_link::is_viewable_slip_url(Some(&source.slip_url))
+                .then_some(source.slip_url);
+            view! {
+                <div class="panel-hint">
+                    {format!("{event} · {} THB", source.amount_thb)}
+                    {(!sheet.is_empty()).then(|| view! {
+                        " · "
+                        <a href=sheet target="_blank" rel="noopener noreferrer" class="link-accent">"Sheet ↗"</a>
+                    })}
+                    {slip.map(|href| view! {
+                        " · "
+                        <a href=href target="_blank" rel="noopener noreferrer" class="link-accent">"Slip ↗"</a>
+                    })}
+                </div>
+            }
+        })
+        .collect_view();
+    view! {
+        <div class="admin-dep-bank-section">
+            <div class="panel-hint admin-dep-bank-label">"Credit from"</div>
+            {rows}
+        </div>
+    }
+    .into_any()
 }

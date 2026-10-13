@@ -1,6 +1,6 @@
 # 165: Public registration stays open after the event starts (and after it ends)
 
-**Status:** open (2026-09-29). Found by session `event-checkin-83` during the `.issues/164` gap-2 rehearsal on staging. Changing it is the owner's call: it alters a prod registration path in the week of the 3 Oct deploy and RTM #6, and day-of sign-up at the door may be relied on.
+**Status:** fixed on develop (2026-10-13, session `event-checkin-11`; owner decision below). In-person seats already closed at the end server-side (`in_person_registration_closed`); the page now agrees (pull 262, deployed) and, after the end, registering is how people watch the recording (this PR). Originally opened 2026-09-29 by session `event-checkin-83` during the `.issues/164` gap-2 rehearsal on staging.
 
 ## What happens
 
@@ -74,3 +74,25 @@ over (completed gateway, no form, no "Happening now") and the API should
 refuse registration past the end. If registration closes at the start, the
 form goes at `event_start_ms`, and "Happening now!" stays only between start
 and end.
+
+## Owner decision 2026-10-13: after the event, register to watch the recording
+
+"I just want registration to be there so people can watch afterwards." So
+seats close when the event ends, and from then on registering is how people
+get the recording:
+
+- One rule, `domain::models::event::{ended, is_over}`, decides "over" for the
+  page, for the in-person seat cutoff (`in_person_registration_closed` now
+  calls `ended`), and for who may register to watch. A time-TBA event ends a
+  day after its end time, which was already the seat rule.
+- Post-event registration opens on its own once an event is over **and** has
+  a public `https://` recording (`EventConfig::recording_url`). The
+  organizer's toggle and deadline still work.
+- The public event API sends `has_recording`, never the link. The ended page's
+  button reads "Register to watch the recording" (`?watch=1`), the form says
+  so, and the register response returns `video_url` and `course_id` to the
+  registrant, so the confirmation shows "Watch the recording" and "Continue
+  the course".
+- Kept open on purpose: course pages (`/events/{course}`) still show their
+  recordings to everyone ("Knowledge should be free for everyone"); the event
+  page is a soft gate for lead capture, not a lock.

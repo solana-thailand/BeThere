@@ -17,6 +17,7 @@ mod sheet_name;
 mod slug;
 mod sponsor;
 mod ticket_note;
+mod window;
 
 #[cfg(test)]
 mod tests;
@@ -41,3 +42,4 @@ pub use ticket_note::{
     MAX_POSTPONED_NOTE_CHARS, MAX_TICKET_NOTE_CHARS, normalize_postponed_note,
     normalize_ticket_note,
 };
+pub use window::{ended, https_public_url, is_over};

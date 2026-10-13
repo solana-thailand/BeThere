@@ -15,6 +15,7 @@ Runs the worker's real SQL — extracted from the Rust sources with the
   person has no open request and no held (payable or locked) credit.
 """
 
+import json
 import re
 import sqlite3
 import unittest
@@ -347,6 +348,42 @@ class CreditPayoutTests(CreditFixture):
         self.assertIn(row["age_hours"], (191, 192))
         self.assertEqual(row["org_ids"], '["org-a"]')
         self.assertEqual(row["credit_thb"], 500)
+
+    def test_the_queue_lists_where_the_credit_came_from(self):
+        # Owner 2026-10-13: the event, its sheet and the slip, to check before
+        # paying credit back. One entry per `hold`; an apply is not a source.
+        self.contact(GMAIL)
+        self.db.execute(
+            "INSERT INTO events (id, name, slug, sheet_id, event_start_ms, event_end_ms) "
+            "VALUES ('rtm-6', 'RTM #6', 'rtm-6', 'SHEET-RTM6', 1, 2)"
+        )
+        self.deposit("rtm-6", "att-1")
+        self.db.execute(
+            "UPDATE thb_deposits SET slip_url = '/api/storage/slips/rtm-6/att-1' "
+            "WHERE event_id = 'rtm-6' AND attendee_id = 'att-1'"
+        )
+        ledger = (
+            "INSERT INTO credit_ledger (email, organization_id, currency, delta, "
+            "reason, event_id, deposit_id) VALUES (?, '', 'thb', ?, ?, ?, ?)"
+        )
+        self.db.execute(ledger, (GMAIL, 500, "hold", "rtm-6", "rtm-6:att-1"))
+        # the event and the deposit are gone: still listed, with blanks
+        self.db.execute(ledger, (GMAIL, 300, "hold", "gone", "gone:x"))
+        self.db.execute(ledger, (GMAIL, -200, "apply", "rtm-6", "apply:rtm-6"))
+        self.request(GMAIL, PROMPTPAY)
+        sources = sorted(
+            json.loads(self.db.execute(QUEUE_SQL).fetchone()["sources_json"]),
+            key=lambda s: -s["amount_thb"],
+        )
+        self.assertEqual(
+            sources,
+            [
+                {"event_id": "rtm-6", "event_name": "RTM #6", "sheet_id": "SHEET-RTM6",
+                 "amount_thb": 500, "slip_url": "/api/storage/slips/rtm-6/att-1"},
+                {"event_id": "gone", "event_name": "", "sheet_id": "",
+                 "amount_thb": 300, "slip_url": ""},
+            ],
+        )
 
     def test_a_request_without_an_account_still_queues(self):
         # Requests made before 0059 have no account row.

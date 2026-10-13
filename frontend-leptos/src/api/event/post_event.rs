@@ -41,6 +41,13 @@ pub struct PostEventRegisterBody {
 pub struct PostEventRegisterData {
     pub attendee_id: String,
     pub message: String,
+    /// The recording, for whoever just registered to watch it (none when the
+    /// event has no public recording). `Option` so an explicit null is fine.
+    #[serde(default)]
+    pub video_url: Option<String>,
+    /// The active course the event is an episode of, for "continue the course".
+    #[serde(default)]
+    pub course_id: Option<String>,
 }
 
 /// `POST /api/public/event/{slug}/register-post-event` — submit the lead-capture

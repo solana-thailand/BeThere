@@ -107,6 +107,7 @@
     "comp_emails_guards tests/comp_emails_guards.rs": 5,
     "comp_reason_guard tests/comp_reason_guard.rs": 3,
     "course tests/course.rs": 3,
+    "event_window tests/event_window.rs": 2,
     "courses_fold tests/courses_fold.rs": 2,
     "courses_guard tests/courses_guard.rs": 3,
     "crawl_routes tests/crawl_routes.rs": 9,

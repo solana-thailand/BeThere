@@ -81,6 +81,7 @@ fn lang_bar_is_off_on_the_landing_only() {
         "/claim/t",
         "/login",
         "/sandbox",
+        "/events/rtm-6/post-event-register",
     ] {
         assert!(!shows_lang_bar(framed), "{framed}");
     }

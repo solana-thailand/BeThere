@@ -456,6 +456,13 @@ pub struct CreditRefundRequest {
     pub account_name: Option<String>,
     #[serde(default, skip_serializing)]
     pub account_source_raw: Option<String>,
+    /// The deposits the credit was held from (event, sheet, slip), so the
+    /// organizer can check them before paying out. Folded from
+    /// `sources_json` by [`CreditRefundRequest::with_account`].
+    #[serde(default, skip_deserializing)]
+    pub sources: Vec<event_checkin_domain::models::credit_payout::CreditSource>,
+    #[serde(default, skip_serializing)]
+    pub sources_json: Option<String>,
 }
 
 /// SQLite returns the flag as an integer.
@@ -488,6 +495,11 @@ impl CreditRefundRequest {
                 self.account_name.take(),
             )
         });
+        self.sources = self
+            .sources_json
+            .take()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
         // Provenance describes an account; without one it says nothing.
         if self.account.is_none() {
             self.account_source = None;
@@ -562,7 +574,9 @@ pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest>
            (SELECT json_group_array(DISTINCT l.organization_id) FROM credit_ledger l \
              WHERE l.email IN ",
         crate::db::person::person_emails_of!("LOWER(c.email)"),
-        ") AS org_ids, \
+        ") AS org_ids, ",
+        crate::db::credit_ledger::credit_sources_of!("LOWER(c.email)"),
+        " AS sources_json, \
            a.method AS account_method, a.promptpay_id AS promptpay_id, \
            a.bank_name AS bank_name, a.bank_account AS bank_account, \
            a.account_name AS account_name, \

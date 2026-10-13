@@ -398,3 +398,29 @@ fn post_event_registration_closed_toggle_beats_a_future_deadline() {
     // The deadline itself has still not passed — the two are independent.
     assert!(!e.post_event_registration_deadline_passed(0));
 }
+
+// ── Registering to watch the recording (.issues/165, owner 2026-10-13) ──
+
+#[test]
+fn a_recording_opens_registration_to_watch_without_the_toggle() {
+    let mut recorded = make_event();
+    recorded.event_end_ms = 1_000;
+    recorded.video_url = "https://youtu.be/abc".to_string();
+    assert!(!recorded.post_event_registration_open);
+    assert!(recorded.post_event_registration_accepting(1_001));
+    assert!(recorded.is_over(1_000));
+    assert!(!recorded.is_over(999));
+
+    // no recording and no toggle: closed, as before
+    let bare = make_event();
+    assert!(!bare.post_event_registration_accepting(i64::MAX));
+
+    // an http link is not a public recording
+    let mut plain = make_event();
+    plain.video_url = "http://youtu.be/abc".to_string();
+    assert!(!plain.post_event_registration_accepting(i64::MAX));
+
+    // the organizer's deadline still closes it
+    recorded.post_event_registration_until_ms = Some(1_000);
+    assert!(!recorded.post_event_registration_accepting(1_001));
+}

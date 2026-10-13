@@ -13,12 +13,14 @@
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::components::A;
-use leptos_router::hooks::use_params;
+use leptos_router::hooks::{use_params, use_query_map};
 use leptos_router::params::Params;
 
 use crate::api::{self, PostEventRegisterBody};
 use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
+use crate::pages::landing::frame::{SiteFrame, use_site_auth};
+use crate::pages::site::doors::SitePage;
 
 /// Route parameters for `/events/:slug/post-event-register`.
 #[derive(Params, PartialEq, Clone, Debug)]
@@ -35,8 +37,11 @@ enum RegState {
     Form,
     /// Submitting to the API.
     Submitting,
-    /// Success — the lead was captured.
-    Done,
+    /// Success — the lead was captured; the recording and its course, if any.
+    Done {
+        video_url: Option<String>,
+        course_id: Option<String>,
+    },
     /// Error (409/410/404/network).
     Error(RegError),
 }
@@ -97,6 +102,10 @@ fn collected_answers(
 pub fn PostEventRegister() -> impl IntoView {
     let i18n = use_i18n();
     let params = use_params::<PostEventRegisterParams>();
+    // `?watch=1`: the ended event page sent the visitor here to watch its
+    // recording, so the form says so (.issues/165, owner 2026-10-13).
+    let query = use_query_map();
+    let to_watch = move || query.read().get("watch").as_deref() == Some("1");
     let slug_val: String = match params.get() {
         Ok(p) => p.slug.unwrap_or_default(),
         Err(_) => String::new(),
@@ -127,6 +136,7 @@ pub fn PostEventRegister() -> impl IntoView {
     // Auth gate on mount — same pattern as the dev profile editor.
     {
         let slug = slug_val.clone();
+        let to_watch_now = query.with_untracked(|q| q.get("watch").as_deref() == Some("1"));
         leptos::task::spawn_local(async move {
             // Empty slug = bad link — surface an error rather than a form.
             if slug.is_empty() {
@@ -138,7 +148,11 @@ pub fn PostEventRegister() -> impl IntoView {
             match crate::api::get_me().await {
                 Ok(_) => set_state.set(RegState::Form),
                 Err(_) => {
-                    let next = format!("/events/{slug}/post-event-register");
+                    // Keep `?watch=1` through sign-in, so the form still says why.
+                    let next = match to_watch_now {
+                        true => format!("/events/{slug}/post-event-register?watch=1"),
+                        false => format!("/events/{slug}/post-event-register"),
+                    };
                     let login_url = format!("/login?next={}", urlencoding::encode(&next));
                     let _ = web_sys::window().map(|w| w.location().set_href(&login_url));
                 }
@@ -157,11 +171,17 @@ pub fn PostEventRegister() -> impl IntoView {
     let back_href = format!("/e/{slug}", slug = slug_val);
 
     let is_submitting = move || matches!(state.get(), RegState::Submitting);
+    // A form mistake or a refused submit stays next to the form, so nothing
+    // typed is lost; only a page that cannot work (no slug) replaces it.
+    let (form_error, set_form_error) = signal(None::<RegError>);
+    // The site's header, theme and footer (.plans/046 Phase 1).
+    let (auth_state, _) = use_site_auth();
 
     view! {
         <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.page_title)) />
-        <div class="center-page">
-            <div class="container layout-col-center">
+        <SiteFrame here=SitePage::Events auth_state=auth_state own_doors=true>
+        <main class="lp-att">
+            <div class="lp-wrap lp-dep-wrap layout-col-center">
                 // ---------- Back link ----------
                 <div class="flex-row-gap" style="margin-bottom:1rem;width:100%;justify-content:flex-start;">
                     <A href=back_href.clone() attr:class="btn btn-outline btn-sm">
@@ -184,37 +204,57 @@ pub fn PostEventRegister() -> impl IntoView {
                             </span>
                             <h2 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.error_title))}</h2>
                             <p class="subtitle" style="margin:0 0 1rem;text-align:center;">
-                                {match msg {
-                                    RegError::MissingSlug => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.missing_slug)).into_any(),
-                                    RegError::NeedName => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.need_name)).into_any(),
-                                    RegError::NeedConsent => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.need_consent)).into_any(),
-                                    RegError::Server(msg) => msg.into_any(),
-                                }}
+                                {reg_error_text(msg)}
                             </p>
                             <A href=back_href.clone() attr:class="btn btn-outline btn-sm">
                                 {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.back))}
                             </A>
                         </div>
                     }.into_any(),
-                    RegState::Done => view! {
+                    RegState::Done { video_url, course_id } => view! {
                         <div class="card layout-col-center">
                             <span style="margin-bottom:1rem;color:#16a34a;">
                                 <Icon icon=IconName::Check class="icon-2xl" />
                             </span>
-                            <h2 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.done_title))}</h2>
+                            <h2 style="margin:0 0 0.5rem;">
+                                {match video_url.is_some() {
+                                    true => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.done_title_recording)),
+                                    false => crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.done_title)),
+                                }}
+                            </h2>
                             <p class="subtitle" style="margin:0 0 1rem;text-align:center;">
                                 {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.done_body))}
                             </p>
-                            <A href="/past-events" attr:class="btn btn-primary">
+                            // Registering is how people watch the recording
+                            // (.issues/165, owner 2026-10-13).
+                            {video_url.map(|href| view! {
+                                <a href=href class="btn btn-primary" target="_blank" rel="noopener noreferrer">
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.watch))}
+                                </a>
+                            })}
+                            {course_id.map(|id| view! {
+                                <A href=format!("/events/{id}") attr:class="btn btn-outline" attr:style="margin-top:0.75rem;">
+                                    {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.continue_course))}
+                                </A>
+                            })}
+                            <A href="/past-events" attr:class="btn btn-outline" attr:style="margin-top:0.75rem;">
                                 {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.browse_past))}
                             </A>
                         </div>
                     }.into_any(),
                     RegState::Form | RegState::Submitting => view! {
                         <div class="card" style="width:100%;max-width:540px;">
-                            <h1 style="margin:0 0 0.5rem;">{crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.title))}</h1>
+                            <h1 style="margin:0 0 0.5rem;">
+                                {move || match to_watch() {
+                                    true => t_string!(i18n, recap.join.title_watch),
+                                    false => t_string!(i18n, recap.join.title),
+                                }}
+                            </h1>
                             <p class="subtitle" style="margin:0 0 1.5rem;">
-                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.intro))}
+                                {move || match to_watch() {
+                                    true => t_string!(i18n, recap.join.intro_watch),
+                                    false => t_string!(i18n, recap.join.intro),
+                                }}
                             </p>
 
                             // Name
@@ -383,28 +423,32 @@ pub fn PostEventRegister() -> impl IntoView {
                             </div>
 
                             // Consents
-                            <div class="dev-profile-field" style="flex-direction:row;align-items:flex-start;gap:0.5rem;">
+                            <label class="dev-profile-field" style="flex-direction:row;align-items:flex-start;gap:0.5rem;">
                                 <input
                                     type="checkbox"
                                     prop:checked=consent_given.get()
                                     on:change=move |ev| set_consent_given.set(event_target_checked(&ev))
                                     disabled=is_submitting()
                                 />
-                                <label class="dev-profile-label" style="font-weight:normal;">
+                                <span class="dev-profile-label" style="font-weight:normal;">
                                     {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.consent))}
-                                </label>
-                            </div>
-                            <div class="dev-profile-field" style="flex-direction:row;align-items:flex-start;gap:0.5rem;">
+                                </span>
+                            </label>
+                            <label class="dev-profile-field" style="flex-direction:row;align-items:flex-start;gap:0.5rem;">
                                 <input
                                     type="checkbox"
                                     prop:checked=consent_marketing.get()
                                     on:change=move |ev| set_consent_marketing.set(event_target_checked(&ev))
                                     disabled=is_submitting()
                                 />
-                                <label class="dev-profile-label" style="font-weight:normal;">
+                                <span class="dev-profile-label" style="font-weight:normal;">
                                     {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.marketing))}
-                                </label>
-                            </div>
+                                </span>
+                            </label>
+
+                            {move || form_error.get().map(|e| view! {
+                                <p class="error-msg visible" role="alert" style="margin-top:0.5rem;">{reg_error_text(e)}</p>
+                            })}
 
                             // Submit
                             <button
@@ -413,13 +457,14 @@ pub fn PostEventRegister() -> impl IntoView {
                                 on:click=move |_| {
                                     let n = name.get();
                                     if n.trim().is_empty() {
-                                        set_state.set(RegState::Error(RegError::NeedName));
+                                        set_form_error.set(Some(RegError::NeedName));
                                         return;
                                     }
                                     if !consent_given.get() {
-                                        set_state.set(RegState::Error(RegError::NeedConsent));
+                                        set_form_error.set(Some(RegError::NeedConsent));
                                         return;
                                     }
+                                    set_form_error.set(None);
                                     let body = PostEventRegisterBody {
                                         name: n.trim().to_string(),
                                         contact_channel: opt_str(contact_channel.get()),
@@ -440,8 +485,14 @@ pub fn PostEventRegister() -> impl IntoView {
                                     let slug = slug_sig.get();
                                     leptos::task::spawn_local(async move {
                                         match api::register_post_event(&slug, &body).await {
-                                            Ok(_) => set_state.set(RegState::Done),
-                                            Err(e) => set_state.set(RegState::Error(RegError::Server(e.message))),
+                                            Ok(data) => set_state.set(RegState::Done {
+                                                video_url: data.video_url,
+                                                course_id: data.course_id,
+                                            }),
+                                            Err(e) => {
+                                                set_form_error.set(Some(RegError::Server(e.message)));
+                                                set_state.set(RegState::Form);
+                                            }
                                         }
                                     });
                                 }
@@ -449,6 +500,7 @@ pub fn PostEventRegister() -> impl IntoView {
                             >
                                 {move || match is_submitting() {
                                     true => t_string!(i18n, recap.join.submitting),
+                                    false if to_watch() => t_string!(i18n, recap.join.submit_watch),
                                     false => t_string!(i18n, recap.join.submit),
                                 }}
                             </button>
@@ -456,7 +508,25 @@ pub fn PostEventRegister() -> impl IntoView {
                     }.into_any(),
                 }}
             </div>
-        </div>
+        </main>
+        </SiteFrame>
+    }
+}
+
+/// The text for why a registration could not go on, in the reader's language
+/// (a server message is shown as sent).
+fn reg_error_text(error: RegError) -> AnyView {
+    match error {
+        RegError::MissingSlug => {
+            crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.missing_slug)).into_any()
+        }
+        RegError::NeedName => {
+            crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.need_name)).into_any()
+        }
+        RegError::NeedConsent => {
+            crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.need_consent)).into_any()
+        }
+        RegError::Server(msg) => msg.into_any(),
     }
 }
 
