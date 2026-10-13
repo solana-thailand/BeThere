@@ -393,3 +393,16 @@
         animation: none;
     }
 }
+
+/* the check-in stamp in the site: square, ink double rule, the light-ground
+   person colour on paper (style-11 holds the motion) */
+.lp-att .ticket-stamp {
+    border-radius: 0;
+    background: var(--lp-paper); /* lines under it do not cross the ink */
+    border-color: var(--lp-ink);
+    color: var(--lp-ink);
+    font-family: var(--lp-sans);
+}
+.lp:not([data-theme="dark"]) .lp-att .ticket-stamp-person {
+    fill: #e04a22;
+}

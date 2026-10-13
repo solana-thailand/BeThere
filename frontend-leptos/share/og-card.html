@@ -1,7 +1,9 @@
 <!doctype html>
 <!--
   The 1200×630 share card (og:image / twitter:image), plan 042 item 0.6.
-  Source of share/og-image.png; re-render with `node share/render_og.mjs`.
+  The stock card, kept as the look of the per-event cards (src/utils/og_card.rs);
+  `node share/render_og.mjs` renders it to share/og-card-stock.png. The site's
+  og-image.png is "The Hall" from devrel-helper ffilms (see index.html).
   One bilingual card: crawlers do not run the SPA, so the head cannot switch
   the image by language. Copy follows the build-plan rules: no
   "never forfeited", no credit exit, no numbers (they would go stale).

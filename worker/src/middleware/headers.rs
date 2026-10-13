@@ -40,13 +40,13 @@ pub const SECURITY_HEADERS: [(&str, &str); 9] = [
         "content-security-policy",
         "default-src 'self'; \
          script-src 'self' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://telegram.org https://challenges.cloudflare.com; \
-         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
+         style-src 'self' 'unsafe-inline'; \
          img-src 'self' data: blob: https:; \
          media-src 'self' blob:; \
          object-src 'none'; \
          frame-src https://www.youtube.com https://www.youtube-nocookie.com https://oauth.telegram.org https://challenges.cloudflare.com; \
          connect-src 'self' https: wss:; \
-         font-src 'self' https://fonts.gstatic.com; \
+         font-src 'self'; \
          frame-ancestors 'none'; \
          base-uri 'self'; \
          form-action 'self'",
