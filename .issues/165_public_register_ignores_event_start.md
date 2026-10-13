@@ -53,3 +53,24 @@ started event and one with an ended event.
 The on-chain rules held in the same run: `refund` before the end was
 rejected with `Custom(1)` = `RefundNotYetAllowed`, and after the end it
 finalized (`.issues/164`).
+
+## Evidence 2026-10-13 (session `event-checkin-11`): the page says "Happening now!" nine days after the event
+
+Opening prod `/e/solana-x-ai-builders-the-road-to-mainnet-6-bangkok` on
+2026-10-13 (RTM #6 ran on 4 Oct) shows **"Happening now!"**, the **Reserve
+Your Spot** button and the sign-in-to-register block.
+
+The cause is in the frontend: `public_event/page.rs` sets `event_completed`
+only from `status == "completed"`. When the countdown is empty and the status
+is still active, `details_card.rs` renders "Happening now!", and
+`show_reg_form = !event_completed` keeps the form. Nothing compares the time
+with `event_end_ms`, so every past event whose status was never set to
+completed reads as live and open. This predates the plan 046 release and is
+not caused by it.
+
+The fix belongs to this issue's decision. If registration closes at the end
+(the recommendation above), the page should treat `now > event_end_ms` as
+over (completed gateway, no form, no "Happening now") and the API should
+refuse registration past the end. If registration closes at the start, the
+form goes at `event_start_ms`, and "Happening now!" stays only between start
+and end.
