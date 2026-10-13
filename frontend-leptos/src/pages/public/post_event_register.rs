@@ -191,12 +191,11 @@ pub fn PostEventRegister() -> impl IntoView {
 
                 // ---------- Auth / submit / error states ----------
                 {move || match state.get() {
-                    RegState::CheckingAuth => view! {
-                        <div class="page-loading">
-                            <span class="spinner spinner-lg"></span>
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.loading))}
-                        </div>
-                    }.into_any(),
+                    RegState::CheckingAuth => crate::skeleton::skeleton(
+                        crate::skeleton::FORM,
+                        |l| crate::i18n::td_string!(l, recap.join.loading),
+                        true,
+                    ),
                     RegState::Error(msg) => view! {
                         <div class="card layout-col-center">
                             <span style="margin-bottom:1rem;opacity:0.6;">

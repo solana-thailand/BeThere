@@ -113,11 +113,11 @@ pub fn OpenEvents() -> impl IntoView {
             {move || {
                 let mut evts = events.get();
                 if !loaded.get() {
-                    return view! {
-                        <p class="lp-rule" role="status">
-                            {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.upcoming.loading))}
-                        </p>
-                    }.into_any();
+                    return crate::skeleton::skeleton(
+                        crate::skeleton::LIST,
+                        |l| crate::i18n::td_string!(l, landing.upcoming.loading),
+                        false,
+                    );
                 }
                 if evts.is_empty() {
                     return view! { <NothingOpen sample_slug=sample_slug.get() /> }.into_any();

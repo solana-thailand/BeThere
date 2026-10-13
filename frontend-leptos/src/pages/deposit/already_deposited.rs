@@ -21,19 +21,11 @@ enum ConfirmCheck {
 
 /// Loading view.
 pub fn loading_view() -> AnyView {
-    view! {
-        <div class="dep2-card">
-            <div class="dep2-confirming">
-                <div class="dep2-confirming-dots">
-                    <span class="dep2-confirming-dot"></span>
-                    <span class="dep2-confirming-dot"></span>
-                    <span class="dep2-confirming-dot"></span>
-                </div>
-                <p>{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.loading))}</p>
-            </div>
-        </div>
-    }
-    .into_any()
+    crate::skeleton::skeleton(
+        crate::skeleton::DEPOSIT,
+        |l| crate::i18n::td_string!(l, deposit.loading),
+        true,
+    )
 }
 
 /// Error view.
