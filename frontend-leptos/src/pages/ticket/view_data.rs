@@ -7,6 +7,10 @@ use crate::utils;
 /// Avoids duplicating the 30+ `let` bindings in each view branch.
 #[derive(Clone)]
 pub struct TicketViewData {
+    /// The check-in happened while this ticket was open (the poll saw it flip):
+    /// the stamp lands and the person drops onto the seat. A ticket that loads
+    /// already checked in shows the stamp still (plan 046 Phase 2).
+    pub stamp_live: bool,
     // QR
     pub qr_image: Option<String>,
     pub has_qr: bool,
@@ -118,6 +122,7 @@ impl TicketViewData {
         let is_online = !data.is_in_person;
 
         Self {
+            stamp_live: false,
             qr_image: data.qr_image.clone(),
             has_qr: data.qr_image.is_some(),
             display_code: data.display_code.clone(),

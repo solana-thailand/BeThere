@@ -75,6 +75,7 @@ pub fn InPersonView(
         deposit_amount_usdc,
         deadline_expired,
         event_over,
+        stamp_live,
         in_person_available,
         refund_link,
         deposit_info,
@@ -208,9 +209,15 @@ pub fn InPersonView(
 
         // 2. Main card
         <div class="ticket-main-card">
-            // The keepsake stamp (F2): lands once the attendee is checked in.
+            // The keepsake stamp (F2) with the logo's seated mark. It lands, and
+            // the person drops onto the seat, only when the check-in happens
+            // while the ticket is open (plan 046 Phase 2); otherwise it is still.
             {matches!(hero_kind, HeroKind::CheckedIn).then(|| view! {
-                <div class="ticket-stamp" aria-hidden="true">
+                <div class="ticket-stamp" class:ticket-stamp--live=stamp_live aria-hidden="true">
+                    <svg class="ticket-stamp-mark" viewBox="0 0 24 30">
+                        <path d=crate::pages::landing::hall::CHAIR class="ticket-stamp-chair" />
+                        <circle cx="13.5" cy="9" r="4.6" class="ticket-stamp-person" />
+                    </svg>
                     {crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.checked_in))}
                 </div>
             })}

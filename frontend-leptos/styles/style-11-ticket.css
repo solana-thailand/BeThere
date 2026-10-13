@@ -121,11 +121,17 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www%2Ew3%2Eorg/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* Passport-style stamp, top right, once checked in. */
+/* Passport-style stamp, top right, once checked in, with the logo's seated
+   mark. Still by default; `--live` (the check-in happened while the ticket
+   was open, plan 046 Phase 2) lands it and drops the person onto the seat:
+   one curve, no bounce (brand/logo README, "Motion"). */
 .ticket-stamp {
     position: absolute;
     top: 0.875rem;
     right: 0.875rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     padding: 0.25rem 0.625rem;
     border: 3px double var(--success);
     border-radius: 6px;
@@ -137,22 +143,49 @@
     text-transform: uppercase;
     transform: rotate(-8deg);
     pointer-events: none;
-    animation: ticket-stamp-land 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.ticket-stamp-mark {
+    width: 0.8em;
+    height: 1em;
+    overflow: visible;
+}
+.ticket-stamp-chair {
+    fill: #6b63f0;
+}
+.ticket-stamp-person {
+    fill: #ff5c39;
+}
+.ticket-stamp--live {
+    animation: ticket-stamp-land 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ticket-stamp--live .ticket-stamp-person {
+    animation: ticket-stamp-drop 0.32s cubic-bezier(0.55, 0, 1, 0.45) 0.45s both;
 }
 
 @keyframes ticket-stamp-land {
     from {
         opacity: 0;
-        transform: rotate(-8deg) scale(2);
+        transform: rotate(-8deg) scale(1.8);
     }
     to {
         opacity: 1;
         transform: rotate(-8deg) scale(1);
     }
 }
+@keyframes ticket-stamp-drop {
+    from {
+        opacity: 0;
+        transform: translateY(-14px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 
 @media (prefers-reduced-motion: reduce) {
-    .ticket-stamp {
+    .ticket-stamp--live,
+    .ticket-stamp--live .ticket-stamp-person {
         animation: none;
     }
 }

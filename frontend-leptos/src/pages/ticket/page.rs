@@ -110,6 +110,8 @@ pub fn Ticket() -> impl IntoView {
     let (show_qr, set_show_qr) = signal(false);
     // Auto-refresh polling state
     let (polling_active, set_polling_active) = signal(false);
+    // Set when a poll sees the check-in happen (plan 046 Phase 2).
+    let stamp_live = StoredValue::new(false);
     let (polling_expired, set_polling_expired) = signal(false);
 
     // Helper: determine which polling tier applies (or None to stop polling)
@@ -277,6 +279,18 @@ pub fn Ticket() -> impl IntoView {
                                 })
                                 .unwrap_or(true);
                             if !unchanged {
+                                // Checked in while the ticket was open: the stamp lands live.
+                                let flipped = state
+                                    .try_with_untracked(|s| match s {
+                                        TicketState::Found(old) => {
+                                            !old.is_checked_in && data.is_checked_in
+                                        }
+                                        _ => false,
+                                    })
+                                    .unwrap_or(false);
+                                if flipped {
+                                    stamp_live.set_value(true);
+                                }
                                 set_state.set(TicketState::Found(Box::new(data)));
                             }
                         }
@@ -405,6 +419,7 @@ pub fn Ticket() -> impl IntoView {
                     TicketState::Found(data) => {
                         let eid = query.get().get("event_id").map(|s| s.to_string());
                         let mut vd = TicketViewData::from_data(&data);
+                        vd.stamp_live = stamp_live.get_value();
                         vd.deposit_href = build_deposit_href(&vd.api_id, eid.as_deref());
                         // Above both views: a new date concerns in-person and
                         // online attendees alike, so it is not a per-view card.
