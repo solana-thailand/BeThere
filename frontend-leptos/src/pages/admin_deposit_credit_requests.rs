@@ -71,11 +71,15 @@ pub fn CreditPayoutCandidates(
     set_refresh_counter: WriteSignal<u32>,
 ) -> impl IntoView {
     let (candidates, set_candidates) = signal(Vec::<CreditRefundRequest>::new());
+    let (no_account, set_no_account) = signal(Vec::<CreditRefundRequest>::new());
     Effect::new(move |_| {
         let _ = refresh_counter.get();
         leptos::task::spawn_local(async move {
             match api::get_credit_payout_candidates().await {
-                Ok(data) => set_candidates.set(data.candidates),
+                Ok(data) => {
+                    set_candidates.set(data.candidates);
+                    set_no_account.set(data.no_account);
+                }
                 // Non-fatal, like the queue: a scanner gets 403 and sees nothing.
                 Err(e) => log::warn!("[admin-deposit] failed to load payout candidates: {e}"),
             }
@@ -101,6 +105,33 @@ pub fn CreditPayoutCandidates(
                         .map(|req| view! {
                             <CreditRefundRow req=req kind=PayoutRowKind::Unrequested set_toast=set_toast set_refresh_counter=set_refresh_counter/>
                         })
+                        .collect_view()
+                }}
+            </div>
+        </Show>
+        // .issues/194: credit that can be neither paid unasked (no account) nor
+        // paid from the queue (no request). Their deposit row may be gone, so
+        // nothing else on this page would show them; read-only, contact them.
+        <Show when=move || !no_account.get().is_empty() fallback=|| ()>
+            <div class="admin-dep-credit-refund-requests">
+                <div class="admin-dep-flow-hint">
+                    <Icon icon=IconName::Warning class="icon-sm"/>
+                    {move || {
+                        let count = no_account.get().len();
+                        let (who, verb) = match count {
+                            1 => ("contact", "holds"),
+                            _ => ("contacts", "hold"),
+                        };
+                        format!(
+                            "{count} {who} {verb} credit with no refund account on file. Contact them for an account, or ask them to request a refund from their ticket."
+                        )
+                    }}
+                </div>
+                {move || {
+                    no_account
+                        .get()
+                        .into_iter()
+                        .map(credit_holder_to_contact)
                         .collect_view()
                 }}
             </div>
@@ -456,4 +487,32 @@ fn credit_sources_view(
         </div>
     }
     .into_any()
+}
+
+/// A credit holder the organizer can only contact (no account, no request):
+/// who, how much, their email to write to, and where the credit came from.
+fn credit_holder_to_contact(req: CreditRefundRequest) -> impl IntoView {
+    let display_name = match req.name.is_empty() {
+        true => req.email.clone(),
+        false => req.name.clone(),
+    };
+    let payable = api::PaidAmounts {
+        thb: req.credit_thb,
+        usdc: req.credit_usdc,
+    };
+    view! {
+        <div class="card admin-dep-credit-refund-row">
+            <div class="flex-row-wrap">
+                <div>
+                    <div class="admin-attendee-name">{utils::escape_html(&display_name)}</div>
+                    <div class="admin-amount-line">{format!("Holds: {payable}")}</div>
+                    <div class="panel-hint">{format!("Email: {}", req.email)}</div>
+                    {credit_sources_view(req.sources)}
+                </div>
+                <div class="admin-dep-payout-status">
+                    <span class="badge badge-warning">"No account on file"</span>
+                </div>
+            </div>
+        </div>
+    }
 }

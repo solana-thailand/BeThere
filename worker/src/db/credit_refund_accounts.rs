@@ -346,6 +346,47 @@ pub(crate) const DEPOSIT_ACCOUNT_HOLDERS_SQL: &str = concat!(
      ORDER BY h.account_captured_at, h.email"
 );
 
+/// People who hold payable credit but can be neither paid unasked nor found in
+/// the request queue (`.issues/194`): no refund account on any of their emails
+/// and no open request. Their deposit row (where the account would have been
+/// copied from) may be gone — the nightly cleanup deleted RTM #3's — so without
+/// this list nobody would see them. One row per person: the lowest email of the
+/// person's linked emails speaks for them. Same column aliases as the request
+/// queue; the account columns are NULL. Outer columns stay out of subquery
+/// `ORDER BY` (SQLite 3.45, see [`DEPOSIT_ACCOUNT_HOLDERS_SQL`]).
+pub(crate) const NO_ACCOUNT_HOLDERS_SQL: &str = concat!(
+    "SELECT * FROM (SELECT \
+       b.email AS email, \
+       COALESCE((SELECT c.name FROM contacts c WHERE LOWER(c.email) = b.email \
+                   AND COALESCE(c.name, '') <> '' LIMIT 1), \
+                (SELECT t.name FROM attendees t WHERE LOWER(t.email) = b.email \
+                   AND COALESCE(t.name, '') <> '' LIMIT 1), '') AS name, \
+       COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                 WHERE l.currency = 'thb' AND l.email IN ",
+    crate::db::person::person_emails_of!("b.email"),
+    "), 0) AS credit_thb, \
+       COALESCE((SELECT SUM(l.delta) FROM credit_ledger l \
+                 WHERE l.currency = 'usdc' AND l.email IN ",
+    crate::db::person::person_emails_of!("b.email"),
+    "), 0) AS credit_usdc, \
+       (SELECT json_group_array(DISTINCT l.organization_id) FROM credit_ledger l \
+         WHERE l.email IN ",
+    crate::db::person::person_emails_of!("b.email"),
+    ") AS org_ids, ",
+    crate::db::credit_ledger::credit_sources_of!("b.email"),
+    " AS sources_json \
+     FROM (SELECT MIN(l.email) AS email FROM credit_ledger l \
+           LEFT JOIN person_emails p ON p.email = l.email \
+           GROUP BY COALESCE(p.person_id, l.email)) b \
+     WHERE NOT EXISTS (SELECT 1 FROM credit_refund_accounts r WHERE r.email IN ",
+    crate::db::person::person_emails_of!("b.email"),
+    ") AND NOT EXISTS (SELECT 1 FROM contacts c \
+         WHERE c.credit_refund_requested = 1 AND LOWER(c.email) IN ",
+    crate::db::person::person_emails_of!("b.email"),
+    ")) h WHERE h.credit_thb > 0 OR h.credit_usdc > 0 \
+     ORDER BY h.name, h.email"
+);
+
 /// Whether the person has an open credit refund request
 /// ([`OPEN_REQUEST_FOR_PERSON_SQL`]). Errors propagate: the payout must not
 /// guess.
@@ -362,6 +403,19 @@ pub async fn open_request_for_person(db: &D1Database, email: &str) -> Result<boo
         .and_then(|n| n.as_i64())
         .unwrap_or(0)
         > 0)
+}
+
+/// Payable credit holders with no account on file and no open request
+/// ([`NO_ACCOUNT_HOLDERS_SQL`]). Call after [`deposit_account_holders`], which
+/// releases ended events' credit first, so both lists read the same balances.
+pub async fn no_account_holders(db: &D1Database) -> Result<Vec<CreditRefundRequest>, String> {
+    let stmt = db.prepare(NO_ACCOUNT_HOLDERS_SQL);
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|v| serde_json::from_value::<CreditRefundRequest>(v).ok())
+        .map(CreditRefundRequest::with_account)
+        .collect())
 }
 
 /// Payable credit holders whose deposit account the organizer may pay to
