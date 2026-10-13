@@ -31,6 +31,7 @@ MACRO_SOURCES = {
     "unreturned_apply_of": "db/credit_ledger.rs",
     "positive_buckets_of": "db/credit_ledger.rs",
     "chosen_account_email_of": "db/credit_refund_accounts.rs",
+    "credit_sources_of": "db/credit_ledger.rs",
 }
 
 # `name!("literal")` or `name!($param)`, with any path prefix (`crate::db::x::`,
@@ -51,6 +52,11 @@ def macro_body(name):
 def expand_concat(args, arg=None):
     """Evaluate a `concat!(...)` argument list: literals, `$param`
     placeholders bound to `arg`, and nested macro calls (recursively)."""
+    # A SQL macro missing from MACRO_SOURCES would not match MACRO_CALL and
+    # drop out as just its argument, so a test could pass on the wrong SQL.
+    unknown = set(re.findall(r"(\w+_of)!\(", args)) - set(MACRO_SOURCES)
+    if unknown:
+        raise KeyError(f"register these SQL macros in MACRO_SOURCES: {sorted(unknown)}")
     parts = []
     token = MACRO_CALL + "|" + LITERAL + r"|\$(\w+)"
     for match in re.finditer(token, args):

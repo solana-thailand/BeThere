@@ -708,6 +708,9 @@ pub struct CreditRefundRequest {
     /// The attendee replaced their deposit account with a different one.
     #[serde(default)]
     pub account_replaced_deposit: bool,
+    /// The deposits the credit was held from: event, its sheet, the slip.
+    #[serde(default)]
+    pub sources: Vec<event_checkin_domain::models::credit_payout::CreditSource>,
 }
 
 /// Response for GET /api/deposit/credit-refund-requests — admin lists contacts
