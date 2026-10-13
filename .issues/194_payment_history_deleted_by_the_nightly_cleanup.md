@@ -1,12 +1,13 @@
 # 194 — Payment history of past events is deleted by the nightly cleanup
 
-**Status:** in progress (2026-10-13, session `event-checkin-11`). Fixes 1 and
-2 are deployed to prod (pull 280 + pull 281, release pull 282, `028fa748`,
-version `3f20edad`, 2026-10-13 16:48 UTC, after backup
-`backup-prod-20261013-2342.sql`); RTM #4 is safe. Still open: the RTM #3
-restore (fix 3, owner go) and the retention decision (fix 4). Owner
-2026-10-13: "the payment history of every past event should stay, for audit,
-but it is gone now; is it the cron?" It is.
+**Status:** deployed (2026-10-14, session `event-checkin-11`). Fixes 1 and 2
+on prod (pull 280 + pull 281, release pull 282, `028fa748`, version
+`3f20edad`, 2026-10-13 16:48 UTC, after backup
+`backup-prod-20261013-2342.sql`); RTM #4 is safe. Fix 3 (RTM #3 restore) run
+on prod 2026-10-13 ~17:00 UTC after backup
+`backup-prod-20261013-2352-pre-rtm3-restore.sql`. Fix 4: owner keeps
+everything for now. Owner 2026-10-13: "the payment history of every past
+event should stay, for audit, but it is gone now; is it the cron?" It is.
 
 ## What happened
 
@@ -71,8 +72,19 @@ visible through their deposit account.
    no automatic writer acts on them except the nightly archive copy (14
    amount-only rows). One row comes back verified and not refunded: the
    owner's own ฿500 (checked in 20 Jun).
-4. **Retention policy** (owner decision, with `.issues/160`): rows now stay
-   indefinitely, bank fields and slip URLs included. If personal data should
+
+   **Done 2026-10-13 (owner go).** Prod read-back: 14 rows, ฿7,000, 11
+   refunded, 2 held, source `cash`; `credit_ledger` 61 rows before and after.
+   Side effect the trial missed (it diffed a fixed table list; wrangler
+   reported 57 changes against 42 statements): the `deposit_statuses` trigger
+   `notification_deposit_insert` queued 14 `deposit_confirmed` rows in
+   `notification_outbox` (ids 2015–2028). Nothing was sent (prod
+   `NOTIFICATIONS_ENABLED = "0"`), but they were visible in the in-app inbox,
+   and `cancel.sql` only runs inside the disabled dispatch. Cancelled on the
+   owner's go (`status='cancelled'`, `NO_LONGER_ELIGIBLE`, 14 changes);
+   `notification_inbox_visible` shows 0 for the event.
+4. **Retention policy** (owner 2026-10-14: keep everything for now; revisit
+   with `.issues/160`): rows stay indefinitely, bank fields and slip URLs included. If personal data should
    still go after a period, scrub those fields on settled rows instead of
    deleting the payment.
 
