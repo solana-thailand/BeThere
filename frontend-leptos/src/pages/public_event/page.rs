@@ -8,6 +8,8 @@ use super::share_button::share_button;
 use super::types::*;
 use crate::i18n::{t, t_string, td_string, use_i18n};
 use crate::icons::{Icon, IconName};
+use crate::pages::landing::frame::SiteFrame;
+use crate::pages::site::doors::SitePage;
 use leptos::prelude::*;
 use leptos_meta::{Meta, Title};
 use leptos_router::hooks::use_params;
@@ -347,27 +349,11 @@ pub fn PublicEvent() -> impl IntoView {
                 ().into_any()
             }
         }}
-        <div class="center-page pe-bg-anim">
-            // Latent-space animated background layer (nebula mesh, color blobs,
-            // aurora sweep, twinkling starfield). Purely decorative — aria-hidden,
-            // pointer-events disabled in CSS.
-            <div class="pe-bg-layer" aria-hidden="true">
-                <div class="pe-bg-nebula"></div>
-                <div class="pe-bg-aurora"></div>
-                <div class="pe-bg-orb pe-bg-orb-1"></div>
-                <div class="pe-bg-orb pe-bg-orb-2"></div>
-                <div class="pe-bg-orb pe-bg-orb-3"></div>
-                <div class="pe-bg-orb pe-bg-orb-4"></div>
-                <div class="pe-bg-stars"></div>
-            </div>
-            <div class="container layout-col-center pe-container-nogap">
-
-                // Back link
-                <div class="pe-back-wrap">
-                    <a href="/" class="pe-back-link">
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.back_home))}
-                    </a>
-                </div>
+        // The site's header, theme and footer (.plans/046 Phase 1); the doors
+        // at the foot lead on to the rest of the site.
+        <SiteFrame here=SitePage::Events auth_state=auth_state>
+        <main class="lp-att">
+            <div class="lp-wrap lp-ev-wrap layout-col-center pe-container-nogap">
 
                 // Page state
                 {move || {
@@ -441,15 +427,9 @@ pub fn PublicEvent() -> impl IntoView {
                     }
                 }}
 
-                // Footer
-                <div class="pe-footer">
-                    <p>
-                        {crate::locale::tr(|l| crate::i18n::td_string!(l, event.powered_by))}" "
-                        <a href="/" class="pe-footer-link">"BeThere"</a>
-                    </p>
-                </div>
             </div>
-        </div>
+        </main>
+        </SiteFrame>
     }
 }
 

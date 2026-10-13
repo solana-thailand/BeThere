@@ -1,6 +1,6 @@
 # 046 — Attendee path onto the site design (UX)
 
-Status: Phase 0 in review (pull 247); Phases 1–2 not started.
+Status: in progress. Phase 0 deployed (pull 247, prod `6cda00ee`). Logo A2 + Phase 1 (all six pages) on develop and staging `9d1665ae` (2026-10-13; pulls 251–258); prod waits on the owner's go. Phase 2 not started.
 
 Owner, 2026-10-12, after the hackathon submission: "better UI/UX", after
 the critical fixes (191 → 160 → 165). Audit screenshots (390 px, dark):
@@ -23,12 +23,12 @@ dark-blue and orange "Proof of Attendance" shell (`brand-logo` +
 | login | `pages/login.rs:153` | style-01-core.css |
 | `/sandbox` | `pages/sandbox/` | mixed |
 
-## Phase 0 — quick fixes (pull 247)
+## Phase 0 — quick fixes (pull 247, deployed)
 
 - [x] `/events` "about every 1 weeks" → "about every week" (`Cadence::weekly`, en/th, static home).
 - [x] Cadence quoted the online Latent Space series: a 6–6 tie with RTM, and `max_by_key` kept the last. A tie now keeps the first listed.
 - [x] `/deposit` for an ended event with nothing on file: the title was "Something went wrong"; it now says "This event has ended" and links to `/events`.
-- [ ] Logo mismatch: moved to Phase 1. It is the shell swap, not a one-liner.
+- [x] Logo mismatch: the final A2 mark (chair + person, `bethere-ux/brand/logo`) in the site header, footer, favicon and apple-touch icon (pull 251); the old orange logo left with Phase 1.
 
 ## Phase 1 — one page per PR
 
@@ -42,6 +42,35 @@ Each PR:
 - keeps `.staff.css` selectors out of attendee markup (`staff_css_fence.py`);
 - attaches before/after screenshots: 390 px and desktop, light and dark, en and th;
 - is verified by opening the page on staging (`docs/web-verification-runbook.md`), not by clippy + curl.
+
+### Done (2026-10-13, on develop + staging)
+
+| Page | Pull | Notes |
+|---|---|---|
+| `/deposit/{attendee}` | 252 | first page; Linux baselines added |
+| `/e/{slug}` + register form | 253 | ~300 lines of animated background CSS removed; `public_event` reuses the landing `AuthState` |
+| `/ticket/{attendee}` | 254 | state banner = ink box with a state-coloured top edge; action cards flat |
+| `/claim/{token}` | 255 | gradient glass panels flattened; `tests/css_braces.rs` added after a conflict dropped a `}` |
+| `/login` | 256 | `.brand-logo` rules removed (nothing renders them now) |
+| `/sandbox` | 257, 258 | no doors (one is this page); inline `code` AA |
+
+How it works: every framed attendee page wraps its content in
+`SiteFrame` + `<main class="lp-att">`. `style-24-attendee-site.css` maps the
+old tokens (`--bg-*`, `--text-*`, `--accent`, radii) onto the landing ones
+inside `.lp-att`, then restyles only hard-coded values. `FRAMED_PREFIXES`
+(`locale.rs`) turns the old language bar off on these routes. Fills that
+carry paper text use `#5a54cb` (AA), not `--lp-field`.
+
+How it was checked: the local fixture worker (e2e seed) plus a contrast
+probe over every text node, which also flags text on a gradient. It was
+proven to fail on the unfixed CSS; it is in
+`~/worktrees/event-checkin/scratch/probes/ev_colors.mjs` (scratch). Also all
+14 a11y specs, the CI visual baselines, and staging after the deploy (which
+found the sandbox `code` colour).
+
+Not seen yet: the claim page's checked-in, quiz and success states (the
+fixture has no check-in); the live sandbox flow past its first screen; Thai
+on every page except `/deposit`.
 
 ## Phase 2
 

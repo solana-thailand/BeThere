@@ -19,6 +19,8 @@ use leptos_router::hooks::use_params;
 
 use crate::api;
 use crate::components::{self as app_components, Toast};
+use crate::pages::landing::frame::{SiteFrame, use_site_auth};
+use crate::pages::site::doors::SitePage;
 
 use self::types::*;
 
@@ -158,14 +160,15 @@ pub fn Deposit() -> impl IntoView {
 
     let has_wallets = move || !detected_wallets.get().is_empty();
 
+    // The site's header, theme and footer (.plans/046 Phase 1): the page sits
+    // in the same frame as /events, not in the old dark shell.
+    let (auth_state, _) = use_site_auth();
+
     view! {
         <Title text=crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.page_title)) />
-        <div class="center-page">
-            <div class="container layout-col-center">
-                // Logo
-                <div class="brand-logo">"BeThere"</div>
-                <div class="brand-logo-sub">"Proof of Attendance"</div>
-
+        <SiteFrame here=SitePage::Events auth_state=auth_state own_doors=true>
+        <main class="lp-att">
+            <div class="lp-wrap lp-dep-wrap layout-col-center">
                 <h1 class="claim-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, deposit.title))}</h1>
 
                 // Event context header
@@ -395,15 +398,9 @@ pub fn Deposit() -> impl IntoView {
                     }
                 }}
 
-                // Footer
-                <div class="claim-footer loading-top">
-                    <div class="brand-line">
-                        <span class="accent">"BeThere"</span>
-                        " — Proof of Attendance"
-                    </div>
-                </div>
             </div>
-        </div>
+        </main>
+        </SiteFrame>
 
         // Toast notifications
         <Toast toast_signal=toast />

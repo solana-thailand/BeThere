@@ -30,6 +30,7 @@
     "copy_markup tests/copy_markup.rs": 6,
     "credit_payout_form tests/credit_payout_form.rs": 9,
     "csp_no_eval tests/csp_no_eval.rs": 2,
+    "css_braces tests/css_braces.rs": 2,
     "css_class_audit tests/css_class_audit.rs": 5,
     "css_tokens_defined tests/css_tokens_defined.rs": 2,
     "dashboard_poll_policy tests/dashboard_poll_policy.rs": 6,

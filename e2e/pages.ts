@@ -59,6 +59,9 @@ export const PAGES: AppPage[] = [
   // event picker rather than a name.
   { name: "staff", path: "/staff", authed: true, ready: ".scanner-event-label" },
   { name: "ticket", path: `/ticket/${ATTENDEE_ID}?event_id=${EVENT_ID}`, authed: true, ready: EVENT_LOADED },
+  // The deposit page in the site frame (.plans/046 Phase 1): the fixture's
+  // THB event with nothing paid yet, so the method card is the state shown.
+  { name: "deposit", path: `/deposit/${ATTENDEE_ID}?event_id=${EVENT_ID}`, authed: true, ready: ".dep2-method-cta" },
   { name: "claim", path: `/claim/${CLAIM_TOKEN}`, authed: false, ready: EVENT_LOADED },
 ];
 

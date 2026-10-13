@@ -140,12 +140,9 @@ pub struct FieldErrors {
 // Auth state
 // ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug)]
-pub enum AuthState {
-    Checking,
-    SignedIn(String),
-    NotSignedIn,
-}
+/// The site's one auth state: the event page hands the same signal to the
+/// site frame's header (.plans/046 Phase 1).
+pub use crate::pages::landing::AuthState;
 
 // ---------------------------------------------------------------------------
 // My-registration lookup

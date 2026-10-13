@@ -15,6 +15,8 @@ use crate::api;
 use crate::auth::get_url_error;
 use crate::i18n::{t_string, use_i18n};
 use crate::icons::{Icon, IconName};
+use crate::pages::landing::frame::{SiteFrame, use_site_auth};
+use crate::pages::site::doors::SitePage;
 
 /// Google SVG icon markup.
 fn google_icon() -> &'static str {
@@ -146,13 +148,12 @@ pub fn Login() -> impl IntoView {
         });
     };
 
+    // The site's header, theme and footer (.plans/046 Phase 1).
+    let (auth_state, _) = use_site_auth();
     view! {
-        <div class="center-page">
-            <div class="container login-center-col">
-                // Logo
-                <div class="brand-logo">"BeThere"</div>
-                <div class="brand-logo-sub">"Proof of Attendance"</div>
-
+        <SiteFrame here=SitePage::Home auth_state=auth_state own_doors=true>
+        <main class="lp-att">
+            <div class="lp-wrap lp-dep-wrap login-center-col">
                 // Title
                 <h1 class="claim-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, login.title))}</h1>
 
@@ -226,14 +227,8 @@ pub fn Login() -> impl IntoView {
                     {crate::locale::tr(|l| crate::i18n::td_string!(l, login.back_home))}
                 </a>
 
-                // Footer
-                <div class="claim-footer">
-                    <div class="brand-line">
-                        <span class="accent">"BeThere"</span>
-                        " — Proof of Attendance"
-                    </div>
-                </div>
             </div>
-        </div>
+        </main>
+        </SiteFrame>
     }
 }

@@ -82,6 +82,18 @@ const ATTENDEE_EVENT_SUFFIXES: [&str; 2] = ["/recap", "/post-event-register"];
 /// step with `SitePage`.
 pub const FRAMED_PATHS: [&str; 4] = ["/", "/events", "/organizers", "/sponsors"];
 
+/// Attendee pages moved into the site frame (.plans/046 Phase 1), matched by
+/// prefix because most carry an id: `/deposit/{attendee}`, `/e/{slug}`,
+/// `/ticket/{attendee}`, `/claim/{token}`; and `/login`, `/sandbox`.
+pub const FRAMED_PREFIXES: [&str; 6] = [
+    "/deposit/",
+    "/e/",
+    "/ticket/",
+    "/claim/",
+    "/login",
+    "/sandbox",
+];
+
 /// Whether `path` is a bilingual attendee page (`/` and `/login` included).
 /// `/events` is matched exactly: deeper `/events/…` pages are staff-only
 /// unless they end in an attendee suffix.
@@ -96,7 +108,9 @@ pub fn is_attendee_path(path: &str) -> bool {
 /// Whether the language bar above the page is drawn: on attendee pages,
 /// except the framed ones, whose header carries the switch inline.
 pub fn shows_lang_bar(path: &str) -> bool {
-    !FRAMED_PATHS.contains(&path) && is_attendee_path(path)
+    let framed =
+        FRAMED_PATHS.contains(&path) || FRAMED_PREFIXES.iter().any(|p| path.starts_with(p));
+    !framed && is_attendee_path(path)
 }
 
 /// The switch, on attendee pages only.
