@@ -120,8 +120,13 @@ pub fn PublicEvent() -> impl IntoView {
                                     );
                                     if api_resp.success {
                                         if let Some(data) = api_resp.data {
-                                            let is_completed = data.status == "completed"
-                                                || data.status == "Completed";
+                                            let now_ms = js_sys::Date::now() as i64;
+                                            let is_completed = crate::utils::event_window::is_over(
+                                                &data.status,
+                                                data.event_end_ms,
+                                                data.time_tba,
+                                                now_ms,
+                                            );
                                             let start_ms = data.event_start_ms;
                                             let name = data.name.clone();
                                             set_event_name.set(name);
@@ -129,7 +134,6 @@ pub fn PublicEvent() -> impl IntoView {
                                             set_state.set(PublicEventState::Loaded(data));
 
                                             // Start countdown if event is in the future
-                                            let now_ms = js_sys::Date::now() as i64;
                                             if !is_completed && start_ms > now_ms {
                                                 set_countdown.set(format_countdown(
                                                     start_ms - now_ms,
@@ -450,7 +454,8 @@ fn render_loaded_event(
     wallet_only: ReadSignal<bool>,
     credit_thb: ReadSignal<u64>,
 ) -> AnyView {
-    if data.status.eq_ignore_ascii_case("completed") {
+    // Over by status or by its end time (`event_completed`, set on load).
+    if event_completed.get_untracked() {
         return completed_event_gateway(data, countdown, event_completed);
     }
     let i18n = use_i18n();
