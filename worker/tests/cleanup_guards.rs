@@ -169,3 +169,34 @@ fn cleanup_failures_carry_no_free_form_error_text() {
         );
     }
 }
+
+/// 4. A cleanup phase that fails must be REPORTABLE, not merely logged.
+///
+/// Every abort path in `run_cleanup` used to write to `tracing` and return a
+/// summary that looked identical to a healthy one. On staging a malformed index
+/// entry aborted the whole run every night from 2026-09-19 and nobody knew for
+/// four days — the cron reported success the entire time. A new error site that
+/// forgets to record its failure silently re-opens exactly that hole, so the
+/// count is pinned rather than spot-checked.
+#[test]
+fn every_cleanup_error_site_records_a_failure() {
+    let code = strip_comments(&src("src/cleanup.rs"));
+
+    // Whitespace-free, because rustfmt breaks a long push across three lines
+    // and a literal `failures.push(` search would then miss it — a guard that
+    // silently stops matching is worse than no guard.
+    let dense: String = code.chars().filter(|c| !c.is_whitespace()).collect();
+    let logged = dense.matches("tracing::error!").count();
+    let recorded = dense.matches(".failures.push(").count();
+
+    assert!(
+        logged > 0,
+        "cleanup should still log its failures — the guard reads the wrong file otherwise"
+    );
+    assert_eq!(
+        logged, recorded,
+        "{logged} error site(s) in cleanup.rs but {recorded} recorded failure(s): an \
+         unrecorded abort is invisible to the nightly alert, which is how the \
+         2026-09-19 staging outage lasted four days"
+    );
+}
