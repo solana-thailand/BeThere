@@ -301,21 +301,6 @@ pub async fn save_deposit_status(db: &D1Database, status: &DepositStatus) -> Res
     }
 }
 
-/// Delete all deposit statuses for an event (cleanup).
-pub async fn delete_deposit_statuses_for_event(
-    db: &D1Database,
-    event_id: &str,
-) -> Result<(), String> {
-    let stmt = db.prepare("DELETE FROM deposit_statuses WHERE event_id = ?1");
-    stmt.bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 delete_deposit_statuses bind: {e:?}"))?
-        .run()
-        .await
-        .map_err(|e| format!("D1 delete_deposit_statuses run: {e:?}"))?;
-
-    Ok(())
-}
-
 /// Delete a single deposit status by event + attendee (attendee deletion).
 pub async fn delete_deposit_status(
     db: &D1Database,
