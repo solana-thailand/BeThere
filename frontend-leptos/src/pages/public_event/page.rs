@@ -909,6 +909,8 @@ fn completed_event_gateway(
     let slug = data.slug.clone();
     let archive_url = data.archive_url.clone();
     let enrollment_open = data.post_event_registration_accepting;
+    // With a recording, registering is how people watch it (owner 2026-10-13).
+    let to_watch = enrollment_open && data.has_recording;
     let poster_url = data.poster_url.clone();
     let nft_image_url = data.nft_image_url.clone();
     let community_links = data.community_links.clone();
@@ -932,7 +934,12 @@ fn completed_event_gateway(
             <h2 class="pe-section-title">
                 <Icon icon=IconName::Party class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_title))}
             </h2>
-            <p class="pe-detail-secondary pe-mb-075">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_body))}</p>
+            <p class="pe-detail-secondary pe-mb-075">
+                {match to_watch {
+                    true => crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_body_recording)),
+                    false => crate::locale::tr(|l| crate::i18n::td_string!(l, event.ended_body)),
+                }}
+            </p>
 
             <div class="pe-btn-row-center">
                 {if !archive_url.is_empty() {
@@ -949,9 +956,17 @@ fn completed_event_gateway(
                 }}
 
                 {if enrollment_open {
-                    let href = format!("/events/{slug}/post-event-register");
+                    let href = match to_watch {
+                        true => format!("/events/{slug}/post-event-register?watch=1"),
+                        false => format!("/events/{slug}/post-event-register"),
+                    };
                     view! {
-                        <a href=href class="btn btn-primary btn-sm">" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.join_community))}</a>
+                        <a href=href class="btn btn-primary btn-sm">
+                            {match to_watch {
+                                true => crate::locale::tr(|l| crate::i18n::td_string!(l, event.watch_recording)),
+                                false => crate::locale::tr(|l| crate::i18n::td_string!(l, event.join_community)),
+                            }}
+                        </a>
                     }.into_any()
                 } else {
                     ().into_any()

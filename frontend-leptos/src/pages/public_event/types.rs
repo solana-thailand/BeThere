@@ -199,6 +199,10 @@ pub struct PublicEventData {
     /// by the Worker. It is empty when the event has no verified archive.
     #[serde(default)]
     pub archive_url: String,
+    /// The event has a public recording (never the link: registering is how
+    /// people watch it).
+    #[serde(default)]
+    pub has_recording: bool,
     pub status: String,
     pub event_start_ms: i64,
     pub event_end_ms: i64,

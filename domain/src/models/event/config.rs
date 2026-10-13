@@ -444,15 +444,35 @@ impl EventConfig {
     }
 
     /// Whether post-event registration actually accepts a submission at `now_ms`
-    /// — the organizer's toggle is on **and** the deadline has not passed.
+    /// — it is open (the organizer's toggle, **or** the event has a recording:
+    /// registering is how people watch it, owner 2026-10-13) **and** the
+    /// deadline has not passed.
     ///
-    /// This is the value public surfaces should gate a "join the community" CTA
-    /// on: the raw `post_event_registration_open` flag stays `true` after the
+    /// This is the value public surfaces should gate the post-event CTA on:
+    /// the raw `post_event_registration_open` flag stays `true` after the
     /// deadline lapses, so rendering the CTA from it invites a visitor to sign
     /// in and fill a form that `POST /api/public/events/{slug}/post-event-register`
     /// answers `410 Gone`. Plan 008 — Phase 3.
     pub fn post_event_registration_accepting(&self, now_ms: i64) -> bool {
-        self.post_event_registration_open && !self.post_event_registration_deadline_passed(now_ms)
+        (self.post_event_registration_open || self.recording_url().is_some())
+            && !self.post_event_registration_deadline_passed(now_ms)
+    }
+
+    /// Over at `now_ms`: marked completed, or past its end time
+    /// ([`super::is_over`]).
+    pub fn is_over(&self, now_ms: i64) -> bool {
+        super::is_over(
+            self.status == EventStatus::Completed,
+            self.event_end_ms,
+            self.time_tba,
+            now_ms,
+        )
+    }
+
+    /// The recording (the event's `video_url`) when it is a public `https://`
+    /// link.
+    pub fn recording_url(&self) -> Option<String> {
+        super::https_public_url(&self.video_url)
     }
 
     /// Resolve the NFT name, expanding `{event_name}` placeholder.
@@ -512,12 +532,7 @@ impl EventConfig {
     /// date-only times, so its end counts from the end of that day. An end of `0`
     /// (never set) never closes it.
     pub fn in_person_registration_closed(&self, now_ms: i64) -> bool {
-        const DAY_MS: i64 = 86_400_000;
-        match self.event_end_ms {
-            0 => false,
-            end if self.time_tba => now_ms >= end.saturating_add(DAY_MS),
-            end => now_ms >= end,
-        }
+        super::window::ended(self.event_end_ms, self.time_tba, now_ms)
     }
 
     /// Is the refund deadline still in the future?

@@ -40,6 +40,11 @@ FROM campaigns c JOIN campaign_events ce ON ce.campaign_id = c.id JOIN events e 
 WHERE c.id = ?1 AND c.status = 'active' AND e.visibility = 'public' AND e.status IN ('active', 'completed') \
 ORDER BY e.event_start_ms";
 
+/// The active course a public event is an episode of, if any. ?1 event id.
+pub const EVENT_COURSE_SQL: &str = "SELECT c.id AS id FROM campaigns c \
+JOIN campaign_events ce ON ce.campaign_id = c.id \
+WHERE ce.event_id = ?1 AND c.status = 'active' ORDER BY c.id LIMIT 1";
+
 /// Whether a course is open for registration. ?1 course.
 pub const COURSE_OPEN_SQL: &str =
     "SELECT 1 AS open FROM campaigns WHERE id = ?1 AND status = 'active'";
@@ -219,6 +224,21 @@ pub async fn course(db: &D1Database, id: &str) -> Result<Option<CourseDetail>, S
         .map_err(|e| format!("D1 course bind: {e:?}"))?;
     let rows = crate::db::d1_safe::safe_all_rows(&stmt).await?;
     Ok(fold_course(&rows))
+}
+
+/// The active course `event_id` belongs to, for "continue the course" after
+/// registering to watch its recording.
+pub async fn course_of_event(db: &D1Database, event_id: &str) -> Result<Option<String>, String> {
+    let stmt = db
+        .prepare(EVENT_COURSE_SQL)
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 event course bind: {e:?}"))?;
+    let rows = crate::db::d1_safe::safe_all_rows(&stmt).await?;
+    Ok(rows
+        .first()
+        .and_then(|r| r.get("id"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string))
 }
 
 pub async fn is_open(db: &D1Database, id: &str) -> Result<bool, String> {
