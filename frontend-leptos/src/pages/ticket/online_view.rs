@@ -7,9 +7,9 @@ use wasm_bindgen::prelude::*;
 use super::action_cards::*;
 use super::calendar_links::CalendarLinks;
 use super::event_context::EventContext;
+use super::materials::TimelineSlot;
 use super::nft_badge::NftClaimedBadge;
 use super::timeline::{Timeline, TimelineStep};
-use super::video_section::VideoSection;
 use super::view_data::TicketViewData;
 use crate::i18n::{t, use_i18n};
 use crate::icons::{Icon, IconName};
@@ -140,6 +140,82 @@ pub fn OnlineView(
         None
     };
 
+    // 3. Timeline — "What's Next?". Rebuilt when the event ends; the
+    // countdown inside ticks on its own. Once the event is over it is history,
+    // so it goes below the claim and the recording (.plans/047).
+    let timeline_slot = TimelineSlot::for_event(event_over);
+    let timeline = move || {
+        if retrospective {
+            return ().into_any();
+        }
+        let ended = event_ended.get();
+        let quest_link = quest_link.clone();
+        view! {
+            <Timeline steps=vec![
+                TimelineStep {
+                    done: true,
+                    number: 1,
+                    title: ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.register))),
+                    desc: ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.register_done))),
+                    link: None,
+                },
+                TimelineStep {
+                    done: ended,
+                    number: 2,
+                    title: ViewFn::from(move || match ended {
+                        true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.event_ended)).into_any(),
+                        false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.wait_for_event)).into_any(),
+                    }),
+                    desc: ViewFn::from(move || match ended {
+                        true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.event_ended_desc)).into_any(),
+                        false => (move || countdown().unwrap_or_else(|| {
+                            crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claims_open_after)).into_any()
+                        })).into_any(),
+                    }),
+                    link: None,
+                },
+                TimelineStep {
+                    done: is_checked_in,
+                    number: 3,
+                    title: ViewFn::from(move || {
+                        if is_checked_in {
+                            crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.quest_completed)).into_any()
+                        } else if quiz_enabled {
+                            crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.complete_quest)).into_any()
+                        } else {
+                            crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.virtual_check_in)).into_any()
+                        }
+                    }),
+                    desc: ViewFn::from(move || {
+                        if is_checked_in {
+                            crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.virtual_check_in_done)).into_any()
+                        } else if quiz_enabled {
+                            crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.pass_quiz)).into_any()
+                        } else {
+                            crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claim_opens_after)).into_any()
+                        }
+                    }),
+                    link: quest_link,
+                },
+                TimelineStep {
+                    done: claimed,
+                    number: 4,
+                    title: ViewFn::from(move || match claimed {
+                        true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.badge_claimed)).into_any(),
+                        false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claim_badge)).into_any(),
+                    }),
+                    desc: ViewFn::from(move || match claimed {
+                        true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.badge_minted)).into_any(),
+                        false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.mint_badge)).into_any(),
+                    }),
+                    link: None,
+                },
+            ] />
+        }
+        .into_any()
+    };
+    let timeline_history = timeline.clone();
+
     view! {
         // 1. Hero banner
         <super::hero::TicketHero
@@ -214,78 +290,8 @@ pub fn OnlineView(
             }}
         </div>
 
-        // 3. Timeline — "What's Next?"
-        // Rebuilt when the event ends; the countdown inside ticks on its own.
-        {move || {
-            if retrospective {
-                return ().into_any();
-            }
-            let ended = event_ended.get();
-            let quest_link = quest_link.clone();
-            view! {
-                <Timeline steps=vec![
-                    TimelineStep {
-                        done: true,
-                        number: 1,
-                        title: ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.register))),
-                        desc: ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.register_done))),
-                        link: None,
-                    },
-                    TimelineStep {
-                        done: ended,
-                        number: 2,
-                        title: ViewFn::from(move || match ended {
-                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.event_ended)).into_any(),
-                            false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.wait_for_event)).into_any(),
-                        }),
-                        desc: ViewFn::from(move || match ended {
-                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.event_ended_desc)).into_any(),
-                            false => (move || countdown().unwrap_or_else(|| {
-                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claims_open_after)).into_any()
-                            })).into_any(),
-                        }),
-                        link: None,
-                    },
-                    TimelineStep {
-                        done: is_checked_in,
-                        number: 3,
-                        title: ViewFn::from(move || {
-                            if is_checked_in {
-                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.quest_completed)).into_any()
-                            } else if quiz_enabled {
-                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.complete_quest)).into_any()
-                            } else {
-                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.virtual_check_in)).into_any()
-                            }
-                        }),
-                        desc: ViewFn::from(move || {
-                            if is_checked_in {
-                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.virtual_check_in_done)).into_any()
-                            } else if quiz_enabled {
-                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.pass_quiz)).into_any()
-                            } else {
-                                crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claim_opens_after)).into_any()
-                            }
-                        }),
-                        link: quest_link,
-                    },
-                    TimelineStep {
-                        done: claimed,
-                        number: 4,
-                        title: ViewFn::from(move || match claimed {
-                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.badge_claimed)).into_any(),
-                            false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.claim_badge)).into_any(),
-                        }),
-                        desc: ViewFn::from(move || match claimed {
-                            true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.badge_minted)).into_any(),
-                            false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.timeline.mint_badge)).into_any(),
-                        }),
-                        link: None,
-                    },
-                ] />
-            }
-            .into_any()
-        }}
+        // 3. Timeline while the event is ahead
+        {(timeline_slot == TimelineSlot::Steps).then_some(timeline)}
 
         // 4. NFT section
         {if retrospective {
@@ -356,18 +362,14 @@ pub fn OnlineView(
             }
         }}
 
-        // 5. Video section
-        {if has_video {
-            view! {
-                <VideoSection video_url=video_url.clone() variant="card".to_string() />
-            }.into_any()
-        } else {
-            view! { <div></div> }.into_any()
-        }}
+        // 5. Recording + slides (.plans/047)
+        {super::materials::materials(has_video, video_url.clone(), community_links.clone())}
+
+        // 3b. Timeline as history once the event is over
+        {(timeline_slot == TimelineSlot::History).then_some(timeline_history)}
 
         // Community links
         {super::announcement::announcement_section(ticket_note.clone())}
-        {crate::pages::ticket::resources::resources_section(community_links.clone())}
         {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::Ticket)}
 
         // 5b. Event series navigation (Plan 013) — "Part of {Series}" + prev/next.
