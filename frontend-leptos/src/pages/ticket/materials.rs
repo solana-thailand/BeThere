@@ -15,9 +15,14 @@ use crate::api::CommunityLink;
 /// The recording (when there is one) and the learning resources.
 pub fn materials(has_video: bool, video_url: String, links: Vec<CommunityLink>) -> AnyView {
     view! {
-        {has_video.then(|| view! {
-            <VideoSection video_url=video_url variant="card".to_string() />
-        })}
+        // The empty div keeps the column's gap where the video would be, as
+        // the views always had; dropping it shifts every ticket by one gap.
+        {match has_video {
+            true => view! {
+                <VideoSection video_url=video_url variant="card".to_string() />
+            }.into_any(),
+            false => view! { <div></div> }.into_any(),
+        }}
         {super::resources::resources_section(links)}
     }
     .into_any()
