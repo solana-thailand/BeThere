@@ -210,6 +210,9 @@ pub async fn register_post_event(
 
         return Ok(ApiOk::new(serde_json::json!({
             "attendee_id": attendee_id,
+            // With the id, the page opens the ticket, which carries the
+            // recording and the slides (.plans/047).
+            "event_id": event_id,
             "message": "Thanks! We'll notify you about future events.",
             "video_url": config.recording_url(),
             "course_id": course_id,

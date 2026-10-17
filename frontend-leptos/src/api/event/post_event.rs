@@ -48,6 +48,10 @@ pub struct PostEventRegisterData {
     /// The active course the event is an episode of, for "continue the course".
     #[serde(default)]
     pub course_id: Option<String>,
+    /// With `attendee_id`, the ticket the page opens next (.plans/047).
+    /// `Option` so an older Worker without it falls back to the done card.
+    #[serde(default)]
+    pub event_id: Option<String>,
 }
 
 /// `POST /api/public/event/{slug}/register-post-event` — submit the lead-capture
