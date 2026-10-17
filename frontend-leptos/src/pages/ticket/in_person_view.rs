@@ -12,7 +12,6 @@ use super::credit_chip::CreditBalanceChip;
 use super::event_context::EventContext;
 use super::nft_badge::NftClaimedBadge;
 use super::qr_section::QrSection;
-use super::video_section::VideoSection;
 use super::view_data::TicketViewData;
 use crate::api::DepositMethod;
 use crate::i18n::{t, t_string, use_i18n};
@@ -517,19 +516,12 @@ pub fn InPersonView(
 
         </div>
 
-        // 5. Video section
-        {if has_video {
-            view! {
-                <VideoSection video_url=video_url.clone() variant="card".to_string() />
-            }.into_any()
-        } else {
-            view! { <div></div> }.into_any()
-        }}
+        // 5. Recording + slides (.plans/047)
+        {super::materials::materials(has_video, video_url.clone(), social_links.clone())}
 
         // Community links (social only — guide links are rendered above
         // in the Access & Logistics card)
         // Slides and other learning resources, in the organizer's order.
-        {crate::pages::ticket::resources::resources_section(social_links.clone())}
         {crate::pages::ticket::community_links::community_links_section(social_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::Ticket)}
 
         // 5b. Event series navigation (Plan 013) — "Part of {Series}" + prev/next.

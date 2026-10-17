@@ -33,6 +33,9 @@ struct PostEventRegisterParams {
 enum RegState {
     /// Verifying the JWT session.
     CheckingAuth,
+    /// The person registered before: one button, no form (.plans/047). The
+    /// name comes from their central profile; "edit details" opens the form.
+    Quick,
     /// Ready to fill the form.
     Form,
     /// Submitting to the API.
@@ -146,7 +149,24 @@ pub fn PostEventRegister() -> impl IntoView {
             // Verify auth via cookie-based API call (HttpOnly cookie may be
             // valid even when localStorage token is absent).
             match crate::api::get_me().await {
-                Ok(_) => set_state.set(RegState::Form),
+                // Prefill from the central profile (.plans/047); someone with
+                // a name on file gets the one-button card. A failed read only
+                // means an empty form.
+                Ok(_) => {
+                    let profile = crate::api::get_my_profile().await.unwrap_or_default();
+                    let known_name = profile.registration_name();
+                    // Name and contact only: the profile stores stack and
+                    // interests as arrays, and sending them back from these
+                    // free-text inputs would rewrite them as one string.
+                    set_contact_channel.set(profile.contact_channel);
+                    set_contact_handle.set(profile.contact_handle);
+                    let next = match known_name.is_empty() {
+                        true => RegState::Form,
+                        false => RegState::Quick,
+                    };
+                    set_name.set(known_name);
+                    set_state.set(next);
+                }
                 Err(_) => {
                     // Keep `?watch=1` through sign-in, so the form still says why.
                     let next = match to_watch_now {
@@ -174,6 +194,12 @@ pub fn PostEventRegister() -> impl IntoView {
     // A form mistake or a refused submit stays next to the form, so nothing
     // typed is lost; only a page that cannot work (no slug) replaces it.
     let (form_error, set_form_error) = signal(None::<RegError>);
+    // Which surface a submit came from, so `Submitting` keeps showing it.
+    let quick_mode = Memo::new(move |was: Option<&bool>| match state.get() {
+        RegState::Quick => true,
+        RegState::Submitting => was.copied().unwrap_or(false),
+        _ => false,
+    });
     // The site's header, theme and footer (.plans/046 Phase 1).
     let (auth_state, _) = use_site_auth();
 
@@ -241,7 +267,62 @@ pub fn PostEventRegister() -> impl IntoView {
                             </A>
                         </div>
                     }.into_any(),
-                    RegState::Form | RegState::Submitting => view! {
+                    // Registered before: one button (.plans/047). Clicking it,
+                    // with the notice beside it, is the consent; marketing
+                    // consent is left as it was (not sent).
+                    RegState::Quick | RegState::Submitting if quick_mode.get_untracked() => view! {
+                        <div class="card" style="width:100%;max-width:540px;">
+                            <h1 style="margin:0 0 0.5rem;">
+                                {move || match to_watch() {
+                                    true => t_string!(i18n, recap.join.title_watch),
+                                    false => t_string!(i18n, recap.join.title),
+                                }}
+                            </h1>
+                            <p class="subtitle" style="margin:0 0 1rem;">
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.quick_as))}
+                                " "<strong>{move || name.get()}</strong>
+                            </p>
+                            <p class="panel-hint" style="margin:0 0 1rem;">
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.quick_consent))}
+                            </p>
+                            {move || form_error.get().map(|e| view! {
+                                <p class="error-msg visible" role="alert" style="margin-bottom:0.5rem;">{reg_error_text(e)}</p>
+                            })}
+                            <button
+                                class="btn btn-primary"
+                                style="width:100%;"
+                                disabled=is_submitting
+                                on:click=move |_| {
+                                    let body = PostEventRegisterBody {
+                                        name: name.get_untracked().trim().to_string(),
+                                        contact_channel: opt_str(contact_channel.get_untracked()),
+                                        contact_handle: opt_str(contact_handle.get_untracked()),
+                                        consent_given: true,
+                                        ..Default::default()
+                                    };
+                                    submit(slug_sig.get_untracked(), body, set_state, set_form_error, RegState::Quick);
+                                }
+                            >
+                                {move || match (is_submitting(), to_watch()) {
+                                    (true, _) => t_string!(i18n, recap.join.submitting),
+                                    (false, true) => t_string!(i18n, recap.join.quick_submit_watch),
+                                    (false, false) => t_string!(i18n, recap.join.quick_submit),
+                                }}
+                            </button>
+                            <button
+                                class="btn btn-outline btn-sm"
+                                style="width:100%;margin-top:0.75rem;"
+                                disabled=is_submitting
+                                on:click=move |_| {
+                                    set_form_error.set(None);
+                                    set_state.set(RegState::Form);
+                                }
+                            >
+                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.edit_details))}
+                            </button>
+                        </div>
+                    }.into_any(),
+                    RegState::Quick | RegState::Form | RegState::Submitting => view! {
                         <div class="card" style="width:100%;max-width:540px;">
                             <h1 style="margin:0 0 0.5rem;">
                                 {move || match to_watch() {
@@ -480,20 +561,7 @@ pub fn PostEventRegister() -> impl IntoView {
                                             &comment.get(),
                                         ),
                                     };
-                                    set_state.set(RegState::Submitting);
-                                    let slug = slug_sig.get();
-                                    leptos::task::spawn_local(async move {
-                                        match api::register_post_event(&slug, &body).await {
-                                            Ok(data) => set_state.set(RegState::Done {
-                                                video_url: data.video_url,
-                                                course_id: data.course_id,
-                                            }),
-                                            Err(e) => {
-                                                set_form_error.set(Some(RegError::Server(e.message)));
-                                                set_state.set(RegState::Form);
-                                            }
-                                        }
-                                    });
+                                    submit(slug_sig.get(), body, set_state, set_form_error, RegState::Form);
                                 }
                                 disabled=is_submitting()
                             >
@@ -510,6 +578,43 @@ pub fn PostEventRegister() -> impl IntoView {
         </main>
         </SiteFrame>
     }
+}
+
+/// Send the registration, then open the ticket, which carries the recording
+/// and the slides (.plans/047). A Worker that sends no `event_id` gets the
+/// done card. A refusal goes back to `back_to` with the error beside it.
+fn submit(
+    slug: String,
+    body: PostEventRegisterBody,
+    set_state: WriteSignal<RegState>,
+    set_form_error: WriteSignal<Option<RegError>>,
+    back_to: RegState,
+) {
+    set_form_error.set(None);
+    set_state.set(RegState::Submitting);
+    leptos::task::spawn_local(async move {
+        match api::register_post_event(&slug, &body).await {
+            Ok(data) => match data.event_id.as_deref() {
+                // A hard navigation: the router's navigate panics when called
+                // from an async callback like this one.
+                Some(event_id) => {
+                    let url = crate::pages::public_event::registered_state::ticket_url(
+                        &data.attendee_id,
+                        event_id,
+                    );
+                    let _ = web_sys::window().map(|w| w.location().set_href(&url));
+                }
+                None => set_state.set(RegState::Done {
+                    video_url: data.video_url,
+                    course_id: data.course_id,
+                }),
+            },
+            Err(e) => {
+                set_form_error.set(Some(RegError::Server(e.message)));
+                set_state.set(back_to);
+            }
+        }
+    });
 }
 
 /// The text for why a registration could not go on, in the reader's language
