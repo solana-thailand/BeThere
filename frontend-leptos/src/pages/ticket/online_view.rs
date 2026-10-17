@@ -57,10 +57,15 @@ pub fn OnlineView(
         event_start_ms: _,
         event_name,
         event_id,
+        participation,
         ..
     } = view_data;
 
     let i18n = use_i18n();
+    // Registered after the event to watch it back (.plans/047): no check-in,
+    // quest or badge can ever happen, so the ticket is just the recording and
+    // the materials.
+    let retrospective = utils::is_retrospective(&participation);
 
     // Live countdown: the clock is a signal updated every 60s; the words are
     // rendered from it in the view, so they follow a language switch.
@@ -140,8 +145,14 @@ pub fn OnlineView(
         <super::hero::TicketHero
             variant="ticket-hero--online"
             icon=IconName::Globe
-            title=move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.online_title))
-            badge=ViewFn::from(move || crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.online_badge)))
+            title=move || match retrospective {
+                true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.retro_title)),
+                false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.online_title)),
+            }
+            badge=ViewFn::from(move || match retrospective {
+                true => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.retro_badge)),
+                false => crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.hero.online_badge)),
+            })
         />
 
         // 2. Main card
@@ -156,8 +167,10 @@ pub fn OnlineView(
                 event_link=event_link.clone()
             />
 
-            // ── Calendar links ──
-            <CalendarLinks subscribe_url=calendar_subscribe_url.clone() />
+            // ── Calendar links ── (nothing to add to a calendar after the event)
+            {(!retrospective).then(|| view! {
+                <CalendarLinks subscribe_url=calendar_subscribe_url.clone() />
+            })}
 
             // Attendee info
             <div class="ticket-info">
@@ -204,6 +217,9 @@ pub fn OnlineView(
         // 3. Timeline — "What's Next?"
         // Rebuilt when the event ends; the countdown inside ticks on its own.
         {move || {
+            if retrospective {
+                return ().into_any();
+            }
             let ended = event_ended.get();
             let quest_link = quest_link.clone();
             view! {
@@ -268,10 +284,13 @@ pub fn OnlineView(
                     },
                 ] />
             }
+            .into_any()
         }}
 
         // 4. NFT section
-        {if claimed {
+        {if retrospective {
+            ().into_any()
+        } else if claimed {
             let asset_id = claimed_asset_id.clone().unwrap_or_default();
             view! {
                 <NftClaimedBadge

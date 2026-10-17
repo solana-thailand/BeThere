@@ -230,6 +230,38 @@ pub(crate) async fn count_events_joined(db: &D1Database, email: &str) -> Result<
     Ok(v.get("c").and_then(|c| c.as_i64()).unwrap_or(0))
 }
 
+/// The name and contact a person last registered with, from `contacts`.
+/// Every registration writes it, so it prefills the next one (.plans/047).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct ContactCard {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub contact_channel: String,
+    #[serde(default)]
+    pub contact_handle: String,
+}
+
+/// Read [`ContactCard`] for an email; `None` when the person never registered.
+pub(crate) async fn get_contact_card(
+    db: &D1Database,
+    email: &str,
+) -> Result<Option<ContactCard>, String> {
+    let rows = db
+        .prepare(
+            "SELECT name, contact_channel, contact_handle FROM contacts \
+             WHERE email = LOWER(?1)",
+        )
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 get_contact_card bind: {e:?}"))?
+        .all()
+        .await
+        .map_err(|e| format!("D1 get_contact_card run: {e:?}"))?
+        .results::<ContactCard>()
+        .map_err(|e| format!("D1 get_contact_card deserialize: {e:?}"))?;
+    Ok(rows.into_iter().next())
+}
+
 /// Get a developer profile by email.
 ///
 /// Bypasses worker crate's `.first::<T>()` which uses `serde_wasm_bindgen::from_value()`

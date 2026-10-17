@@ -30,7 +30,9 @@
     "ended_desc": "Nothing to pay. The recording, if there is one, is below.",
     "ready": "Ready for Check-In",
     "online_title": "Online Registration",
-    "online_badge": "Online Track"
+    "online_badge": "Online Track",
+    "retro_title": "Recording and materials",
+    "retro_badge": "Watching back"
   },
   "info": {
     "name": "Name",

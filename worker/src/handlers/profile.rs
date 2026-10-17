@@ -41,6 +41,12 @@ pub struct MyProfileResponse {
     pub location_city: String,
     pub consent_outreach: bool,
     pub total_events: i64,
+    /// Name and contact from the person's last registration (`contacts`), so
+    /// the next registration form starts filled in (.plans/047). Empty when
+    /// they never registered.
+    pub contact_name: String,
+    pub contact_channel: String,
+    pub contact_handle: String,
 }
 
 /// Profile update request from the attendee.
@@ -155,6 +161,15 @@ pub async fn get_my_profile(
             profile.total_events.unwrap_or(0)
         });
 
+    // Prefill only: a failed read leaves the form empty, not the page broken.
+    let contact = crate::db::developers::get_contact_card(d1, &claims.email)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(identity_fingerprint = %identity_fingerprint, error = %e, "get_contact_card failed; no prefill");
+            None
+        })
+        .unwrap_or_default();
+
     Ok(ApiOk::new(MyProfileResponse {
         email: profile.email,
         display_name: profile.display_name.unwrap_or_default(),
@@ -179,6 +194,9 @@ pub async fn get_my_profile(
         location_city: profile.location_city.unwrap_or_default(),
         consent_outreach: profile.consent_outreach.unwrap_or(0) != 0,
         total_events: events_joined,
+        contact_name: contact.name,
+        contact_channel: contact.contact_channel,
+        contact_handle: contact.contact_handle,
     }))
 }
 
@@ -291,6 +309,9 @@ pub async fn update_my_profile(
         company_org: body.company_org,
         location_city: body.location_city,
         consent_outreach: body.consent_outreach,
-        total_events: 0, // not meaningful here
+        total_events: 0,             // not meaningful here
+        contact_name: String::new(), // read-only here; see GET
+        contact_channel: String::new(),
+        contact_handle: String::new(),
     }))
 }

@@ -57,6 +57,27 @@ pub struct DeveloperProfile {
     pub consent_outreach: bool,
     #[serde(default)]
     pub total_events: i64,
+    /// Name and contact from the last registration (`contacts`), the
+    /// prefill for the next one (.plans/047). Empty when never registered.
+    #[serde(default)]
+    pub contact_name: String,
+    #[serde(default)]
+    pub contact_channel: String,
+    #[serde(default)]
+    pub contact_handle: String,
+}
+
+impl DeveloperProfile {
+    /// The name to register under: the profile's own, else the last
+    /// registration's. Empty when neither exists.
+    pub fn registration_name(&self) -> String {
+        [&self.display_name, &self.contact_name]
+            .into_iter()
+            .map(|n| n.trim())
+            .find(|n| !n.is_empty())
+            .unwrap_or_default()
+            .to_string()
+    }
 }
 
 /// Profile update request body for PUT /api/my-profile.
