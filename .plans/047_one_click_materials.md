@@ -1,6 +1,6 @@
 # 047 — Past-event materials and one-click registration
 
-**Status:** Phase 1 in progress (2026-10-17, session `event-checkin-ef`).
+**Status:** Phase 1 deployed to prod (2026-10-17, session `event-checkin-ef`). Phase 2 not started.
 
 ## Why
 
@@ -55,7 +55,14 @@ YouTube description → /e/{slug} (ended page: recording + "watch" button)
       over. One `materials()` block renders the recording and resources in both
       views (`tests/ticket_materials_order.rs`). Checked on the fixture worker:
       in-person and online ended tickets, claim card first.
-- [ ] Prod (owner go 2026-10-17).
+- [x] Prod (owner go 2026-10-17): release pull 285, `aec56c53`, version
+      `241e02a8`, 16:36 UTC, after backup `backup-prod-20261017-2331.sql`.
+      Checked read-only: content types, headers, `/api/my-profile` 401
+      unauthenticated, RTM #5 ended page shows the watch button and sends a
+      guest to sign-in. The write smoke was skipped: the smoke token had
+      expired.
+- [ ] Owner: add slides to RTM #1–#5 (all have a recording; only RTM #6 has
+      materials, 6 links) and link each event page from its YouTube video.
 
 ## Phase 2 (not started)
 
