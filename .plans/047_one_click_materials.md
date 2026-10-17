@@ -47,7 +47,15 @@ YouTube description → /e/{slug} (ended page: recording + "watch" button)
       ended page → one-button card → ticket with the recording and both
       resource links; with no profile on file the form shows instead; a
       second visit lands straight on the same ticket.
-- [ ] Staging, then owner go for prod.
+- [x] Staging (pull 283, `bb072770`), smoke passed.
+- [x] Ticket order on ended events (owner "continue from your suggestion",
+      2026-10-17): what you can still do, then the recording and slides, then
+      history. In person was already right (the claim card leads the main
+      card). Online: the timeline moves below the materials once the event is
+      over. One `materials()` block renders the recording and resources in both
+      views (`tests/ticket_materials_order.rs`). Checked on the fixture worker:
+      in-person and online ended tickets, claim card first.
+- [ ] Prod (owner go 2026-10-17).
 
 ## Phase 2 (not started)
 

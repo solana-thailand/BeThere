@@ -8,6 +8,7 @@ pub mod credit_refund_card;
 pub mod event_context;
 pub mod hero;
 pub mod in_person_view;
+pub mod materials;
 pub mod nft_badge;
 pub mod online_view;
 pub mod page;
