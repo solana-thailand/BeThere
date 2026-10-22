@@ -39,6 +39,12 @@ that names the state and its date, and nothing carries a refund *date* to the
 client today. So the candidate shrinks to: one line above those cards, plus a
 `refunded_at` field if the worker has it. Check the worker before promising it.
 
+**Built (branch `feature/048-refund-date`):** the worker already stored
+`thb_deposits.refunded_at`; the ticket payload now carries it and the refund
+card says "Returned on YYYY-MM-DD" (TH: "คืนเมื่อ …"). Opened on a local
+fixture worker in EN and TH (2026-10-22): the card renders the date and the
+receipt link. Not yet seen on staging.
+
 ## Order
 
 1. ~~Audit~~ done in code (above); still open the page on staging to confirm.
