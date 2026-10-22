@@ -1,6 +1,6 @@
 # 047 — Past-event materials and one-click registration
 
-**Status:** Phase 1 deployed to prod (2026-10-17, session `event-checkin-ef`). Phase 2 not started.
+**Status:** Phase 1 deployed to prod (2026-10-17, session `event-checkin-ef`). Phase 2 in progress: the live form prefills name and contact from the server profile (branch `feature/047-live-form-prefill`); one-click still open.
 
 ## Why
 
@@ -61,8 +61,11 @@ YouTube description → /e/{slug} (ended page: recording + "watch" button)
       unauthenticated, RTM #5 ended page shows the watch button and sends a
       guest to sign-in. The write smoke was skipped: the smoke token had
       expired.
-- [ ] Owner: add slides to RTM #1–#5 (all have a recording; only RTM #6 has
-      materials, 6 links) and link each event page from its YouTube video.
+- [x] Slides added to RTM #1–#5 on prod via the admin API (2026-10-18): 7 decks
+      (Katopz #1–#5, Chaerin #1, Golf #4). Rollback snapshot kept in
+      `~/bethere-backups/`.
+- [ ] Owner: still missing Golf (#1 NFT Engine, #2 pay.sh x402), Luke (#3),
+      Gui Bibeau (#5), Andy (#1); link each event page from its YouTube video.
 
 ## Phase 2 (not started)
 
