@@ -163,6 +163,7 @@
     "pending_credit_desc": "Your credit deposit is being processed.",
     "refund_returned": "RSVP Deposit Returned",
     "refund_receipt": "View Refund Receipt →",
+    "refund_on": "Returned on {date}",
     "claim_title": "You're checked in!",
     "claim_cta": "Claim Your NFT Badge →",
     "reclaim_title": "Deadline Passed — Reclaim Your Spot",
