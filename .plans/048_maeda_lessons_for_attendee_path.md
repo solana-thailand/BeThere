@@ -28,10 +28,20 @@ learn from it and adapt. The mapping below is our inference, not his claims.
 | MAYA | Night Edition and new features | Test: if it needs explaining, it is too advanced |
 | Built for agents | `.plans/045` SG2 (x402) | Read-only status API an agent can poll. Needs a consent and security decision first; do not build before that |
 
+## Audit result (2026-10-22, code read only, page not opened)
+
+The in-person ticket already answers most of the deposit question:
+`DepositInfo` carries `verified`, `refunded`, `refund_proof_url` and
+`held_as_credit`; `in_person_view.rs` renders a `RefundCard` with the
+organizer's transfer proof when refunded, a held-as-credit state, and the
+hold/refund cards after check-in. What is missing is one plain status line
+that names the state and its date, and nothing carries a refund *date* to the
+client today. So the candidate shrinks to: one line above those cards, plus a
+`refunded_at` field if the worker has it. Check the worker before promising it.
+
 ## Order
 
-1. Audit what the ticket shows for a THB deposit today (read the code, then
-   open the page; do not trust this table).
+1. ~~Audit~~ done in code (above); still open the page on staging to confirm.
 2. If there is a gap, add the status line behind the existing ticket layout
    without moving live tickets (the visual baselines pin them).
 3. Measure clicks for plan 047 Phase 2 before designing one-click for live
