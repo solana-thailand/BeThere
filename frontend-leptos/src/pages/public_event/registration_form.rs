@@ -154,6 +154,28 @@ pub fn registration_form(
         );
     }
 
+    // Server profile (.plans/047 Phase 2): a returning attendee on a new
+    // browser has no localStorage profile, but `contacts` remembers them.
+    // Fills only what is still empty, so typing or the local profile wins.
+    if !wallet_only {
+        leptos::task::spawn_local(async move {
+            let Ok(profile) = crate::api::get_my_profile().await else {
+                return;
+            };
+            let name = profile.registration_name();
+            if !name.is_empty() && reg_name.get_untracked().is_empty() {
+                set_reg_name.set(name);
+            }
+            if !profile.contact_channel.is_empty() && reg_contact_channel.get_untracked().is_empty()
+            {
+                set_reg_contact_channel.set(profile.contact_channel);
+            }
+            if !profile.contact_handle.is_empty() && reg_contact_handle.get_untracked().is_empty() {
+                set_reg_contact_handle.set(profile.contact_handle);
+            }
+        });
+    }
+
     view! {
         {move || {
             let current_reg = reg_state.get();
