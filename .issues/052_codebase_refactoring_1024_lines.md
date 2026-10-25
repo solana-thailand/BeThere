@@ -277,3 +277,8 @@ in markup, form values and toasts after normalising the trunk inline-loader hash
 7 of the 9 steps change the DOM and the typed step changes form values, so the probe can fail. Not covered:
 the camera (headless has none) and a real walk-in submit (it writes the Sheet). No file in the repo is over
 1024 lines after this.
+
+**Deployed 2026-10-25:** release pull 294, prod `682c742c`, version `ec971628`, 10:19 UTC, after backup
+`backup-prod-20261025-1701.sql`; staging `b56fc134` (version `b13c9ebe`) phone-tested by the owner first.
+Checked after deploy: staging parity, content types, security headers, `/staff` serves HTML, the RTM #5
+ended page sends a guest to sign-in. Write smoke skipped: the smoke token had expired.
