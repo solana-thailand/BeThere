@@ -125,6 +125,11 @@ pub fn registration_form(
     };
     let section_label = Arc::new(resolved_config.section_label.clone());
     let form_fields = Arc::new(resolved_config.fields.clone());
+    // One click (.plans/047 Phase 2): offered once the server profile shows
+    // the event asks nothing it cannot answer (`one_click_eligible`).
+    let has_required_custom_field =
+        dev_profile_enabled && resolved_config.fields.iter().any(|f| f.required);
+    let (quick, set_quick) = signal(false);
 
     // Auto-fill from localStorage for returning users
     if let Some(saved_json) = loadDevProfile()
@@ -173,6 +178,17 @@ pub fn registration_form(
             if !profile.contact_handle.is_empty() && reg_contact_handle.get_untracked().is_empty() {
                 set_reg_contact_handle.set(profile.contact_handle);
             }
+            set_quick.set(one_click_eligible(&OneClickInputs {
+                has_deposit,
+                is_hybrid,
+                wallet_only,
+                require_photo_consent,
+                require_contact,
+                has_required_custom_field,
+                name: &reg_name.get_untracked(),
+                contact_channel: &reg_contact_channel.get_untracked(),
+                contact_handle: &reg_contact_handle.get_untracked(),
+            }));
         });
     }
 
@@ -278,12 +294,190 @@ pub fn registration_form(
                     let slug = slug_for_reg.clone();
                     let email_for_display = locked_email.clone();
                     let email_for_submit = locked_email.clone();
+                    // One submit path for the full form and the one-click card.
+                    let submit = {
+                        let slug = slug.clone();
+                        let email_sub = email_for_submit.clone();
+                        let submit_fields = form_fields.as_ref().clone();
+                        move || {
+                                let name_val = reg_name.get();
+                                let part_val = reg_participation.get();
+                                let channel_val = reg_contact_channel.get();
+                                let handle_val = reg_contact_handle.get();
+                                let deposit_val = reg_deposit_agreed.get();
+                                // Wallet-only sessions submit the typed email; Google sessions the locked one.
+                                let email_val = if wallet_only { reg_email.get() } else { email_sub.clone() };
+
+                                let mut errors = FieldErrors::default();
+                                if name_val.trim().is_empty() {
+                                    errors.name = Some(|l| td_string!(l, event.err_name_required));
+                                }
+                                if wallet_only && !email_looks_valid(email_val.trim()) {
+                                    errors.email = Some(|l| td_string!(l, event.err_email_invalid));
+                                }
+                                if require_contact && channel_val.trim().is_empty() {
+                                    errors.contact_channel = Some(|l| td_string!(l, event.err_channel_required));
+                                }
+                                if require_contact && handle_val.trim().is_empty() {
+                                    errors.contact_handle = Some(|l| td_string!(l, event.err_handle_required));
+                                }
+                                let consent_val = reg_consent_given.get();
+                                if !consent_val {
+                                    errors.consent_given = Some(|l| td_string!(l, event.err_consent_required));
+                                }
+                                let photo_consent_val = reg_photo_consent_given.get();
+                                if require_photo_consent && !photo_consent_val {
+                                    errors.photo_consent_given = Some(|l| td_string!(l, event.err_photo_consent_required));
+                                }
+                                let is_online_track = is_hybrid && part_val.to_lowercase().contains("online");
+                                if has_deposit && !is_online_track && !deposit_val && !regular_ok() {
+                                    errors.deposit_agreed = Some(|l| td_string!(l, event.err_deposit_required));
+                                }
+
+                                let has_errors = errors.name.is_some()
+                                    || errors.email.is_some()
+                                    || errors.contact_channel.is_some()
+                                    || errors.contact_handle.is_some()
+                                    || errors.consent_given.is_some()
+                                    || errors.deposit_agreed.is_some()
+                                    || errors.photo_consent_given.is_some();
+
+                                // Determine scroll target before moving errors
+                                let scroll_target = errors.name.as_ref()
+                                    .map(|_| "pe-field-name")
+                                    .or(errors.email.as_ref().map(|_| "pe-field-email"))
+                                    .or(errors.contact_channel.as_ref().map(|_| "pe-field-channel"))
+                                    .or(errors.contact_handle.as_ref().map(|_| "pe-field-handle"))
+                                    .or(errors.consent_given.as_ref().map(|_| "pe-field-consent"))
+                                    .or(errors.deposit_agreed.as_ref().map(|_| "pe-field-deposit"))
+                                    .or(errors.photo_consent_given.as_ref().map(|_| "pe-field-photo-consent"));
+
+                                set_field_errors.set(errors);
+
+                                if has_errors {
+                                    if let Some(id) = scroll_target {
+                                        scroll_to_element(id);
+                                    }
+                                    return;
+                                }
+
+                                // Extract dynamic field values for submission
+                                let dynamic_vals = dynamic_field_values.get();
+                                let (experience_level, tech_stack, interests) =
+                                    extract_profile_fields(&dynamic_vals, &submit_fields);
+
+                                // Build dynamic profile_fields map (Issue #049 Phase 2)
+                                let profile_fields: std::collections::HashMap<String, String> = submit_fields
+                                    .iter()
+                                    .filter(|f| f.profile_field)
+                                    .filter_map(|f| {
+                                        dynamic_vals.get(&f.key).cloned()
+                                            .filter(|v| !v.is_empty())
+                                            .map(|v| (f.key.clone(), v))
+                                    })
+                                    .collect();
+
+                                set_reg_state.set(RegState::Submitting);
+                                let body = RegisterBody {
+                                    slug: slug.clone(),
+                                    name: name_val.trim().to_string(),
+                                    email: email_val.trim().to_lowercase(),
+                                    participation_type: if part_val.is_empty() { None } else { Some(part_val.clone()) },
+                                    contact_channel: if channel_val.trim().is_empty() { None } else { Some(channel_val.trim().to_string()) },
+                                    contact_handle: if handle_val.trim().is_empty() { None } else { Some(handle_val.trim().to_string()) },
+                                    deposit_agreed: if deposit_val { Some(true) } else { None },
+                                    consent_given: if consent_val { Some(true) } else { None },
+                                    photo_consent_given: if photo_consent_val { Some(true) } else { None },
+                                    consent_marketing: Some(reg_consent_marketing.get()),
+                                    experience_level,
+                                    tech_stack,
+                                    interests,
+                                    profile_fields: if profile_fields.is_empty() { None } else { Some(profile_fields) },
+                                };
+
+                                // Client-side messages are rendered in the language
+                                // current at submit time; server errors pass through.
+                                let locale: Locale = i18n.get_locale_untracked();
+                                leptos::task::spawn_local(async move {
+                                    let window = web_sys::window().expect("no window");
+                                    let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
+                                    let url = format!("{origin}/api/public/register");
+                                    let fail = |msg: &str| RegState::Error(msg.to_string());
+                                    let fail_with = |msg: &str, e: &dyn std::fmt::Display| RegState::Error(format!("{msg}: {e}"));
+
+                                    let token_header = bot_check.header();
+                                    let mut hdrs = vec![("Content-Type", "application/json")];
+                                    if let Some((name, token)) = token_header.as_ref() {
+                                        hdrs.push((name, token.as_str()));
+                                    }
+                                    let result = crate::api::fetch::post(&url, &hdrs, Some(serde_json::to_string(&body).unwrap_or_default())).await;
+                                    // The token is spent whatever the answer was.
+                                    bot_check.reset();
+                                    match result
+                                    {
+                                        Ok(resp) => {
+                                            if resp.status() == 401 {
+                                                set_reg_state.set(fail(td_string!(locale, event.err_session_expired)));
+                                                return;
+                                            }
+                                            match crate::api::fetch::response_text(&resp).await {
+                                                Ok(text) => {
+                                                    match serde_json::from_str::<RegisterResponse>(&text) {
+                                                        Ok(api_resp) => {
+                                                            if api_resp.success {
+                                                                if let Some(data) = api_resp.data {
+                                                                    set_reg_state.set(RegState::Success(data));
+                                                                } else {
+                                                                    set_reg_state.set(fail(td_string!(locale, event.err_no_data)));
+                                                                }
+                                                            } else {
+                                                                set_reg_state.set(RegState::Error(match api_resp.error {
+                                                                    Some(msg) if event_checkin_domain::turnstile::is_rejection(&msg) => {
+                                                                        td_string!(locale, event.err_bot_check).to_string()
+                                                                    }
+                                                                    Some(msg) => msg,
+                                                                    None => td_string!(locale, event.err_registration_failed).to_string(),
+                                                                }));
+                                                            }
+                                                        }
+                                                        Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_parse), &e)),
+                                                    }
+                                                }
+                                                Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_read), &e)),
+                                            }
+                                        }
+                                        Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_network), &e)),
+                                    }
+                                });
+                        }
+                    };
                     view! {
                         <div class="pe-card">
                             <h2 class="pe-section-title">
                                 <Icon icon=IconName::Ticket class="icon-md" />" "{crate::locale::tr(|l| crate::i18n::td_string!(l, event.reserve_title))}
                             </h2>
                             <div class="pe-flex-col-gap-md">
+                                // One-click summary: who registers, and what agreeing means.
+                                {move || quick.get().then(|| view! {
+                                    <div class="pe-field">
+                                        <p class="pe-detail-secondary">
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.quick_as))}" "
+                                            <strong>{move || reg_name.get()}</strong>
+                                        </p>
+                                        {move || {
+                                            let channel = reg_contact_channel.get();
+                                            let handle = reg_contact_handle.get();
+                                            (!channel.is_empty()).then(|| view! { <p class="pe-field-hint">{format!("{channel}: {handle}")}</p> })
+                                        }}
+                                        <p class="pe-field-hint">
+                                            {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.quick_consent))}" "
+                                            <a href="/privacy" target="_blank" class="pe-ext-link">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.privacy_policy))}</a>
+                                        </p>
+                                    </div>
+                                })}
+                                // The full form stays in the DOM, prefilled, so "edit my details" only
+                                // shows it. `contents` keeps the flex gaps exactly as before.
+                                <div style:display=move || if quick.get() { "none" } else { "contents" }>
                                 // Name
                                 <div class="pe-field" id="pe-field-name">
                                     <label class="pe-field-label">{crate::locale::tr(|l| crate::i18n::td_string!(l, event.field_name))}<span class="pe-required">" *"</span></label>
@@ -539,171 +733,47 @@ pub fn registration_form(
                                         <span>{crate::locale::tr(|l| crate::i18n::td_string!(l, event.marketing_consent))}</span>
                                     </label>
                                 </div>
+                                </div>
                                 <crate::bot_check::BotCheckSlot check=bot_check />
-                                // Submit button
+                                // Submit button. The one-click card calls the same closure.
                                 {
-                                    let slug = slug.clone();
-                                    let email_sub = email_for_submit.clone();
-                                    let submit_fields = form_fields.as_ref().clone();
+                                    let submit = submit.clone();
                                     view! {
                                         <button
                                             class="pe-submit-btn"
+                                            style:display=move || if quick.get() { "none" } else { "" }
                                             disabled=move || !bot_check.ready()
-                                            on:click=move |_| {
-                                                let name_val = reg_name.get();
-                                                let part_val = reg_participation.get();
-                                                let channel_val = reg_contact_channel.get();
-                                                let handle_val = reg_contact_handle.get();
-                                                let deposit_val = reg_deposit_agreed.get();
-                                                // Wallet-only sessions submit the typed email; Google sessions the locked one.
-                                                let email_val = if wallet_only { reg_email.get() } else { email_sub.clone() };
-
-                                                let mut errors = FieldErrors::default();
-                                                if name_val.trim().is_empty() {
-                                                    errors.name = Some(|l| td_string!(l, event.err_name_required));
-                                                }
-                                                if wallet_only && !email_looks_valid(email_val.trim()) {
-                                                    errors.email = Some(|l| td_string!(l, event.err_email_invalid));
-                                                }
-                                                if require_contact && channel_val.trim().is_empty() {
-                                                    errors.contact_channel = Some(|l| td_string!(l, event.err_channel_required));
-                                                }
-                                                if require_contact && handle_val.trim().is_empty() {
-                                                    errors.contact_handle = Some(|l| td_string!(l, event.err_handle_required));
-                                                }
-                                                let consent_val = reg_consent_given.get();
-                                                if !consent_val {
-                                                    errors.consent_given = Some(|l| td_string!(l, event.err_consent_required));
-                                                }
-                                                let photo_consent_val = reg_photo_consent_given.get();
-                                                if require_photo_consent && !photo_consent_val {
-                                                    errors.photo_consent_given = Some(|l| td_string!(l, event.err_photo_consent_required));
-                                                }
-                                                let is_online_track = is_hybrid && part_val.to_lowercase().contains("online");
-                                                if has_deposit && !is_online_track && !deposit_val && !regular_ok() {
-                                                    errors.deposit_agreed = Some(|l| td_string!(l, event.err_deposit_required));
-                                                }
-
-                                                let has_errors = errors.name.is_some()
-                                                    || errors.email.is_some()
-                                                    || errors.contact_channel.is_some()
-                                                    || errors.contact_handle.is_some()
-                                                    || errors.consent_given.is_some()
-                                                    || errors.deposit_agreed.is_some()
-                                                    || errors.photo_consent_given.is_some();
-
-                                                // Determine scroll target before moving errors
-                                                let scroll_target = errors.name.as_ref()
-                                                    .map(|_| "pe-field-name")
-                                                    .or(errors.email.as_ref().map(|_| "pe-field-email"))
-                                                    .or(errors.contact_channel.as_ref().map(|_| "pe-field-channel"))
-                                                    .or(errors.contact_handle.as_ref().map(|_| "pe-field-handle"))
-                                                    .or(errors.consent_given.as_ref().map(|_| "pe-field-consent"))
-                                                    .or(errors.deposit_agreed.as_ref().map(|_| "pe-field-deposit"))
-                                                    .or(errors.photo_consent_given.as_ref().map(|_| "pe-field-photo-consent"));
-
-                                                set_field_errors.set(errors);
-
-                                                if has_errors {
-                                                    if let Some(id) = scroll_target {
-                                                        scroll_to_element(id);
-                                                    }
-                                                    return;
-                                                }
-
-                                                // Extract dynamic field values for submission
-                                                let dynamic_vals = dynamic_field_values.get();
-                                                let (experience_level, tech_stack, interests) =
-                                                    extract_profile_fields(&dynamic_vals, &submit_fields);
-
-                                                // Build dynamic profile_fields map (Issue #049 Phase 2)
-                                                let profile_fields: std::collections::HashMap<String, String> = submit_fields
-                                                    .iter()
-                                                    .filter(|f| f.profile_field)
-                                                    .filter_map(|f| {
-                                                        dynamic_vals.get(&f.key).cloned()
-                                                            .filter(|v| !v.is_empty())
-                                                            .map(|v| (f.key.clone(), v))
-                                                    })
-                                                    .collect();
-
-                                                set_reg_state.set(RegState::Submitting);
-                                                let body = RegisterBody {
-                                                    slug: slug.clone(),
-                                                    name: name_val.trim().to_string(),
-                                                    email: email_val.trim().to_lowercase(),
-                                                    participation_type: if part_val.is_empty() { None } else { Some(part_val.clone()) },
-                                                    contact_channel: if channel_val.trim().is_empty() { None } else { Some(channel_val.trim().to_string()) },
-                                                    contact_handle: if handle_val.trim().is_empty() { None } else { Some(handle_val.trim().to_string()) },
-                                                    deposit_agreed: if deposit_val { Some(true) } else { None },
-                                                    consent_given: if consent_val { Some(true) } else { None },
-                                                    photo_consent_given: if photo_consent_val { Some(true) } else { None },
-                                                    consent_marketing: Some(reg_consent_marketing.get()),
-                                                    experience_level,
-                                                    tech_stack,
-                                                    interests,
-                                                    profile_fields: if profile_fields.is_empty() { None } else { Some(profile_fields) },
-                                                };
-
-                                                // Client-side messages are rendered in the language
-                                                // current at submit time; server errors pass through.
-                                                let locale: Locale = i18n.get_locale_untracked();
-                                                leptos::task::spawn_local(async move {
-                                                    let window = web_sys::window().expect("no window");
-                                                    let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
-                                                    let url = format!("{origin}/api/public/register");
-                                                    let fail = |msg: &str| RegState::Error(msg.to_string());
-                                                    let fail_with = |msg: &str, e: &dyn std::fmt::Display| RegState::Error(format!("{msg}: {e}"));
-
-                                                    let token_header = bot_check.header();
-                                                    let mut hdrs = vec![("Content-Type", "application/json")];
-                                                    if let Some((name, token)) = token_header.as_ref() {
-                                                        hdrs.push((name, token.as_str()));
-                                                    }
-                                                    let result = crate::api::fetch::post(&url, &hdrs, Some(serde_json::to_string(&body).unwrap_or_default())).await;
-                                                    // The token is spent whatever the answer was.
-                                                    bot_check.reset();
-                                                    match result
-                                                    {
-                                                        Ok(resp) => {
-                                                            if resp.status() == 401 {
-                                                                set_reg_state.set(fail(td_string!(locale, event.err_session_expired)));
-                                                                return;
-                                                            }
-                                                            match crate::api::fetch::response_text(&resp).await {
-                                                                Ok(text) => {
-                                                                    match serde_json::from_str::<RegisterResponse>(&text) {
-                                                                        Ok(api_resp) => {
-                                                                            if api_resp.success {
-                                                                                if let Some(data) = api_resp.data {
-                                                                                    set_reg_state.set(RegState::Success(data));
-                                                                                } else {
-                                                                                    set_reg_state.set(fail(td_string!(locale, event.err_no_data)));
-                                                                                }
-                                                                            } else {
-                                                                                set_reg_state.set(RegState::Error(match api_resp.error {
-                                                                                    Some(msg) if event_checkin_domain::turnstile::is_rejection(&msg) => {
-                                                                                        td_string!(locale, event.err_bot_check).to_string()
-                                                                                    }
-                                                                                    Some(msg) => msg,
-                                                                                    None => td_string!(locale, event.err_registration_failed).to_string(),
-                                                                                }));
-                                                                            }
-                                                                        }
-                                                                        Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_parse), &e)),
-                                                                    }
-                                                                }
-                                                                Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_read), &e)),
-                                                            }
-                                                        }
-                                                        Err(e) => set_reg_state.set(fail_with(td_string!(locale, event.err_network), &e)),
-                                                    }
-                                                });
-                                            }
+                                            on:click=move |_| submit()
                                         >
                                             {crate::locale::tr(|l| crate::i18n::td_string!(l, event.submit))}
                                         </button>
                                     }
+                                }
+                                // One click (.plans/047 Phase 2): agreeing is the click.
+                                {
+                                    let submit = submit.clone();
+                                    move || quick.get().then(|| {
+                                        let submit = submit.clone();
+                                        view! {
+                                            <button
+                                                class="pe-submit-btn"
+                                                disabled=move || !bot_check.ready()
+                                                on:click=move |_| {
+                                                    set_reg_consent_given.set(true);
+                                                    submit();
+                                                }
+                                            >
+                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.quick_submit))}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline btn-block"
+                                                on:click=move |_| set_quick.set(false)
+                                            >
+                                                {crate::locale::tr(|l| crate::i18n::td_string!(l, recap.join.edit_details))}
+                                            </button>
+                                        }
+                                    })
                                 }
                             </div>
                         </div>

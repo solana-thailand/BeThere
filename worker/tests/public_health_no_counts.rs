@@ -36,3 +36,19 @@ fn public_health_returns_no_counts_field() {
         "health.rs lost its connectivity probe"
     );
 }
+
+#[test]
+fn public_health_reports_the_deploy_build_stamp() {
+    assert!(
+        health_code().contains(r#""build": option_env!("BETHERE_BUILD").unwrap_or("unstamped")"#),
+        "health.rs lost the build stamp"
+    );
+    let deploy = Path::new(env!("CARGO_MANIFEST_DIR")).join("deploy.sh");
+    let deploy =
+        fs::read_to_string(&deploy).unwrap_or_else(|e| panic!("read {}: {e}", deploy.display()));
+    assert!(
+        deploy.contains(r#"BETHERE_BUILD="$(deploy_provenance)""#)
+            && deploy.contains("export BETHERE_BUILD"),
+        "deploy.sh no longer stamps the worker build"
+    );
+}

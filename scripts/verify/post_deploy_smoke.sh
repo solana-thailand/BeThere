@@ -22,6 +22,11 @@
 #   bash scripts/verify/post_deploy_smoke.sh                 # staging (default)
 #   bash scripts/verify/post_deploy_smoke.sh --url <base>    # explicit target
 #   bash scripts/verify/post_deploy_smoke.sh --url <prod> --i-know-this-writes
+#   ... --expect-build "git:$(git rev-parse HEAD)"          # also pin the stamp
+#
+# /api/health reports `build`: the `git:<sha>[+dirty]` string deploy.sh stamps,
+# or "unstamped" for any other build. Without --expect-build the value is only
+# printed; with it, anything else (including "unstamped") is a failure.
 #
 # Exit: 0 all green, 1 any failure.
 set -euo pipefail
@@ -31,15 +36,17 @@ cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 BASE_URL="https://bethere-staging.solana-thailand.workers.dev"
 ALLOW_WRITES_ANYWHERE=false
 TOKEN="${SMOKE_TOKEN:-dev-token}"
+EXPECT_BUILD=""
 FIXTURE_ID="smoke-$(date +%s)"
 CLEANED=false
 
-usage() { sed -n '3,30p' "${BASH_SOURCE[0]}" >&2; exit 1; }
+usage() { sed -n '3,35p' "${BASH_SOURCE[0]}" >&2; exit 1; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --url) [ $# -ge 2 ] || { echo "❌ --url needs a value" >&2; usage; }; BASE_URL="$2"; shift 2 ;;
     --i-know-this-writes) ALLOW_WRITES_ANYWHERE=true; shift ;;
+    --expect-build) [ $# -ge 2 ] && [ -n "$2" ] || { echo "❌ --expect-build needs a value" >&2; usage; }; EXPECT_BUILD="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "❌ Unknown argument: $1" >&2; usage ;;
   esac
@@ -128,8 +135,18 @@ echo "Fixture: $FIXTURE_ID"
 
 # ── 1. Reads (the checks that passed while production was broken) ───────────
 step "1. Reads"
-api GET "/api/health" >/dev/null
+health=$(api GET "/api/health")
 if [ "$(last_status)" = "200" ]; then pass "/api/health → 200"; else fail "/api/health → $(last_status)"; fi
+
+build=$(printf '%s' "$health" \
+  | python3 -c "import sys,json;print(json.load(sys.stdin).get('build') or '<absent>')" 2>/dev/null || echo "<unparsable>")
+if [ -z "$EXPECT_BUILD" ]; then
+  info "build: $build (pass --expect-build to pin it)"
+elif [ "$build" = "$EXPECT_BUILD" ]; then
+  pass "build → $build"
+else
+  fail "build → $build (expected $EXPECT_BUILD)"
+fi
 
 ct=$(curl -sI "$BASE_URL/" | tr -d '\r' | awk -F': ' 'tolower($1)=="content-type"{print $2}')
 case "$ct" in
@@ -202,5 +219,5 @@ if [ "$FAILED" -eq 0 ]; then
   echo "  ✅ Writes work. Safe to promote."
   exit 0
 fi
-echo "  ❌ A write path is broken. DO NOT promote this build."
+echo "  ❌ A check failed (see FAIL above). DO NOT promote this build."
 exit 1
