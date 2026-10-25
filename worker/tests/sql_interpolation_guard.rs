@@ -75,13 +75,13 @@ struct AllowedInterpolation {
 const ALLOWED_INTERPOLATIONS: &[AllowedInterpolation] = &[
     // -- Identifiers: SQLite cannot parameterise a column name. -------------
     AllowedInterpolation {
-        file: "src/db/events.rs",
+        file: "src/db/events/read.rs",
         placeholders: &["column"],
         reason: "`get_event_raw(column: &'static str)` — an identifier cannot be \
                  bound; `&'static str` admits only compile-time literals.",
     },
     AllowedInterpolation {
-        file: "src/db/events.rs",
+        file: "src/db/events/public.rs",
         placeholders: &["PUBLIC_EVENT_COLUMNS"],
         reason: "A column list is a set of identifiers, which SQLite cannot bind. \
                  It is a `const &'static str` with no parameters, so there is no \
@@ -139,7 +139,7 @@ const ALLOWED_INTERPOLATIONS: &[AllowedInterpolation] = &[
     },
     // -- Integers and bools: a number cannot carry SQL. ---------------------
     AllowedInterpolation {
-        file: "src/db/events.rs",
+        file: "src/db/events/write.rs",
         placeholders: &[
             "capacity",
             "deposit_amount_thb",
@@ -154,7 +154,6 @@ const ALLOWED_INTERPOLATIONS: &[AllowedInterpolation] = &[
             "on_chain_event_id",
             "online_capacity",
             "online_registration_open",
-            "open_val",
             "quiz_enabled",
             "recap_published",
             "refund_deadline_hours",
@@ -162,13 +161,18 @@ const ALLOWED_INTERPOLATIONS: &[AllowedInterpolation] = &[
             "require_photo_consent",
             "time_tba",
             "total_attendees",
-            "until_sql",
-            "value",
         ],
-        reason: "Every one is an integer or bool off a typed `EventConfig` field \
-                 (`until_sql` is `format!(\"{ms}\")` over an `Option<i64>`, else the \
-                 literal `NULL`). They are interpolated only because \
+        reason: "Every one is an integer or bool off a typed `EventConfig` field. \
+                 They are interpolated only because \
                  `D1Type::Integer` is `i32`-only and these are `u64`/`u32`/`bool`.",
+    },
+    AllowedInterpolation {
+        file: "src/db/events/config.rs",
+        placeholders: &["open_val", "until_sql", "value"],
+        reason: "The recap and post-event flags: `value` and `open_val` are `0`/`1` \
+                 from a `bool`; `until_sql` is `format!(\"{ms}\")` over an \
+                 `Option<i64>`, else the literal `NULL`. Split from the \
+                 `events/write.rs` row when the module was split (.issues/052).",
     },
     AllowedInterpolation {
         file: "src/db/event_summaries.rs",

@@ -134,8 +134,7 @@ fn the_exact_column_migration_is_present() {
 /// must prefer it. A guard, because both halves are easy to drop silently.
 #[test]
 fn the_writer_and_reader_both_use_the_exact_column() {
-    let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/db/events.rs"))
-        .expect("events.rs is readable");
+    let source = events_module_source();
 
     assert!(
         source.contains("'{on_chain_event_id}'"),
@@ -150,4 +149,21 @@ fn the_writer_and_reader_both_use_the_exact_column() {
         !source.contains("on_chain_event_id: self.on_chain_event_id.unwrap_or(0)"),
         "to_event_config must not read the rounded numeric column directly"
     );
+}
+
+/// Every `.rs` file under `src/db/events/`, joined in name order. The module was
+/// one file until .issues/052 split it; these guards are about the module.
+fn events_module_source() -> String {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/db/events");
+    let mut paths: Vec<_> = std::fs::read_dir(dir)
+        .expect("worker/src/db/events/ must be readable")
+        .map(|e| e.expect("dir entry").path())
+        .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+        .collect();
+    paths.sort();
+    paths
+        .iter()
+        .map(|p| std::fs::read_to_string(p).expect("events module file is readable"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
