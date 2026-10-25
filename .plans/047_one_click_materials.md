@@ -1,6 +1,6 @@
 # 047 — Past-event materials and one-click registration
 
-**Status:** Phase 1 deployed to prod (2026-10-17, session `event-checkin-ef`). Phase 2 in progress: the live form prefills name and contact from the server profile (pull 286, on prod 2026-10-25); one-click for live events still open.
+**Status:** Phase 1 deployed to prod (2026-10-17, session `event-checkin-ef`). Phase 2: live-form prefill on prod (pull 286); one click on the live form built (branch `feature/047-live-one-click`).
 
 ## Why
 
@@ -69,10 +69,20 @@ YouTube description → /e/{slug} (ended page: recording + "watch" button)
 
 ## Phase 2 (not started)
 
-- Live-event registration form: prefill from the server profile, not only
-  localStorage `bt_dev_profile`; one click when the event asks nothing the
-  profile lacks (participation type, deposit and custom `form_config` fields
-  make this a larger change).
+- [x] Live-event registration form prefills name and contact from the server
+  profile (pull 286, prod 2026-10-25).
+- [x] One click on the live form (owner rule 2026-10-25): offered only when the
+  event has no deposit, no required custom field and one way to attend; never
+  for wallet-only sessions or when photo consent is required; only with a name
+  on file (and the contact when the event requires one). `one_click_eligible`
+  in `public_event/types.rs`; both buttons share one submit closure; the full
+  form stays in the DOM, prefilled, hidden with `display:none` (`contents`
+  otherwise, so the form's layout is unchanged) and one bot-check slot.
+  Tests `tests/live_one_click.rs` (5). Checked on a local fixture worker: a
+  deposit event shows the form; a free event shows the card (EN + TH); "edit my
+  details first" shows the prefilled form; "agree and register" lands on the
+  ticket; 0 page errors. `consent_given` goes in the same request body as the
+  form's checkbox (it is recorded on the Sheet, not in D1).
 - Organizer side: a "slides" field per past event is already in the event form
   (Community links → type `slides`); fill it for RTM #1–#6.
 
