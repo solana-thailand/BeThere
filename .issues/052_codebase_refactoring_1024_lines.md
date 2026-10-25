@@ -174,6 +174,19 @@ in `playtest.rs` (658 lines). The move is verbatim and all 42 tests still pass. 
 `--lib --tests -D warnings` and `fmt --check` are clean. That leaves `scanner/page.rs` and `quiz_editor/editor.rs`
 in the frontend. Both are single-component `view!` splits, so both wait until after the freeze.
 
+2026-10-01 (`event-checkin-e0`, branch `feature/052-quiz-editor-split`, not merged): `quiz_editor/editor.rs`
+is split. The question list (the `{move || …}` block under "Questions list") moved verbatim into
+`questions.rs` as `render_questions(config, set_config, confirm_delete_q, set_confirm_delete_q) -> AnyView`,
+called from the same reactive closure, so the tracking boundary is unchanged. `editor.rs` 1075 → 729,
+`questions.rs` 363. Gates: frontend `fmt --check`, wasm32 clippy `-D warnings` (default and `--features staff`),
+316 tests in 39 binaries. DOM A/B in headless Chrome against a local worker with the e2e seed, `develop`
+build vs. branch build (different served wasm hashes checked): 18 editor states (empty, create, edit text and
+option, set correct, add option, add question, move up, toggle, delete arm/confirm, preview, edit, import open,
+import merge, save, reload) are byte-identical in markup, form values and toasts, with no page errors; every
+step changes the DOM, so the probe can fail. The quiz editor is staff-only and not in the take script, but
+the branch still merges after the 8 Oct take with the others. `scanner/page.rs` (1304) is the last frontend
+file over the line; it stays after the freeze because it is demo-critical.
+
 Backend re-measure, same day: `worker/src/db/events.rs` is **1114 at HEAD** (1125 with the uncommitted F7
 sponsor edits). The "backend queue is empty" note below is stale. Split it after F7 lands; F7 owns the file
 until then. Also done: `worker/src/sheets/mod.rs` (953 lines of logic behind an index, not over the line
@@ -241,3 +254,12 @@ then, with the other held branches. There are no pushes, merges or deploys befor
 - **Merge check:** a simulated merge (`git merge-tree`) of 1 and then 2 onto `develop` `6604beee` is conflict-free. Both branches add a dated paragraph to this issue, in different places.
 - **No overlap with the other branches:** no other held branch touches `quiz_editor/`. The other held branches are qa-take-fixes, 162, 163, remap, stamp and pin; their order is in `.plans/031`.
 - **`pages/scanner/page.rs` (1304) stays frozen** until after the take, because it is demo-critical. Reopen trigger: the 8 Oct take is filmed.
+
+**2026-10-25 (`event-checkin-e8`):** both held splits landed, re-done on current `develop` rather than
+rebased. `worker/src/db/events.rs` (1130) → `worker/src/db/events/` (`row`, `config`, `write`, `read`,
+`public`, `mod` as index), pull 291; the text-reading guards now read the new files and the SQL
+interpolation allowlist gained a `config.rs` row. `quiz_editor/editor.rs` → `editor.rs` (729) +
+`questions.rs` (365): the original commit `c76e8538` cherry-picked unchanged (the directory had not moved
+since), re-gated with fmt, wasm32 clippy `-D warnings` (default and `--features staff`) and 459 frontend
+tests. Remaining over the line: `frontend-leptos/src/pages/scanner/page.rs` (1333); its take-freeze trigger
+(the 8 Oct take) has passed.
