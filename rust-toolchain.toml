@@ -1,0 +1,16 @@
+# The one toolchain every build of this repo uses: CI, local gates and the
+# wasm that `deploy.sh` ships. `.plans/030` §3.
+#
+# - Bump `channel` here only. `scripts/verify/toolchain_pin_gate.py` fails CI
+#   when a workflow's `toolchain:` disagrees with it.
+# - `targets` is explicit: the worker and the frontend both ship as wasm32,
+#   and a pin without it builds native and fails at the wasm step.
+# - `RUSTUP_TOOLCHAIN` in the environment overrides this file. `deploy.sh` and
+#   `frontend-leptos/build.sh` unset it (`scripts/pinned_toolchain.sh`).
+# - `.github/workflows/toolchain-rot.yml` runs the gates on `stable` weekly, so
+#   a new release's lints show up before the next bump.
+[toolchain]
+channel = "1.98.1"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

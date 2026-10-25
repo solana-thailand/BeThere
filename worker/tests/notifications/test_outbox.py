@@ -180,7 +180,7 @@ class OutboxTests(Harness):
         # policy overrides a trigger's own `OR IGNORE`, so a reschedule that
         # re-inserted an existing reminder aborted the whole save and D1 kept
         # the old date (`.issues/152`). The plain-UPDATE tests above cannot see it.
-        upsert_src = (WORKER / 'src/db/events.rs').read_text()
+        upsert_src = (WORKER / 'src/db/events/write.rs').read_text()
         self.assertIn('ON CONFLICT (id) DO UPDATE SET', upsert_src)
         self.assertIn('event_start_ms = excluded.event_start_ms', upsert_src)
         self.register()

@@ -16,7 +16,7 @@ NOW = 1_790_000_000_000
 
 
 def list_sql():
-    source = (SRC / "db/events.rs").read_text()
+    source = (SRC / "db/events/public.rs").read_text()
     rest = source[source.index("pub async fn list_public_events_raw(") :]
     literal = re.search(r'format!\(\s*"((?:[^"\\]|\\[\s\S])*)"', rest).group(1)
     return unescape(literal).replace("{PUBLIC_EVENT_COLUMNS}", "id, status, visibility, event_end_ms")

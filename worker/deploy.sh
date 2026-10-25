@@ -41,6 +41,12 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Build on the channel in rust-toolchain.toml. The wrangler [build] command
+# and frontend-leptos/build.sh inherit this environment.
+# shellcheck source=../scripts/pinned_toolchain.sh
+source "$SCRIPT_DIR/../scripts/pinned_toolchain.sh"
+use_pinned_toolchain
+
 PNP_FILE="$HOME/.pnp.cjs"
 PNP_BACKUP="$HOME/.pnp.cjs.bak"
 MOVED=false

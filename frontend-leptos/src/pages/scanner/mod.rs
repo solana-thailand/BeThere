@@ -10,10 +10,12 @@
 //! Requires being wrapped in `<ProtectedRoute>` to provide
 //! `ReadSignal<String>` (user email) via context.
 
+mod event_bar;
 mod interop;
 mod logic;
 mod page;
 mod state;
 mod views;
+mod walk_in;
 
 pub use page::Scanner;

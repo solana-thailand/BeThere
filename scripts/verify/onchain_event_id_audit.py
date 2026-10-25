@@ -2,7 +2,7 @@
 """Audit — and recover — `events.on_chain_event_id` values corrupted by SQLite.
 
 Issue 085. `on_chain_event_id` is a **u64** on-chain, but SQLite integers are
-signed 64-bit. `db/events.rs` interpolates the value into the SQL literal, so a
+signed 64-bit. `db/events/write.rs` interpolates the value into the SQL literal, so a
 value above `i64::MAX` (9223372036854775807) is not an integer literal SQLite
 can store — it silently falls back to REAL and the low digits are gone.
 
