@@ -109,11 +109,14 @@ The newest deployment's timestamp must be this run's.
 ## 7. Post-deploy smoke (reads **and** writes)
 
 ```sh
-bash scripts/verify/post_deploy_smoke.sh                        # staging
-bash scripts/verify/post_deploy_smoke.sh --url <prod> --i-know-this-writes
+B="git:$(git rev-parse HEAD)"   # the stamp deploy.sh baked in (+dirty if the tree was)
+bash scripts/verify/post_deploy_smoke.sh --expect-build "$B"                        # staging
+bash scripts/verify/post_deploy_smoke.sh --url <prod> --i-know-this-writes --expect-build "$B"
 ```
 
-It checks status **and** Content-Type. A 200 with `application/octet-stream`
+It checks status **and** Content-Type. `--expect-build` fails unless
+`/api/health`'s `build` is exactly that string, so it catches an edge still
+serving the previous deploy and a build made outside `deploy.sh` ("unstamped"). A 200 with `application/octet-stream`
 on a JS/wasm asset is a failure, not a pass. Frontend changes are also verified
 by opening the page (`docs/web-verification-runbook.md`).
 

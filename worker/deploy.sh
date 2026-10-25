@@ -519,6 +519,12 @@ else
     echo "🚀 Deploying to Cloudflare Workers (production: ${WORKER_NAME})..."
   fi
 
+  # Stamp the worker build with the provenance the Version message carries.
+  # /api/health reports it (option_env! in handlers/health.rs; cargo rebuilds
+  # when it changes), and "unstamped" for any build outside this script.
+  BETHERE_BUILD="$(deploy_provenance)"
+  export BETHERE_BUILD
+
   echo "🏗️  Building Leptos WASM frontend via build.sh..."
   (cd "../frontend-leptos" && bash build.sh)
 
