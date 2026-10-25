@@ -1,6 +1,6 @@
 # 047 — Past-event materials and one-click registration
 
-**Status:** Phase 1 deployed to prod (2026-10-17, session `event-checkin-ef`). Phase 2: live-form prefill on prod (pull 286); one click on the live form built (branch `feature/047-live-one-click`).
+**Status:** Phase 1 deployed to prod (2026-10-17, session `event-checkin-ef`). Phase 2 deployed to prod 2026-10-25: live-form prefill (pull 286) and one click on the live form (pull 296), release pull 297.
 
 ## Why
 
@@ -83,6 +83,12 @@ YouTube description → /e/{slug} (ended page: recording + "watch" button)
   details first" shows the prefilled form; "agree and register" lands on the
   ticket; 0 page errors. `consent_given` goes in the same request body as the
   form's checkbox (it is recorded on the Sheet, not in D1).
+- [x] Prod (owner go 2026-10-25): release pull 297, `4e222285`, version
+  `22f7689a`, 11:54 UTC, after backup `backup-prod-20261025-1836.sql`. First
+  release with the health build stamp: `/api/health` reports
+  `git:4e222285…`. Checked: staging parity, content types, security headers,
+  RTM #5 ended page sends a guest to sign-in. Write smoke skipped: the smoke
+  token had expired (`.issues/195`).
 - Organizer side: a "slides" field per past event is already in the event form
   (Community links → type `slides`); fill it for RTM #1–#6.
 
