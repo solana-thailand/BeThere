@@ -263,3 +263,17 @@ interpolation allowlist gained a `config.rs` row. `quiz_editor/editor.rs` → `e
 since), re-gated with fmt, wasm32 clippy `-D warnings` (default and `--features staff`) and 459 frontend
 tests. Remaining over the line: `frontend-leptos/src/pages/scanner/page.rs` (1333); its take-freeze trigger
 (the 8 Oct take) has passed.
+
+**2026-10-25, scanner (`event-checkin-e8`):** `pages/scanner/page.rs` 1333 → 970. The walk-in flow (its
+three form signals as `WalkinFields`, the cancel/submit/override handlers, and the four walk-in screens of
+the result overlay) moved verbatim to `walk_in.rs` (389) as `walkin_overlay(…)`; the event selector bar
+moved to `event_bar.rs` (73). Names are unchanged, so the diff is a move. The four scanner guards
+(`scanner_event_scope`, `scanner_single_detail_fetch`, `scanner_scan_wakeup`, `ticket_display_code`) pass
+unchanged: the scan, lookup and manual-entry paths they pin stay in `page.rs`. Gates: frontend fmt, wasm32
+clippy `-D warnings` (default and `--features staff`), 459 tests. DOM A/B on a local fixture worker
+(`develop` `bf177b99` vs. branch build, same D1): 10 scanner states (idle, manual entry open/closed,
+settings open, flash toggle, settings closed, walk-in form, empty submit, typed name, cancel) are identical
+in markup, form values and toasts after normalising the trunk inline-loader hash; 0 page errors either side;
+7 of the 9 steps change the DOM and the typed step changes form values, so the probe can fail. Not covered:
+the camera (headless has none) and a real walk-in submit (it writes the Sheet). No file in the repo is over
+1024 lines after this.
