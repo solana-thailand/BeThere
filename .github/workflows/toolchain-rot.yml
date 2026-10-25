@@ -1,0 +1,58 @@
+name: Toolchain rot (stable)
+
+# Plan 030 §3. Every other job builds on the channel in rust-toolchain.toml, so
+# a new stable release cannot turn them red. This lane runs the same compile and
+# lint gates on `stable` once a week. When it goes red, a bump of the pin would
+# go red too: fix the new lints (or file an issue) before bumping. It never
+# blocks a merge.
+#
+# RUSTUP_TOOLCHAIN outranks rust-toolchain.toml, which is how this lane escapes
+# the pin. scripts/verify/toolchain_pin_gate.py allows `stable` in this file only.
+
+on:
+  schedule:
+    - cron: '17 3 * * 1' # Monday 03:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTUP_TOOLCHAIN: stable
+
+jobs:
+  rot:
+    name: clippy on stable (workspace, worker wasm32, frontend wasm32)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Rust (stable, wasm32 target)
+        uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch; SHA-pinned, so `toolchain:` must be explicit
+        with:
+          toolchain: stable
+          components: clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Show the toolchain that will build
+        run: rustc --version
+
+      - name: Stub frontend dist for worker include_str!
+        # Same reason as ci.yml build-test: the worker include_str!s the SPA shell.
+        run: |
+          mkdir -p frontend-leptos/dist
+          printf '<!DOCTYPE html><html><head><title>ci-stub</title></head><body></body></html>\n' \
+            > frontend-leptos/dist/index.html
+
+      - name: cargo clippy (workspace, -D warnings)
+        run: cargo clippy --workspace --locked --all-targets -- -D warnings
+
+      - name: cargo clippy (worker, wasm32, -D warnings)
+        run: cargo clippy -p event-checkin-worker --locked --target wasm32-unknown-unknown -- -D warnings
+
+      - name: cargo clippy (frontend, wasm32, -D warnings)
+        working-directory: frontend-leptos
+        run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
