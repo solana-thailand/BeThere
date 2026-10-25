@@ -153,13 +153,31 @@ pub fn DepositPendingCard(
     }
 }
 
+/// The `YYYY-MM-DD` day of an RFC 3339 refund time, or `None` when it is
+/// empty or not date-shaped (an older worker, or a bad row): no date line then.
+pub fn refund_date_line(refunded_at: &str) -> Option<String> {
+    let day = refunded_at.get(..10)?;
+    let b = day.as_bytes();
+    let shaped = b[4] == b'-'
+        && b[7] == b'-'
+        && b.iter()
+            .enumerate()
+            .all(|(i, c)| matches!(i, 4 | 7) || c.is_ascii_digit());
+    shaped.then(|| day.to_string())
+}
+
 /// Refund processed notice — shown when a deposit refund has been completed.
 #[component]
 pub fn RefundCard(
     /// URL to the refund proof/receipt (empty = hidden)
     #[prop(into)]
     refund_proof_url: String,
+    /// RFC 3339 time the refund was recorded (empty = no date line)
+    #[prop(into)]
+    refunded_at: String,
 ) -> impl IntoView {
+    let i18n = crate::i18n::use_i18n();
+    let returned_on = refund_date_line(&refunded_at);
     // Staff-typed and clicked by the attendee: render only a safe link (.issues/145).
     let url = event_checkin_domain::validation::safe_document_link(&refund_proof_url)
         .unwrap_or_default()
@@ -171,6 +189,18 @@ pub fn RefundCard(
             </div>
             <div>
                 <div class="ticket-action-title">{crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.refund_returned))}</div>
+                {returned_on.map(|date| {
+                    view! {
+                        <div class="ticket-action-desc">
+                            {move || {
+                                crate::locale::fill(
+                                    crate::i18n::td_string!(i18n.get_locale(), ticket.action.refund_on),
+                                    &[("date", &date)],
+                                )
+                            }}
+                        </div>
+                    }
+                })}
                 {if !url.is_empty() {
                     view! {
                         <a

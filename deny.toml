@@ -33,6 +33,12 @@ ignore = [
   # Only cargo-audit's lockfile scan reports this one (cargo-deny's resolved
   # graph does not reach rand 0.7 in the escrow build).
   { id = "RUSTSEC-2026-0097", reason = "rand 0.7.3: unsound only with a custom logger calling rand::rng(); Solana toolchain transitive" },
+  # Escrow dev-dependency only: quasar-svm (test SVM) -> agave-syscalls ->
+  # k256 0.13 -> crypto-bigint 0.5. Not in the on-chain program or the worker,
+  # and the test SVM only sees throwaway keys. The fix is 0.7.6, which k256 0.13
+  # cannot take; reopen when quasar-svm moves to an agave on k256 0.14
+  # (checked 2026-10-25).
+  { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5.5: timing side channels; escrow test SVM only (dev-dependency), no secrets" },
 ]
 
 [licenses]

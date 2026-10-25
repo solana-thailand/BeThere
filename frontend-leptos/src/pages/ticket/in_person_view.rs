@@ -455,7 +455,10 @@ pub fn InPersonView(
                     }}
                     {if dep.refunded {
                         view! {
-                            <RefundCard refund_proof_url=dep.refund_proof_url.clone().unwrap_or_default() />
+                            <RefundCard
+                                refund_proof_url=dep.refund_proof_url.clone().unwrap_or_default()
+                                refunded_at=dep.refunded_at.clone().unwrap_or_default()
+                            />
                         }.into_any()
                     } else {
                         view! { <div></div> }.into_any()

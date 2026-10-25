@@ -163,6 +163,7 @@
     "pending_credit_desc": "กำลังดำเนินการมัดจำด้วยเครดิตของคุณ",
     "refund_returned": "คืนเงินมัดจำ RSVP แล้ว",
     "refund_receipt": "ดูหลักฐานการคืนเงิน →",
+    "refund_on": "คืนเมื่อ {date}",
     "claim_title": "คุณเช็คอินแล้ว!",
     "claim_cta": "รับ NFT badge ของคุณ →",
     "reclaim_title": "เลยกำหนดแล้ว — จองที่นั่งคืนได้",
