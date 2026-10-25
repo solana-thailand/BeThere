@@ -240,8 +240,7 @@ fn event_format_falls_back_to_in_person() {
 /// helper, which is what the assertion is still here to catch.
 #[test]
 fn the_enum_parse_has_exactly_one_home() {
-    let source = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/db/events.rs"))
-        .expect("worker/src/db/events.rs must be readable");
+    let source = events_module_source();
     // Prose about the pattern must not satisfy a rule about code.
     let code: String = source
         .lines()
@@ -266,4 +265,21 @@ fn the_enum_parse_has_exactly_one_home() {
         "the legacy-NULL fallback belongs in `parse_enum_column`'s `legacy` \
          argument, not open-coded at a call site"
     );
+}
+
+/// Every `.rs` file under `src/db/events/`, joined in name order. The module was
+/// one file until .issues/052 split it; these guards are about the module.
+fn events_module_source() -> String {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/src/db/events");
+    let mut paths: Vec<_> = std::fs::read_dir(dir)
+        .expect("worker/src/db/events/ must be readable")
+        .map(|e| e.expect("dir entry").path())
+        .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+        .collect();
+    paths.sort();
+    paths
+        .iter()
+        .map(|p| std::fs::read_to_string(p).expect("events module file is readable"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }

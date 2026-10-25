@@ -453,7 +453,7 @@ step_create_event_kv() {
   # event_end_ms — the events API has no absolute-timestamp field for it. The
   # Worker derives refund_deadline_ms = event_end_ms + hours * 3_600_000
   # (worker/src/handlers/deposit/usdc/handlers/status.rs:114). 168h = 7 days,
-  # matching the Worker's own default (worker/src/db/events.rs:242).
+  # matching the Worker's own default (`refund_deadline_hours.unwrap_or(168)` in worker/src/db/events/row.rs).
   local event_end_ms refund_deadline_hours
   event_end_ms=$(( EVENT_END_S * 1000 ))
   refund_deadline_hours=168
