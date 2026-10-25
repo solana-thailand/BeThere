@@ -62,6 +62,7 @@
     "og_card_layout tests/og_card_layout.rs": 12,
     "post_event_one_click tests/post_event_one_click.rs": 7,
     "live_form_server_prefill tests/live_form_server_prefill.rs": 3,
+    "live_one_click tests/live_one_click.rs": 5,
     "refund_date_line tests/refund_date_line.rs": 3,
     "profile_link_result tests/profile_link_result.rs": 4,
     "public_event_attendance tests/public_event_attendance.rs": 9,

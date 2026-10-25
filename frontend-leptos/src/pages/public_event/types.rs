@@ -537,3 +537,45 @@ pub fn format_refund_deadline(hours: u32, locale: Locale) -> String {
         _ => format!("{} {unit_days}", hours / 24),
     }
 }
+
+// ---------------------------------------------------------------------------
+// One-click registration on the live form (.plans/047 Phase 2)
+// ---------------------------------------------------------------------------
+
+/// What the live form knows when it decides whether to offer one click.
+pub struct OneClickInputs<'a> {
+    pub has_deposit: bool,
+    pub is_hybrid: bool,
+    pub wallet_only: bool,
+    pub require_photo_consent: bool,
+    pub require_contact: bool,
+    /// A custom form field marked required is shown (the developer-profile
+    /// section is on and at least one of its fields is `required`).
+    pub has_required_custom_field: bool,
+    pub name: &'a str,
+    pub contact_channel: &'a str,
+    pub contact_handle: &'a str,
+}
+
+/// Owner rule (2026-10-25): one click only when the event asks nothing the
+/// profile cannot answer — no deposit, no required custom field, one way to
+/// attend. Also never for wallet-only sessions (their email is typed), never
+/// when photo consent is required (one click must not grant it), and only
+/// with a name on file, plus the contact when the event requires one.
+pub fn one_click_eligible(i: &OneClickInputs) -> bool {
+    if i.has_deposit
+        || i.is_hybrid
+        || i.wallet_only
+        || i.require_photo_consent
+        || i.has_required_custom_field
+    {
+        return false;
+    }
+    if i.name.trim().is_empty() {
+        return false;
+    }
+    match i.require_contact {
+        true => !i.contact_channel.trim().is_empty() && !i.contact_handle.trim().is_empty(),
+        false => true,
+    }
+}
