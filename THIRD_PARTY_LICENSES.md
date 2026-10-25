@@ -1641,7 +1641,7 @@ USE OR OTHER DEALINGS IN THE SOFTWARE.
 ### MIT License
 
 Used by:
-- tokio 1.52.1
+- tokio 1.54.1
 
 ```text
 MIT License
