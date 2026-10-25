@@ -254,3 +254,12 @@ then, with the other held branches. There are no pushes, merges or deploys befor
 - **Merge check:** a simulated merge (`git merge-tree`) of 1 and then 2 onto `develop` `6604beee` is conflict-free. Both branches add a dated paragraph to this issue, in different places.
 - **No overlap with the other branches:** no other held branch touches `quiz_editor/`. The other held branches are qa-take-fixes, 162, 163, remap, stamp and pin; their order is in `.plans/031`.
 - **`pages/scanner/page.rs` (1304) stays frozen** until after the take, because it is demo-critical. Reopen trigger: the 8 Oct take is filmed.
+
+**2026-10-25 (`event-checkin-e8`):** both held splits landed, re-done on current `develop` rather than
+rebased. `worker/src/db/events.rs` (1130) → `worker/src/db/events/` (`row`, `config`, `write`, `read`,
+`public`, `mod` as index), pull 291; the text-reading guards now read the new files and the SQL
+interpolation allowlist gained a `config.rs` row. `quiz_editor/editor.rs` → `editor.rs` (729) +
+`questions.rs` (365): the original commit `c76e8538` cherry-picked unchanged (the directory had not moved
+since), re-gated with fmt, wasm32 clippy `-D warnings` (default and `--features staff`) and 459 frontend
+tests. Remaining over the line: `frontend-leptos/src/pages/scanner/page.rs` (1333); its take-freeze trigger
+(the 8 Oct take) has passed.
