@@ -1,6 +1,6 @@
 # 047 — Past-event materials and one-click registration
 
-**Status:** Phase 1 deployed to prod (2026-10-17, session `event-checkin-ef`). Phase 2 in progress: the live form prefills name and contact from the server profile (branch `feature/047-live-form-prefill`); one-click still open.
+**Status:** Phase 1 deployed to prod (2026-10-17, session `event-checkin-ef`). Phase 2 in progress: the live form prefills name and contact from the server profile (pull 286, on prod 2026-10-25); one-click for live events still open.
 
 ## Why
 
@@ -75,6 +75,8 @@ YouTube description → /e/{slug} (ended page: recording + "watch" button)
   make this a larger change).
 - Organizer side: a "slides" field per past event is already in the event form
   (Community links → type `slides`); fill it for RTM #1–#6.
+
+- [x] Prod (owner go 2026-10-25): release pull 288, `01f7effa`, version `4359e027`, 05:47 UTC, after backup `backup-prod-20261025-1241.sql`; same release carried the tokio RUSTSEC-2026-0386 fix (pull 290). Checked: staging parity, content types, security headers, the shipped wasm carries the new text, RTM #5 ended page sends a guest to sign-in. Write smoke skipped: the smoke token had expired.
 
 ## Notes
 

@@ -1,6 +1,6 @@
 # 048 — Lessons from John Maeda's talk, applied to the attendee path
 
-**Status:** proposal, nothing built. Source: "John Maeda's Simple Recipe for
+**Status:** refund-date line deployed to prod (pull 287 via release pull 288, 2026-10-25); the rest is proposal. Source: "John Maeda's Simple Recipe for
 Better Products in the Age of AI" (Convex, YouTube `w6BJ6lXxB0I`, 30 min,
 read from auto-captions, so a few words are garbled). Owner asked 2026-10-22 to
 learn from it and adapt. The mapping below is our inference, not his claims.
@@ -43,7 +43,9 @@ client today. So the candidate shrinks to: one line above those cards, plus a
 `thb_deposits.refunded_at`; the ticket payload now carries it and the refund
 card says "Returned on YYYY-MM-DD" (TH: "คืนเมื่อ …"). Opened on a local
 fixture worker in EN and TH (2026-10-22): the card renders the date and the
-receipt link. Not yet seen on staging.
+receipt link. Not seen on staging (staging has no refunded deposit).
+
+Prod (owner go 2026-10-25): release pull 288, `01f7effa`, version `4359e027`, 05:47 UTC, after backup `backup-prod-20261025-1241.sql`; same release carried the tokio RUSTSEC-2026-0386 fix (pull 290). Checked: staging parity, content types, security headers, the shipped wasm carries the new text, RTM #5 ended page sends a guest to sign-in. Write smoke skipped: the smoke token had expired.
 
 ## Order
 
