@@ -61,7 +61,7 @@
     "mirror_field_types tests/mirror_field_types.rs": 8,
     "og_card_layout tests/og_card_layout.rs": 12,
     "post_event_one_click tests/post_event_one_click.rs": 7,
-    "faq_markdown tests/faq_markdown.rs": 3,
+    "faq_markdown tests/faq_markdown.rs": 4,
     "live_form_server_prefill tests/live_form_server_prefill.rs": 3,
     "live_one_click tests/live_one_click.rs": 5,
     "refund_date_line tests/refund_date_line.rs": 3,
