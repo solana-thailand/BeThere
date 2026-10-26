@@ -61,3 +61,14 @@ fn the_attendee_shell_ships_both_files() {
         );
     }
 }
+
+#[test]
+fn the_markdown_is_served_as_utf8() {
+    let headers = std::fs::read_to_string(path("_headers")).expect("_headers");
+    let rule = headers
+        .split("\n/faq*.md\n")
+        .nth(1)
+        .expect("_headers has a /faq*.md rule");
+    let block = rule.split("\n\n").next().unwrap_or_default();
+    assert!(block.contains("Content-Type: text/markdown; charset=utf-8"));
+}

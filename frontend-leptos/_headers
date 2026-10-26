@@ -58,6 +58,12 @@
 /manifest.json
   Cache-Control: no-cache, must-revalidate
 
+# The Markdown FAQ for AI readers (.plans/049). text/markdown needs an explicit
+# charset (RFC 7763); without it the Thai file can be read as Latin-1.
+/faq*.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: no-cache, must-revalidate
+
 # Content-hashed assets — filename changes per build, so long caching is safe.
 /event-checkin-frontend-*.js
   Cache-Control: public, max-age=31536000, immutable
