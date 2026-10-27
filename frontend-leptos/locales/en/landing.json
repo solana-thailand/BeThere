@@ -22,7 +22,7 @@
     "film_close": "Close the film",
     "film_captions": "Captions",
     "b_events_link": "Events and courses →",
-    "c_lead": "{came} of the {paid} chairs were filled by people who paid a deposit. The empty outlines are the {gone} who did not come."
+    "c_lead": "{came} of the {paid} who paid a deposit came. The empty outlines are the {gone} who did not."
   },
   "cta": {
     "dashboard": "Go to Dashboard →",

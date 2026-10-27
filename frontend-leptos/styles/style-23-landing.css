@@ -2360,18 +2360,13 @@ a.lp-event:focus-visible {
     display: none;
 }
 .lp-hero-c-hall {
-    margin: 0 -8px 12px;
+    margin: 0 0 20px;
 }
 .lp-hero-c .lp-hall-box {
     padding: 0;
     gap: 6px;
     background: none;
     border: 0;
-}
-.lp-hero-c .lp-hall {
-    /* The chairs thin out toward the words. */
-    -webkit-mask-image: linear-gradient(#000 38%, transparent 100%);
-    mask-image: linear-gradient(#000 38%, transparent 100%);
 }
 .lp-hero-c .lp-hall-came {
     fill: var(--lp-t-field);
@@ -2383,16 +2378,11 @@ a.lp-event:focus-visible {
 .lp-hero-c .lp-hall-big {
     display: none;
 }
-.lp-hero-c .lp-hall-say,
-.lp-hero-c .lp-hall-fine {
+.lp-hero-c .lp-hall-say {
     max-width: 52em;
-}
-.lp-hero-c-grid .lp-hero-text {
-    max-width: 52em;
-    margin-top: 8px;
 }
 .lp-hero-c .lp-hero-h1 {
-    font-size: clamp(44px, 8vw, 96px);
+    font-size: clamp(44px, 6vw, 80px);
     line-height: 0.98;
     letter-spacing: -0.04em;
     text-wrap: auto;
@@ -2429,5 +2419,34 @@ a.lp-event:focus-visible {
 }
 .lp-hero-c .lp-hall-picking ~ .lp-hall-say {
     visibility: visible;
+}
+
+/* Wide screens: the headline and, level with it, the sentence, the action and
+   what the numbers count (.plans/049: use the width, shorten the page). */
+@media (min-width: 768px) {
+    .lp-hero-c-cols {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 56px;
+        /* Level with each other, not hung from the bottom: the headline and
+           the sentence read as one block. */
+        align-items: center;
+        max-width: none;
+    }
+    .lp-hero-c-cols .lp-hero-sub {
+        margin-top: 0;
+    }
+}
+.lp-hero-scope {
+    margin: 16px 0 0;
+    font-size: 13px;
+    color: var(--lp-ink-3);
+    max-width: 34em;
+}
+.lp-hero-c-grid {
+    position: relative;
+}
+.lp-hero-c-side {
+    min-width: 0;
 }
 

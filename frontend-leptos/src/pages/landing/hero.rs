@@ -81,14 +81,18 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                 // The payers' hall as a band across the top (.plans/049, owner pick C):
                 // the evidence first, then the words.
                 <div class="lp-hero-c-hall">
-                    <super::hall::Hall cols=hall_band_cols() />
+                    <super::hall::Hall cols=hall_band_cols() show_fine=false />
                 </div>
                 <div class="lp-hero-text">
+                  <div class="lp-hero-c-cols">
                     <h1 class="lp-hero-h1">
                         <span>{tr(|l| crate::i18n::td_string!(l, landing.hero.headline_1))}</span>
                         <br />
                         <span class="lp-hero-h1-2">{tr(|l| crate::i18n::td_string!(l, landing.hero.headline_2))}</span>
                     </h1>
+                    // Wide screens: the words on the left, the sentence and the action
+                    // on the right, level with the headline's last line.
+                    <div class="lp-hero-c-side">
                     // The proof in one sentence, with the hall's own numbers.
                     <p class="lp-hero-sub">{lead}</p>
                     <div class="lp-actions">
@@ -123,6 +127,10 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                     </div>
                     // The one-minute film is a quiet link, not a second button.
                     <div class="lp-hero-more"><WhyFilm /></div>
+                    // What the numbers count: kept, small, under the action.
+                    <p class="lp-hero-scope">{tr(|l| crate::i18n::td_string!(l, landing.hall.fine))}</p>
+                    </div>
+                  </div>
                 </div>
             </div>
         </header>

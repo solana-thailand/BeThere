@@ -70,7 +70,12 @@ fn event_line(row: &LadderRow, locale: Locale) -> String {
 }
 
 #[component]
-pub fn Hall(#[prop(default = COLS)] cols: usize) -> impl IntoView {
+pub fn Hall(
+    #[prop(default = COLS)] cols: usize,
+    /// The caveat line under the chairs; the hero draws it beside its words.
+    #[prop(default = true)]
+    show_fine: bool,
+) -> impl IntoView {
     let i18n = use_i18n();
     let (seats, w, h) = hall_seats_in(&LADDER, cols);
     let (paid, came) = ladder_total();
@@ -131,7 +136,9 @@ pub fn Hall(#[prop(default = COLS)] cols: usize) -> impl IntoView {
                     None => td_string!(i18n.get_locale(), landing.hall.point).to_string(),
                 }}
             </p>
-            <p class="lp-hall-fine">{tr(|l| td_string!(l, landing.hall.fine))}</p>
+            {show_fine.then(|| view! {
+                <p class="lp-hall-fine">{tr(|l| td_string!(l, landing.hall.fine))}</p>
+            })}
         </div>
     }
 }
