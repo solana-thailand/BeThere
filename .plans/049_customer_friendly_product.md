@@ -95,6 +95,46 @@ Moving the card into the hero would save one tap on free events only, at the
 cost of restructuring an 889-line page and its visual baselines. Revisit if a
 click-through measurement shows people stop at the hero button.
 
+## Minor finding: `HEAD /media/*` is 404
+
+The landing film works for viewers (GET, range, 206, 3.8 MB `video/mp4`, EN and
+TH, captions and posters). `media::serve` is gated on `Method::GET` in
+`worker/src/lib.rs`, so `HEAD` falls through to the 404 page; a link checker or
+crawler that probes with HEAD would report the film as broken. Left alone: the
+path took work to get right (iOS Safari ranges, edge cache) and nothing real
+breaks. Fix if a checker ever complains: answer HEAD with the same headers and no
+body.
+
+## Item 3: clips (draft for the owner, nothing rendered)
+
+The existing "Why a deposit · 1 min" film is a pitch about the problem (no-shows
+and food waste). These two are how-tos, so they do not duplicate it. 60–90 s
+each, EN and TH captions like the existing film, screens from a seeded fixture
+(no real attendee data), built with the fframes/ffilms pipeline.
+
+**Attendee, "Show up, get it back" (~75 s)**
+1. Open an event from `/events`; the Reserve button (5 s).
+2. Sign in once; the card says "You'll register as …"; one tap on "Agree and
+   register" (10 s). Say that a name on file is why it is one tap.
+3. The ticket: pay the deposit by PromptPay, upload the slip (15 s).
+4. At the door: show the QR, the staff phone scans it (10 s).
+5. After the event: the refund card, "Returned on <date>" and the receipt
+   (15 s). Say the refund window in the words the site already uses.
+6. End card: the badge, and where to find the FAQ (10 s).
+
+**Organizer, "Create an event in 3 minutes" (~85 s)**
+1. `/admin` → Create Event: only Basic Info, Schedule and Google Sheets are open
+   (15 s). Name, date, place; the deposit amount, which is required.
+2. Save; the public link and the share button (10 s).
+3. Door day: the scanner on a phone, a scan, a walk-in (20 s).
+4. After: Deposits & Refunds, refund with the slip; credit holders and the
+   payout (20 s).
+5. End card: FAQ and organizer page (10 s).
+
+Owner to decide: tone (plain or the Night Edition look), voice-over or captions
+only, whether the organizer clip may show the Google Sheet step (it needs a
+service account), and the order. Rendering waits for that.
+
 ## Order
 
 1. Item 4 (this branch).
