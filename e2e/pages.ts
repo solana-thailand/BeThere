@@ -31,14 +31,14 @@ export interface AppPage {
 const EVENT_LOADED = `text=${EVENT_NAME}`;
 
 export const PAGES: AppPage[] = [
-  // The photo reel (L9) and the goal globe (L10) load on first sight. The
-  // open events moved to /events (.plans/045), so the home is ready when the
-  // payers' hall has its total.
+  // The photo reel (L9) loads on first sight. The open events moved to /events
+  // (.plans/045), so the home is ready when the payers' hall is drawn: the chairs
+  // are the picture now, and the big figure is not shown (.plans/049).
   {
     name: "landing",
     path: "/",
     authed: false,
-    ready: ".lp-hall-big",
+    ready: ".lp-hall",
     reveal: [{ at: ".lp-reel", ready: ".lp-moment" }],
     still: true,
   },
