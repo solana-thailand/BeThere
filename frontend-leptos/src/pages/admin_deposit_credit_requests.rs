@@ -23,7 +23,7 @@ use crate::utils;
 use crate::utils::credit_payout::{
     account_copy_value, account_lines, account_source_badge, age_line, parse_paid,
 };
-use event_checkin_domain::models::credit_payout::is_overdue;
+use event_checkin_domain::models::credit_payout::{RefundAccount, is_overdue};
 
 /// Same cap as the deposit refund proof (`admin_deposit.rs`): the worker's
 /// slip validator refuses a data URL over 5 MB.
@@ -111,7 +111,8 @@ pub fn CreditPayoutCandidates(
         </Show>
         // .issues/194: credit that can be neither paid unasked (no account) nor
         // paid from the queue (no request). Their deposit row may be gone, so
-        // nothing else on this page would show them; read-only, contact them.
+        // nothing else on this page would show them. The organizer can record a
+        // payout to an account they type (owner, 2026-10-27).
         <Show when=move || !no_account.get().is_empty() fallback=|| ()>
             <div class="admin-dep-credit-refund-requests">
                 <div class="admin-dep-flow-hint">
@@ -123,7 +124,7 @@ pub fn CreditPayoutCandidates(
                             _ => ("contacts", "hold"),
                         };
                         format!(
-                            "{count} {who} {verb} credit with no refund account on file. Contact them for an account, or ask them to request a refund from their ticket."
+                            "{count} {who} {verb} credit with no refund account on file. Ask them to request a refund from their ticket, or, if you already paid them, type the account you paid to and attach the slip."
                         )
                     }}
                 </div>
@@ -131,7 +132,9 @@ pub fn CreditPayoutCandidates(
                     no_account
                         .get()
                         .into_iter()
-                        .map(credit_holder_to_contact)
+                        .map(|req| view! {
+                            <CreditRefundRow req=req kind=PayoutRowKind::TypedAccount set_toast=set_toast set_refresh_counter=set_refresh_counter/>
+                        })
                         .collect_view()
                 }}
             </div>
@@ -146,6 +149,9 @@ enum PayoutRowKind {
     Requested,
     /// The organizer pays to the deposit account unasked; the slip is required.
     Unrequested,
+    /// No usable account on file: the organizer types the account they paid
+    /// to; the slip is required (`.issues/194`).
+    TypedAccount,
 }
 
 /// One payout row: the account, the age (requests only), and the
@@ -183,6 +189,22 @@ fn CreditRefundRow(
     let (paid_usdc, set_paid_usdc) = signal(start(credit_usdc));
     let (proof, set_proof) = signal(None::<String>);
     let (pending, set_pending) = signal(false);
+    // TypedAccount only: the account the organizer paid to.
+    let (to_promptpay, set_to_promptpay) = signal(false);
+    let (to_bank_name, set_to_bank_name) = signal(String::new());
+    let (to_bank_account, set_to_bank_account) = signal(String::new());
+    let (to_account_name, set_to_account_name) = signal(String::new());
+    let (to_promptpay_id, set_to_promptpay_id) = signal(String::new());
+    let typed_account = move || match to_promptpay.get() {
+        true => RefundAccount::PromptPay {
+            promptpay_id: to_promptpay_id.get(),
+        },
+        false => RefundAccount::Bank {
+            bank_name: to_bank_name.get(),
+            bank_account: to_bank_account.get(),
+            account_name: to_account_name.get(),
+        },
+    };
 
     // Issue #120 §3. Nothing payable and credit still covering an event that
     // has not ended: clearing would reverse nothing and drop the request. The
@@ -202,6 +224,7 @@ fn CreditRefundRow(
     };
     let overdue = is_overdue(age_hours);
     let copy_value = account.as_ref().map(account_copy_value);
+    let email_for_contact = email.clone();
     // Where the account came from (`.issues/190`): the attendee's deposit, or
     // typed by them — and a warning when they replaced the deposit account.
     let source_badge = account_source_badge(
@@ -235,14 +258,21 @@ fn CreditRefundRow(
     };
 
     // Why "Record payout" cannot be pressed yet, shown next to it.
-    let missing = move || match (
-        paid_thb.get().trim().is_empty() && paid_usdc.get().trim().is_empty(),
-        kind == PayoutRowKind::Unrequested && proof.get().is_none(),
-    ) {
-        (true, true) => Some("Enter the amount you transferred and attach the slip"),
-        (true, false) => Some("Enter the amount you transferred"),
-        (false, true) => Some("Attach the transfer slip to record this payout"),
-        (false, false) => None,
+    let missing = move || {
+        if kind == PayoutRowKind::TypedAccount
+            && typed_account().normalized_organizer_typed().is_err()
+        {
+            return Some("Type the account you paid to");
+        }
+        match (
+            paid_thb.get().trim().is_empty() && paid_usdc.get().trim().is_empty(),
+            kind != PayoutRowKind::Requested && proof.get().is_none(),
+        ) {
+            (true, true) => Some("Enter the amount you transferred and attach the slip"),
+            (true, false) => Some("Enter the amount you transferred"),
+            (false, true) => Some("Attach the transfer slip to record this payout"),
+            (false, false) => None,
+        }
     };
 
     let record_payout = move |_| {
@@ -253,12 +283,23 @@ fn CreditRefundRow(
                 return;
             }
         };
+        let paid_to = match kind {
+            PayoutRowKind::TypedAccount => match typed_account().normalized_organizer_typed() {
+                Ok(account) => Some(account),
+                Err(e) => {
+                    components::show_toast(&set_toast, &e.to_string(), ToastType::Error);
+                    return;
+                }
+            },
+            _ => None,
+        };
         let body = ClearCreditRefundRequest {
             email: email.clone(),
             paid,
             proof: proof.get_untracked(),
+            paid_to,
         };
-        if kind == PayoutRowKind::Unrequested && body.proof.is_none() {
+        if kind != PayoutRowKind::Requested && body.proof.is_none() {
             components::show_toast(
                 &set_toast,
                 "Attach the transfer slip — they did not ask for this payout",
@@ -272,7 +313,9 @@ fn CreditRefundRow(
                 PayoutRowKind::Requested => {
                     api::clear_credit_refund_request(&body).await.map(|_| ())
                 }
-                PayoutRowKind::Unrequested => api::organizer_credit_payout(&body).await.map(|_| ()),
+                PayoutRowKind::Unrequested | PayoutRowKind::TypedAccount => {
+                    api::organizer_credit_payout(&body).await.map(|_| ())
+                }
             };
             match result {
                 Ok(()) => {
@@ -296,7 +339,38 @@ fn CreditRefundRow(
         });
     };
 
-    let account_view = match &account {
+    let account_view = match (&account, kind) {
+        (_, PayoutRowKind::TypedAccount) => view! {
+            <div class="panel-hint">{format!("Email: {email_for_contact}")}</div>
+            <label class="panel-hint">
+                <input
+                    type="checkbox"
+                    prop:checked=move || to_promptpay.get()
+                    on:change=move |ev| set_to_promptpay.set(event_target_checked(&ev))
+                />
+                " Paid by PromptPay"
+            </label>
+            {move || match to_promptpay.get() {
+                true => view! {
+                    <input class="form-input dep-input" type="text" inputmode="numeric" placeholder="PromptPay ID (phone or 13-digit ID)"
+                        prop:value=move || to_promptpay_id.get()
+                        on:input=move |ev| set_to_promptpay_id.set(event_target_value(&ev)) />
+                }.into_any(),
+                false => view! {
+                    <input class="form-input dep-input" type="text" placeholder="Bank"
+                        prop:value=move || to_bank_name.get()
+                        on:input=move |ev| set_to_bank_name.set(event_target_value(&ev)) />
+                    <input class="form-input dep-input" type="text" inputmode="numeric" placeholder="Account number (10-15 digits)"
+                        prop:value=move || to_bank_account.get()
+                        on:input=move |ev| set_to_bank_account.set(event_target_value(&ev)) />
+                    <input class="form-input dep-input" type="text" placeholder="Account name"
+                        prop:value=move || to_account_name.get()
+                        on:input=move |ev| set_to_account_name.set(event_target_value(&ev)) />
+                }.into_any(),
+            }}
+        }
+        .into_any(),
+        _ => match &account {
         Some(account) => account_lines(account)
             .into_iter()
             .map(|(label, value)| {
@@ -308,6 +382,7 @@ fn CreditRefundRow(
             <span class="badge badge-warning">"No account on file — ask the attendee"</span>
         }
         .into_any(),
+        },
     };
 
     view! {
@@ -337,7 +412,12 @@ fn CreditRefundRow(
                         </div>
                     })}
                     <div class="admin-dep-bank-section">
-                        <div class="panel-hint admin-dep-bank-label">"Pay to"</div>
+                        <div class="panel-hint admin-dep-bank-label">
+                            {match kind {
+                                PayoutRowKind::TypedAccount => "Paid to (type the account you sent it to)",
+                                _ => "Pay to",
+                            }}
+                        </div>
                         {account_view}
                         {source_badge.map(|(class, text)| view! {
                             <div class="panel-hint"><span class=class>{text}</span></div>
@@ -349,6 +429,7 @@ fn CreditRefundRow(
                     {match kind {
                         PayoutRowKind::Requested => view! { <span class="badge badge-warning">"Refund Requested"</span> },
                         PayoutRowKind::Unrequested => view! { <span class="badge badge-info">"Not requested"</span> },
+                        PayoutRowKind::TypedAccount => view! { <span class="badge badge-warning">"No account on file"</span> },
                     }}
                     {copy_value.map(|value| view! {
                         <button
@@ -402,7 +483,7 @@ fn CreditRefundRow(
                             <span class="form-label">
                                 {match kind {
                                     PayoutRowKind::Requested => "Transfer slip (optional — JPEG, PNG, WebP, max 3MB)",
-                                    PayoutRowKind::Unrequested => "Transfer slip (required — JPEG, PNG, WebP, max 3MB)",
+                                    PayoutRowKind::Unrequested | PayoutRowKind::TypedAccount => "Transfer slip (required — JPEG, PNG, WebP, max 3MB)",
                                 }}
                             </span>
                             <input
@@ -487,32 +568,4 @@ fn credit_sources_view(
         </div>
     }
     .into_any()
-}
-
-/// A credit holder the organizer can only contact (no account, no request):
-/// who, how much, their email to write to, and where the credit came from.
-fn credit_holder_to_contact(req: CreditRefundRequest) -> impl IntoView {
-    let display_name = match req.name.is_empty() {
-        true => req.email.clone(),
-        false => req.name.clone(),
-    };
-    let payable = api::PaidAmounts {
-        thb: req.credit_thb,
-        usdc: req.credit_usdc,
-    };
-    view! {
-        <div class="card admin-dep-credit-refund-row">
-            <div class="flex-row-wrap">
-                <div>
-                    <div class="admin-attendee-name">{utils::escape_html(&display_name)}</div>
-                    <div class="admin-amount-line">{format!("Holds: {payable}")}</div>
-                    <div class="panel-hint">{format!("Email: {}", req.email)}</div>
-                    {credit_sources_view(req.sources)}
-                </div>
-                <div class="admin-dep-payout-status">
-                    <span class="badge badge-warning">"No account on file"</span>
-                </div>
-            </div>
-        </div>
-    }
 }

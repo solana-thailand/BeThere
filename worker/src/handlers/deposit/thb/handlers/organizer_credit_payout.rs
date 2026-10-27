@@ -10,10 +10,14 @@
 //! held as credit), so the organizer can return the money without waiting for
 //! a request. Three rules keep that safe:
 //!
-//! - **Only to the deposit account.** The account that speaks for the person
-//!   must be the deposit-sourced one. An account the attendee typed (or a
-//!   replacement of the deposit one) only exists with a request, and a request
-//!   is paid from the queue.
+//! - **Only to the deposit account — or one the organizer typed.** The account
+//!   that speaks for the person must be the deposit-sourced one. An account
+//!   the attendee typed (or a replacement of the deposit one) only exists with
+//!   a request, and a request is paid from the queue. When the person has no
+//!   usable account (`.issues/194`: the owner paid two credit holders by
+//!   other means), the organizer types the account they paid to (`paid_to`):
+//!   it must pass `RefundAccount::normalized_organizer_typed`, and the audit
+//!   keeps its `audit_label` (bank, holder, last four digits).
 //! - **Never over an open request.** If any email of the person has one, the
 //!   attendee chose where to be paid; this endpoint refuses and points to the
 //!   queue.
@@ -29,7 +33,9 @@
 
 use axum::{Extension, Json, extract::State};
 use event_checkin_domain::models::auth::Claims;
-use event_checkin_domain::models::credit_payout::{AccountSource, PaidAmounts, PayoutScope};
+use event_checkin_domain::models::credit_payout::{
+    AccountSource, PaidAmounts, PayoutScope, RefundAccount,
+};
 use event_checkin_domain::models::error::AppError;
 use serde::{Deserialize, Serialize};
 
@@ -103,6 +109,11 @@ pub struct OrganizerCreditPayoutRequest {
     /// Required here: no attendee asked, so the slip is the record.
     #[serde(default)]
     pub proof: Option<String>,
+    /// The account the organizer paid to, typed by them, for a person with no
+    /// usable account on file (`.issues/194`). Absent: pay to the deposit
+    /// account.
+    #[serde(default)]
+    pub paid_to: Option<RefundAccount>,
 }
 
 /// Response for an organizer-initiated payout.
@@ -161,20 +172,32 @@ pub async fn organizer_credit_payout_handler(
         )
         .into());
     }
-    match crate::db::credit_refund_accounts::chosen_for_person(db, &body.email)
+    let on_file = crate::db::credit_refund_accounts::chosen_for_person(db, &body.email)
         .await
-        .map_err(AppError::Internal)?
-    {
-        Some((_, AccountSource::Deposit, _)) => {}
-        _ => {
+        .map_err(AppError::Internal)?;
+    // Which account the money went to: the deposit one on file, or the one
+    // the organizer typed. A typed account wins (the deposit one can be junk,
+    // `.issues/194`), and is checked harder than an attendee's.
+    let (initiator, paid_to) = match (body.paid_to.clone(), on_file) {
+        (Some(typed), _) => {
+            let typed = typed
+                .normalized_organizer_typed()
+                .map_err(|e| AppError::Validation(e.to_string()))?;
+            (
+                PayoutInitiator::OrganizerTypedAccount,
+                Some(typed.audit_label()),
+            )
+        }
+        (None, Some((_, AccountSource::Deposit, _))) => (PayoutInitiator::Organizer, None),
+        (None, _) => {
             return Err(AppError::Conflict(
-                "no deposit refund account on file for this person — they can request a \
-                 refund from their ticket page"
+                "no deposit refund account on file for this person — type the account you \
+                 paid to, or they can request a refund from their ticket page"
                     .to_string(),
             )
             .into());
         }
-    }
+    };
 
     let paid = body.paid;
     let buckets = super::credit_payout::scoped_buckets(db, &scope, &body.email).await?;
@@ -188,7 +211,8 @@ pub async fn organizer_credit_payout_handler(
         paid,
         Some(proof),
         &buckets,
-        PayoutInitiator::Organizer,
+        initiator,
+        paid_to.as_deref(),
     )
     .await?;
 

@@ -90,7 +90,10 @@ fn account_error_text(error: RefundAccountError) -> Signal<&'static str> {
         }
         RefundAccountError::BankAccountMissing
         | RefundAccountError::BankNameMissing
-        | RefundAccountError::AccountNameMissing => {
+        | RefundAccountError::AccountNameMissing
+        // Organizer-typed accounts only (`.issues/194`); the attendee path
+        // never returns it, but the bank message fits if it ever does.
+        | RefundAccountError::BankAccountDigits => {
             crate::locale::tr(|l| crate::i18n::td_string!(l, ticket.action.return_err_bank))
         }
     }

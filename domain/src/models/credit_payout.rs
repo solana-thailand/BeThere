@@ -78,6 +78,8 @@ pub enum RefundAccountError {
     BankNameMissing,
     AccountNameMissing,
     PromptPayIdInvalid,
+    /// An organizer-typed bank account that is not 10–15 digits.
+    BankAccountDigits,
 }
 
 impl fmt::Display for RefundAccountError {
@@ -92,6 +94,7 @@ impl fmt::Display for RefundAccountError {
                 "PromptPay ID must be a 10-digit phone number starting with 0 \
                  or a 13-digit ID number"
             }
+            Self::BankAccountDigits => "bank_account must be 10 to 15 digits",
         })
     }
 }
@@ -186,6 +189,47 @@ impl RefundAccount {
                 bank_account: bank_account?,
                 account_name: account_name?,
             }),
+        }
+    }
+}
+
+impl RefundAccount {
+    /// An account the **organizer** typed after paying someone with no account
+    /// on file (`.issues/194`). Stricter than the attendee rule, which only
+    /// asks for non-blank fields (and let a 1-digit account through): nobody
+    /// else checks this account before the ledger moves, so a bank account
+    /// must be 10–15 digits once spaces and dashes are dropped.
+    pub fn normalized_organizer_typed(self) -> Result<Self, RefundAccountError> {
+        let account = self.normalized()?;
+        match &account {
+            Self::Bank { bank_account, .. } => {
+                let digits = bank_account.chars().filter(|c| !matches!(c, ' ' | '-'));
+                let ok = digits.clone().all(|c| c.is_ascii_digit())
+                    && (10..=15).contains(&digits.count());
+                match ok {
+                    true => Ok(account),
+                    false => Err(RefundAccountError::BankAccountDigits),
+                }
+            }
+            Self::PromptPay { .. } => Ok(account),
+        }
+    }
+
+    /// What the audit entry keeps: the method, the bank and the holder, and
+    /// only the last four digits. The slip is the full record.
+    pub fn audit_label(&self) -> String {
+        let last4 = |raw: &str| {
+            let digits: String = raw.chars().filter(char::is_ascii_digit).collect();
+            let tail = digits.len().saturating_sub(4);
+            format!("···{}", &digits[tail..])
+        };
+        match self {
+            Self::PromptPay { promptpay_id } => format!("PromptPay {}", last4(promptpay_id)),
+            Self::Bank {
+                bank_name,
+                bank_account,
+                account_name,
+            } => format!("{bank_name} {} ({account_name})", last4(bank_account)),
         }
     }
 }
