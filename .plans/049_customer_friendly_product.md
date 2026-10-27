@@ -59,6 +59,42 @@ Measured on a local fixture, same probe, 390×844:
 Not done, owner call: collapse Deposit Details too (with a summary line) only if
 the amount stops being required on create, or the default becomes "deposit off".
 
+## Landing page: less is more (2026-10-27, prototype on `feature/049-landing-minimal`, not merged)
+
+Owner: too many things pull the eye, unclear what is the focus; asked whether
+less is better for the business image. Measured on prod and a local fixture
+(390 and 1440 wide):
+
+| | current | minimal prototype |
+|---|---|---|
+| mobile page | 4.9 screens | 2.9 |
+| desktop page | 2.9 | 1.7 |
+| animated elements | 3 | 0 |
+| hero parts | 9 (kicker, 2-colour headline, sub-line with 6 underlined keywords, Today/Coming box, orange quote, 2 buttons, the 90/94 card, cookie bar) | 4 (headline, one sentence, 2 buttons, the 90/94 card) |
+
+Cut: the kicker, the Today/Coming box, the quote, the keyword underlines, both
+"SO FAR" tapes, the second payers line (73/77) and the devnet door on the home
+page (the other pages keep it); the globe moved to `/events`.
+
+**Retraction.** An earlier version of this note called the "0 events · ฿0" strip
+the most serious problem. It was a screenshot taken during the count-up
+animation: after scrolling it reads 14 events, 141 on-site, 111 through the door,
+385 online, ฿48,000. 90/94 (RTM #1–#6 with hand records) and 73/77 (recorded by
+BeThere only) are different counts and each is labelled. No numbers bug; the case
+for the cut is clutter, not a defect.
+
+**Checked, not a bug:** the group-photo strip showed empty frames in a screenshot.
+All 8 photo URLs answer 200 `image/jpeg`; they are `loading="lazy"` and 8 of 8
+load once the strip is scrolled through.
+
+## Fix B (register card in the hero): not done, on purpose
+
+Measured: the hero's "Reserve Your Spot" is at 0.89 screens and already jumps to
+the card (`#reserve`), so the one-click path is 2 taps and 0 manual scrolling.
+Moving the card into the hero would save one tap on free events only, at the
+cost of restructuring an 889-line page and its visual baselines. Revisit if a
+click-through measurement shows people stop at the hero button.
+
 ## Order
 
 1. Item 4 (this branch).
