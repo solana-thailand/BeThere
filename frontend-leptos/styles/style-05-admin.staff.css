@@ -186,6 +186,10 @@
     padding: 1.25rem;
     max-width: 100%;
     overflow-x: hidden;
+    /* `clip` clips the same way but is not a scroll container, so a sticky
+       child (the event form's save row, .plans/049) sticks to the viewport
+       instead of to this <main>. Browsers without `clip` keep `hidden`. */
+    overflow-x: clip;
     background: var(--bg-primary);
 }
 

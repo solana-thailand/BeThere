@@ -9,9 +9,14 @@ use super::section::{FormSection, SectionBadge};
 /// Staff and admin emails.
 #[component]
 pub(super) fn PeopleSection(ctx: FormCtx) -> impl IntoView {
-    let FormCtx { form, set_form, .. } = ctx;
+    let FormCtx {
+        form,
+        set_form,
+        is_create,
+        ..
+    } = ctx;
     view! {
-        <FormSection icon_class="form-section-icon-people" title="People" badge=SectionBadge::Optional>
+        <FormSection icon_class="form-section-icon-people" title="People" badge=SectionBadge::Optional open=!is_create>
                 <div class="quiz-settings-grid">
                 <div class="quiz-setting-item">
                     <label class="quiz-field-label">"Organizer Emails"</label>

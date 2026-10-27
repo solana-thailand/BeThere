@@ -282,6 +282,17 @@
     align-items: center;
 }
 
+/* The event form's save row stays on screen while a long form scrolls past it
+   (.plans/049): the one button that matters is never 9 screens away. */
+.card > .form-actions-row {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    padding: 0.75rem 0;
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+}
+
 /* --- Info Note (dashed border note box) --- */
 .info-note {
     border: 1px dashed var(--border);
