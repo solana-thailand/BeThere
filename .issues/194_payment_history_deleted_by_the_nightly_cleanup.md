@@ -125,3 +125,10 @@ organizer payout refused them. Built:
 the person's row under "no refund account on file" → type the bank, account
 number and name you paid to (or tick PromptPay) → the amount is prefilled →
 attach the transfer slip → Record payout.
+
+**Option B deployed 2026-10-27 (owner go):** release pull 302, prod `40dfc870`, version `5efea250`, 10:45 UTC,
+after backup `backup-prod-20261027-1724.sql`; staging `666a663c` ran the same tree first. Checked after deploy:
+`/api/health` reports `git:40dfc870…`, content types, security headers, `/faq.md` and `/faq.th.md` served as
+`text/markdown; charset=utf-8`, the payout endpoint answers 401 without a session, the RTM #5 ended page sends a
+guest to sign-in. Write smoke skipped: the smoke token had expired (`.issues/195`). The owner records the
+Chanthawat Kiriyadee and Pond Bangna refunds himself from Admin → Deposits & Refunds → Held as Credit.
