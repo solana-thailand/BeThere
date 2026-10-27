@@ -2,8 +2,9 @@
 //! carried, every figure from `GET /api/public/stats` with its measured-at
 //! time (build plan rule 1). The numbers count up once when they come into
 //! view; under reduced motion they are simply there. Without stats the lines
-//! are not drawn at all. The goal and its globe (L10) are `goal.rs`, under
-//! the strip; the photo reel (L9) is `photos.rs`, above it.
+//! are not drawn at all. The photo reel (L9) is `photos.rs`, above it. The
+//! tapes, the payers line and the goal's globe left the home page in the
+//! less-is-more pass (.plans/049): the hero's hall carries the payers figure.
 
 use leptos::html::Div;
 use leptos::prelude::*;
@@ -12,19 +13,12 @@ use wasm_bindgen::closure::Closure;
 
 use crate::i18n::td_string;
 
-use super::goal::Goal;
 use super::hero::MarkupText;
 use super::photos::PhotoReel;
-use super::stats::{
-    count_at, group_thousands, measured_at_label, payers_line_shown, use_landing_stats,
-};
-use super::story::ladder_total;
+use super::stats::{count_at, group_thousands, measured_at_label, use_landing_stats};
 
 const COUNT_UP_MS: f64 = 1200.0;
 const FRAME_MS: u64 = 16;
-/// Labels per tape: the run loops by half its width, so it must be more than
-/// twice the widest screen (32 × ~110 px).
-const TAPE_REPEATS: usize = 32;
 
 pub(super) fn reduced_motion() -> bool {
     web_sys::window()
@@ -143,28 +137,6 @@ pub fn SoFar() -> impl IntoView {
             ],
         )
     };
-    let payers_at = move |t: f64| {
-        let Some(s) = stats.get().filter(payers_line_shown) else {
-            return String::new();
-        };
-        crate::locale::fill(
-            td_string!(i18n.get_locale(), landing.sofar.payers),
-            &[
-                (
-                    "came",
-                    &group_thousands(count_at(u64::from(s.deposit_payers_came), t)),
-                ),
-                ("paid", &group_thousands(u64::from(s.deposit_payers))),
-            ],
-        )
-    };
-    let payers_total = move || {
-        let (paid, came) = ladder_total();
-        crate::locale::fill(
-            td_string!(i18n.get_locale(), landing.sofar.payers_total),
-            &[("came", &came.to_string()), ("paid", &paid.to_string())],
-        )
-    };
     // Meals ordered against registrations (.plans/045 R4.11): only once an
     // organizer has entered a count.
     let meals = move || {
@@ -183,13 +155,7 @@ pub fn SoFar() -> impl IntoView {
         })
     };
     let done = Signal::derive(move || done_at(progress.get()));
-    let payers = Signal::derive(move || payers_at(progress.get()));
-    let read_out = move || {
-        let strip = |s: String| s.replace("**", "");
-        format!("{} {}", strip(done_at(1.0)), strip(payers_at(1.0)))
-            .trim_end()
-            .to_string()
-    };
+    let read_out = move || done_at(1.0).replace("**", "");
     let livebar = move || {
         stats.get().map(|s| {
             crate::locale::fill(
@@ -198,15 +164,8 @@ pub fn SoFar() -> impl IntoView {
             )
         })
     };
-    let tape = move || {
-        (0..TAPE_REPEATS)
-            .map(|_| view! { <span>{crate::locale::tr(|l| td_string!(l, landing.sofar.tape))}</span><i></i> })
-            .collect::<Vec<_>>()
-    };
-
     view! {
         <section id="goal" class="lp-goal">
-            <div class="lp-tape" aria-hidden="true"><div class="lp-tape-run">{tape()}</div></div>
             <PhotoReel />
             <div class="lp-wrap" node_ref=strip>
                 {move || stats.with(Option::is_some).then(|| view! {
@@ -214,17 +173,8 @@ pub fn SoFar() -> impl IntoView {
                     <p class="lp-sr">{read_out}</p>
                     <p class="lp-done" aria-hidden="true"><MarkupText text=done /></p>
                 })}
-                {move || stats.with(|s| s.as_ref().is_some_and(payers_line_shown)).then(|| view! {
-                    <p class="lp-done lp-payers" aria-hidden="true"><MarkupText text=payers /></p>
-                    <p class="lp-fineprint lp-center">{crate::locale::tr(|l| td_string!(l, landing.sofar.payers_note))}</p>
-                    // The ladder's total (RTM #1–#6, hand records included), under
-                    // the system-only figure above: both true, both labelled.
-                    <p class="lp-fineprint lp-center">{payers_total}</p>
-                })}
                 {move || meals().map(|line| view! { <p class="lp-fineprint lp-center">{line}</p> })}
             </div>
-            <div class="lp-tape lp-t2" aria-hidden="true"><div class="lp-tape-run">{tape()}</div></div>
-            <Goal />
         </section>
     }
 }

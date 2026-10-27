@@ -39,16 +39,20 @@ export const PAGES: AppPage[] = [
     path: "/",
     authed: false,
     ready: ".lp-hall-big",
-    reveal: [
-      { at: ".lp-reel", ready: ".lp-moment" },
-      { at: ".lp-goal-grid", ready: "#lp-countries option" },
-    ],
+    reveal: [{ at: ".lp-reel", ready: ".lp-moment" }],
     still: true,
   },
   // `/discover` now redirects to `/events`, which shows the same list inside
   // the site frame until R4.3 (.plans/045). The baseline name stays; the shot
   // changed with the frame, so CI wrote a new one.
-  { name: "discover", path: "/events", authed: false, ready: EVENT_LOADED },
+  // The goal globe moved here from the home page (.plans/049): wait for it.
+  {
+    name: "discover",
+    path: "/events",
+    authed: false,
+    ready: EVENT_LOADED,
+    reveal: [{ at: ".lp-goal-grid", ready: "#lp-countries option" }],
+  },
   { name: "organizers", path: "/organizers", authed: false, ready: ".lp-lanes" },
   { name: "sponsors", path: "/sponsors", authed: false, ready: "#contact" },
   { name: "event", path: `/e/${EVENT_SLUG}`, authed: false, ready: EVENT_LOADED },

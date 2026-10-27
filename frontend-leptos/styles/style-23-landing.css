@@ -51,11 +51,6 @@
     font: 600 13px/1.4 var(--lp-sans);
     margin: 0 0 18px;
 }
-.lp-quote {
-    font: 600 15px/1.3 var(--lp-sans);
-    color: var(--lp-t-warm);
-    margin: 0 0 10px;
-}
 .lp-btn {
     display: inline-flex;
     align-items: center;
@@ -335,20 +330,12 @@ mark.lp-hl {
     line-height: 1.16;
     letter-spacing: -0.01em;
 }
-.lp-hero-sub,
-.lp-hero-now {
+.lp-hero-sub {
     white-space: pre-line;
 }
 .lp-hero-sub {
     margin: 16px 0 24px;
     font-size: 19px;
-    color: var(--lp-ink-2);
-}
-.lp-hero-now {
-    font: 500 14px/1.5 var(--lp-sans);
-    margin: -8px 0 26px;
-    padding-left: 12px;
-    border-left: 3px solid var(--lp-field);
     color: var(--lp-ink-2);
 }
 .lp-actions {
@@ -1403,44 +1390,6 @@ a.lp-event:focus-visible {
     padding-top: 40px;
     padding-bottom: 40px;
 }
-.lp-tape {
-    /* #f4f0e6 on #5a54cb is 5.18:1; ink on the brand #6b63f0 was 4.16, under
-       AA for 15 px text (axe, CI 37381847919). */
-    background: #5a54cb;
-    color: #f4f0e6;
-    transform: rotate(-1.2deg);
-    margin: 28px -20px 0;
-    border-block: 2px solid #121212;
-    overflow: hidden;
-    white-space: nowrap;
-}
-.lp-tape.lp-t2 {
-    transform: rotate(1deg);
-    margin: 0 -20px 28px;
-}
-.lp-tape-run {
-    display: inline-flex;
-    align-items: center;
-    gap: 18px;
-    padding: 8px 0;
-    font: 800 15px/1 var(--lp-sans);
-    letter-spacing: 0.12em;
-    animation: lp-tape 40s linear infinite;
-}
-.lp-t2 .lp-tape-run {
-    animation-direction: reverse;
-}
-.lp-tape-run i {
-    width: 8px;
-    height: 8px;
-    background: #f4f0e6;
-    transform: rotate(45deg);
-}
-@keyframes lp-tape {
-    to {
-        transform: translateX(-50%);
-    }
-}
 .lp-livebar {
     display: flex;
     justify-content: center;
@@ -1465,9 +1414,6 @@ a.lp-event:focus-visible {
 .lp-goal mark.lp-hl {
     background: none;
     color: #8f88ff;
-}
-.lp-payers {
-    font-size: 15px;
 }
 .lp-center {
     text-align: center;
@@ -1502,11 +1448,6 @@ a.lp-event:focus-visible {
 .lp-slot-open:focus-visible {
     outline: 3px solid #8f88ff;
     outline-offset: 3px;
-}
-@media (prefers-reduced-motion: reduce) {
-    .lp-tape-run {
-        animation: none;
-    }
 }
 
 /* Read by screen readers, not drawn: the final figures behind a count-up. */

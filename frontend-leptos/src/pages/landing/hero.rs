@@ -40,6 +40,21 @@ pub fn MarkupText(text: Signal<String>) -> impl IntoView {
     }
 }
 
+/// Catalog text with the copy markup removed: links and highlights become
+/// plain words (the landing hero, .plans/049).
+#[component]
+fn Plain(text: Signal<&'static str>) -> impl IntoView {
+    move || {
+        parse(text.get())
+            .into_iter()
+            .map(|seg| match seg {
+                Segment::Text(t) | Segment::Highlight(t) => t.to_string(),
+                Segment::Link { text, .. } => text.to_string(),
+            })
+            .collect::<String>()
+    }
+}
+
 #[component]
 pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) -> impl IntoView {
     let tr = crate::locale::tr;
@@ -52,17 +67,15 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
             <canvas class="lp-room" width="320" height="180" aria-hidden="true" node_ref=canvas></canvas>
             <div class="lp-wrap lp-hero-grid">
                 <div class="lp-hero-text">
-                    <p class="lp-kicker">{tr(|l| crate::i18n::td_string!(l, landing.hero.kicker))}</p>
                     <h1 class="lp-hero-h1">
                         <span>{tr(|l| crate::i18n::td_string!(l, landing.hero.headline_1))}</span>
                         <br />
                         <span class="lp-hero-h1-2">{tr(|l| crate::i18n::td_string!(l, landing.hero.headline_2))}</span>
                     </h1>
                     <p class="lp-hero-sub">
-                        <Markup text=tr(|l| crate::i18n::td_string!(l, landing.hero.sub)) />
+                        // Less is more (.plans/049): the keywords stay words, not links.
+                        <Plain text=tr(|l| crate::i18n::td_string!(l, landing.hero.sub)) />
                     </p>
-                    <p class="lp-hero-now">{tr(|l| crate::i18n::td_string!(l, landing.hero.now))}</p>
-                    <p class="lp-quote">{tr(|l| crate::i18n::td_string!(l, landing.hero.quote))}</p>
                     <div class="lp-actions">
                         {move || {
                             let role = user_role.get();
