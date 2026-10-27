@@ -87,6 +87,33 @@ for the cut is clutter, not a defect.
 All 8 photo URLs answer 200 `image/jpeg`; they are `loading="lazy"` and 8 of 8
 load once the strip is scrolled through.
 
+## Landing page: pick B built (2026-10-27/28, branch `feature/049-landing-b`)
+
+Owner asked for something better than the cut-down version, or a fresh idea.
+Static mockups of three directions were compared (A "the number", B
+"organizer first", C "chairs as the page"); owner: build the recommended one.
+
+Why B: the home page's reader is the organizer or sponsor, not a ticket buyer
+(there are 0 open events right now, and organizer access is by invitation), so
+the page leads with the organizer's own promise ("Know who will really come
+before you order food") and the proof, not with a button to events.
+
+Built: one-sentence headline (EN and TH); the primary action for a visitor is
+"Join the organizer waitlist" (`/organizers#join`), not "host an event";
+"Events and courses" is a text link; the 94-chair hall stays as the visual
+proof; under it two measured medians from `/api/public/stats` (deposit slip
+check 9 min, end of event to refund 31 h), drawn only when both are published,
+with when they were measured and how many cases (`proof.rs`, `landing_b.rs`);
+the three doors, both tapes, the kicker, the Today/Coming box, the quote and
+the keyword underlines left the home page. The lit-room backdrop stays (brand,
+and tests pin it). Fixture: mobile 4.9 → 2.6 screens, desktop 2.9 → 1.6.
+
+Tried and not taken: C's chairs as a full-bleed hero backdrop (local commit
+`ad89d537`, not pushed). First try cropped the chairs and dimmed the number
+(my bug); second try showed all 94 and the 4 empty outlines clearly, but the
+sentence collided with the chairs and a phone gets the card anyway. Revisit if
+the page ever needs a stronger first image.
+
 ## Fix B (register card in the hero): not done, on purpose
 
 Measured: the hero's "Reserve Your Spot" is at 0.89 screens and already jumps to
