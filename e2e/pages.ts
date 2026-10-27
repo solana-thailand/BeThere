@@ -31,24 +31,28 @@ export interface AppPage {
 const EVENT_LOADED = `text=${EVENT_NAME}`;
 
 export const PAGES: AppPage[] = [
-  // The photo reel (L9) and the goal globe (L10) load on first sight. The
-  // open events moved to /events (.plans/045), so the home is ready when the
-  // payers' hall has its total.
+  // The photo reel (L9) loads on first sight. The open events moved to /events
+  // (.plans/045), so the home is ready when the payers' hall is drawn: the chairs
+  // are the picture now, and the big figure is not shown (.plans/049).
   {
     name: "landing",
     path: "/",
     authed: false,
-    ready: ".lp-hall-big",
-    reveal: [
-      { at: ".lp-reel", ready: ".lp-moment" },
-      { at: ".lp-goal-grid", ready: "#lp-countries option" },
-    ],
+    ready: ".lp-hall",
+    reveal: [{ at: ".lp-reel", ready: ".lp-moment" }],
     still: true,
   },
   // `/discover` now redirects to `/events`, which shows the same list inside
   // the site frame until R4.3 (.plans/045). The baseline name stays; the shot
   // changed with the frame, so CI wrote a new one.
-  { name: "discover", path: "/events", authed: false, ready: EVENT_LOADED },
+  // The goal globe moved here from the home page (.plans/049): wait for it.
+  {
+    name: "discover",
+    path: "/events",
+    authed: false,
+    ready: EVENT_LOADED,
+    reveal: [{ at: ".lp-goal-grid", ready: "#lp-countries option" }],
+  },
   { name: "organizers", path: "/organizers", authed: false, ready: ".lp-lanes" },
   { name: "sponsors", path: "/sponsors", authed: false, ready: "#contact" },
   { name: "event", path: `/e/${EVENT_SLUG}`, authed: false, ready: EVENT_LOADED },

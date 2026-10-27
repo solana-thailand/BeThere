@@ -33,21 +33,28 @@ pub struct HallSeat {
 /// Seat `rows` in order, one block per row, each block's no-shows at its
 /// end, `COLS` to a row of chairs. Returns the seats and the drawing's size.
 pub fn hall_seats(rows: &[LadderRow]) -> (Vec<HallSeat>, f32, f32) {
+    hall_seats_in(rows, COLS)
+}
+
+/// [`hall_seats`] with `cols` chairs to a row: the hero draws the hall wide
+/// (a band across the page) or narrow (a phone), the card keeps `COLS`.
+pub fn hall_seats_in(rows: &[LadderRow], cols: usize) -> (Vec<HallSeat>, f32, f32) {
+    let cols = cols.max(1);
     let mut seats = Vec::new();
     let mut i = 0usize;
     for (group, row) in rows.iter().enumerate() {
         for k in 0..row.paid {
             seats.push(HallSeat {
-                x: X0 + (i % COLS) as f32 * DX,
-                y: Y0 + (i / COLS) as f32 * DY,
+                x: X0 + (i % cols) as f32 * DX,
+                y: Y0 + (i / cols) as f32 * DY,
                 came: k < row.came,
                 group,
             });
             i += 1;
         }
     }
-    let height = i.div_ceil(COLS) as f32 * DY;
-    (seats, COLS as f32 * DX, height)
+    let height = i.div_ceil(cols) as f32 * DY;
+    (seats, cols as f32 * DX, height)
 }
 
 /// "RTM #4 · 16 paid · 14 came", in the reader's language.
@@ -63,9 +70,14 @@ fn event_line(row: &LadderRow, locale: Locale) -> String {
 }
 
 #[component]
-pub fn Hall() -> impl IntoView {
+pub fn Hall(
+    #[prop(default = COLS)] cols: usize,
+    /// The caveat line under the chairs; the hero draws it beside its words.
+    #[prop(default = true)]
+    show_fine: bool,
+) -> impl IntoView {
     let i18n = use_i18n();
-    let (seats, w, h) = hall_seats(&LADDER);
+    let (seats, w, h) = hall_seats_in(&LADDER, cols);
     let (paid, came) = ladder_total();
     // The event under the pointer or focus; `None` shows the hint.
     let picked = RwSignal::new(None::<usize>);
@@ -124,7 +136,9 @@ pub fn Hall() -> impl IntoView {
                     None => td_string!(i18n.get_locale(), landing.hall.point).to_string(),
                 }}
             </p>
-            <p class="lp-hall-fine">{tr(|l| td_string!(l, landing.hall.fine))}</p>
+            {show_fine.then(|| view! {
+                <p class="lp-hall-fine">{tr(|l| td_string!(l, landing.hall.fine))}</p>
+            })}
         </div>
     }
 }
