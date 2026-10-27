@@ -40,27 +40,57 @@ pub fn MarkupText(text: Signal<String>) -> impl IntoView {
     }
 }
 
+/// Chairs to a row of the hero's band: wide on a desktop (a few rows across the
+/// page), narrower on a phone so the chairs stay chairs. Read once when the page
+/// mounts.
+fn hall_band_cols() -> usize {
+    let width = web_sys::window()
+        .and_then(|w| w.inner_width().ok())
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1280.0);
+    match width < 768.0 {
+        true => 14,
+        false => 24,
+    }
+}
+
 #[component]
 pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) -> impl IntoView {
     let tr = crate::locale::tr;
     let area = NodeRef::<leptos::html::Header>::new();
     let canvas = NodeRef::<leptos::html::Canvas>::new();
     super::room::use_lit_room(area, canvas);
+    // The sentence's numbers are the hall's own: paid, came, and who did not.
+    let (paid, came) = event_checkin_domain::models::facts::ladder_total();
+    let i18n = crate::i18n::use_i18n();
+    let lead = move || {
+        crate::locale::fill(
+            crate::i18n::td_string!(i18n.get_locale(), landing.hero.c_lead),
+            &[
+                ("came", &came.to_string()),
+                ("paid", &paid.to_string()),
+                ("gone", &paid.saturating_sub(came).to_string()),
+            ],
+        )
+    };
     view! {
-        <header class="lp-hero" id="top" node_ref=area>
+        <header class="lp-hero lp-hero-c" id="top" node_ref=area>
             // The lit room (.plans/045 R4.1), drawn by room/room.js.
             <canvas class="lp-room" width="320" height="180" aria-hidden="true" node_ref=canvas></canvas>
-            <div class="lp-wrap lp-hero-grid">
+            <div class="lp-wrap lp-hero-c-grid">
+                // The payers' hall as a band across the top (.plans/049, owner pick C):
+                // the evidence first, then the words.
+                <div class="lp-hero-c-hall">
+                    <super::hall::Hall cols=hall_band_cols() />
+                </div>
                 <div class="lp-hero-text">
                     <h1 class="lp-hero-h1">
-                        <span>{tr(|l| crate::i18n::td_string!(l, landing.hero.b_headline_1))}</span>
-                        // One sentence, not two stacked lines: `text-wrap: balance`
-                        // cannot balance across a forced break.
-                        " "
-                        <span class="lp-hero-h1-2">{tr(|l| crate::i18n::td_string!(l, landing.hero.b_headline_2))}</span>
+                        <span>{tr(|l| crate::i18n::td_string!(l, landing.hero.headline_1))}</span>
+                        <br />
+                        <span class="lp-hero-h1-2">{tr(|l| crate::i18n::td_string!(l, landing.hero.headline_2))}</span>
                     </h1>
-                    // Who pays decides here: the organizer (.plans/049, owner pick B).
-                    <p class="lp-hero-sub">{tr(|l| crate::i18n::td_string!(l, landing.hero.b_lead))}</p>
+                    // The proof in one sentence, with the hall's own numbers.
+                    <p class="lp-hero-sub">{lead}</p>
                     <div class="lp-actions">
                         {move || {
                             let role = user_role.get();
@@ -90,18 +120,10 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                                 }.into_any(),
                             }
                         }}
-                        <WhyFilm />
                     </div>
-                    // Open events are few right now, so the way to events and courses
-                    // is a plain link, not the headline action.
-                    {move || (!matches!(auth_state.get(), AuthState::SignedIn(_))).then(|| view! {
-                        <p class="lp-hero-more">
-                            <A href="/events">{tr(|l| crate::i18n::td_string!(l, landing.hero.b_events_link))}</A>
-                        </p>
-                    })}
+                    // The one-minute film is a quiet link, not a second button.
+                    <div class="lp-hero-more"><WhyFilm /></div>
                 </div>
-                // The payers' hall (.plans/045 R4.2): the evidence first.
-                <super::hall::Hall />
             </div>
         </header>
     }
@@ -159,7 +181,7 @@ fn WhyFilm() -> impl IntoView {
         }
     };
     view! {
-        <button class="lp-btn" type="button" on:click=open>
+        <button class="lp-link-btn" type="button" on:click=open>
             {crate::locale::tr(|l| crate::i18n::td_string!(l, landing.hero.why))}
         </button>
         // Esc closes a modal dialog natively; so do a tap on the backdrop and

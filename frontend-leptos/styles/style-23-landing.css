@@ -302,12 +302,6 @@ mark.lp-hl {
         rgba(14, 16, 32, 0.1) 100%
     );
 }
-.lp-hero-grid {
-    display: grid;
-    grid-template-columns: 1.05fr 0.95fr;
-    gap: 48px;
-    align-items: center;
-}
 /* room.js keeps its light off each child of this column (the quiet boxes) */
 .lp-hero-text {
     min-width: 0;
@@ -419,10 +413,6 @@ mark.lp-hl {
 @media (max-width: 767px) {
     .lp-hero {
         padding: 40px 0;
-    }
-    .lp-hero-grid {
-        grid-template-columns: 1fr;
-        gap: 28px;
     }
 }
 @media (max-width: 480px) {
@@ -2357,53 +2347,87 @@ a.lp-event:focus-visible {
     }
 }
 
-/* ---- Proof under the hero (.plans/049): two measured medians ---- */
-.lp-hero-more {
-    margin: 18px 0 0;
-    font-weight: 600;
+/* ---- Hero C (.plans/049, owner pick): the payers' hall as a band across the
+   top, the words under it. The same chairs and data as the card. The lit room
+   is not drawn here: the chairs are the picture. ---- */
+.lp-hero-c {
+    padding: 20px 0 56px;
 }
-.lp-hero-more a {
-    color: var(--lp-t-field);
-    text-decoration: none;
+.lp-hero-c .lp-room {
+    display: none;
 }
-.lp-hero-more a:hover {
-    text-decoration: underline;
+.lp-hero-c::after {
+    display: none;
 }
-.lp-proof {
-    padding: 40px 0 8px;
+.lp-hero-c-hall {
+    margin: 0 -8px 12px;
 }
-.lp-proof-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    border: 2px solid var(--lp-ink);
+.lp-hero-c .lp-hall-box {
+    padding: 0;
+    gap: 6px;
+    background: none;
+    border: 0;
 }
-.lp-proof-card {
-    padding: 22px 24px;
-    border-right: 2px solid var(--lp-ink);
+.lp-hero-c .lp-hall {
+    /* The chairs thin out toward the words. */
+    -webkit-mask-image: linear-gradient(#000 38%, transparent 100%);
+    mask-image: linear-gradient(#000 38%, transparent 100%);
 }
-.lp-proof-card:last-child {
-    border-right: 0;
+.lp-hero-c .lp-hall-came {
+    fill: var(--lp-t-field);
 }
-.lp-proof-card b {
-    display: block;
-    font: 800 clamp(34px, 6vw, 56px) / 1 var(--lp-sans);
+.lp-hero-c .lp-hall-gone {
+    stroke: var(--lp-t-field);
+}
+/* The hero sentence carries the number; the caption's big figure would repeat it. */
+.lp-hero-c .lp-hall-big {
+    display: none;
+}
+.lp-hero-c .lp-hall-say,
+.lp-hero-c .lp-hall-fine {
+    max-width: 52em;
+}
+.lp-hero-c-grid .lp-hero-text {
+    max-width: 52em;
+    margin-top: 8px;
+}
+.lp-hero-c .lp-hero-h1 {
+    font-size: clamp(44px, 8vw, 96px);
+    line-height: 0.98;
     letter-spacing: -0.04em;
-    color: var(--lp-t-field);
+    text-wrap: auto;
 }
-.lp-proof-card p {
-    margin: 10px 0 0;
-    color: var(--lp-ink-2);
-    font-size: 15px;
+.lp-hero-c .lp-hero-sub {
+    font-size: clamp(17px, 2.2vw, 22px);
+    max-width: 34em;
 }
 @media (max-width: 767px) {
-    .lp-proof-grid {
-        grid-template-columns: 1fr;
-    }
-    .lp-proof-card {
-        border-right: 0;
-        border-bottom: 2px solid var(--lp-ink);
-    }
-    .lp-proof-card:last-child {
-        border-bottom: 0;
+    .lp-hero-c {
+        padding: 14px 0 44px;
     }
 }
+
+/* Lean (owner: less is more): one button, the film as a quiet link, the chairs'
+   hint only once a chair is pointed at. */
+.lp-hero-more {
+    margin: 18px 0 0;
+}
+.lp-link-btn {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--lp-t-field);
+    font: 600 16px/1.4 var(--lp-sans);
+    cursor: pointer;
+    text-decoration: none;
+}
+.lp-link-btn:hover {
+    text-decoration: underline;
+}
+.lp-hero-c .lp-hall-say {
+    visibility: hidden;
+}
+.lp-hero-c .lp-hall-picking ~ .lp-hall-say {
+    visibility: visible;
+}
+

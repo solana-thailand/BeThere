@@ -1,6 +1,7 @@
-//! The home page after the "B" redesign (.plans/049, owner pick): the
-//! organizer is the reader, the call to action is the waitlist (organizer
-//! access is by invitation), and two measured medians sit under the hero.
+//! The home page after the "C" redesign, made lean (.plans/049, owner picks):
+//! the chairs are the picture, one sentence names them, the one call to action
+//! is the waitlist (organizer access is by invitation), and nothing else
+//! competes: the numbers live on the pages that ask for them.
 
 use std::fs;
 
@@ -30,52 +31,32 @@ fn the_waitlist_target_exists_on_the_organizers_page() {
 }
 
 #[test]
-fn the_home_page_is_hero_proof_and_so_far_only() {
+fn the_home_page_is_hero_and_photos_only() {
     let page = read("src/pages/landing/page.rs");
-    for kept in ["<Hero ", "<MyRegistrations", "<Proof", "<SoFar"] {
+    for kept in ["<Hero ", "<MyRegistrations", "<PhotoReel"] {
         assert!(page.contains(kept), "home lost {kept}");
     }
-    assert!(
-        !page.contains("<Doors"),
-        "the three doors left the home page"
-    );
+    for gone in ["<Doors", "<Proof", "<SoFar"] {
+        assert!(!page.contains(gone), "home still has {gone}");
+    }
 }
 
 #[test]
-fn the_medians_need_both_timings_and_say_when_and_how_many() {
-    let proof = read("src/pages/landing/proof.rs");
-    assert!(proof.contains("s.slip_check?") && proof.contains("s.refund_after_end?"));
-    for key in [
-        "landing.proof.fine",
-        "landing.proof.slip",
-        "landing.proof.refund",
-    ] {
-        assert!(proof.contains(key), "{key}");
-    }
-    for lang in ["en", "th"] {
-        let fine = catalog(lang)["proof"]["fine"]
-            .as_str()
-            .expect("proof.fine")
-            .to_string();
-        for hole in ["{at}", "{slips}", "{refunds}"] {
-            assert!(fine.contains(hole), "{lang}: proof.fine lost {hole}");
-        }
-    }
+fn the_running_totals_moved_to_the_sponsors_page() {
+    // "A headcount you can check" is the sponsors page's promise; the strip,
+    // with its meals line, is drawn there and no longer on the home page.
+    let sponsors = read("src/pages/site/sponsors.rs");
+    assert!(sponsors.contains("<SoFar"));
+    // The medians are already on the organizers and events pages.
+    assert!(read("src/pages/landing/how.rs").contains("duration_label"));
+    assert!(read("src/pages/site/deposit_walk.rs").contains("duration_label"));
 }
 
 #[test]
 fn the_new_copy_exists_in_both_languages_and_promises_nothing() {
     for lang in ["en", "th"] {
         let c = catalog(lang);
-        for (section, key) in [
-            ("hero", "b_headline_1"),
-            ("hero", "b_headline_2"),
-            ("hero", "b_lead"),
-            ("hero", "b_events_link"),
-            ("proof", "slip"),
-            ("proof", "refund"),
-            ("proof", "fine"),
-        ] {
+        for (section, key) in [("hero", "c_lead"), ("hero", "b_events_link")] {
             let text = c[section][key].as_str().unwrap_or_default();
             assert!(!text.is_empty(), "{lang}: landing.{section}.{key}");
             let lower = text.to_lowercase();
@@ -87,11 +68,24 @@ fn the_new_copy_exists_in_both_languages_and_promises_nothing() {
 }
 
 #[test]
-fn the_headline_is_one_balanced_sentence() {
+fn the_hero_sentence_takes_its_numbers_from_the_hall() {
+    // Owner pick C: the chairs are the picture and one sentence names them. The
+    // numbers are the hall's own (`ladder_total`), never typed in.
     let hero = read("src/pages/landing/hero.rs");
-    assert!(
-        !hero.contains("<br />"),
-        "a forced break defeats text-wrap: balance"
-    );
-    assert!(read("styles/style-23-landing.css").contains("text-wrap: balance"));
+    assert!(hero.contains("ladder_total()"));
+    assert!(hero.contains(r#"("came", &came.to_string())"#));
+    assert!(hero.contains(r#"("gone", &paid.saturating_sub(came).to_string())"#));
+    for lang in ["en", "th"] {
+        let lead = catalog(lang)["hero"]["c_lead"]
+            .as_str()
+            .expect("hero.c_lead")
+            .to_string();
+        for hole in ["{came}", "{paid}", "{gone}"] {
+            assert!(lead.contains(hole), "{lang}: c_lead lost {hole}");
+        }
+        assert!(
+            !lead.chars().any(|c| c.is_ascii_digit()),
+            "{lang}: c_lead must not carry a typed number"
+        );
+    }
 }

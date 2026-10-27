@@ -2,9 +2,10 @@
 //! carried, every figure from `GET /api/public/stats` with its measured-at
 //! time (build plan rule 1). The numbers count up once when they come into
 //! view; under reduced motion they are simply there. Without stats the lines
-//! are not drawn at all. The photo reel (L9) is `photos.rs`, above it. The
-//! tapes, the payers line and the goal's globe left the home page in the
-//! less-is-more pass (.plans/049): the hero's hall carries the payers figure.
+//! are not drawn at all. The strip lives on `/sponsors` (the page that promises
+//! "a headcount you can check"); the home page keeps only the photo reel
+//! (`photos.rs`), the tapes and the payers line left it, and the goal's globe
+//! is on `/events` (.plans/049).
 
 use leptos::html::Div;
 use leptos::prelude::*;
@@ -14,7 +15,6 @@ use wasm_bindgen::closure::Closure;
 use crate::i18n::td_string;
 
 use super::hero::MarkupText;
-use super::photos::PhotoReel;
 use super::stats::{count_at, group_thousands, measured_at_label, use_landing_stats};
 
 const COUNT_UP_MS: f64 = 1200.0;
@@ -166,7 +166,6 @@ pub fn SoFar() -> impl IntoView {
     };
     view! {
         <section id="goal" class="lp-goal">
-            <PhotoReel />
             <div class="lp-wrap" node_ref=strip>
                 {move || stats.with(Option::is_some).then(|| view! {
                     <p class="lp-livebar"><i></i><span>{livebar}</span></p>
