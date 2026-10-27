@@ -93,3 +93,35 @@ visible through their deposit account.
 RTM #2's deposit rows were deleted on 22 Aug, before the oldest local backup
 (10 Sep); the archive keeps their amounts and flags but not names, bank or
 slips. RTM #1 was never in the system.
+
+## Option B built (2026-10-27, `event-checkin-e8`, owner "ทาง 2")
+
+The owner wants to pay Chanthawat Kiriyadee and Pond Bangna back himself and
+record it. Neither has a usable refund account (Pond's is "2"), so the
+organizer payout refused them. Built:
+
+- `POST /api/deposit/organizer-credit-payout` takes an optional `paid_to`
+  (`RefundAccount`, bank or PromptPay). With it, the payout goes through the
+  same `settle_payout` core: the amount must equal the payable balance, the
+  slip is required, an open request still refuses (409).
+- `RefundAccount::normalized_organizer_typed`: stricter than the attendee
+  rule — a bank account must be 10–15 digits (spaces and dashes allowed), so
+  a 1-digit account is refused. PromptPay keeps its rule.
+- The audit entry says `initiated_by: organizer_typed_account` and keeps
+  `paid_to` as `audit_label()`: bank, holder and the last four digits only.
+  The full number is not stored; the slip is the record.
+- Staff UI: the "no refund account on file" rows on the Held as Credit tab are
+  now payout rows with the account fields, the amount and a required slip.
+- Tests: `domain/tests/organizer_typed_account.rs` (6),
+  `credit_payout_guards.rs` (typed account checked before money moves, label
+  not the number, reaches settle), full worker suite 870/870,
+  `test_credit_payout.py` 56/56.
+- Checked on a local fixture (seeded no-account holder, 500 THB): a 1-digit
+  account keeps the button disabled; a valid account + slip records "500 THB",
+  the row leaves the list, the ledger gets `refund -500`, the audit has the
+  label and no full number.
+
+**How the owner records it:** Admin → Deposits & Refunds → Held as Credit →
+the person's row under "no refund account on file" → type the bank, account
+number and name you paid to (or tick PromptPay) → the amount is prefilled →
+attach the transfer slip → Record payout.

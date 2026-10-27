@@ -528,6 +528,7 @@ pub async fn clear_credit_refund_request_handler(
             body.proof.as_deref(),
             &buckets,
             super::credit_payout::PayoutInitiator::Attendee,
+            None,
         )
         .await?;
     }

@@ -233,6 +233,8 @@ fn the_organizer_payout_pays_only_the_deposit_account_with_a_slip() {
         "attach the transfer slip",
         "open_request_for_person(",
         "AccountSource::Deposit",
+        // .issues/194: a typed account is checked harder than an attendee's.
+        "normalized_organizer_typed()",
     ] {
         assert!(
             at(needle) < settle,
@@ -246,6 +248,12 @@ fn the_organizer_payout_pays_only_the_deposit_account_with_a_slip() {
     assert!(
         handler.contains("PayoutInitiator::Organizer"),
         "the audit entry must say the organizer started it"
+    );
+    assert!(
+        handler.contains("PayoutInitiator::OrganizerTypedAccount")
+            && handler.contains("audit_label()")
+            && handler[settle..].contains("paid_to.as_deref()"),
+        "a typed account must reach the audit as its label, never the full number"
     );
 }
 
