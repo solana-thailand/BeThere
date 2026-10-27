@@ -218,6 +218,12 @@ pub fn llms_txt(origin: &str, events: &[OpenEvent]) -> String {
             }
         }
     }
+    // The pages below render only with wasm; these are plain Markdown built
+    // from the same catalog (.plans/049 item 4, frontend tests/faq_markdown.rs).
+    out.push_str(&format!(
+        "\n## Docs\n\n- [FAQ, English (Markdown)]({origin}/faq.md)\n\
+         - [FAQ, Thai (Markdown)]({origin}/faq.th.md)\n"
+    ));
     out.push_str("\n## Pages\n\n");
     for (path, title) in PUBLIC_PAGES {
         out.push_str(&format!("- [{title}]({origin}{path})\n"));

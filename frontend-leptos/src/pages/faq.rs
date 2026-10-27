@@ -148,3 +148,69 @@ pub fn Faq() -> impl IntoView {
         </div>
     }
 }
+
+/// The FAQ as Markdown, for AI readers (.plans/049 item 4). `/llms.txt`
+/// links pages that render only with wasm, so a crawler reads nothing behind
+/// them; this is the same catalog text, in the same order as the page, served
+/// as a static file. Native only: the wasm never calls it.
+/// `tests/faq_markdown.rs` fails when the committed files drift from it.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn faq_markdown(locale: Locale) -> String {
+    let qa = |out: &mut String, q: &str, a: &str| {
+        out.push_str(&format!("### {q}\n\n{a}\n\n"));
+    };
+    // `td_string!` cannot interpolate (no `interpolate_display`), so the two
+    // answers that carry `{{ refund_window }}` are read raw from the same
+    // catalog JSON and filled with the same window the page uses.
+    let catalog: serde_json::Value = serde_json::from_str(match locale {
+        Locale::en => include_str!("../../locales/en/landing.json"),
+        Locale::th => include_str!("../../locales/th/landing.json"),
+    })
+    .expect("landing catalog is JSON");
+    let with_window = |key: &str| {
+        catalog["faq"][key]
+            .as_str()
+            .expect("faq key in the catalog")
+            .replace("{{ refund_window }}", thb_refund_window(locale))
+    };
+    let mut out = format!(
+        "# {}\n\n## {}\n\n",
+        td_string!(locale, landing.faq.title),
+        td_string!(locale, landing.faq.tab_attendees)
+    );
+    for (q, a) in ATTENDEE_QA.into_iter().take(3) {
+        qa(&mut out, q(locale), a(locale));
+    }
+    qa(
+        &mut out,
+        td_string!(locale, landing.faq.deposit_q),
+        &with_window("deposit_a"),
+    );
+    for (q, a) in ATTENDEE_QA.into_iter().skip(3) {
+        qa(&mut out, q(locale), a(locale));
+    }
+    let privacy = format!(
+        "{} [{}](/data-privacy) · [{}](/privacy)",
+        td_string!(locale, landing.faq.privacy_a),
+        td_string!(locale, landing.faq.privacy_manage),
+        td_string!(locale, landing.faq.privacy_policy)
+    );
+    qa(
+        &mut out,
+        td_string!(locale, landing.faq.privacy_q),
+        &privacy,
+    );
+    out.push_str(&format!(
+        "## {}\n\n",
+        td_string!(locale, landing.faq.tab_organizers)
+    ));
+    for (q, a) in ORGANIZER_QA {
+        qa(&mut out, q(locale), a(locale));
+    }
+    qa(
+        &mut out,
+        td_string!(locale, landing.faq.org_settle_q),
+        &with_window("org_settle_a"),
+    );
+    out.trim_end().to_string() + "\n"
+}

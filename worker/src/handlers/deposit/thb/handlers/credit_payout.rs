@@ -27,6 +27,10 @@ pub(super) enum PayoutInitiator {
     /// The organizer paid to the account from the attendee's deposit with no
     /// request open (`organizer-credit-payout`).
     Organizer,
+    /// The organizer paid a person with no usable account on file, to an
+    /// account the organizer typed (`organizer-credit-payout` with `paid_to`,
+    /// `.issues/194`). The audit keeps the account's `audit_label`.
+    OrganizerTypedAccount,
 }
 
 /// Ledger note on every payout reversal row.
@@ -144,6 +148,7 @@ pub(super) async fn audit_payout(
     requested_at: &str,
     proof: Option<&str>,
     initiator: PayoutInitiator,
+    paid_to: Option<&str>,
     organizations: &[&str],
 ) -> Result<(), String> {
     let kv = state
@@ -161,6 +166,8 @@ pub(super) async fn audit_payout(
             "requested_at": requested_at,
             "proof": proof,
             "initiated_by": initiator,
+            // Only for an organizer-typed account: bank, holder, last 4 digits.
+            "paid_to": paid_to,
             // Who may see the payout in the history (`credit_payout_history`).
             "organizations": organizations,
         }),
@@ -219,6 +226,7 @@ pub(super) async fn settle_payout(
     proof: Option<&str>,
     buckets: &[CreditBucket],
     initiator: PayoutInitiator,
+    paid_to: Option<&str>,
 ) -> Result<(), AppError> {
     let target_fingerprint = state.log_fingerprint(email);
     let payable = payable_of(buckets);
@@ -285,6 +293,7 @@ pub(super) async fn settle_payout(
         key_at,
         proof.as_deref(),
         initiator,
+        paid_to,
         &organizations,
     )
     .await

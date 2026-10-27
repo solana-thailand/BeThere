@@ -738,6 +738,10 @@ pub struct ClearCreditRefundRequest {
     /// The transfer slip as a `data:image/...` URL, if attached.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proof: Option<String>,
+    /// Organizer payout only: the account the organizer paid to, for a person
+    /// with no usable account on file (`.issues/194`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paid_to: Option<RefundAccount>,
 }
 
 /// Response for POST /api/deposit/clear-credit-refund-request (admin).

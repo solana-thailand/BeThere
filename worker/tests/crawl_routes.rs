@@ -183,3 +183,12 @@ fn events_without_a_slug_are_not_linked() {
         0
     );
 }
+
+/// The pages llms.txt lists render only with wasm, so it must point AI readers
+/// at the Markdown FAQ the attendee shell ships (.plans/049 item 4).
+#[test]
+fn llms_txt_links_the_markdown_faq() {
+    let text = llms_txt(CANONICAL_ORIGIN, &[]);
+    assert!(text.contains(&format!("({CANONICAL_ORIGIN}/faq.md)")));
+    assert!(text.contains(&format!("({CANONICAL_ORIGIN}/faq.th.md)")));
+}
