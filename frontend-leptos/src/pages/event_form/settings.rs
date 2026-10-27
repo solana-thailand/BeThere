@@ -18,7 +18,7 @@ pub(super) fn SettingsSection(ctx: FormCtx) -> impl IntoView {
         ..
     } = ctx;
     view! {
-        <FormSection icon_class="form-section-icon-settings" title="Settings" badge=SectionBadge::Optional>
+        <FormSection icon_class="form-section-icon-settings" title="Settings" badge=SectionBadge::Optional open=!is_create>
             <div class="quiz-settings-grid">
                 <div class="quiz-setting-item">
                 <label class="quiz-field-label">"Claim Base URL"<span class="field-optional-badge">"Auto"</span></label>
@@ -210,9 +210,14 @@ pub(super) fn SettingsSection(ctx: FormCtx) -> impl IntoView {
 /// Capacity and registration control (in-person formats only).
 #[component]
 pub(super) fn CapacitySection(ctx: FormCtx) -> impl IntoView {
-    let FormCtx { form, set_form, .. } = ctx;
+    let FormCtx {
+        form,
+        set_form,
+        is_create,
+        ..
+    } = ctx;
     view! {
-        <FormSection icon_class="form-section-icon-settings" title="Capacity & Registration Control" badge=SectionBadge::Optional>
+        <FormSection icon_class="form-section-icon-settings" title="Capacity & Registration Control" badge=SectionBadge::Optional open=!is_create>
                 <div class="quiz-settings-grid">
                     // In-person capacity
                     <Show when=move || form.get().event_format != api::EventFormat::Online fallback=|| view! { <div></div> }>

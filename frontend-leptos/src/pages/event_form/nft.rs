@@ -14,10 +14,11 @@ pub(super) fn NftSection(ctx: FormCtx) -> impl IntoView {
         form,
         set_form,
         editing_id,
+        is_create,
         ..
     } = ctx;
     view! {
-        <FormSection icon_class="form-section-icon-nft" title="NFT Attendance Badge" badge=SectionBadge::Recommended>
+        <FormSection icon_class="form-section-icon-nft" title="NFT Attendance Badge" badge=SectionBadge::Recommended open=!is_create>
             // ── Quick-fill default badge ──
             <div class="quiz-setting-item event-form-span-full">
                 <div class="hint-info event-form-nft-intro">

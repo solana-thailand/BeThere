@@ -17,10 +17,11 @@ pub(super) fn PosterSection(ctx: FormCtx) -> impl IntoView {
         editing_id,
         poster_busy,
         set_poster_busy,
+        is_create,
         ..
     } = ctx;
     view! {
-        <FormSection icon_class="form-section-icon-nft" title="Event Poster" badge=SectionBadge::Optional>
+        <FormSection icon_class="form-section-icon-nft" title="Event Poster" badge=SectionBadge::Optional open=!is_create>
             <div class="quiz-setting-item event-form-span-full">
                 <div class="hint-info event-form-nft-intro">
                     "Shown at the top of the public event page (/e/{{slug}}). Falls back to the NFT badge if not set."

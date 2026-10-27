@@ -38,6 +38,27 @@ Proposed fixes, by value (owner picks):
 - Door: no change proposed. Auto-confirm after a camera scan would save a tap per
   person but removes the chance to catch a wrong ticket; owner call if wanted.
 
+## Fix A built (2026-10-27, owner pick A, branch `feature/049-quick-create`)
+
+On create, the Optional and Recommended sections of the event form start
+collapsed (`open=!is_create`; editing still opens everything); the three
+Required ones start open. Deposit Details stays open on purpose: a new event has
+the deposit on, and then the amount is required (the form refuses "Create"
+without one), so hiding it would hide the field the error is about. The save row
+is `position: sticky` and `.admin-content` uses `overflow-x: clip` (it used
+`hidden`, which made `<main>` the sticky container, so the row never stuck).
+
+Measured on a local fixture, same probe, 390×844:
+
+| | before | after |
+|---|---|---|
+| page | 9.3 screens | **6.3** |
+| fields shown | 38 | **25** |
+| save button | at 9.2 screens | **stuck to the bottom of the screen** |
+
+Not done, owner call: collapse Deposit Details too (with a summary line) only if
+the amount stops being required on create, or the default becomes "deposit off".
+
 ## Order
 
 1. Item 4 (this branch).
