@@ -109,3 +109,23 @@ fn the_save_row_is_sticky() {
             .contains("position: sticky")
     );
 }
+
+/// `overflow-x: clip` (which lets the sticky save row stick) drops the 0
+/// automatic minimum width `hidden` gave the grid item, so `<main>` grew to its
+/// widest child (722 px on a 390 px phone, e2e notifications.spec). The rule
+/// must keep `min-width: 0` for as long as it says `clip`.
+#[test]
+fn clipping_the_admin_content_keeps_it_shrinkable() {
+    let css = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("styles/style-05-admin.staff.css"),
+    )
+    .expect("css");
+    let at = css.find(".admin-content {").expect(".admin-content rule");
+    let rule = css[at..].split('}').next().unwrap();
+    if rule.contains("overflow-x: clip") {
+        assert!(
+            rule.contains("min-width: 0"),
+            ".admin-content clips without min-width: 0, so wide children widen the page"
+        );
+    }
+}

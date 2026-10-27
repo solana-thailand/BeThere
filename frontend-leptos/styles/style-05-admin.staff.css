@@ -190,6 +190,12 @@
        child (the event form's save row, .plans/049) sticks to the viewport
        instead of to this <main>. Browsers without `clip` keep `hidden`. */
     overflow-x: clip;
+    /* A grid or flex item's automatic minimum width is 0 only for overflow other than
+       visible/clip. `hidden` gave this <main> that; `clip` does not, so without
+       this it grows to its widest child (a wide table: 722 px on a 390 px
+       phone, e2e notifications.spec "mobile delivery table stays within its
+       panel") instead of shrinking and letting the child scroll. */
+    min-width: 0;
     background: var(--bg-primary);
 }
 
