@@ -27,6 +27,7 @@ mod notifications;
 mod page;
 /// The photo reel; public for `tests/landing_photo_reel.rs`.
 pub mod photos;
+mod proof;
 mod registrations;
 /// The lit room's mount bridge; public for `tests/landing_room.rs`.
 pub mod room;

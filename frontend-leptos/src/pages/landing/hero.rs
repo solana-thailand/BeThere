@@ -40,21 +40,6 @@ pub fn MarkupText(text: Signal<String>) -> impl IntoView {
     }
 }
 
-/// Catalog text with the copy markup removed: links and highlights become
-/// plain words (the landing hero, .plans/049).
-#[component]
-fn Plain(text: Signal<&'static str>) -> impl IntoView {
-    move || {
-        parse(text.get())
-            .into_iter()
-            .map(|seg| match seg {
-                Segment::Text(t) | Segment::Highlight(t) => t.to_string(),
-                Segment::Link { text, .. } => text.to_string(),
-            })
-            .collect::<String>()
-    }
-}
-
 #[component]
 pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) -> impl IntoView {
     let tr = crate::locale::tr;
@@ -68,14 +53,14 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
             <div class="lp-wrap lp-hero-grid">
                 <div class="lp-hero-text">
                     <h1 class="lp-hero-h1">
-                        <span>{tr(|l| crate::i18n::td_string!(l, landing.hero.headline_1))}</span>
-                        <br />
-                        <span class="lp-hero-h1-2">{tr(|l| crate::i18n::td_string!(l, landing.hero.headline_2))}</span>
+                        <span>{tr(|l| crate::i18n::td_string!(l, landing.hero.b_headline_1))}</span>
+                        // One sentence, not two stacked lines: `text-wrap: balance`
+                        // cannot balance across a forced break.
+                        " "
+                        <span class="lp-hero-h1-2">{tr(|l| crate::i18n::td_string!(l, landing.hero.b_headline_2))}</span>
                     </h1>
-                    <p class="lp-hero-sub">
-                        // Less is more (.plans/049): the keywords stay words, not links.
-                        <Plain text=tr(|l| crate::i18n::td_string!(l, landing.hero.sub)) />
-                    </p>
+                    // Who pays decides here: the organizer (.plans/049, owner pick B).
+                    <p class="lp-hero-sub">{tr(|l| crate::i18n::td_string!(l, landing.hero.b_lead))}</p>
                     <div class="lp-actions">
                         {move || {
                             let role = user_role.get();
@@ -90,15 +75,30 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                                         {tr(|l| crate::i18n::td_string!(l, landing.cta.scanner))}
                                     </A>
                                 }.into_any(),
-                                _ => view! {
+                                // A signed-in attendee has nothing to wait for.
+                                AuthState::SignedIn(_) => view! {
                                     <A href="/events" attr:class="lp-btn lp-btn-primary">
-                                        {tr(|l| crate::i18n::td_string!(l, landing.cta.find_events))}
+                                        {tr(|l| crate::i18n::td_string!(l, landing.hero.b_events_link))}
+                                    </A>
+                                }.into_any(),
+                                // Organizer access is by invitation: the honest action
+                                // is the waitlist, not "host an event".
+                                _ => view! {
+                                    <A href="/organizers#join" attr:class="lp-btn lp-btn-primary">
+                                        {tr(|l| crate::i18n::td_string!(l, landing.join.waitlist_cta))}
                                     </A>
                                 }.into_any(),
                             }
                         }}
                         <WhyFilm />
                     </div>
+                    // Open events are few right now, so the way to events and courses
+                    // is a plain link, not the headline action.
+                    {move || (!matches!(auth_state.get(), AuthState::SignedIn(_))).then(|| view! {
+                        <p class="lp-hero-more">
+                            <A href="/events">{tr(|l| crate::i18n::td_string!(l, landing.hero.b_events_link))}</A>
+                        </p>
+                    })}
                 </div>
                 // The payers' hall (.plans/045 R4.2): the evidence first.
                 <super::hall::Hall />

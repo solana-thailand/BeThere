@@ -318,10 +318,13 @@ mark.lp-hl {
 .lp-hero-h1 {
     margin: 0;
     font-weight: 700;
-    font-size: 66px;
-    line-height: 1;
+    /* The headline is a sentence now (.plans/049): smaller than the old
+       two-word one, and balanced so no single word is left on the last line. */
+    font-size: 56px;
+    line-height: 1.02;
     letter-spacing: -0.03em;
     color: var(--lp-ink);
+    text-wrap: balance;
 }
 .lp-hero-h1-2 {
     color: var(--lp-h-field);
@@ -424,7 +427,7 @@ mark.lp-hl {
 }
 @media (max-width: 480px) {
     .lp-hero-h1 {
-        font-size: 46px;
+        font-size: 38px;
     }
 }
 
@@ -2351,5 +2354,56 @@ a.lp-event:focus-visible {
 @media (max-width: 767px) {
     .lp-doors {
         grid-template-columns: 1fr;
+    }
+}
+
+/* ---- Proof under the hero (.plans/049): two measured medians ---- */
+.lp-hero-more {
+    margin: 18px 0 0;
+    font-weight: 600;
+}
+.lp-hero-more a {
+    color: var(--lp-t-field);
+    text-decoration: none;
+}
+.lp-hero-more a:hover {
+    text-decoration: underline;
+}
+.lp-proof {
+    padding: 40px 0 8px;
+}
+.lp-proof-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    border: 2px solid var(--lp-ink);
+}
+.lp-proof-card {
+    padding: 22px 24px;
+    border-right: 2px solid var(--lp-ink);
+}
+.lp-proof-card:last-child {
+    border-right: 0;
+}
+.lp-proof-card b {
+    display: block;
+    font: 800 clamp(34px, 6vw, 56px) / 1 var(--lp-sans);
+    letter-spacing: -0.04em;
+    color: var(--lp-t-field);
+}
+.lp-proof-card p {
+    margin: 10px 0 0;
+    color: var(--lp-ink-2);
+    font-size: 15px;
+}
+@media (max-width: 767px) {
+    .lp-proof-grid {
+        grid-template-columns: 1fr;
+    }
+    .lp-proof-card {
+        border-right: 0;
+        border-bottom: 2px solid var(--lp-ink);
+    }
+    .lp-proof-card:last-child {
+        border-bottom: 0;
     }
 }

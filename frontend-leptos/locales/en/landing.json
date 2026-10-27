@@ -20,7 +20,11 @@
     "quote": "“Let's go, everyone.”",
     "why": "Why a deposit · 1 min",
     "film_close": "Close the film",
-    "film_captions": "Captions"
+    "film_captions": "Captions",
+    "b_headline_1": "Know who will really come",
+    "b_headline_2": "before you order food.",
+    "b_lead": "Free events with a refundable deposit. Guests hold a seat, show up, and get it all back. You set the amount, or none.",
+    "b_events_link": "Events and courses →"
   },
   "cta": {
     "dashboard": "Go to Dashboard →",
@@ -395,5 +399,10 @@
     "paid": "paid",
     "came": "came",
     "fine": "A deposit doesn't make people come. It tells you who will. · RTM #1–#6 · staff not counted"
+  },
+  "proof": {
+    "slip": "median time to check a deposit slip",
+    "refund": "median time from the end of an event to the refund",
+    "fine": "Medians over past events, recorded by the system · measured {at} · {slips} slips, {refunds} refunds"
   }
 }
