@@ -2371,9 +2371,6 @@ a.lp-event:focus-visible {
 .lp-hero-c .lp-hall-came {
     fill: var(--lp-t-field);
 }
-.lp-hero-c .lp-hall-gone {
-    stroke: var(--lp-t-field);
-}
 /* The hero sentence carries the number; the caption's big figure would repeat it. */
 .lp-hero-c .lp-hall-big {
     display: none;
@@ -2448,5 +2445,39 @@ a.lp-event:focus-visible {
 }
 .lp-hero-c-side {
     min-width: 0;
+}
+
+/* The chairs tell the story (.plans/049): the empty outlines in the warm colour
+   so the eye finds the few who did not come; by-event rows carry a label and a
+   count; the chairs fill in once when the page opens, the outlines last. */
+.lp-hero-c .lp-hall-gone {
+    stroke: var(--lp-t-warm);
+    stroke-width: 2;
+}
+.lp-hall-label,
+.lp-hall-count {
+    font: 700 13px / 1 var(--lp-sans);
+    fill: var(--lp-ink-3);
+}
+.lp-hall-count {
+    fill: var(--lp-ink-2);
+}
+.lp-hall g.lp-hall-on .lp-hall-label,
+.lp-hall g.lp-hall-on .lp-hall-count {
+    fill: var(--lp-ink);
+}
+@media (prefers-reduced-motion: no-preference) {
+    /* Opacity only: the chairs are placed by a `transform` attribute that a CSS
+       transform would override. `backwards` holds the chair hidden until its
+       turn and then lets the normal styles (hover dimming) apply. */
+    .lp-hero-c .lp-hall path {
+        animation: lp-seat 360ms var(--lp-ease) backwards;
+        animation-delay: calc(var(--i, 0) * 11ms);
+    }
+    @keyframes lp-seat {
+        from {
+            opacity: 0;
+        }
+    }
 }
 

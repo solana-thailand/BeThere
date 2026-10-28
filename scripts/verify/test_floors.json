@@ -51,7 +51,7 @@
     "landing_b tests/landing_b.rs": 6,
     "landing_event_card tests/landing_event_card.rs": 5,
     "landing_goal tests/landing_goal.rs": 3,
-    "landing_hall tests/landing_hall.rs": 3,
+    "landing_hall tests/landing_hall.rs": 5,
     "landing_header tests/landing_header.rs": 5,
     "landing_how_routes tests/landing_how_routes.rs": 3,
     "landing_photo_reel tests/landing_photo_reel.rs": 2,

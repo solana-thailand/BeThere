@@ -40,17 +40,17 @@ pub fn MarkupText(text: Signal<String>) -> impl IntoView {
     }
 }
 
-/// Chairs to a row of the hero's band: wide on a desktop (a few rows across the
-/// page), narrower on a phone so the chairs stay chairs. Read once when the page
-/// mounts.
-fn hall_band_cols() -> usize {
+/// How the hero draws the hall: a labelled row per event on a wide screen, a
+/// flowing block of 14 to a row on a phone (the labels would be unreadable
+/// there). Read once when the page mounts.
+fn hall_band() -> (super::hall::HallLayout, usize) {
     let width = web_sys::window()
         .and_then(|w| w.inner_width().ok())
         .and_then(|v| v.as_f64())
         .unwrap_or(1280.0);
     match width < 768.0 {
-        true => 14,
-        false => 24,
+        true => (super::hall::HallLayout::Blocks, 14),
+        false => (super::hall::HallLayout::ByEvent, 24),
     }
 }
 
@@ -60,6 +60,7 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
     let area = NodeRef::<leptos::html::Header>::new();
     let canvas = NodeRef::<leptos::html::Canvas>::new();
     super::room::use_lit_room(area, canvas);
+    let (band_layout, band_cols) = hall_band();
     // The sentence's numbers are the hall's own: paid, came, and who did not.
     let (paid, came) = event_checkin_domain::models::facts::ladder_total();
     let i18n = crate::i18n::use_i18n();
@@ -81,7 +82,7 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                 // The payers' hall as a band across the top (.plans/049, owner pick C):
                 // the evidence first, then the words.
                 <div class="lp-hero-c-hall">
-                    <super::hall::Hall cols=hall_band_cols() show_fine=false />
+                    <super::hall::Hall cols=band_cols layout=band_layout show_fine=false />
                 </div>
                 <div class="lp-hero-text">
                   <div class="lp-hero-c-cols">
