@@ -2398,8 +2398,18 @@ a.lp-event:focus-visible {
    hint only once a chair is pointed at. */
 .lp-hero-more {
     margin: 18px 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    align-items: baseline;
+}
+/* Keeps the action's room while the home page finds out what is open. */
+.lp-actions-hold {
+    display: inline-block;
+    min-height: 52px;
 }
 .lp-link-btn {
+    display: inline-block;
     padding: 0;
     border: 0;
     background: none;

@@ -89,3 +89,25 @@ fn the_hero_sentence_takes_its_numbers_from_the_hall() {
         );
     }
 }
+
+#[test]
+fn the_hero_action_follows_what_is_open_and_never_flashes() {
+    let hero = read("src/pages/landing/hero.rs");
+    // The action waits for the answer and holds its room meanwhile.
+    assert!(hero.contains("fetch_next_event"));
+    assert!(hero.contains("lp-actions-hold"));
+    // Organizer access is by invitation: the visitor's door is the waitlist.
+    assert!(!hero.contains("find_events"));
+    // Both quiet links are counted, on the allowlisted doors only.
+    assert!(hero.contains(r#"count_click(SitePage::Home, "organizers")"#));
+    assert!(hero.contains(r#"count_click(SitePage::Home, "events")"#));
+    for lang in ["en", "th"] {
+        let hero_keys = &catalog(lang)["hero"];
+        let next = hero_keys["next_cta"].as_str().expect("hero.next_cta");
+        for hole in ["{name}", "{when}"] {
+            assert!(next.contains(hole), "{lang}: next_cta lost {hole}");
+        }
+        let notify = hero_keys["notify_link"].as_str().expect("hero.notify_link");
+        assert!(!notify.is_empty());
+    }
+}
