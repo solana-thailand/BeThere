@@ -2390,18 +2390,22 @@ a.lp-event:focus-visible {
 }
 @media (max-width: 767px) {
     .lp-hero-c {
-        padding: 14px 0 44px;
+        padding: 16px 0 44px;
     }
 }
 
 /* Lean (owner: less is more): one button, the film as a quiet link, the chairs'
    hint only once a chair is pointed at. */
 .lp-hero-more {
-    margin: 18px 0 0;
+    margin: 16px 0 0;
     display: flex;
     flex-wrap: wrap;
     gap: 8px 22px;
     align-items: baseline;
+}
+/* On the 4 px grid; 52 px tall, which is also the room `.lp-actions-hold` keeps. */
+.lp-hero-c .lp-btn {
+    padding: 16px 24px;
 }
 /* Keeps the action's room while the home page finds out what is open. */
 .lp-actions-hold {
@@ -2466,7 +2470,7 @@ a.lp-event:focus-visible {
 }
 .lp-hall-label,
 .lp-hall-count {
-    font: 700 13px / 1 var(--lp-sans);
+    font: 500 13px / 1 var(--lp-sans);
     fill: var(--lp-ink-3);
 }
 .lp-hall-count {
