@@ -1015,7 +1015,7 @@ rollover_deposit (source event deactivated, target event active)
 | Label | Mint Address | Notes |
 |-------|-------------|-------|
 | **Devnet USDC** | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | Current devnet test USDC |
-| ~~Old Devnet~~ | ~~`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m`~~ | **This is mainnet USDC!** Do NOT use on devnet |
+| ~~Old Devnet~~ | ~~`EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`~~ | **This is mainnet USDC!** Do NOT use on devnet |
 
 ---
 

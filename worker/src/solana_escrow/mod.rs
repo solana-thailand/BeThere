@@ -52,11 +52,11 @@ pub(crate) const ESCROW_PROGRAM_ID_DEVNET: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1
 pub(crate) const ESCROW_PROGRAM_ID_MAINNET: &str = "";
 
 /// Devnet USDC mint.
-/// Mainnet: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m
+/// Mainnet: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
 pub(crate) const USDC_MINT_DEVNET: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
 /// Mainnet USDC mint.
-pub(crate) const USDC_MINT_MAINNET: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m";
+pub(crate) const USDC_MINT_MAINNET: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
 /// The target Solana cluster, seeded ONCE from the `SOLANA_CLUSTER` env var at worker
 /// init via [`set_cluster`].

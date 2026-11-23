@@ -79,7 +79,7 @@ Request body (Helius enhanced webhook format):
       "tokenTransfers": [
         {
           "tokenAmount": 15.0,
-          "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m"
+          "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
         }
       ]
     }

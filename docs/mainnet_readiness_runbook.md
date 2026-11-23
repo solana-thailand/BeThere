@@ -12,7 +12,7 @@
 Key facts (verify before trusting):
 - Program ID (devnet): `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T`
 - Upgrade authority (single key today): `9Bz7p4RWdX7eaR4hFUeCc7aSZjDHsie8q1u8imwavkBN`
-- USDC mint — devnet `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`, mainnet `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m`
+- USDC mint — devnet `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`, mainnet `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
 - `ESCROW_PROGRAM_ID_MAINNET` is empty (`worker/src/solana_escrow/mod.rs`) — mainnet program not deployed.
 
 ---

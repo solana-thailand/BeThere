@@ -74,7 +74,7 @@ Upload required secrets to the Cloudflare Worker `production` environment:
 cd worker
 
 # 1. Mainnet RPC API Key
-echo "ba776ca2-44eb-44f2-b264-02caa12db98d" | npx wrangler secret put HELIUS_API_KEY --env production
+echo "<HELIUS_API_KEY>" | npx wrangler secret put HELIUS_API_KEY --env production
 
 # 2. Mainnet USDC Mint
 echo "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" | npx wrangler secret put USDC_MINT --env production
