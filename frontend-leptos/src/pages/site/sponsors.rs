@@ -7,6 +7,7 @@ use leptos_meta::Title;
 use crate::i18n::td_string;
 use crate::locale::tr;
 use crate::pages::landing::frame::{SiteFrame, use_site_auth};
+use crate::pages::landing::sofar::SoFar;
 use crate::pages::landing::sponsors::Sponsors;
 
 use super::doors::SitePage;
@@ -23,6 +24,8 @@ pub fn SponsorsPage() -> impl IntoView {
                 title=|l| td_string!(l, landing.sponsors.title)
                 sub=|l| td_string!(l, landing.sponsors.lede)
             />
+            // The headcount the page promises, measured by the system.
+            <SoFar />
             <Sponsors headless=true />
         </SiteFrame>
     }

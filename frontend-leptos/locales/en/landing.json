@@ -20,7 +20,9 @@
     "quote": "“Let's go, everyone.”",
     "why": "Why a deposit · 1 min",
     "film_close": "Close the film",
-    "film_captions": "Captions"
+    "film_captions": "Captions",
+    "b_events_link": "Events and courses →",
+    "c_lead": "{came} of the {paid} who paid a deposit came. The empty outlines are the {gone} who did not."
   },
   "cta": {
     "dashboard": "Go to Dashboard →",

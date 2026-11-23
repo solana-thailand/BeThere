@@ -40,6 +40,11 @@ pub fn EventsPage() -> impl IntoView {
             </section>
             <Learn />
             <DepositWalk />
+            // The goal and its globe moved here from the home page in the
+            // less-is-more pass (.plans/049).
+            <section id="goal" class="lp-goal">
+                <crate::pages::landing::goal::Goal />
+            </section>
         </SiteFrame>
     }
 }

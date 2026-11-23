@@ -30,7 +30,7 @@ pub mod photos;
 mod registrations;
 /// The lit room's mount bridge; public for `tests/landing_room.rs`.
 pub mod room;
-mod sofar;
+pub mod sofar;
 /// Sponsor placements; public for `tests/landing_sponsors.rs`.
 pub mod sponsors;
 /// The shared stats fetch and duration label; public for tests.

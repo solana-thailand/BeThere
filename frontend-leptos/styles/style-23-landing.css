@@ -51,11 +51,6 @@
     font: 600 13px/1.4 var(--lp-sans);
     margin: 0 0 18px;
 }
-.lp-quote {
-    font: 600 15px/1.3 var(--lp-sans);
-    color: var(--lp-t-warm);
-    margin: 0 0 10px;
-}
 .lp-btn {
     display: inline-flex;
     align-items: center;
@@ -307,12 +302,6 @@ mark.lp-hl {
         rgba(14, 16, 32, 0.1) 100%
     );
 }
-.lp-hero-grid {
-    display: grid;
-    grid-template-columns: 1.05fr 0.95fr;
-    gap: 48px;
-    align-items: center;
-}
 /* room.js keeps its light off each child of this column (the quiet boxes) */
 .lp-hero-text {
     min-width: 0;
@@ -323,10 +312,13 @@ mark.lp-hl {
 .lp-hero-h1 {
     margin: 0;
     font-weight: 700;
-    font-size: 66px;
-    line-height: 1;
+    /* The headline is a sentence now (.plans/049): smaller than the old
+       two-word one, and balanced so no single word is left on the last line. */
+    font-size: 56px;
+    line-height: 1.02;
     letter-spacing: -0.03em;
     color: var(--lp-ink);
+    text-wrap: balance;
 }
 .lp-hero-h1-2 {
     color: var(--lp-h-field);
@@ -335,20 +327,12 @@ mark.lp-hl {
     line-height: 1.16;
     letter-spacing: -0.01em;
 }
-.lp-hero-sub,
-.lp-hero-now {
+.lp-hero-sub {
     white-space: pre-line;
 }
 .lp-hero-sub {
     margin: 16px 0 24px;
     font-size: 19px;
-    color: var(--lp-ink-2);
-}
-.lp-hero-now {
-    font: 500 14px/1.5 var(--lp-sans);
-    margin: -8px 0 26px;
-    padding-left: 12px;
-    border-left: 3px solid var(--lp-field);
     color: var(--lp-ink-2);
 }
 .lp-actions {
@@ -430,14 +414,10 @@ mark.lp-hl {
     .lp-hero {
         padding: 40px 0;
     }
-    .lp-hero-grid {
-        grid-template-columns: 1fr;
-        gap: 28px;
-    }
 }
 @media (max-width: 480px) {
     .lp-hero-h1 {
-        font-size: 46px;
+        font-size: 38px;
     }
 }
 
@@ -1403,44 +1383,6 @@ a.lp-event:focus-visible {
     padding-top: 40px;
     padding-bottom: 40px;
 }
-.lp-tape {
-    /* #f4f0e6 on #5a54cb is 5.18:1; ink on the brand #6b63f0 was 4.16, under
-       AA for 15 px text (axe, CI 37381847919). */
-    background: #5a54cb;
-    color: #f4f0e6;
-    transform: rotate(-1.2deg);
-    margin: 28px -20px 0;
-    border-block: 2px solid #121212;
-    overflow: hidden;
-    white-space: nowrap;
-}
-.lp-tape.lp-t2 {
-    transform: rotate(1deg);
-    margin: 0 -20px 28px;
-}
-.lp-tape-run {
-    display: inline-flex;
-    align-items: center;
-    gap: 18px;
-    padding: 8px 0;
-    font: 800 15px/1 var(--lp-sans);
-    letter-spacing: 0.12em;
-    animation: lp-tape 40s linear infinite;
-}
-.lp-t2 .lp-tape-run {
-    animation-direction: reverse;
-}
-.lp-tape-run i {
-    width: 8px;
-    height: 8px;
-    background: #f4f0e6;
-    transform: rotate(45deg);
-}
-@keyframes lp-tape {
-    to {
-        transform: translateX(-50%);
-    }
-}
 .lp-livebar {
     display: flex;
     justify-content: center;
@@ -1465,9 +1407,6 @@ a.lp-event:focus-visible {
 .lp-goal mark.lp-hl {
     background: none;
     color: #8f88ff;
-}
-.lp-payers {
-    font-size: 15px;
 }
 .lp-center {
     text-align: center;
@@ -1502,11 +1441,6 @@ a.lp-event:focus-visible {
 .lp-slot-open:focus-visible {
     outline: 3px solid #8f88ff;
     outline-offset: 3px;
-}
-@media (prefers-reduced-motion: reduce) {
-    .lp-tape-run {
-        animation: none;
-    }
 }
 
 /* Read by screen readers, not drawn: the final figures behind a count-up. */
@@ -2412,3 +2346,107 @@ a.lp-event:focus-visible {
         grid-template-columns: 1fr;
     }
 }
+
+/* ---- Hero C (.plans/049, owner pick): the payers' hall as a band across the
+   top, the words under it. The same chairs and data as the card. The lit room
+   is not drawn here: the chairs are the picture. ---- */
+.lp-hero-c {
+    padding: 20px 0 56px;
+}
+.lp-hero-c .lp-room {
+    display: none;
+}
+.lp-hero-c::after {
+    display: none;
+}
+.lp-hero-c-hall {
+    margin: 0 0 20px;
+}
+.lp-hero-c .lp-hall-box {
+    padding: 0;
+    gap: 6px;
+    background: none;
+    border: 0;
+}
+.lp-hero-c .lp-hall-came {
+    fill: var(--lp-t-field);
+}
+.lp-hero-c .lp-hall-gone {
+    stroke: var(--lp-t-field);
+}
+/* The hero sentence carries the number; the caption's big figure would repeat it. */
+.lp-hero-c .lp-hall-big {
+    display: none;
+}
+.lp-hero-c .lp-hall-say {
+    max-width: 52em;
+}
+.lp-hero-c .lp-hero-h1 {
+    font-size: clamp(44px, 6vw, 80px);
+    line-height: 0.98;
+    letter-spacing: -0.04em;
+    text-wrap: auto;
+}
+.lp-hero-c .lp-hero-sub {
+    font-size: clamp(17px, 2.2vw, 22px);
+    max-width: 34em;
+}
+@media (max-width: 767px) {
+    .lp-hero-c {
+        padding: 14px 0 44px;
+    }
+}
+
+/* Lean (owner: less is more): one button, the film as a quiet link, the chairs'
+   hint only once a chair is pointed at. */
+.lp-hero-more {
+    margin: 18px 0 0;
+}
+.lp-link-btn {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--lp-t-field);
+    font: 600 16px/1.4 var(--lp-sans);
+    cursor: pointer;
+    text-decoration: none;
+}
+.lp-link-btn:hover {
+    text-decoration: underline;
+}
+.lp-hero-c .lp-hall-say {
+    visibility: hidden;
+}
+.lp-hero-c .lp-hall-picking ~ .lp-hall-say {
+    visibility: visible;
+}
+
+/* Wide screens: the headline and, level with it, the sentence, the action and
+   what the numbers count (.plans/049: use the width, shorten the page). */
+@media (min-width: 768px) {
+    .lp-hero-c-cols {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 56px;
+        /* Level with each other, not hung from the bottom: the headline and
+           the sentence read as one block. */
+        align-items: center;
+        max-width: none;
+    }
+    .lp-hero-c-cols .lp-hero-sub {
+        margin-top: 0;
+    }
+}
+.lp-hero-scope {
+    margin: 16px 0 0;
+    font-size: 13px;
+    color: var(--lp-ink-3);
+    max-width: 34em;
+}
+.lp-hero-c-grid {
+    position: relative;
+}
+.lp-hero-c-side {
+    min-width: 0;
+}
+

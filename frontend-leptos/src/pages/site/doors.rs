@@ -140,7 +140,9 @@ pub fn Doors(here: SitePage) -> impl IntoView {
                 <h2 class="lp-h2">{heading}</h2>
                 <div class="lp-doors">
                     {cards}
-                    {try_band(TRY_LIVE, here)}
+                    // The home page keeps three doors (.plans/049, less is more);
+                    // the devnet try band stays on the other pages.
+                    {(here != SitePage::Home).then(|| try_band(TRY_LIVE, here))}
                 </div>
             </div>
         </section>
