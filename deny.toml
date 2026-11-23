@@ -38,6 +38,10 @@ ignore = [
   # and the test SVM only sees throwaway keys. The fix is 0.7.6, which k256 0.13
   # cannot take; reopen when quasar-svm moves to an agave on k256 0.14
   # (checked 2026-10-25).
+  # chrono: unmaintained (2026-09-14), no patched version. Used directly by
+  # domain and worker and by the `worker` crate itself, so it cannot be dropped
+  # here; reopen when workers-rs leaves chrono (checked 2026-11-23).
+  { id = "RUSTSEC-2026-0543", reason = "chrono: unmaintained, no patched version; direct dep and workers-rs transitive" },
   { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5.5: timing side channels; escrow test SVM only (dev-dependency), no secrets" },
 ]
 

@@ -293,7 +293,9 @@ jobs:
     name: playwright e2e (SPA served by the worker)
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    # ubuntu-latest moved to 26.04 (2026-11-23), which Playwright chromium does not
+    # support yet, and the Linux visual baselines were recorded on 24.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     # The five specs in `e2e/` were never wired into CI, so a frontend regression
     # that still compiles (a renamed CSS hook, a dead route, a broken auth guard)
