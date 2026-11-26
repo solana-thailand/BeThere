@@ -269,6 +269,11 @@ pub struct EventConfig {
     /// Map link for the venue (e.g. a Google Maps share URL). Empty = no link.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub location_map_url: String,
+    /// The Ontime room's attendee feed (`https://<host>/r/<room>/public`),
+    /// shown live on the event page while the show runs (plan 050). Empty =
+    /// none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ontime_feed_url: String,
     /// Emails that are admitted to this event **without paying a deposit**.
     ///
     /// Guests the organizer has decided do not pay — speakers, sponsors, VIPs.
@@ -638,6 +643,7 @@ impl EventConfig {
             description: String::new(),
             location: String::new(),
             location_map_url: String::new(),
+            ontime_feed_url: String::new(),
             comp_emails: Vec::new(),
             video_url: String::new(),
             event_format: EventFormat::InPerson,

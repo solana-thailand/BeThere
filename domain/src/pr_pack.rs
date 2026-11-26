@@ -350,6 +350,7 @@ mod tests {
             description: String::new(),
             location: "Bangkok, Thailand".into(),
             location_map_url: String::new(),
+            ontime_feed_url: String::new(),
             video_url: String::new(),
             calendar_subscribe_url: "https://cal.example/sub".into(),
             community_links: vec![],

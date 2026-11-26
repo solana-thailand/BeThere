@@ -4,8 +4,8 @@ use worker::KvStore;
 
 use event_checkin_domain::models::event::{
     CreateEventRequest, DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus,
-    EventConfig, EventIndex, EventStatus, normalize_map_url, normalize_postponed_note,
-    normalize_sheet_name, normalize_sponsors, normalize_ticket_note,
+    EventConfig, EventIndex, EventStatus, normalize_map_url, normalize_ontime_feed_url,
+    normalize_postponed_note, normalize_sheet_name, normalize_sponsors, normalize_ticket_note,
 };
 
 use crate::event_store::read::get_event_index;
@@ -56,6 +56,8 @@ pub async fn create_event(
 
     let location_map_url =
         normalize_map_url(&req.location_map_url).map_err(EventWriteError::Invalid)?;
+    let ontime_feed_url =
+        normalize_ontime_feed_url(&req.ontime_feed_url).map_err(EventWriteError::Invalid)?;
     let ticket_note_in_person =
         normalize_ticket_note(&req.ticket_note_in_person).map_err(EventWriteError::Invalid)?;
     let ticket_note_online =
@@ -177,6 +179,7 @@ pub async fn create_event(
         description: req.description.trim().to_string(),
         location: req.location.trim().to_string(),
         location_map_url,
+        ontime_feed_url,
         comp_emails: Vec::new(),
         video_url: req.video_url.trim().to_string(),
         event_format: req.event_format.clone(),

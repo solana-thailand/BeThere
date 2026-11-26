@@ -9,7 +9,7 @@ use crate::error::ApiOk;
 use crate::state::AppState;
 use event_checkin_domain::models::attendee::TrackCounts;
 use event_checkin_domain::models::error::AppError;
-use event_checkin_domain::models::event::{EventVisibility, safe_map_url};
+use event_checkin_domain::models::event::{EventVisibility, safe_map_url, safe_ontime_feed};
 
 /// `GET /api/public/events`
 ///
@@ -292,6 +292,12 @@ pub async fn get_public_event(
     response_fields.insert(
         "organizer_name".to_string(),
         serde_json::Value::String(organizer_name),
+    );
+    // The Ontime room's public feed (plan 050): no token, no notes. Null
+    // unless it is still a valid feed link; the page then shows no live card.
+    response_fields.insert(
+        "ontime_feed_url".to_string(),
+        json!(safe_ontime_feed(&config.ontime_feed_url).map(|feed| feed.feed_url())),
     );
     // Already https-only and bounded: `normalize_sponsors` ran at the write.
     response_fields.insert(

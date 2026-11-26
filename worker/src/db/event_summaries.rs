@@ -738,6 +738,7 @@ mod tests {
             description: String::new(),
             location: String::new(),
             location_map_url: String::new(),
+            ontime_feed_url: String::new(),
             video_url: String::new(),
             calendar_subscribe_url: String::new(),
             community_links: vec![],

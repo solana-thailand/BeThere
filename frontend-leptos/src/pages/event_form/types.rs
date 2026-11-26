@@ -56,6 +56,8 @@ pub struct EventForm {
     pub max_refundable_deposits: String,
     pub location: String,
     pub location_map_url: String,
+    /// The Ontime attendee link, as pasted (plan 050).
+    pub ontime_feed_url: String,
     /// Deposit-waived emails, as typed: one per line or comma-separated. Parsed
     /// on submit; normalised server-side so casing here does not matter.
     pub comp_emails: String,
@@ -205,6 +207,7 @@ pub fn default_form() -> EventForm {
         max_refundable_deposits: String::new(),
         location: String::new(),
         location_map_url: String::new(),
+        ontime_feed_url: String::new(),
         comp_emails: String::new(),
         video_url: String::new(),
         in_person_capacity: String::new(),
@@ -304,6 +307,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         },
         location: detail.location.clone(),
         location_map_url: detail.location_map_url.clone(),
+        ontime_feed_url: detail.ontime_feed_url.clone(),
         comp_emails: detail.comp_emails.join("\n"),
         video_url: detail.video_url.clone(),
         in_person_capacity: detail

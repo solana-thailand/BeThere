@@ -144,6 +144,9 @@ pub struct EventDetail {
     pub location: String,
     #[serde(default)]
     pub location_map_url: String,
+    /// The Ontime room's attendee feed (plan 050). Empty = none.
+    #[serde(default)]
+    pub ontime_feed_url: String,
     /// Emails admitted without paying a deposit (`EventConfig::comp_emails`).
     #[serde(default)]
     pub comp_emails: Vec<String>,
@@ -303,6 +306,8 @@ pub struct CreateEventBody {
     pub location: Option<String>,
     #[serde(default)]
     pub location_map_url: String,
+    #[serde(default)]
+    pub ontime_feed_url: String,
     /// Emails admitted without paying a deposit. See `EventConfig::comp_emails`.
     #[serde(default)]
     pub comp_emails: Vec<String>,
@@ -428,6 +433,8 @@ pub struct UpdateEventBody {
     pub location: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location_map_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ontime_feed_url: Option<String>,
     /// `None` leaves the waived-email list untouched; `Some(vec![])` clears it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comp_emails: Option<Vec<String>>,

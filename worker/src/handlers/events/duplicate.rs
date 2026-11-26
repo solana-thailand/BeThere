@@ -188,6 +188,8 @@ pub async fn duplicate_event(
         description: source.description.clone(),
         location: source.location.clone(),
         location_map_url: source.location_map_url.clone(),
+        // a series often runs every instance from the same Ontime room
+        ontime_feed_url: source.ontime_feed_url.clone(),
         // NOTE: `comp_emails` is deliberately absent. `CreateEventRequest` has
         // no such field, so a duplicate starts with nobody waived — which is
         // the behaviour we want. A waived-email list is a decision about who

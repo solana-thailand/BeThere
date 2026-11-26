@@ -747,3 +747,92 @@ a.pe-sponsor:focus-visible {
         transition: none;
     }
 }
+
+/* Live "on now / next" card, from the event's Ontime room (plan 050). Only
+   rendered while the show runs. Tokens only, so it follows the attendee
+   theme in light and dark. Timer digits are tabular so they do not jitter. */
+.pe-live {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin: 0 0 1rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--bg-card);
+}
+.pe-live-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+.pe-live-chip,
+.pe-live-pace {
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 0.15rem 0.5rem;
+    border: 1px solid currentColor;
+    border-radius: var(--radius);
+}
+.pe-live-chip-live { color: var(--danger); }
+.pe-live-chip-live::before { content: "● "; }
+.pe-live-chip-paused { color: var(--text-secondary); }
+.pe-live-pace-ontime { color: var(--success); }
+.pe-live-pace-late { color: var(--warning); }
+.pe-live-pace-ahead { color: var(--accent); }
+.pe-live-label {
+    margin: 0.35rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.pe-live-title {
+    margin: 0;
+    font-size: 1.15rem;
+    line-height: 1.35;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+.pe-live-fields,
+.pe-live-next {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    overflow-wrap: anywhere;
+}
+.pe-live-left {
+    margin: 0.2rem 0 0;
+    font-size: 1.6rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+}
+.pe-live-left.pe-live-over { color: var(--danger); }
+/* An outlined track on the page's second paper: on the attendee theme
+   `--border` is ink, so a filled track would read as a finished bar. */
+.pe-live-bar {
+    height: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    overflow: hidden;
+}
+.pe-live-bar > span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 1s linear;
+}
+.pe-live-foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+.pe-live-foot a { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) {
+    .pe-live-bar > span { transition: none; }
+}

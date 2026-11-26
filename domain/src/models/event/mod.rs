@@ -11,6 +11,7 @@ mod defaults;
 mod enums;
 mod form;
 mod map_url;
+mod ontime_feed;
 mod requests;
 mod responses;
 mod sheet_name;
@@ -26,6 +27,10 @@ pub use config::{CommunityLink, EventConfig, EventIndex, EventMeta};
 pub use enums::{EscrowStatus, EventFormat, EventStatus, EventVisibility, OnlineOpenMode};
 pub use form::{FormFieldConfig, FormFieldType, RegistrationFormConfig};
 pub use map_url::{MAX_MAP_URL_CHARS, normalize_map_url, safe_map_url};
+pub use ontime_feed::{
+    MAX_ONTIME_FEED_URL_CHARS, OntimeFeed, normalize_ontime_feed_url, parse_ontime_feed_url,
+    safe_ontime_feed,
+};
 pub use requests::{CreateEventRequest, DuplicateEventRequest, UpdateEventRequest};
 pub use responses::{
     CreateEventResponse, EventDetailResponse, EventListResponse, UpdateEventResponse,

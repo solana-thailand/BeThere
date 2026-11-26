@@ -46,7 +46,7 @@ pub async fn upsert_event(
          online_open_mode, online_registration_open, \
          deposit_deadline_hours, updated_by, dev_profile_enabled, community_links, \
          calendar_subscribe_url, poster_url, recap_published, location_map_url, \
-         ticket_note_in_person, ticket_note_online, postponed_note, sponsors_json) \
+         ticket_note_in_person, ticket_note_online, postponed_note, sponsors_json, ontime_feed_url) \
          VALUES (?, ?, ?, ?, ?, \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
@@ -66,7 +66,7 @@ pub async fn upsert_event(
          ?, {online_registration_open}, \
          {deposit_deadline_hours}, ?, {dev_profile_enabled}, ?, \
          ?, ?, {recap_published}, ?, \
-         ?, ?, ?, ?) \
+         ?, ?, ?, ?, ?) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -119,7 +119,8 @@ pub async fn upsert_event(
          ticket_note_in_person = excluded.ticket_note_in_person, \
          ticket_note_online = excluded.ticket_note_online, \
          postponed_note = excluded.postponed_note, \
-         sponsors_json = excluded.sponsors_json",
+         sponsors_json = excluded.sponsors_json, \
+         ontime_feed_url = excluded.ontime_feed_url",
         event_start_ms = config.event_start_ms,
         event_end_ms = config.event_end_ms,
         deposit_enabled = config.deposit_enabled as i32,
@@ -189,6 +190,7 @@ pub async fn upsert_event(
         D1Type::Text(&config.ticket_note_online),
         D1Type::Text(&config.postponed_note),
         D1Type::Text(&sponsors_json),
+        D1Type::Text(&config.ontime_feed_url),
     ];
 
     db.prepare(&sql)

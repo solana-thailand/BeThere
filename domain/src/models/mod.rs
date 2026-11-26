@@ -11,6 +11,7 @@ pub mod event;
 pub mod event_summary;
 pub mod facts;
 pub mod landing_photo;
+pub mod live_agenda;
 pub mod next_step;
 pub mod org;
 pub mod public_stats;

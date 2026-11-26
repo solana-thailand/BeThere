@@ -175,6 +175,32 @@ pub(super) fn BasicSection(ctx: FormCtx) -> impl IntoView {
                     </span>
                 </div>
                 <div class="quiz-setting-item">
+                    <label class="quiz-field-label">
+                        "Live agenda from Ontime"<span class="field-optional-badge">"Optional"</span>
+                    </label>
+                    <input
+                        type="url"
+                        class="quiz-number-input"
+                        placeholder="https://…/r/your-room/public/agenda/"
+                        prop:value=move || form.get().ontime_feed_url
+                        on:input=move |ev| set_form.update(|f| f.ontime_feed_url = event_target_value(&ev))
+                    />
+                    {move || {
+                        // Checked here as it is typed; the Worker checks it again on save.
+                        use event_checkin_domain::models::event::normalize_ontime_feed_url;
+                        match normalize_ontime_feed_url(&form.get().ontime_feed_url) {
+                            Err(message) => view! {
+                                <span class="quiz-setting-hint" style="color: var(--danger);" role="alert">{message}</span>
+                            }.into_any(),
+                            Ok(_) => view! {
+                                <span class="quiz-setting-hint">
+                                    "In Ontime: Settings, Network, Attendee page. Turn it on and paste the page link. While the show runs, the event page shows what is on now, what is next and whether it runs late. Never paste a link with a token."
+                                </span>
+                            }.into_any(),
+                        }
+                    }}
+                </div>
+                <div class="quiz-setting-item">
                     <label class="quiz-field-label">"Link"<span class="field-optional-badge">"Optional"</span></label>
                     <input
                         type="text"

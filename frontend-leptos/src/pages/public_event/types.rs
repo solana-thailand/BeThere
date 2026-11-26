@@ -230,6 +230,10 @@ pub struct PublicEventData {
     /// Venue map link — the Worker only sends a safe https URL, else null.
     #[serde(default)]
     pub location_map_url: Option<String>,
+    /// The Ontime room's attendee feed (plan 050) — the Worker only sends a
+    /// valid feed link, else null. Drives the live "now / next" card.
+    #[serde(default)]
+    pub ontime_feed_url: Option<String>,
     pub created_at: String,
     pub dev_mode: bool,
 

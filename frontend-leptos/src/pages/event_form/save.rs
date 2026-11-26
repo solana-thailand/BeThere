@@ -265,6 +265,7 @@ pub(super) fn save_event(ctx: FormCtx, on_done: OnDone) {
                 Some(current_form.location.trim().to_string())
             },
             location_map_url: current_form.location_map_url.trim().to_string(),
+            ontime_feed_url: current_form.ontime_feed_url.trim().to_string(),
             // A brand-new event starts with nobody waived; the list is
             // managed from the edit form once the event exists.
             comp_emails: Vec::new(),
@@ -520,6 +521,8 @@ pub(super) fn save_event(ctx: FormCtx, on_done: OnDone) {
             },
             // Always sent so clearing the field removes the link.
             location_map_url: Some(current_form.location_map_url.trim().to_string()),
+            // Always sent so clearing the field unlinks the room.
+            ontime_feed_url: Some(current_form.ontime_feed_url.trim().to_string()),
             // Always sent, so emptying the box really does clear the list.
             // Split on newlines AND commas because people paste both.
             comp_emails: Some(
