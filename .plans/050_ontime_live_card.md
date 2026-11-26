@@ -35,6 +35,10 @@ show runs late, from that feed, with nothing copied into BeThere.
   its handlers. When the room turns its feed off (close 1000 with a reason)
   the card forgets the show. A link to the room's own attendee page in the
   page's language.
+- **Ticket page**: the same card above the event context in both the
+  in-person and online views. The attendee read sends
+  `event_ontime_feed_url` flattened to `""` (the ticket client declares a
+  plain `String`; an explicit null fails the whole ticket, `.issues/133`).
 - **Event form**: "Live agenda from Ontime" under the CSV import, checked as
   it is typed. Duplicating an event keeps the link (a series often runs from
   one room).
@@ -60,6 +64,9 @@ no Ontime code is vendored.
   note anywhere; an edit in Ontime and the operator moving on reach the card;
   Thai works; turning the feed off removes the card. No page errors besides
   the local sign-in 401 and the analytics beacon.
+- The ticket page, the same way (a local attendee, a second throwaway room,
+  deleted): the card shows the session, presenter and next, follows the
+  operator, and goes when the feed is turned off; no page errors.
 
 ## Deploy (owner's call)
 
@@ -71,6 +78,5 @@ no Ontime code is vendored.
 
 ## Later
 
-- The same card on the ticket page (attendees at the venue open the ticket).
 - Per-session times as Ontime expects them, once ontime-rs sends them.
 - The rotating check-in QR (plan 041) can use the same room link.

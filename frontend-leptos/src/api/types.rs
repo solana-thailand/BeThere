@@ -405,6 +405,9 @@ pub struct AttendeeData {
     /// Venue map link (https only, sanitized by the Worker). Empty = no link.
     #[serde(default)]
     pub event_location_map_url: String,
+    /// The Ontime room's attendee feed (plan 050). Empty = no live card.
+    #[serde(default)]
+    pub event_ontime_feed_url: String,
     /// Event tagline / subtitle.
     #[serde(default)]
     pub event_tagline: String,
