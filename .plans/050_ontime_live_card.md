@@ -68,6 +68,25 @@ no Ontime code is vendored.
   deleted): the card shows the session, presenter and next, follows the
   operator, and goes when the feed is turned off; no page errors.
 
+## Review (2026-11-27, pull 308, session event-checkin-88)
+
+An independent read found no way to leak a room token, open a socket to a
+host the organiser did not choose, or null out the ticket page. CSP already
+allows it (`connect-src 'self' https: wss:`). Fixed on the branch:
+
+- The card rebuilt its whole `<section>` every second (the clock was read
+  in the closure that builds it), so focus on the agenda link was lost and
+  `aria-live` sat on a node that was replaced. Now a memo of the card without
+  its clock builds the section, and only the countdown and the bar tick; the
+  countdown is `aria-live="off"`.
+- A `null` field value, id, kind or entry list threw the whole packet away.
+- A port the browser refuses (e.g. 99999) passed the check and made the loop
+  retry every second; such ports are refused, and a failed open backs off.
+- Leaving the 3 h window kept the last "on now" up for good; it is cleared.
+
+Not changed: the ticket page remounts the card when the ticket itself
+changes (the poll skips identical payloads), e.g. once at check-in.
+
 ## Deploy (owner's call)
 
 1. Apply `0067_event_ontime_feed_url.sql` (staging, then prod), read the

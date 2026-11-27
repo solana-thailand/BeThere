@@ -42,14 +42,14 @@ pub enum EntryKind {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgendaEntry {
-    #[serde(rename = "type", default)]
+    #[serde(rename = "type", default, deserialize_with = "null_as_default")]
     pub kind: EntryKind,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub id: String,
     #[serde(default, deserialize_with = "null_as_default")]
     pub title: String,
     /// Fields the room chose to show, by label, e.g. `Presenter`.
-    #[serde(default, deserialize_with = "null_as_default")]
+    #[serde(default, deserialize_with = "fields_without_nulls")]
     pub fields: BTreeMap<String, String>,
 }
 
@@ -57,7 +57,7 @@ pub struct AgendaEntry {
 pub struct Agenda {
     #[serde(default, deserialize_with = "null_as_default")]
     pub title: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "null_as_default")]
     pub entries: Vec<AgendaEntry>,
 }
 
@@ -101,6 +101,20 @@ where
     T: Default + Deserialize<'de>,
 {
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
+}
+
+/// A field the room left empty arrives as `null`; it is not shown, and it must
+/// not throw away the rest of the packet.
+fn fields_without_nulls<'de, D>(deserializer: D) -> Result<BTreeMap<String, String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Option::<BTreeMap<String, Option<String>>>::deserialize(deserializer)?;
+    Ok(raw
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(label, value)| value.map(|value| (label, value)))
+        .collect())
 }
 
 #[derive(Deserialize)]

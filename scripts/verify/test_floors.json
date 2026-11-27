@@ -180,7 +180,7 @@
     "og_card tests/og_card.rs": 8,
     "og_splice tests/og_splice.rs": 15,
     "onchain_event_id_exactness tests/onchain_event_id_exactness.rs": 6,
-    "ontime_feed tests/ontime_feed.rs": 18,
+    "ontime_feed tests/ontime_feed.rs": 20,
     "organizer_typed_account tests/organizer_typed_account.rs": 6,
     "participation_type_parse tests/participation_type_parse.rs": 3,
     "participation_walk_in tests/participation_walk_in.rs": 5,

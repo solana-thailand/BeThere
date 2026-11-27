@@ -272,3 +272,39 @@ fn clock_text_reads_like_a_timer() {
     assert_eq!(time_of_day(37_800_000), "10:30");
     assert_eq!(time_of_day(-60_000), "23:59");
 }
+
+/// A field the room left empty, a null id, a null kind or a null entry list
+/// must not throw away the whole packet (review of pull 308).
+#[test]
+fn nulls_inside_the_agenda_keep_the_rest_of_the_packet() {
+    let text = packet("play", Some(1_200_000), 0)
+        .replace(
+            r#""fields":{"Presenter":"Ozone"}"#,
+            r#""fields":{"Presenter":null,"Room":"A"}"#,
+        )
+        .replace(r#"{"type":"group","id":"g""#, r#"{"type":null,"id":null"#);
+    let mut feed = LiveAgenda::default();
+    assert!(feed.apply(&text, 1_000), "the packet is taken");
+    let card = feed.card(1_000).expect("a card while it plays");
+    assert_eq!(card.title, "Opening");
+    assert_eq!(card.fields, vec![("Room".to_string(), "A".to_string())]);
+
+    let empty = r#"{"tag":"public-data","payload":{"agenda":{"title":"T","entries":null}}}"#;
+    let mut feed = LiveAgenda::default();
+    assert!(
+        feed.apply(empty, 1_000),
+        "a null entry list is an empty one"
+    );
+    assert_eq!(feed.title(), Some("T"));
+}
+
+/// `WebSocket::new` throws on a port it cannot use, so such a link would
+/// only ever fail in the browser.
+#[test]
+fn a_port_the_browser_refuses_is_refused() {
+    for port in ["99999", "65536", "0", "+80"] {
+        let url = format!("https://{HOST}:{port}/r/day1/public");
+        assert!(parse_ontime_feed_url(&url).is_err(), "{url}");
+    }
+    assert!(parse_ontime_feed_url(&format!("https://{HOST}:65535/r/day1/public")).is_ok());
+}

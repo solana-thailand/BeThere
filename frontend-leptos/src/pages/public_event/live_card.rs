@@ -99,7 +99,12 @@ pub fn LiveCard(feed_url: Option<String>, start_ms: i64, end_ms: i64) -> impl In
             }
             let around = now_ms >= start_ms - WINDOW_MS && now_ms <= end_ms + WINDOW_MS;
             match (&connection, around) {
-                (Some(_), false) => connection = None,
+                // the window closed: drop the socket and forget the show, or
+                // a card missed by its last packet would stay "on now"
+                (Some(_), false) => {
+                    connection = None;
+                    let _ = set_live.try_update(LiveAgenda::clear);
+                }
                 (Some(open), true) if open.is_closed() => {
                     connection = None;
                     retry_at = now_ms + retry_ms;
@@ -108,6 +113,11 @@ pub fn LiveCard(feed_url: Option<String>, start_ms: i64, end_ms: i64) -> impl In
                 (Some(open), true) if open.is_open() => retry_ms = FIRST_RETRY_MS,
                 (None, true) if now_ms >= retry_at => {
                     connection = Connection::open(&loop_feed, set_live);
+                    // the browser refused the address: back off like a drop
+                    if connection.is_none() {
+                        retry_at = now_ms + retry_ms;
+                        retry_ms = (retry_ms * 2).min(MAX_RETRY_MS);
+                    }
                 }
                 _ => {}
             }
@@ -116,18 +126,34 @@ pub fn LiveCard(feed_url: Option<String>, start_ms: i64, end_ms: i64) -> impl In
     });
 
     let i18n = use_i18n();
-    let card = move || live.with(|l| l.card(now.get()));
+    // `card` moves every second; `shape` (the card without its clock) changes
+    // only when the session, the pace or the finish does. The section is built
+    // from `shape`, so it is not replaced each second: focus on the agenda
+    // link survives, a tap is not lost, and `aria-live` sits on a node that
+    // stays. Only the countdown and the bar read `card`.
+    let card = Memo::new(move |_| live.with(|l| l.card(now.get())));
+    let shape = Memo::new(move |_| card.get().map(without_clock));
     view! {
-        {move || card().map(|card| {
+        {move || shape.get().map(|shape| {
             let locale = i18n.get_locale();
             let agenda_href = feed.agenda_url(match locale {
                 Locale::th => "th",
                 Locale::en => "en",
             });
-            card_view(card, locale, agenda_href)
+            card_view(shape, card, locale, agenda_href)
         })}
     }
     .into_any()
+}
+
+/// The card with its clock zeroed: whether there is a countdown stays, its
+/// value does not.
+fn without_clock(card: NowCard) -> NowCard {
+    NowCard {
+        left_ms: card.left_ms.map(|_| 0),
+        progress: 0.0,
+        ..card
+    }
 }
 
 /// `5 min`, `2 h`, `7 h 32 min`.
@@ -150,7 +176,12 @@ fn span(minutes: u32, locale: Locale) -> String {
     }
 }
 
-fn card_view(card: NowCard, locale: Locale, agenda_href: String) -> impl IntoView {
+fn card_view(
+    card: NowCard,
+    clock: Memo<Option<NowCard>>,
+    locale: Locale,
+    agenda_href: String,
+) -> impl IntoView {
     let text = |key: fn(Locale) -> &'static str| key(locale);
     let i18n = use_i18n();
     let (state, state_class) = match card.paused {
@@ -189,8 +220,8 @@ fn card_view(card: NowCard, locale: Locale, agenda_href: String) -> impl IntoVie
         .map(|(_, value)| value.as_str())
         .collect::<Vec<_>>()
         .join(" · ");
-    let left = card.left_ms.map(clock_text);
-    let over = card.left_ms.is_some_and(|ms| ms < 0);
+    let left_ms = move || clock.with(|c| c.as_ref().and_then(|c| c.left_ms));
+    let has_left = card.left_ms.is_some();
     let next = card.next_title.map(|title| {
         fill(
             text(|l| crate::i18n::td_string!(l, event.live_next)),
@@ -207,7 +238,10 @@ fn card_view(card: NowCard, locale: Locale, agenda_href: String) -> impl IntoVie
             &[("time", &time_of_day(ms))],
         ),
     });
-    let width = format!("width: {:.1}%", card.progress * 100.0);
+    let width = move || {
+        let progress = clock.with(|c| c.as_ref().map_or(0.0, |c| c.progress));
+        format!("width: {:.1}%", progress * 100.0)
+    };
     view! {
         <section class="pe-live" aria-label=t_string!(i18n, event.live_aria) aria-live="polite">
             <div class="pe-live-head">
@@ -217,8 +251,15 @@ fn card_view(card: NowCard, locale: Locale, agenda_href: String) -> impl IntoVie
             <p class="pe-live-label">{t_string!(i18n, event.live_on_now)}</p>
             <h2 class="pe-live-title">{card.title}</h2>
             {(!fields.is_empty()).then(|| view! { <p class="pe-live-fields">{fields}</p> })}
-            {left.map(|left| view! {
-                <p class="pe-live-left" class:pe-live-over=over>{left}</p>
+            // `aria-live="off"`: a countdown read out every second is noise
+            {has_left.then(|| view! {
+                <p
+                    class="pe-live-left"
+                    class:pe-live-over=move || left_ms().is_some_and(|ms| ms < 0)
+                    aria-live="off"
+                >
+                    {move || left_ms().map(clock_text).unwrap_or_default()}
+                </p>
             })}
             <div class="pe-live-bar" aria-hidden="true"><span style=width></span></div>
             {next.map(|next| view! { <p class="pe-live-next">{next}</p> })}

@@ -76,7 +76,8 @@ fn is_valid_host(host: &str) -> bool {
     let port_ok = match port {
         None => true,
         Some(port) => {
-            !port.is_empty() && port.len() <= 5 && port.chars().all(|c| c.is_ascii_digit())
+            // a port the browser accepts: `WebSocket::new` throws on 99999
+            port.parse::<u16>().is_ok_and(|n| n > 0) && port.chars().all(|c| c.is_ascii_digit())
         }
     };
     name_ok && port_ok
