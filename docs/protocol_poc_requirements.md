@@ -29,7 +29,7 @@ The protocol shall enforce that the deposit amount, event end time, and refund d
 
 The protocol shall allow an attendee to deposit USDC tokens into a vault owned by the event escrow PDA via the SPL Token program.
 
-The protocol shall accept deposits only in the USDC mint configured at escrow creation (devnet: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`, mainnet: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m`).
+The protocol shall accept deposits only in the USDC mint configured at escrow creation (devnet: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`, mainnet: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`).
 
 The protocol shall reject any deposit where the transferred amount does not exactly match the escrow's configured `deposit_amount`.
 

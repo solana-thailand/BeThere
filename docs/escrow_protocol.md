@@ -590,7 +590,7 @@ Organizer receives: $14.55
 | Cluster | USDC Mint | Explorer Base URL |
 |---------|-----------|-------------------|
 | `devnet` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `https://explorer.solana.com?cluster=devnet` |
-| `mainnet-beta` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m` | `https://explorer.solana.com` |
+| `mainnet-beta` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | `https://explorer.solana.com` |
 
 All explorer links (transaction signatures, account addresses) must be cluster-aware. Read from `SOLANA_CLUSTER` environment variable to determine which cluster and mint to use.
 
@@ -602,7 +602,7 @@ pub fn get_usdc_mint(cluster: &str) -> Pubkey {
         "devnet" => "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
             .parse()
             .unwrap(),
-        "mainnet-beta" => "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m"
+        "mainnet-beta" => "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
             .parse()
             .unwrap(),
         _ => panic!("Unsupported cluster: {cluster}"),

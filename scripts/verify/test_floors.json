@@ -244,6 +244,7 @@
     "turnstile_gate tests/turnstile_gate.rs": 4,
     "unmapped_column_aliasing tests/unmapped_column_aliasing.rs": 5,
     "usdc_deposit_check tests/usdc_deposit_check.rs": 7,
+    "usdc_mint_guard tests/usdc_mint_guard.rs": 2,
     "vendored_jsqr_integrity tests/vendored_jsqr_integrity.rs": 2,
     "vendored_mwa_integrity tests/vendored_mwa_integrity.rs": 2,
     "virtual_checkin_gate tests/virtual_checkin_gate.rs": 5,

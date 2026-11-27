@@ -474,7 +474,7 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 | Constant | Devnet | Mainnet |
 |----------|--------|--------|
 | Program ID | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` | TBD |
-| USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m` |
+| USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
 
 **Transaction building:** All TX builders are in `worker/src/solana_escrow/tx_builders/`. They share an `EscrowCtx` that resolves program IDs + derives PDAs once, and a `finalize_tx()` helper that handles message building → blockhash → serialization → base64. Each instruction has its own builder file for maintainability.
 
