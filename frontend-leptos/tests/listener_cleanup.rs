@@ -108,3 +108,30 @@ fn session_timer_stops_when_unmounted() {
         .map_or(body.len(), |i| i + 1)];
     assert!(body.contains(".try_set(label.to_string()).is_some()"));
 }
+
+/// Plan 050: the live card's socket loop ends with the card, and the socket
+/// closes and lets go of its handlers when it is dropped, so leaving the event
+/// page never leaves a socket to the Ontime room open.
+#[test]
+fn live_card_socket_closes_when_unmounted() {
+    const CARD: &str = include_str!("../src/pages/public_event/live_card.rs");
+    let looped = CARD
+        .find("set_now.try_set(now_ms).is_some()")
+        .expect("LiveCard's loop no longer stops on unmount; update this guard");
+    assert!(
+        CARD[looped..]
+            .trim_start_matches(|c| c != '{')
+            .starts_with("{\n                break;")
+    );
+    let drop = CARD
+        .find("impl Drop for Connection")
+        .expect("Connection no longer closes on drop");
+    let body = &CARD[drop..];
+    for needed in ["set_onmessage(None)", "set_onclose(None)", ".close()"] {
+        assert!(body.contains(needed), "Connection::drop lost {needed}");
+    }
+    assert!(
+        !CARD.contains(".forget()"),
+        "a forgotten closure outlives the card"
+    );
+}

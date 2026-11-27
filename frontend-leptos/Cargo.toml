@@ -56,6 +56,9 @@ js-sys = "0.3"
 web-sys = { version = "0.3", features = [
   "Blob",
   "BlobPropertyBag",
+  "CloseEvent",
+  "MessageEvent",
+  "WebSocket",
   "Clipboard",
   "DomRect",
   "Element",

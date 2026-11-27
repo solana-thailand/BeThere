@@ -114,6 +114,9 @@ pub struct CreateEventRequest {
     /// Map link for the venue (e.g. a Google Maps share URL).
     #[serde(default)]
     pub location_map_url: String,
+    /// The Ontime room's attendee page or feed link (plan 050).
+    #[serde(default)]
+    pub ontime_feed_url: String,
     /// YouTube/live stream/recording URL.
     #[serde(default)]
     pub video_url: String,
@@ -309,6 +312,9 @@ pub struct UpdateEventRequest {
     /// New venue map link. Empty string clears it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location_map_url: Option<String>,
+    /// New Ontime attendee link (plan 050). Empty string clears it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ontime_feed_url: Option<String>,
     /// YouTube/live stream/recording URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub video_url: Option<String>,

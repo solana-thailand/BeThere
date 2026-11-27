@@ -592,6 +592,14 @@ fn render_loaded_event(
         // returning registrant needs. Registration itself stays open.
         {crate::components::postponed_banner(&data.postponed_note)}
 
+        // What is on now and next, from the event's Ontime room, while the
+        // show runs (plan 050). Nothing at all before and after.
+        <super::live_card::LiveCard
+            feed_url=data.ontime_feed_url.clone()
+            start_ms=data.event_start_ms
+            end_ms=data.event_end_ms
+        />
+
         // Hero CTA — the primary action, reachable above the fold. Jumps to the
         // reserve/action zone (the form itself is further down the page). Label
         // adapts once we know the attendee's registration state.

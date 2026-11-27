@@ -153,5 +153,19 @@
   "err_network": "Network error",
   "err_bot_check": "The human check failed or expired. Please try again.",
   "organized_by": "Organized by",
-  "sponsors_title": "Supported by"
+  "sponsors_title": "Supported by",
+  "live_now": "Live now",
+  "live_paused": "Paused",
+  "live_on_now": "On now",
+  "live_next": "Next: {title}",
+  "live_late": "Running {time} late",
+  "live_ahead": "{time} ahead",
+  "live_on_time": "On time",
+  "live_finish": "Expected to finish around {time}",
+  "live_planned": "Planned to finish at {time}",
+  "live_minutes": "{m} min",
+  "live_hours": "{h} h",
+  "live_hours_minutes": "{h} h {m} min",
+  "live_full_agenda": "Full agenda",
+  "live_aria": "What is on now at this event"
 }

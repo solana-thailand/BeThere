@@ -95,6 +95,8 @@ pub struct D1EventRow {
     pub calendar_subscribe_url: Option<String>,
     // Columns added by migration 0041 (venue map link)
     pub location_map_url: Option<String>,
+    // Column added by migration 0067 (Ontime attendee feed, plan 050)
+    pub ontime_feed_url: Option<String>,
     // Columns added by migration 0019 (event poster)
     pub poster_url: Option<String>,
     // Columns added by migration 0020 (Plan 008 — denormalized recap flag).
@@ -327,6 +329,7 @@ impl D1EventRow {
                 .unwrap_or_default(),
             calendar_subscribe_url: self.calendar_subscribe_url.clone().unwrap_or_default(),
             location_map_url: self.location_map_url.clone().unwrap_or_default(),
+            ontime_feed_url: self.ontime_feed_url.clone().unwrap_or_default(),
             poster_url: self.poster_url.clone().unwrap_or_default(),
             recap_published: self.recap_published.unwrap_or(0) != 0,
             post_event_registration_open: self.post_event_registration_open.unwrap_or(0) != 0,

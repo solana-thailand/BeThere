@@ -278,6 +278,7 @@ pub async fn confirm_escrow_init_handler(
             community_links: None,
             calendar_subscribe_url: None,
             location_map_url: None,
+            ontime_feed_url: None,
         };
 
         let saved = event_store::update_event(kv, d1, &event.id, &update_req, &claims.email)

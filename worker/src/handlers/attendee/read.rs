@@ -14,7 +14,7 @@ use crate::error::ApiOk;
 use event_checkin_domain::models::api::AttendeeResponse;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
-use event_checkin_domain::models::event::safe_map_url;
+use event_checkin_domain::models::event::{safe_map_url, safe_ontime_feed};
 
 use crate::handlers::ext::{
     EventIdQuery, get_attendee_for_public, resolve_event, resolve_event_with_access, resolve_kv,
@@ -330,6 +330,11 @@ pub async fn get_public_ticket(
         None
     };
 
+    // Flattened to "" like the map link: the ticket client declares a plain
+    // String, and an explicit null would fail the whole ticket (.issues/133).
+    let ontime_feed_url = safe_ontime_feed(&event.ontime_feed_url)
+        .map(|feed| feed.feed_url())
+        .unwrap_or_default();
     let data = json!({
         "attendee": response,
         "qr_image": qr_image,
@@ -355,6 +360,8 @@ pub async fn get_public_ticket(
         // event without a venue map link. Flatten to "" to honour the declared
         // contract. See `.issues/133`.
         "event_location_map_url": safe_map_url(&event.location_map_url).unwrap_or_default(),
+        // The Ontime room's public feed for the live card (plan 050), "" if none.
+        "event_ontime_feed_url": ontime_feed_url,
         "event_tagline": event.tagline,
         "nft_image_url": event.nft_image_url,
         "claimed": attendee.claimed_at.is_some(),

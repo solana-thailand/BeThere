@@ -153,5 +153,19 @@
   "err_network": "เครือข่ายขัดข้อง",
   "err_bot_check": "การยืนยันว่าเป็นคนจริงไม่ผ่านหรือหมดเวลา กรุณาลองอีกครั้ง",
   "organized_by": "จัดโดย",
-  "sponsors_title": "ผู้สนับสนุน"
+  "sponsors_title": "ผู้สนับสนุน",
+  "live_now": "กำลังไลฟ์",
+  "live_paused": "พักชั่วคราว",
+  "live_on_now": "ตอนนี้",
+  "live_next": "ถัดไป: {title}",
+  "live_late": "ช้ากว่ากำหนด {time}",
+  "live_ahead": "เร็วกว่ากำหนด {time}",
+  "live_on_time": "ตรงเวลา",
+  "live_finish": "คาดว่าจะจบราว {time}",
+  "live_planned": "กำหนดจบ {time}",
+  "live_minutes": "{m} นาที",
+  "live_hours": "{h} ชม.",
+  "live_hours_minutes": "{h} ชม. {m} นาที",
+  "live_full_agenda": "ดูกำหนดการทั้งหมด",
+  "live_aria": "ตอนนี้งานถึงช่วงไหนแล้ว"
 }

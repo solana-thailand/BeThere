@@ -54,7 +54,8 @@ pub fn OnlineView(
         community_links,
         calendar_subscribe_url,
         ticket_note,
-        event_start_ms: _,
+        event_start_ms,
+        event_ontime_feed_url,
         event_name,
         event_id,
         participation,
@@ -233,6 +234,13 @@ pub fn OnlineView(
 
         // 2. Main card
         <div class="ticket-main-card">
+            // What is on now, from the event's Ontime room (plan 050)
+            <crate::pages::public_event::live_card::LiveCard
+                feed_url=Some(event_ontime_feed_url.clone()).filter(|url| !url.is_empty())
+                start_ms=event_start_ms
+                end_ms=event_end_ms
+            />
+
             // Event context
             <EventContext
                 nft_image_url=nft_image_url.clone()

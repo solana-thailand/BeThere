@@ -1,0 +1,13 @@
+-- 0067_event_ontime_feed_url.sql
+-- The Ontime room an event is run from (plan 050): its attendee feed,
+-- `https://<host>/r/<room>/public`. The public event page listens to that
+-- room's listen-only socket and shows what is on now and next while the show
+-- runs. Written only through `normalize_ontime_feed_url`, which holds it to
+-- https, a plain host and a valid room name, and refuses a link with a token.
+--
+-- '' = no Ontime room, which is the state every existing event starts in.
+-- Nothing on any page changes until an organizer pastes a link.
+--
+-- NOTE: NOT idempotent — ALTER TABLE ADD COLUMN fails if the column already
+-- exists. Relies on the d1_migrations tracker to prevent re-execution.
+ALTER TABLE events ADD COLUMN ontime_feed_url TEXT NOT NULL DEFAULT '';
