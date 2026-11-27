@@ -22,7 +22,9 @@
     "film_close": "Close the film",
     "film_captions": "Captions",
     "b_events_link": "Events and courses →",
-    "c_lead": "{came} of the {paid} who paid a deposit came. The empty outlines are the {gone} who did not."
+    "c_lead": "{came} of the {paid} who paid a deposit came. The empty outlines are the {gone} who did not.",
+    "next_cta": "Next: {name} · {when} →",
+    "notify_link": "Get an email when the next event opens →"
   },
   "cta": {
     "dashboard": "Go to Dashboard →",

@@ -23,7 +23,16 @@ fn the_open_list_is_fetched_once() {
     // The home links to /events instead of listing them.
     let home = read("src/pages/landing/page.rs");
     assert!(!home.contains("OpenEvents") && !home.contains("Upcoming"));
-    assert!(read("src/pages/landing/hero.rs").contains(r#"<A href="/events""#));
+    // `<A>` or a plain `<a>` (the router takes both; the hero uses `<a>` so it
+    // can count the click), possibly with the href on its own line.
+    let hero: String = read("src/pages/landing/hero.rs")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        hero.contains(r#"<A href="/events""#) || hero.contains(r#"<a href="/events""#),
+        "the home links to /events"
+    );
 }
 
 /// R4.13: the empty state tells a reader with credit that it can pay their

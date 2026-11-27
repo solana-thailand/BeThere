@@ -10,6 +10,7 @@ use crate::components::is_admin_role;
 use crate::utils::copy_markup::{Segment, parse};
 
 use super::auth::AuthState;
+use crate::pages::site::doors::{SitePage, count_click};
 
 /// Catalog text with the copy markup rendered: keyword links, highlights,
 /// and newlines left for `white-space: pre-line`. `MarkupText` takes text
@@ -40,17 +41,17 @@ pub fn MarkupText(text: Signal<String>) -> impl IntoView {
     }
 }
 
-/// Chairs to a row of the hero's band: wide on a desktop (a few rows across the
-/// page), narrower on a phone so the chairs stay chairs. Read once when the page
-/// mounts.
-fn hall_band_cols() -> usize {
+/// How the hero draws the hall: a labelled row per event on a wide screen, a
+/// flowing block of 14 to a row on a phone (the labels would be unreadable
+/// there). Read once when the page mounts.
+fn hall_band() -> (super::hall::HallLayout, usize) {
     let width = web_sys::window()
         .and_then(|w| w.inner_width().ok())
         .and_then(|v| v.as_f64())
         .unwrap_or(1280.0);
     match width < 768.0 {
-        true => 14,
-        false => 24,
+        true => (super::hall::HallLayout::Blocks, 14),
+        false => (super::hall::HallLayout::ByEvent, 24),
     }
 }
 
@@ -60,6 +61,9 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
     let area = NodeRef::<leptos::html::Header>::new();
     let canvas = NodeRef::<leptos::html::Canvas>::new();
     super::room::use_lit_room(area, canvas);
+    let (band_layout, band_cols) = hall_band();
+    // What is open decides the action (.plans/049): `None` until it is known.
+    let next_event = LocalResource::new(crate::pages::site::open_events::fetch_next_event);
     // The sentence's numbers are the hall's own: paid, came, and who did not.
     let (paid, came) = event_checkin_domain::models::facts::ladder_total();
     let i18n = crate::i18n::use_i18n();
@@ -81,7 +85,7 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                 // The payers' hall as a band across the top (.plans/049, owner pick C):
                 // the evidence first, then the words.
                 <div class="lp-hero-c-hall">
-                    <super::hall::Hall cols=hall_band_cols() show_fine=false />
+                    <super::hall::Hall cols=band_cols layout=band_layout show_fine=false />
                 </div>
                 <div class="lp-hero-text">
                   <div class="lp-hero-c-cols">
@@ -98,35 +102,100 @@ pub fn Hero(auth_state: ReadSignal<AuthState>, user_role: ReadSignal<String>) ->
                     <div class="lp-actions">
                         {move || {
                             let role = user_role.get();
-                            match auth_state.get() {
-                                AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => view! {
+                            let signed_in = matches!(auth_state.get(), AuthState::SignedIn(_));
+                            // Operators keep their own entry.
+                            if signed_in && (is_admin_role(&role) || role == "organizer") {
+                                return view! {
                                     <A href="/admin" attr:class="lp-btn lp-btn-primary">
                                         {tr(|l| crate::i18n::td_string!(l, landing.cta.dashboard))}
                                     </A>
-                                }.into_any(),
-                                AuthState::SignedIn(_) if role == "staff" => view! {
+                                }.into_any();
+                            }
+                            if signed_in && role == "staff" {
+                                return view! {
                                     <A href="/staff" attr:class="lp-btn lp-btn-primary">
                                         {tr(|l| crate::i18n::td_string!(l, landing.cta.scanner))}
                                     </A>
-                                }.into_any(),
+                                }.into_any();
+                            }
+                            // Everyone else: what the home page offers depends on what is
+                            // open. Wait for the answer, so the button never flips from
+                            // one thing to another under the reader's eyes.
+                            let Some(next) = next_event.get() else {
+                                return view! { <span class="lp-actions-hold"></span> }.into_any();
+                            };
+                            match (next, signed_in) {
+                                (Some(ev), _) => {
+                                    let when = crate::utils::format_event_day(ev.start_ms);
+                                    let text = crate::locale::fill(
+                                        crate::i18n::td_string!(i18n.get_locale(), landing.hero.next_cta),
+                                        &[("name", &ev.name), ("when", &when)],
+                                    );
+                                    view! {
+                                        <a
+                                            href=format!("/e/{}", ev.slug)
+                                            class="lp-btn lp-btn-primary"
+                                            on:click=move |_| count_click(SitePage::Home, "events")
+                                        >
+                                            {text}
+                                        </a>
+                                    }.into_any()
+                                }
                                 // A signed-in attendee has nothing to wait for.
-                                AuthState::SignedIn(_) => view! {
-                                    <A href="/events" attr:class="lp-btn lp-btn-primary">
+                                (None, true) => view! {
+                                    <a
+                                        href="/events"
+                                        class="lp-btn lp-btn-primary"
+                                        on:click=move |_| count_click(SitePage::Home, "events")
+                                    >
                                         {tr(|l| crate::i18n::td_string!(l, landing.hero.b_events_link))}
-                                    </A>
+                                    </a>
                                 }.into_any(),
-                                // Organizer access is by invitation: the honest action
-                                // is the waitlist, not "host an event".
-                                _ => view! {
-                                    <A href="/organizers#join" attr:class="lp-btn lp-btn-primary">
+                                // Nothing open: organizer access is by invitation, so the
+                                // honest action is the waitlist, not "host an event".
+                                (None, false) => view! {
+                                    <a
+                                        href="/organizers#join"
+                                        class="lp-btn lp-btn-primary"
+                                        on:click=move |_| count_click(SitePage::Home, "organizers")
+                                    >
                                         {tr(|l| crate::i18n::td_string!(l, landing.join.waitlist_cta))}
-                                    </A>
+                                    </a>
                                 }.into_any(),
                             }
                         }}
                     </div>
-                    // The one-minute film is a quiet link, not a second button.
-                    <div class="lp-hero-more"><WhyFilm /></div>
+                    // Quiet links: the one-minute film, and the other way in.
+                    <div class="lp-hero-more">
+                        <WhyFilm />
+                        {move || {
+                            let signed_in = matches!(auth_state.get(), AuthState::SignedIn(_));
+                            let next = next_event.get()?;
+                            (!signed_in).then(|| match next {
+                                // An event is open: the organizer's way in stays one click away.
+                                Some(_) => view! {
+                                    <a
+                                        href="/organizers#join"
+                                        class="lp-link-btn"
+                                        on:click=move |_| count_click(SitePage::Home, "organizers")
+                                    >
+                                        {tr(|l| crate::i18n::td_string!(l, landing.join.waitlist_cta))}
+                                    </a>
+                                }.into_any(),
+                                // Nothing open: an attendee can ask to be told (the form is
+                                // on /events, in the empty state).
+                                None => view! {
+                                    <a
+                                        href="/events"
+                                        class="lp-link-btn"
+                                        on:click=move |_| count_click(SitePage::Home, "events")
+                                    >
+                                        {tr(|l| crate::i18n::td_string!(l, landing.hero.notify_link))}
+                                    </a>
+                                }.into_any(),
+                            })
+                        }}
+                    </div>
                     // What the numbers count: kept, small, under the action.
                     <p class="lp-hero-scope">{tr(|l| crate::i18n::td_string!(l, landing.hall.fine))}</p>
                     </div>

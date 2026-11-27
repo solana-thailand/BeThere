@@ -1,6 +1,6 @@
 # 049 — What makes customers like the product: five asks, sized for BeThere
 
-**Status:** in progress. Item 4 done (pull 298, 299; on staging). Item 1 measured (`.benchmarks/009`); its fixes below need owner picks. Owner asked 2026-10-27 to
+**Status:** in progress. Item 4 done (pull 298, 299; on staging). Item 1 measured (`.benchmarks/009`); its fixes below need owner picks. Landing r2 built locally (2026-11-16), waiting on the owner to push. Owner asked 2026-10-27 to
 assess a post listing five tips and adapt them ("go").
 
 Two kinds of customer, and the tips land differently: **attendees** (phone, a few visits a year)
@@ -113,6 +113,64 @@ Tried and not taken: C's chairs as a full-bleed hero backdrop (local commit
 (my bug); second try showed all 94 and the 4 empty outlines clearly, but the
 sentence collided with the chairs and a phone gets the card anyway. Revisit if
 the page ever needs a stronger first image.
+
+## Landing page r2: the hall, a state-aware hero, counted links (2026-10-28 → 2026-11-16, branch `feature/049-landing-r2`, not pushed)
+
+On top of pick B. The owner keeps "2-desktop-4-C": the chairs band, one sentence, one button.
+
+- **The hall** (`5f30a3a9`): on wide screens, one labelled row per event (RTM #1–#6)
+  with its count at the end; a phone keeps the flowing block. The 4 who did not
+  come are outlined in the warm colour and arrive last. The fill animates opacity
+  only (a CSS transform would override each chair's `transform` attribute) and
+  is off under `prefers-reduced-motion`.
+- **Set 2, the hero follows what is open** (`67e6c55e`). Event open: the primary is
+  "Next: {name} · {when} →" to `/e/{slug}`, with a quiet waitlist link. Nothing
+  open: the waitlist is primary, with a quiet "Get an email when the next event
+  opens →" to `/events`. The action renders after `fetch_next_event` resolves;
+  `.lp-actions-hold` reserves 52px so nothing jumps. Signed-in roles keep their
+  primaries (admin/organizer → Dashboard, staff → Scanner, attendee → Events).
+  `open_events.rs` shares `fetch_open_events()` and adds `NextEvent`.
+- **Set 3, count the quiet links**: `count_click(SitePage::Home, "organizers" | "events")`;
+  the existing counter, no worker change.
+- **Unslop polish** (`d2736871`; the `unslop` skill's verdict was "light slop"):
+  16px rhythm (`.lp-hero-more` 18 → 16, mobile hero top 14 → 16), the hero
+  button 52px tall (scoped to `.lp-hero-c`, because `.lp-btn` is global), and
+  the hall label and count at weight 500 instead of 700.
+
+Against prod (build `40dfc870`, version `5efea250`, still the old landing):
+
+| | prod | r2 |
+|---|---|---|
+| mobile page | 4.9 screens (TH 4.7) | 1.7 |
+| desktop page | 2.9 | 1.4 |
+
+Gone from the home page, still on other pages: the Solana badge, "online free",
+the PromptPay/USDC line and the "Which one are you?" cards. Screenshots: owner's
+`~/Desktop/landing-compare/final/` (`r2/`, `polish/`, `vs-prod/`, `coral/`).
+
+Assessed, not adopted:
+
+- **Coral palette** (an injected-CSS mock only): body text 3.43:1 fails WCAG AA
+  (the button is 11.18:1). It needs a contrast fix before it can be considered.
+- **Google Stitch**: 3 variants in a private project. Its Thai line
+  "จบงานคืนเงินทันที" promises refund timing the policy does not, so it is out.
+- **Reference sites** (riir.ai, edoardolunardi.dev, good-fella.com, the PEAFOWL
+  cover): nothing taken.
+- **MultiHopper** for payouts: no. Its transfers are time-based, not
+  conditional on check-in. Fees (0.5%, per hop, and 0.002 SOL screening per
+  wallet) cut into "get it all back". The hop trail hurts transparency, and
+  its permanent-delegate wrapper tokens add trust risk.
+- **Claude Design `/design`** exists, but it was not available in the
+  sessions that did this work.
+
+Open, owner: the headline weight (700); the trailing periods in the headline;
+whether "Get it all back" still matches the deposit/credit policy; a bordered
+Sign In in the header (site-wide); whether Thai and light theme look right after
+the polish (not checked yet; check on staging). Next steps: merge PR 304
+(`landing-b`), push r2 and open its PR, and record the Linux baselines from
+CI's `visual-baselines` artifact, after looking at them. Then staging, then
+prod on a go (rollback `5efea250`). Read the two click counters after about
+a week.
 
 ## Fix B (register card in the hero): not done, on purpose
 

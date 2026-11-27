@@ -20,7 +20,7 @@ use super::subscribe::SubscribeForm;
 
 /// Lightweight event item from the public events API.
 #[derive(Clone, Deserialize)]
-struct PublicEventItem {
+pub(crate) struct PublicEventItem {
     name: String,
     slug: String,
     event_start_ms: i64,
@@ -50,7 +50,7 @@ struct PublicEventItem {
 }
 
 #[derive(Clone, Deserialize, Default)]
-struct PublicEventsResponse {
+pub(crate) struct PublicEventsResponse {
     events: Vec<PublicEventItem>,
     /// A seeded demo event to show when nothing is live; absent until set.
     #[serde(default)]
@@ -59,6 +59,63 @@ struct PublicEventsResponse {
 
 /// The community Discord, for the empty state (prototype, ASKS-4 §6).
 const DISCORD_URL: &str = "https://discord.gg/PGbUgNmsns";
+
+/// `GET /api/public/events`: the open events and the demo event's slug. `None`
+/// when the request or its parsing fails (logged); callers show nothing open.
+pub(crate) async fn fetch_open_events() -> Option<PublicEventsResponse> {
+    let origin = web_sys::window()?
+        .location()
+        .origin()
+        .unwrap_or_else(|_| "http://localhost:8787".to_string());
+    let url = format!("{origin}/api/public/events");
+    match crate::api::fetch::get(&url, &[]).await {
+        Ok(resp) if resp.status() == 200 => {
+            match crate::api::fetch::response_json::<ApiResponse<PublicEventsResponse>>(&resp).await
+            {
+                Ok(wrapper) => wrapper.data,
+                Err(e) => {
+                    log::warn!("[landing] failed to parse events: {e}");
+                    None
+                }
+            }
+        }
+        Ok(_) => {
+            log::warn!("[landing] events API returned non-200");
+            None
+        }
+        Err(e) => {
+            log::warn!("[landing] events fetch error: {e}");
+            None
+        }
+    }
+}
+
+/// The nearest open event, for the home page's call to action (.plans/049).
+#[derive(Clone, Debug, PartialEq)]
+pub struct NextEvent {
+    pub name: String,
+    pub slug: String,
+    pub start_ms: i64,
+}
+
+/// The open event that starts first, or `None` when nothing is open (or the
+/// list could not be read: the home page then offers what it offered before).
+pub async fn fetch_next_event() -> Option<NextEvent> {
+    let events = fetch_open_events().await?.events;
+    let mut order: Vec<(i64, usize)> = events
+        .iter()
+        .enumerate()
+        .map(|(i, e)| (e.event_start_ms, i))
+        .collect();
+    nearest_first(&mut order);
+    let (_, first) = *order.first()?;
+    let e = events.get(first)?;
+    Some(NextEvent {
+        name: e.name.clone(),
+        slug: e.slug.clone(),
+        start_ms: e.event_start_ms,
+    })
+}
 
 /// The head's side panel: the open events, nearest first, or the empty state.
 #[component]
@@ -71,38 +128,9 @@ pub fn OpenEvents() -> impl IntoView {
     // Fetch events on mount
     Effect::new(move |_| {
         leptos::task::spawn_local(async move {
-            let window = web_sys::window().expect("no window");
-            let origin = window
-                .location()
-                .origin()
-                .unwrap_or_else(|_| "http://localhost:8787".to_string());
-            let url = format!("{origin}/api/public/events");
-
-            match crate::api::fetch::get(&url, &[]).await {
-                Ok(resp) if resp.status() == 200 => {
-                    match crate::api::fetch::response_json::<ApiResponse<PublicEventsResponse>>(
-                        &resp,
-                    )
-                    .await
-                    {
-                        Ok(wrapper) => {
-                            if let Some(data) = wrapper.data {
-                                set_sample_slug
-                                    .set(data.sample_event_slug.filter(|s| !s.is_empty()));
-                                set_events.set(data.events);
-                            }
-                        }
-                        Err(e) => {
-                            log::warn!("[landing] failed to parse events: {e}");
-                        }
-                    }
-                }
-                Ok(_) => {
-                    log::warn!("[landing] events API returned non-200");
-                }
-                Err(e) => {
-                    log::warn!("[landing] events fetch error: {e}");
-                }
+            if let Some(data) = fetch_open_events().await {
+                set_sample_slug.set(data.sample_event_slug.filter(|s| !s.is_empty()));
+                set_events.set(data.events);
             }
             set_loaded.set(true);
         });
